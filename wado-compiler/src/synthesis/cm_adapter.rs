@@ -1382,9 +1382,25 @@ fn synthesize_lower_tuple(
     stmts
 }
 
+fn is_gc_passthrough_param(ty: &Type) -> bool {
+    matches!(ty, Type::Named(n) if n.name == "String")
+        || matches!(ty, Type::Generic(g) if g.name == "Array" && g.args.len() == 1)
+}
+
+fn is_wasm_flat_type(type_id: TypeId) -> bool {
+    matches!(
+        type_id,
+        TypeTable::I32 | TypeTable::I64 | TypeTable::F32 | TypeTable::F64
+    )
+}
+
 /// Compute the flat ABI parameter types for a WASI function parameter.
-pub fn flatten_param_type(ty: &Type) -> Vec<TypeId> {
-    match ty {
+pub fn flatten_param_type(
+    ty: &Type,
+    wasi_registry: &crate::component_model::WasiRegistry,
+) -> Vec<TypeId> {
+    let resolved = wasi_registry.resolve_type(ty);
+    match &resolved {
         Type::Named(named) => match named.name.as_str() {
             "i32" | "u32" | "bool" | "char" | "i8" | "u8" | "i16" | "u16" => {
                 vec![TypeTable::I32]
@@ -1399,7 +1415,7 @@ pub fn flatten_param_type(ty: &Type) -> Vec<TypeId> {
         Type::Reference(_) | Type::MutReference(_) => vec![TypeTable::I32],
         Type::Tuple(elems) if elems.is_empty() => vec![],
         _ => {
-            let flat = cm_abi::cm_flat_types(ty);
+            let flat = cm_abi::cm_flat_types(&resolved);
             flat.iter()
                 .map(|t| match t {
                     cm_abi::CmValType::I32 => TypeTable::I32,
@@ -1792,7 +1808,7 @@ fn synthesize_adapter(
     // Track (start_param_idx, param_count) per WASI param for Pass 2 indexing.
     let mut param_mapping: Vec<(usize, usize)> = Vec::new();
     for (param_name, _, param_type) in &func_info.params {
-        let flat_tys = flatten_param_type(param_type);
+        let flat_tys = flatten_param_type(param_type, wasi_registry);
         if flat_tys.is_empty() {
             continue; // unit param, skip
         }
@@ -1885,7 +1901,7 @@ fn synthesize_adapter(
     // Intermediate locals (packed i64, etc.) are allocated after all params.
     let mut mapping_idx = 0usize;
     for (param_name, _, param_type) in &func_info.params {
-        let flat_tys = flatten_param_type(param_type);
+        let flat_tys = flatten_param_type(param_type, wasi_registry);
         if flat_tys.is_empty() {
             continue; // unit param, skip
         }
@@ -6155,10 +6171,18 @@ fn rewrite_calls_in_expr(
                     adapter.return_type = expr.type_id;
                     fixup_return_type_in_body(&mut adapter, old_return_type, expr.type_id);
                 }
+                let wasi_func = wasi_registry.get_function(&qualified);
                 for (i, arg) in args.iter().enumerate() {
                     if i < adapter.params.len() && adapter.params[i].type_id != arg.expr.type_id {
+                        let is_gc_passthrough = wasi_func.is_some_and(|f| {
+                            i < f.params.len() && is_gc_passthrough_param(&f.params[i].2)
+                        });
                         if is_streaming && adapter.params[i].type_id == TypeTable::I32 {
                             // Streaming: keep adapter param as i32, cast the arg instead
+                        } else if !is_gc_passthrough
+                            && is_wasm_flat_type(adapter.params[i].type_id)
+                        {
+                            // Non-GC flat param: adapter type is authoritative, cast arg.
                         } else {
                             let local_idx = adapter.params[i].local_index as usize;
                             adapter.params[i].type_id = arg.expr.type_id;
@@ -6166,6 +6190,25 @@ fn rewrite_calls_in_expr(
                                 adapter.local_types[local_idx] = arg.expr.type_id;
                             }
                         }
+                    }
+                }
+            }
+
+            // Cast call-site args to match adapter param types when they differ
+            // (e.g., i32 literal → i64 for Duration newtype)
+            {
+                let adapter = adapter_rc.borrow();
+                for (i, arg) in args.iter_mut().enumerate() {
+                    if i < adapter.params.len()
+                        && adapter.params[i].type_id != arg.expr.type_id
+                        && is_wasm_flat_type(adapter.params[i].type_id)
+                    {
+                        let target = adapter.params[i].type_id;
+                        let original = std::mem::replace(
+                            &mut arg.expr,
+                            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
+                        );
+                        arg.expr = cast(original, target);
                     }
                 }
             }
@@ -6226,7 +6269,7 @@ fn rewrite_calls_in_expr(
                 .is_some_and(|f| f.is_async && f.has_streaming_param());
 
             // Extract receiver and args before replacing
-            let (taken_receiver, taken_args) =
+            let (taken_receiver, mut taken_args) =
                 if let TirExprKind::MethodCall { receiver, args, .. } = &mut expr.kind {
                     (
                         std::mem::replace(
@@ -6262,13 +6305,25 @@ fn rewrite_calls_in_expr(
                     }
                 }
                 // Fix up remaining params from the args
+                let method_func = wasi_registry.get_function(&qualified);
                 for (i, arg) in taken_args.iter().enumerate() {
                     let param_idx = i + 1; // +1 to skip self
                     if param_idx < adapter.params.len()
                         && adapter.params[param_idx].type_id != arg.expr.type_id
                     {
+                        // For method calls, WASI params include self at index 0, so
+                        // the i-th arg corresponds to WASI param index i+1
+                        let wasi_param_idx = i + 1;
+                        let is_gc_passthrough = method_func.is_some_and(|f| {
+                            wasi_param_idx < f.params.len()
+                                && is_gc_passthrough_param(&f.params[wasi_param_idx].2)
+                        });
                         if is_streaming && adapter.params[param_idx].type_id == TypeTable::I32 {
                             // Streaming: keep adapter param as i32, cast the arg instead
+                        } else if !is_gc_passthrough
+                            && is_wasm_flat_type(adapter.params[param_idx].type_id)
+                        {
+                            // Non-GC flat param: adapter type is authoritative, cast arg.
                         } else {
                             let local_idx = adapter.params[param_idx].local_index as usize;
                             adapter.params[param_idx].type_id = arg.expr.type_id;
@@ -6292,6 +6347,25 @@ fn rewrite_calls_in_expr(
                         wasi_registry,
                         true, // skip_self: call_args excludes self
                     );
+                }
+            }
+
+            // Cast call-site args to match adapter param types when they differ
+            {
+                let adapter = adapter_rc.borrow();
+                for (i, arg) in taken_args.iter_mut().enumerate() {
+                    let param_idx = i + 1; // +1 to skip self
+                    if param_idx < adapter.params.len()
+                        && adapter.params[param_idx].type_id != arg.expr.type_id
+                        && is_wasm_flat_type(adapter.params[param_idx].type_id)
+                    {
+                        let target = adapter.params[param_idx].type_id;
+                        let original = std::mem::replace(
+                            &mut arg.expr,
+                            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
+                        );
+                        arg.expr = cast(original, target);
+                    }
                 }
             }
 
@@ -6379,7 +6453,7 @@ fn rewrite_calls_in_expr(
                             }
                             flat_idx += 1;
                         } else {
-                            let flat_tys = flatten_param_type(param_type);
+                            let flat_tys = flatten_param_type(param_type, wasi_registry);
                             flat_idx += flat_tys.len().max(1);
                         }
                     }
@@ -6408,7 +6482,7 @@ fn rewrite_calls_in_expr(
             let flat_call_args = if let Some(func_info) = &wasi_func_info {
                 let mut flat = Vec::new();
                 for (i, (_param_name, _, param_type)) in func_info.params.iter().enumerate() {
-                    let flat_tys = flatten_param_type(param_type);
+                    let flat_tys = flatten_param_type(param_type, wasi_registry);
                     if flat_tys.is_empty() || i >= taken_args.len() {
                         continue;
                     }
@@ -6814,6 +6888,7 @@ fn collect_effect_calls_in_expr(
 mod tests {
     use super::*;
     use crate::ast::NamedType;
+    use crate::component_model::WasiRegistry;
 
     fn named_type(name: &str) -> Type {
         Type::Named(NamedType {
@@ -6824,38 +6899,51 @@ mod tests {
 
     #[test]
     fn flatten_param_i32() {
-        assert_eq!(flatten_param_type(&named_type("i32")), vec![TypeTable::I32]);
+        let reg = WasiRegistry::new();
+        assert_eq!(flatten_param_type(&named_type("i32"), &reg), vec![TypeTable::I32]);
     }
 
     #[test]
     fn flatten_param_i64() {
-        assert_eq!(flatten_param_type(&named_type("i64")), vec![TypeTable::I64]);
+        let reg = WasiRegistry::new();
+        assert_eq!(flatten_param_type(&named_type("i64"), &reg), vec![TypeTable::I64]);
     }
 
     #[test]
     fn flatten_param_f64() {
-        assert_eq!(flatten_param_type(&named_type("f64")), vec![TypeTable::F64]);
+        let reg = WasiRegistry::new();
+        assert_eq!(flatten_param_type(&named_type("f64"), &reg), vec![TypeTable::F64]);
     }
 
     #[test]
     fn flatten_param_string() {
+        let reg = WasiRegistry::new();
         assert_eq!(
-            flatten_param_type(&named_type("String")),
+            flatten_param_type(&named_type("String"), &reg),
             vec![TypeTable::I32, TypeTable::I32]
         );
     }
 
     #[test]
     fn flatten_param_bool() {
+        let reg = WasiRegistry::new();
         assert_eq!(
-            flatten_param_type(&named_type("bool")),
+            flatten_param_type(&named_type("bool"), &reg),
             vec![TypeTable::I32]
         );
     }
 
     #[test]
     fn flatten_param_unit() {
-        assert!(flatten_param_type(&Type::Tuple(vec![])).is_empty());
+        let reg = WasiRegistry::new();
+        assert!(flatten_param_type(&Type::Tuple(vec![]), &reg).is_empty());
+    }
+
+    #[test]
+    fn flatten_param_newtype_u64() {
+        let (reg, _) = WasiRegistry::build_from_stdlib();
+        assert_eq!(flatten_param_type(&named_type("Duration"), reg), vec![TypeTable::I64]);
+        assert_eq!(flatten_param_type(&named_type("Mark"), reg), vec![TypeTable::I64]);
     }
 
     #[test]
