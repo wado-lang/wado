@@ -596,7 +596,9 @@ match command {
 | Literal      | `0`, `"hello"`, `true`       | Matches exact value    |
 | Variant      | `Some(x)`, `None`            | Matches variant case   |
 | Tuple        | `[a, b, c]`                  | Destructures tuple     |
+| Nested tuple | `[10, Some(x)]`              | Literal/variant sub-patterns in tuple |
 | Struct       | `{ x, y }`, `Point { x, y }` | Destructures struct    |
+| Nested struct| `{ x: 0, y }`               | Literal/variant sub-patterns in struct |
 | Or           | `Red \| Blue`                | Matches either pattern |
 | Guard        | `Some(x) && x > 0`           | Pattern with condition |
 
@@ -621,6 +623,37 @@ match customer {
     Premium(years) && years > 5 => 0.3,
     Premium(_) => 0.2,
     _ => 0.1,
+}
+```
+
+**Nested Sub-Patterns in Tuple/Struct Destructuring:**
+
+Tuple and struct patterns support literal, variant, and enum sub-patterns. These are lowered into guard conditions with appropriate checks:
+
+```wado
+// Literal sub-patterns in tuples
+match [x, y] {
+    [0, 0] => "origin",
+    [0, _] => "y-axis",
+    [_, 0] => "x-axis",
+    _ => "other",
+}
+
+// Variant sub-patterns in tuples
+match [a, b] {
+    [Some(x), Some(y)] => x + y,
+    [Some(x), None] => x,
+    [None, _] => 0,
+}
+
+// Literal sub-patterns in structs
+if let { x: 0, y: 0 } = point { println("origin"); }
+
+// Enum sub-patterns in tuples
+match [color, size] {
+    [Red, Large] => "big red",
+    [Blue, _] => "blue",
+    _ => "other",
 }
 ```
 
@@ -2739,6 +2772,7 @@ match s {
 - `match` expression/statement: implemented
 - `matches` operator: implemented
 - Match ergonomics (`&T` scrutinees in `if let`/`match`/`matches`; payload bindings become refs): implemented
+- Nested sub-patterns in tuple/struct destructuring (literal, variant, enum): implemented
 - Generic custom variant pattern matching (e.g., `Maybe<T>`): not yet implemented
 - `Result<T, E>` pattern matching: not yet implemented
 
