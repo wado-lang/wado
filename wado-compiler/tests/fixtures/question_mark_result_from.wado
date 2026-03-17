@@ -31,7 +31,16 @@ export fn run() with Stdout {
     assert high_op(false) matches { Ok(n) && n == 101 };
 
     // Err path: LowError is wrapped into HighError::Low
-    assert high_op(true) matches { Err(Low(e)) && e.code == 42 };
+    let r2 = high_op(true);
+    if let Err(e) = r2 {
+        if let Low(inner) = e {
+            assert inner.code == 42;
+        } else {
+            panic("expected Low variant");
+        }
+    } else {
+        panic("expected Err");
+    }
 
     println("ok");
 }

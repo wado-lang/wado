@@ -710,6 +710,10 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.exit_scope();
             }
 
+            Expr::QuestionMark(qm) => {
+                self.bind_expr(&qm.expr)?;
+            }
+
             // Literals don't reference variables
             Expr::Literal(_) => {}
         }

@@ -647,21 +647,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         target_type_id,
                         static_call.span,
                     );
-                } else {
-                    // Unknown case name
-                    let _ = self.logger.error(TypeError::UnknownFunction {
-                        name: format!("{}::{}", name, static_call.method),
-                        span: static_call.span,
-                    });
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
                 }
-            } else {
-                // Variant not found in variant_cases (shouldn't happen)
-                let _ = self.logger.error(TypeError::UnknownType {
-                    name: name.clone(),
-                    span: static_call.span,
-                });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                // If no matching case, fall through to general method lookup
+                // (e.g., trait methods like `AppError::from(e)`)
             }
         }
 
@@ -713,15 +701,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         target_type_id,
                         static_call.span,
                     );
-                } else {
-                    // Unknown case name
-                    let _ = self.logger.error(TypeError::UnknownFunction {
-                        name: format!("{}::{}", name, static_call.method),
-                        span: static_call.span,
-                    });
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
                 }
+                // If no matching case, fall through to general method lookup
+                // (e.g., trait methods like `Result::<T, E>::from(e)`)
             }
+        }
+
+        // Handle From<T>::from calls resolved via bodyless `impl From<T> for Type;`
+        // The synthesized function doesn't exist during resolution, so we generate the call inline.
+        if static_call.method == "from"
+            && args.len() == 1
+            && self.has_from_synthesis_request(&static_call.target_type, &args[0].type_id)
+        {
+            return self.resolve_from_call(
+                target_type_id,
+                args[0].type_id,
+                args.into_iter().next().unwrap(),
+                static_call.span,
+            );
         }
 
         let (struct_name, struct_module, mangled_struct_name, struct_type_args) =
@@ -759,6 +756,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     (name.clone(), ModuleSource::primitive(), name, vec![])
                 }
                 ResolvedType::Enum {
+                    name,
+                    module_source,
+                } => (name.clone(), module_source.clone(), name.clone(), vec![]),
+                ResolvedType::Variant {
                     name,
                     module_source,
                 } => (name.clone(), module_source.clone(), name.clone(), vec![]),
@@ -1416,6 +1417,52 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Find the trait name for a static method on a struct, if the method belongs to a trait impl.
     /// Returns `None` for inherent static methods, `Some(trait_name)` for trait static methods.
+    pub(super) fn has_from_synthesis_request(
+        &self,
+        target_type: &ast::Type,
+        arg_type_id: &crate::tir::TypeId,
+    ) -> bool {
+        let target_name = Self::get_type_name_static(target_type);
+        let arg_type_name = self.type_table.borrow().type_name(*arg_type_id);
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && impl_block.is_synthesize_request
+                && let Some(trait_type) = &impl_block.trait_type
+                && Self::get_type_name_static(trait_type) == "From"
+                && Self::get_type_name_static(&impl_block.ty) == target_name
+            {
+                if let ast::Type::Generic(generic) = trait_type
+                    && generic.args.len() == 1
+                {
+                    let from_name = self.get_type_name_full(&generic.args[0]);
+                    if from_name == arg_type_name {
+                        return true;
+                    }
+                }
+            }
+        }
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && impl_block.is_synthesize_request
+                    && let Some(trait_type) = &impl_block.trait_type
+                    && Self::get_type_name_static(trait_type) == "From"
+                    && Self::get_type_name_static(&impl_block.ty) == target_name
+                {
+                    if let ast::Type::Generic(generic) = trait_type
+                        && generic.args.len() == 1
+                    {
+                        let from_name = self.get_type_name_full(&generic.args[0]);
+                        if from_name == arg_type_name {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
     pub(super) fn find_static_method_trait(
         &self,
         struct_name: &str,

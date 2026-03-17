@@ -497,6 +497,10 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         // becomes: `if let pattern = expr { guard } else { false }`
         // or if no guard: `if let pattern = expr { true } else { false }`
         Expr::Matches(m) => desugar_matches_expr(m),
+        Expr::QuestionMark(qm) => Expr::QuestionMark(Box::new(crate::ast::QuestionMarkExpr {
+            expr: desugar_expr(&qm.expr),
+            span: qm.span,
+        })),
     }
 }
 

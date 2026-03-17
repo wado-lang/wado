@@ -351,6 +351,48 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 variant_type,
                                 call.span,
                             );
+                        }
+                        // If no matching case, check for From<T> synthesis requests
+                        else if suffix == "from"
+                            && args.len() == 1
+                        {
+                            let target_type_id = self.type_table.borrow_mut().make_variant(
+                                prefix.to_string(),
+                                variant_info.module_source.clone(),
+                            );
+                            let from_type = args[0].type_id;
+                            let from_type_name = self.type_table.borrow().type_name(from_type);
+                            let matching_impl = self.current_module_items.iter().any(|item| {
+                                if let Item::Impl(impl_block) = item
+                                    && impl_block.is_synthesize_request
+                                    && let Some(trait_type) = &impl_block.trait_type
+                                    && Self::get_type_name_static(trait_type) == "From"
+                                    && Self::get_type_name_static(&impl_block.ty) == prefix
+                                {
+                                    if let ast::Type::Generic(generic) = trait_type
+                                        && generic.args.len() == 1
+                                    {
+                                        self.get_type_name_full(&generic.args[0]) == from_type_name
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                }
+                            });
+                            if matching_impl {
+                                return self.resolve_from_call(
+                                    target_type_id,
+                                    from_type,
+                                    args.into_iter().next().unwrap(),
+                                    call.span,
+                                );
+                            }
+                            let _ = self.logger.error(TypeError::UnknownFunction {
+                                name: format!("{prefix}::{suffix}"),
+                                span: call.span,
+                            });
+                            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
                         } else {
                             // Unknown case name
                             let _ = self.logger.error(TypeError::UnknownFunction {

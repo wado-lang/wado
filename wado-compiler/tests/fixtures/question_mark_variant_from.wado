@@ -43,13 +43,36 @@ fn process(io_ok: bool, valid: bool) -> Result<i32, AppError> {
 
 export fn run() with Stdout {
     // All steps succeed
-    assert process(true, true) matches { Ok(n) && n == 42 };
+    let r1 = process(true, true);
+    if let Ok(n) = r1 {
+        assert n == 42;
+    } else {
+        panic("expected Ok");
+    }
 
     // IO failure → AppError::Io
-    assert process(false, true) matches { Err(Io(e)) && e.message == "disk error" };
+    let r2 = process(false, true);
+    if let Err(e) = r2 {
+        if let Io(inner) = e {
+            assert inner.message == "disk error";
+        } else {
+            panic("expected Io variant");
+        }
+    } else {
+        panic("expected Err");
+    }
 
     // Parse failure → AppError::Parse
-    assert process(true, false) matches { Err(Parse(e)) && e.input == "bad" };
+    let r3 = process(true, false);
+    if let Err(e) = r3 {
+        if let Parse(inner) = e {
+            assert inner.input == "bad";
+        } else {
+            panic("expected Parse variant");
+        }
+    } else {
+        panic("expected Err");
+    }
 
     println("ok");
 }

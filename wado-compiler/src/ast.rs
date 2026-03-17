@@ -593,6 +593,8 @@ pub enum Expr {
     TupleLiteral(Box<TupleLiteralExpr>),
     /// Labeled block expression: `label: { ... }` where the last expression is the value
     LabeledBlock(Box<LabeledBlockExpr>),
+    /// Postfix `?` operator for error propagation on `Result<T, E>` and `Option<T>`.
+    QuestionMark(Box<QuestionMarkExpr>),
 }
 
 /// Labeled block expression: `label: { ... }` that produces a value
@@ -601,6 +603,13 @@ pub enum Expr {
 pub struct LabeledBlockExpr {
     pub label: String,
     pub block: Block,
+    pub span: Span,
+}
+
+/// Postfix `?` operator: `expr?`
+#[derive(Debug, Clone)]
+pub struct QuestionMarkExpr {
+    pub expr: Expr,
     pub span: Span,
 }
 
@@ -630,6 +639,7 @@ impl Expr {
             Expr::StructLiteral(e) => e.span,
             Expr::TupleLiteral(e) => e.span,
             Expr::LabeledBlock(e) => e.span,
+            Expr::QuestionMark(e) => e.span,
         }
     }
 
@@ -724,6 +734,10 @@ impl Expr {
             Expr::LabeledBlock(mut e) => {
                 e.span = new_span;
                 Expr::LabeledBlock(e)
+            }
+            Expr::QuestionMark(mut e) => {
+                e.span = new_span;
+                Expr::QuestionMark(e)
             }
         }
     }

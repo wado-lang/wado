@@ -1543,6 +1543,10 @@ impl<'a> Unparser<'a> {
             Expr::StructLiteral(s) => self.unparse_struct_literal(s),
             Expr::TupleLiteral(t) => self.unparse_tuple_literal(t),
             Expr::LabeledBlock(lb) => self.unparse_labeled_block_expr(lb),
+            Expr::QuestionMark(qm) => {
+                self.unparse_expr(&qm.expr);
+                self.output.push('?');
+            }
         }
     }
 
@@ -2939,6 +2943,10 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
             output.push(']');
         }
         Expr::LabeledBlock(_) => output.push_str("<labeled-block>"),
+        Expr::QuestionMark(qm) => {
+            unparse_expr_into(&qm.expr, output, false);
+            output.push('?');
+        }
     }
 }
 

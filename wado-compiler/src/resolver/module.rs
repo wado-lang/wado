@@ -455,4 +455,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             _ => "Unknown".to_string(),
         }
     }
+
+    pub(super) fn get_type_name_full(&self, ty: &Type) -> String {
+        match ty {
+            Type::Named(named) => named.name.clone(),
+            Type::Generic(generic) => {
+                let args: Vec<String> = generic.args.iter().map(|a| self.get_type_name_full(a)).collect();
+                format!("{}<{}>", generic.name, args.join(", "))
+            }
+            Type::Reference(inner) => format!("&{}", self.get_type_name_full(inner)),
+            Type::MutReference(inner) => format!("&mut {}", self.get_type_name_full(inner)),
+            _ => self.get_type_name(ty),
+        }
+    }
 }

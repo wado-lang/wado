@@ -10,7 +10,8 @@ use crate::ast::{
     FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
     IndexExpr, InnerAttribute, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
     MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
-    Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
+    Newtype, Param, Pattern, QuestionMarkExpr, ResourceDecl, ReturnStmt, SelfKind,
+    StaticMethodCallExpr, Stmt,
     StructDecl, StructField, StructLiteralExpr, StructLiteralField, StructPatternField,
     TaskReturnStmt, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl,
     UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl,
@@ -2373,6 +2374,12 @@ impl Parser {
                 }
                 TokenKind::Matches => {
                     expr = self.parse_matches_expr(expr)?;
+                }
+                TokenKind::Question => {
+                    let start_span = expr.span();
+                    let question_token = self.advance();
+                    let span = start_span.merge(&question_token.span);
+                    expr = Expr::QuestionMark(Box::new(QuestionMarkExpr { expr, span }));
                 }
                 _ => break,
             }
