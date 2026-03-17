@@ -1,0 +1,64 @@
+use { MonotonicClock, Mark, Duration, SystemClock, Instant } from "wasi:clocks";
+
+test "monotonic: now is non-decreasing" {
+    let t1 = MonotonicClock::now();
+    let t2 = MonotonicClock::now();
+    assert t2 >= t1;
+}
+
+test "monotonic: resolution is positive" {
+    let res = MonotonicClock::get_resolution();
+    assert res > 0;
+}
+
+test "monotonic: wait_for advances clock" {
+    let before = MonotonicClock::now();
+    MonotonicClock::wait_for(1_000_000);
+    let after = MonotonicClock::now();
+    assert after >= before;
+}
+
+test "monotonic: wait_until reaches target" {
+    let now = MonotonicClock::now();
+    let target: Mark = now + 1_000_000;
+    MonotonicClock::wait_until(target);
+    let after = MonotonicClock::now();
+    assert after >= target;
+}
+
+test "monotonic: wait_for zero returns immediately" {
+    let before = MonotonicClock::now();
+    MonotonicClock::wait_for(0);
+    let after = MonotonicClock::now();
+    assert after >= before;
+}
+
+test "monotonic: wait_until past returns immediately" {
+    MonotonicClock::wait_until(0);
+    let after = MonotonicClock::now();
+    assert after > 0;
+}
+
+test "system clock: now returns valid instant" {
+    let instant = SystemClock::now();
+    assert instant.seconds > 0;
+    assert instant.nanoseconds < 1_000_000_000 as u32;
+}
+
+test "system clock: resolution is positive" {
+    let res = SystemClock::get_resolution();
+    assert res > 0;
+}
+
+test "system clock: two reads are consistent" {
+    let t1 = SystemClock::now();
+    let t2 = SystemClock::now();
+    if t2.seconds > t1.seconds {
+        assert true;
+    } else if t2.seconds == t1.seconds {
+        assert t2.nanoseconds >= t1.nanoseconds;
+    }
+}
+
+__DATA__
+{"test": {}}

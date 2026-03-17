@@ -124,10 +124,9 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 continue;
             }
 
-            // Skip async functions with void return (not fully supported)
-            if func.is_async && func.return_type.is_none() {
-                continue;
-            }
+            // Async functions with void return are supported (e.g., MonotonicClock::wait_for).
+            // The adapter handles them by calling the lowered function, waiting for the subtask,
+            // and freeing the async results buffer.
 
             // Build param types using CM ABI type flattening.
             // WASI P3 async functions with > MAX_FLAT_ASYNC_PARAMS (4) flat params use
@@ -137,15 +136,27 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
             for (_, _, ty) in &func.params {
                 let resolved_ty = wasi_registry.resolve_type(ty);
-                crate::component_model::flatten_wasi_param_type(&resolved_ty, &mut param_vts);
+                crate::component_model::flatten_wasi_param_type(
+                    &resolved_ty,
+                    &mut param_vts,
+                    wasi_registry,
+                );
             }
 
-            // Async functions have an additional outptr parameter
+            // Async functions: per CM spec flatten_functype('lower'), the outptr (i32) is
+            // only appended when len(flat_results) > 0 (i.e., when there is a return type).
+            // Async void functions (e.g., wait_for, wait_until) have no results and no outptr.
             if func.is_async {
+                let has_results = func.return_type.is_some();
                 if param_vts.len() > MAX_FLAT_ASYNC_PARAMS {
-                    // Indirect convention: collapse all params to a single params_ptr + outptr.
-                    param_vts = vec![wasm_encoder::ValType::I32, wasm_encoder::ValType::I32];
-                } else {
+                    // Indirect convention: collapse all params to a single params_ptr.
+                    // Add outptr only if there are results.
+                    if has_results {
+                        param_vts = vec![wasm_encoder::ValType::I32, wasm_encoder::ValType::I32];
+                    } else {
+                        param_vts = vec![wasm_encoder::ValType::I32];
+                    }
+                } else if has_results {
                     // Direct convention: params passed directly + outptr.
                     param_vts.push(wasm_encoder::ValType::I32);
                 }
@@ -182,7 +193,11 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 } else {
                     // Simple return — flatten the return type
                     let mut out = Vec::new();
-                    crate::component_model::flatten_wasi_param_type(&resolved_ret_ty, &mut out);
+                    crate::component_model::flatten_wasi_param_type(
+                        &resolved_ret_ty,
+                        &mut out,
+                        wasi_registry,
+                    );
                     out.into_iter().map(valtype_to_wir_type).collect()
                 }
             } else {

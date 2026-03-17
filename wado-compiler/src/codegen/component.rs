@@ -1419,16 +1419,36 @@ fn generate_wasi_imports(
                     .params
                     .iter()
                     .map(|(_, cm_name, ty)| {
-                        let val_type = wado_type_to_cm_val_type(
-                            project,
-                            ty,
-                            stream_type_idx,
-                            error_code_idx,
-                            result_param_type_idx,
-                            &enum_export_indices,
-                            &flags_export_indices,
-                            &borrow_resource_type_indices,
-                        );
+                        let resolved_ty = project.wasi_registry.resolve_type(ty);
+                        // Use shared_type_gen for struct (record) param types
+                        let val_type = if let Type::Named(named) = &resolved_ty
+                            && project.wasi_registry.is_struct(&named.name)
+                        {
+                            shared_type_gen.set_next_idx(local_type_idx);
+                            let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
+                                .iter()
+                                .map(|(k, &v)| (k.as_str(), v))
+                                .collect();
+                            let val = shared_type_gen.ast_type_to_cm(
+                                &resolved_ty,
+                                &mut instance_type,
+                                project.wasi_registry,
+                                &resource_exports,
+                            );
+                            local_type_idx = shared_type_gen.next_idx();
+                            val
+                        } else {
+                            wado_type_to_cm_val_type(
+                                project,
+                                ty,
+                                stream_type_idx,
+                                error_code_idx,
+                                result_param_type_idx,
+                                &enum_export_indices,
+                                &flags_export_indices,
+                                &borrow_resource_type_indices,
+                            )
+                        };
                         (cm_name.clone(), val_type)
                     })
                     .collect();
@@ -1439,13 +1459,32 @@ fn generate_wasi_imports(
 
                 let result_type = func.return_type.as_ref().map(|ty| {
                     let resolved_ty = project.wasi_registry.resolve_type(ty);
-                    wado_type_to_cm_result_type(
-                        &resolved_ty,
-                        result_type_idx,
-                        array_type_idx,
-                        option_type_idx,
-                        tuple_type_idx,
-                    )
+                    // Use shared_type_gen for struct (record) return types
+                    if let Type::Named(named) = &resolved_ty
+                        && project.wasi_registry.is_struct(&named.name)
+                    {
+                        shared_type_gen.set_next_idx(local_type_idx);
+                        let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
+                            .iter()
+                            .map(|(k, &v)| (k.as_str(), v))
+                            .collect();
+                        let val = shared_type_gen.ast_type_to_cm(
+                            &resolved_ty,
+                            &mut instance_type,
+                            project.wasi_registry,
+                            &resource_exports,
+                        );
+                        local_type_idx = shared_type_gen.next_idx();
+                        val
+                    } else {
+                        wado_type_to_cm_result_type(
+                            &resolved_ty,
+                            result_type_idx,
+                            array_type_idx,
+                            option_type_idx,
+                            tuple_type_idx,
+                        )
+                    }
                 });
 
                 let mut func_encoder = instance_type.ty().function();
@@ -2267,10 +2306,6 @@ fn lower_wasi_functions(
             let local_name = func.local_alias_name();
 
             if !ctx.has_comp_func(&local_name) {
-                continue;
-            }
-
-            if func.is_async && func.return_type.is_none() {
                 continue;
             }
 
