@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773758819308,
+  "lastUpdate": 1773786530627,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3962,6 +3962,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2f42226272bd63cb130aa608001fb8dcfc9083ca"
         },
         "date": 1773758819101,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9094,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22373,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a1acbc62596ae47e5d3cd585de502bdb6258e53a",
+          "message": "Merge pull request #598 from wado-lang/claude/implement-wasi-clocks-dRSMf\n\nAdd support for WASI clocks with async void functions",
+          "timestamp": "2026-03-18T07:26:19+09:00",
+          "tree_id": "f2887f6dbf7cd4457d2fc38a5e917056eb5f1bec",
+          "url": "https://github.com/wado-lang/wado/commit/a1acbc62596ae47e5d3cd585de502bdb6258e53a"
+        },
+        "date": 1773786530440,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
