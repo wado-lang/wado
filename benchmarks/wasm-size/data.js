@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773737801196,
+  "lastUpdate": 1773746528350,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3845,6 +3845,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a844606d065ef2b6ca1f16e757b4a467203b1216"
         },
         "date": 1773737800989,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9094,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22373,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3b1401590468e8626b107ba57055adf3970c37fc",
+          "message": "Merge pull request #597 from wado-lang/claude/implement-conversion-web-R1YpK\n\nImplement From/TryFrom traits and ? operator support",
+          "timestamp": "2026-03-17T20:19:27+09:00",
+          "tree_id": "419b66103efad483744bc18fbb30b262c6c41a99",
+          "url": "https://github.com/wado-lang/wado/commit/3b1401590468e8626b107ba57055adf3970c37fc"
+        },
+        "date": 1773746528213,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
