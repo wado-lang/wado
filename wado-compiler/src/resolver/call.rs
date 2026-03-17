@@ -817,6 +817,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         self.type_table
                             .borrow_mut()
                             .make_enum(named.name.clone(), module_source)
+                    } else if self.wasi_registry.is_struct(&named.name) {
+                        // WASI struct (record) type - look up module source from all_struct_fields
+                        let module_source = self
+                            .all_struct_fields
+                            .iter()
+                            .find_map(|(ms, map)| {
+                                if map.contains_key(&named.name) {
+                                    Some(ms.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or_else(|| ModuleSource::wasi("clocks"));
+                        self.type_table
+                            .borrow_mut()
+                            .make_struct(named.name.clone(), module_source)
                     } else {
                         // Unknown type - represent as i32 handle
                         TypeTable::I32

@@ -1841,6 +1841,23 @@ fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
+            // Struct (record) param: single GC reference, adapter extracts fields
+            Type::Named(n) if wasi_registry.is_struct(&n.name) => {
+                let struct_type_id = {
+                    let mut tt = type_table.borrow_mut();
+                    wasi_type_to_type_id_with_registry(param_type, &mut tt, Some(wasi_registry))
+                };
+                params.push(TirParam {
+                    name: param_name.clone(),
+                    type_id: struct_type_id,
+                    local_index: next_local,
+                    is_mut: false,
+                    span: synth_span(),
+                });
+                local_types.push(struct_type_id);
+                next_local += 1;
+                param_mapping.push((start, 1));
+            }
             // All other types: create flat params matching CM ABI
             _ => {
                 for (j, flat_ty) in flat_tys.iter().enumerate() {
@@ -2142,6 +2159,28 @@ fn synthesize_adapter(
                 ));
             }
 
+            // Struct (record) param: extract fields as flat args
+            Type::Named(n) if wasi_registry.is_struct(&n.name) => {
+                let struct_type_id = params[start_idx].type_id;
+                let wado_fields = wasi_registry
+                    .get_struct_fields_with_wado_names(&n.name)
+                    .unwrap();
+                for (field_idx, (wado_name, _, field_ty)) in wado_fields.iter().enumerate() {
+                    let field_type_id = {
+                        let mut tt = type_table.borrow_mut();
+                        wasi_type_to_type_id(field_ty, &mut tt)
+                    };
+                    flat_args.push(TirExpr {
+                        kind: crate::tir::TirExprKind::FieldAccess {
+                            expr: Box::new(local_ref(param_local, param_name, struct_type_id)),
+                            field_index: field_idx as u32,
+                            field_name: wado_name.clone(),
+                        },
+                        type_id: field_type_id,
+                        span: synth_span(),
+                    });
+                }
+            }
             // All other types (including Option<T>): flat params passed through directly
             _ => {
                 for j in 0..count {
@@ -2160,49 +2199,54 @@ fn synthesize_adapter(
         // - MAX_FLAT_ASYNC_PARAMS = 4 flat params before switching to indirect.
         // - If flat_args exceeds 4, all params are passed via a single params_ptr
         //   (pointer to a linear-memory buffer with all lowered params).
-        // - The results_ptr is always added as the final param.
-        // - Both params buffer and results buffer are allocated via realloc.
+        // - Per CM spec flatten_functype: the results_ptr is only added when
+        //   len(flat_results) > 0 (i.e., when there IS a return type).
+        // - Async void functions have no results_ptr.
         const MAX_FLAT_ASYNC_PARAMS: usize = 4;
 
-        // Allocate the async results buffer via realloc.
-        // Compute size/alignment from the return type's CM layout.
-        let (async_result_size, async_result_align) = if let Some(return_type) =
-            &func_info.return_type
-        {
-            if let crate::ast::Type::Named(named) = return_type
-                && let Some(sa) =
-                    crate::component_model::wasi_variant_cm_size_align(&named.name, wasi_registry)
+        let has_results = func_info.return_type.is_some();
+
+        // Allocate the async results buffer via realloc (only when there are results).
+        if has_results {
+            let (async_result_size, async_result_align) = if let Some(return_type) =
+                &func_info.return_type
             {
-                sa
+                if let crate::ast::Type::Named(named) = return_type
+                    && let Some(sa) = crate::component_model::wasi_variant_cm_size_align(
+                        &named.name,
+                        wasi_registry,
+                    )
+                {
+                    sa
+                } else {
+                    (
+                        crate::component_model::cm_size_with_registry(return_type, wasi_registry),
+                        crate::component_model::cm_align_with_registry(return_type, wasi_registry),
+                    )
+                }
             } else {
-                (
-                    crate::component_model::cm_size_with_registry(return_type, wasi_registry),
-                    crate::component_model::cm_align_with_registry(return_type, wasi_registry),
-                )
-            }
-        } else {
-            // No return type: allocate a minimal buffer (4 bytes).
-            (4, 4)
-        };
-        let async_outptr_local = next_local;
-        body_stmts.push(let_stmt(
-            "__async_outptr",
-            async_outptr_local,
-            TypeTable::I32,
-            builtin_call(
-                "realloc",
-                vec![
-                    i32_const(0),
-                    i32_const(0),
-                    i32_const(async_result_align as i32),
-                    i32_const(async_result_size as i32),
-                ],
+                unreachable!()
+            };
+            let async_outptr_local = next_local;
+            body_stmts.push(let_stmt(
+                "__async_outptr",
+                async_outptr_local,
                 TypeTable::I32,
-            ),
-        ));
-        local_types.push(TypeTable::I32);
-        next_local += 1;
-        async_outptr_info = Some((async_outptr_local, async_result_size, async_result_align));
+                builtin_call(
+                    "realloc",
+                    vec![
+                        i32_const(0),
+                        i32_const(0),
+                        i32_const(async_result_align as i32),
+                        i32_const(async_result_size as i32),
+                    ],
+                    TypeTable::I32,
+                ),
+            ));
+            local_types.push(TypeTable::I32);
+            next_local += 1;
+            async_outptr_info = Some((async_outptr_local, async_result_size, async_result_align));
+        }
 
         if flat_args.len() > MAX_FLAT_ASYNC_PARAMS {
             // Indirect calling: write all params to a memory buffer using CM layout.
@@ -2270,18 +2314,17 @@ fn synthesize_adapter(
                 }
             }
 
-            // Replace flat_args with (params_buf, async_outptr).
-            flat_args = vec![
-                local_ref(params_buf_local, "__params_buf", TypeTable::I32),
-                local_ref(async_outptr_local, "__async_outptr", TypeTable::I32),
-            ];
+            // Replace flat_args with params_buf (+ async_outptr if results exist).
+            flat_args = vec![local_ref(params_buf_local, "__params_buf", TypeTable::I32)];
+            if let Some((outptr_local, _, _)) = async_outptr_info {
+                flat_args.push(local_ref(outptr_local, "__async_outptr", TypeTable::I32));
+            }
         } else {
             // Direct calling: params fit within MAX_FLAT_ASYNC_PARAMS.
-            flat_args.push(local_ref(
-                async_outptr_local,
-                "__async_outptr",
-                TypeTable::I32,
-            ));
+            // Only add outptr if there are results.
+            if let Some((outptr_local, _, _)) = async_outptr_info {
+                flat_args.push(local_ref(outptr_local, "__async_outptr", TypeTable::I32));
+            }
         }
     } else if let Some((size, align)) = outptr_alloc {
         // Allocate outptr via realloc
@@ -2343,54 +2386,61 @@ fn synthesize_adapter(
             TypeTable::UNIT,
         )));
 
-        let (outptr_local, outptr_size, outptr_align) =
-            async_outptr_info.expect("async_outptr_info should be set for async functions");
-        if let Some(return_type) = &func_info.return_type {
-            // Async with result: lift from the dynamically allocated results buffer.
-            let resolved = wasi_registry.resolve_type(return_type);
-            let lift_ctx = LiftContext {
-                wasi_registry,
-                type_table,
-            };
-            let lifted = synthesize_lift_with_context(
-                &resolved,
-                local_ref(outptr_local, "__async_outptr", TypeTable::I32),
-                &mut next_local,
-                &mut body_stmts,
-                &mut local_types,
-                &lift_ctx,
-            );
-            // Materialize the lifted value into a local before freeing if it
-            // contains a bare memory load (e.g., i32.load from the outptr buffer).
-            // Complex types are already materialized into locals by synthesize_lift.
-            let lifted =
-                materialize_if_needed(lifted, &mut next_local, &mut body_stmts, &mut local_types);
-            // Free the async results buffer after materializing the lifted value.
-            body_stmts.push(expr_stmt(builtin_call(
-                "realloc",
-                vec![
+        if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
+            if let Some(return_type) = &func_info.return_type {
+                // Async with result: lift from the dynamically allocated results buffer.
+                let resolved = wasi_registry.resolve_type(return_type);
+                let lift_ctx = LiftContext {
+                    wasi_registry,
+                    type_table,
+                };
+                let lifted = synthesize_lift_with_context(
+                    &resolved,
                     local_ref(outptr_local, "__async_outptr", TypeTable::I32),
-                    i32_const(outptr_size as i32),
-                    i32_const(outptr_align as i32),
-                    i32_const(0),
-                ],
-                TypeTable::I32,
-            )));
-            let lifted_type_id = lifted.type_id;
-            body_stmts.push(return_stmt(Some(lifted)));
-            adapter_return_type = lifted_type_id; // real type, fixed up at call site if needed
+                    &mut next_local,
+                    &mut body_stmts,
+                    &mut local_types,
+                    &lift_ctx,
+                );
+                // Materialize the lifted value into a local before freeing if it
+                // contains a bare memory load (e.g., i32.load from the outptr buffer).
+                // Complex types are already materialized into locals by synthesize_lift.
+                let lifted = materialize_if_needed(
+                    lifted,
+                    &mut next_local,
+                    &mut body_stmts,
+                    &mut local_types,
+                );
+                // Free the async results buffer after materializing the lifted value.
+                body_stmts.push(expr_stmt(builtin_call(
+                    "realloc",
+                    vec![
+                        local_ref(outptr_local, "__async_outptr", TypeTable::I32),
+                        i32_const(outptr_size as i32),
+                        i32_const(outptr_align as i32),
+                        i32_const(0),
+                    ],
+                    TypeTable::I32,
+                )));
+                let lifted_type_id = lifted.type_id;
+                body_stmts.push(return_stmt(Some(lifted)));
+                adapter_return_type = lifted_type_id;
+            } else {
+                // Has outptr but no return type: free the async results buffer.
+                body_stmts.push(expr_stmt(builtin_call(
+                    "realloc",
+                    vec![
+                        local_ref(outptr_local, "__async_outptr", TypeTable::I32),
+                        i32_const(outptr_size as i32),
+                        i32_const(outptr_align as i32),
+                        i32_const(0),
+                    ],
+                    TypeTable::I32,
+                )));
+                adapter_return_type = TypeTable::UNIT;
+            }
         } else {
-            // No return type: free the async results buffer.
-            body_stmts.push(expr_stmt(builtin_call(
-                "realloc",
-                vec![
-                    local_ref(outptr_local, "__async_outptr", TypeTable::I32),
-                    i32_const(outptr_size as i32),
-                    i32_const(outptr_align as i32),
-                    i32_const(0),
-                ],
-                TypeTable::I32,
-            )));
+            // Async void: no outptr, no results to lift.
             adapter_return_type = TypeTable::UNIT;
         }
     } else if let Some((alloc_size, alloc_align)) = outptr_alloc {

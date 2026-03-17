@@ -126,12 +126,17 @@ impl WasiFunctionInfo {
 
     /// Check if a named type is a WASI variant/struct whose payload requires memory.
     fn named_type_payload_requires_memory(ty: &Type, registry: &WasiRegistry) -> bool {
-        if let Type::Named(named) = ty
-            && let Some(cases) = registry.get_variant_cases(&named.name)
-        {
-            return cases
-                .iter()
-                .any(|(_, payload)| payload.as_ref().is_some_and(Self::type_requires_memory));
+        if let Type::Named(named) = ty {
+            if let Some(cases) = registry.get_variant_cases(&named.name) {
+                return cases
+                    .iter()
+                    .any(|(_, payload)| payload.as_ref().is_some_and(Self::type_requires_memory));
+            }
+            // WASI struct (record) types always need memory since they have multiple
+            // fields and exceed MAX_FLAT_RESULTS (1) in canon lower.
+            if registry.is_struct(&named.name) {
+                return true;
+            }
         }
         false
     }
@@ -796,7 +801,7 @@ impl WasiRegistry {
 
         // Check all parameter types
         for (_, _, ty) in &func.params {
-            if !is_param_type_supported_with_types(ty, &enums, &resources) {
+            if !is_param_type_supported_with_types(ty, &enums, &resources, &structs) {
                 return false;
             }
         }
@@ -1651,7 +1656,7 @@ fn join_val_types(a: Option<ValType>, b: Option<ValType>) -> ValType {
 /// Compound types like String and `Array<T>` are lowered to (ptr: i32, len: i32)
 /// in the Component Model core ABI. This function pushes the appropriate number
 /// of `ValType`s for each parameter.
-pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>) {
+pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &WasiRegistry) {
     match ty {
         Type::Named(named) => match named.name.as_str() {
             // String is lowered to (ptr: i32, len: i32) in CM core ABI
@@ -1667,6 +1672,13 @@ pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>) {
             "f64" => out.push(ValType::F64),
             // Unit type — no core values
             "()" => {}
+            // Struct (record) types flatten to concatenation of field flat types
+            name if registry.is_struct(name) => {
+                let fields = registry.get_struct_fields(name).unwrap();
+                for (_, field_ty) in fields {
+                    flatten_wasi_param_type(field_ty, out, registry);
+                }
+            }
             // Resource handles, enums, etc.
             _ => out.push(ValType::I32),
         },
@@ -1681,15 +1693,15 @@ pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>) {
             // option<T> flattens to: discriminant i32 + flatten(T)
             "Option" if generic.args.len() == 1 => {
                 out.push(ValType::I32); // discriminant
-                flatten_wasi_param_type(&generic.args[0], out);
+                flatten_wasi_param_type(&generic.args[0], out, registry);
             }
             // result<T, E> flattens to: discriminant i32 + union(flatten(T), flatten(E))
             "Result" if generic.args.len() == 2 => {
                 out.push(ValType::I32); // discriminant
                 let mut ok_flat = Vec::new();
                 let mut err_flat = Vec::new();
-                flatten_wasi_param_type(&generic.args[0], &mut ok_flat);
-                flatten_wasi_param_type(&generic.args[1], &mut err_flat);
+                flatten_wasi_param_type(&generic.args[0], &mut ok_flat, registry);
+                flatten_wasi_param_type(&generic.args[1], &mut err_flat, registry);
                 let max_len = ok_flat.len().max(err_flat.len());
                 for i in 0..max_len {
                     let ok_val = ok_flat.get(i).copied();
@@ -1746,6 +1758,7 @@ fn is_param_type_supported_with_types(
     ty: &Type,
     enums: &IndexSet<&str>,
     resources: &IndexSet<&str>,
+    structs: &IndexSet<&str>,
 ) -> bool {
     match ty {
         Type::Named(named) => {
@@ -1753,6 +1766,7 @@ fn is_param_type_supported_with_types(
             // Check primitives and unit type
             // Unit type () is parsed as Named("()"), not Tuple([])
             // Resource types are passed as borrow<resource> in CM (i32 handle in core wasm)
+            // Struct types (records) like Instant are also supported as params
             matches!(
                 name,
                 "i32"
@@ -1769,6 +1783,7 @@ fn is_param_type_supported_with_types(
                     | "()"
             ) || enums.contains(name)
                 || resources.contains(name)
+                || structs.contains(name)
         }
         Type::Generic(generic) => {
             matches!(
@@ -1906,7 +1921,12 @@ fn is_primitive_type_supported_with_types(
 
 /// Check if a parameter type is supported (without enum/resource knowledge)
 pub fn is_param_type_supported(ty: &Type) -> bool {
-    is_param_type_supported_with_types(ty, &IndexSet::default(), &IndexSet::default())
+    is_param_type_supported_with_types(
+        ty,
+        &IndexSet::default(),
+        &IndexSet::default(),
+        &IndexSet::default(),
+    )
 }
 
 /// Check if a return type is supported (without enum/resource/struct knowledge)
