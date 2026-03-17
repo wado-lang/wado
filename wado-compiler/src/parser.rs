@@ -1105,7 +1105,7 @@ impl Parser {
             false
         };
 
-        let pattern = self.parse_let_pattern()?;
+        let pattern = self.parse_pattern()?;
 
         let ty = if self.check(&TokenKind::Colon) {
             self.advance();
@@ -1299,7 +1299,7 @@ impl Parser {
             false
         };
 
-        let pattern = self.parse_let_pattern()?;
+        let pattern = self.parse_pattern()?;
 
         let ty = if self.check(&TokenKind::Colon) {
             self.advance();
@@ -1383,7 +1383,7 @@ impl Parser {
             }
 
             // Try to parse a let-pattern followed by 'of'
-            let pattern = self.parse_let_pattern();
+            let pattern = self.parse_pattern();
             if let Ok(binding) = pattern
                 && matches!(self.peek().kind, TokenKind::Of)
             {
@@ -1558,17 +1558,31 @@ impl Parser {
             self.expect(&TokenKind::RParen)?;
             Ok(Pattern::Tuple(patterns))
         } else if self.check(&TokenKind::LBracket) {
-            // Tuple pattern with brackets: [a, b, c]
+            // Tuple pattern with brackets: [a, b, c] or [a, b, ..]
             self.advance();
             let mut patterns = Vec::new();
             if !self.check(&TokenKind::RBracket) {
-                patterns.push(self.parse_pattern()?);
-                while self.check(&TokenKind::Comma) {
+                if self.check_dot_dot() {
                     self.advance();
-                    if self.check(&TokenKind::RBracket) {
-                        break;
-                    }
+                    self.advance();
+                    // Rest-only: [..] — consume and produce empty pattern list
+                } else {
                     patterns.push(self.parse_pattern()?);
+                    while self.check(&TokenKind::Comma) {
+                        self.advance();
+                        if self.check(&TokenKind::RBracket) {
+                            break;
+                        }
+                        if self.check_dot_dot() {
+                            self.advance();
+                            self.advance();
+                            if self.check(&TokenKind::Comma) {
+                                self.advance();
+                            }
+                            break;
+                        }
+                        patterns.push(self.parse_pattern()?);
+                    }
                 }
             }
             self.expect(&TokenKind::RBracket)?;
@@ -1667,109 +1681,6 @@ impl Parser {
         }
     }
 
-    /// Parse a pattern for let statements and struct field sub-patterns.
-    /// Supports: identifier, wildcard `_`, tuple pattern `[a, b, c]`,
-    /// struct pattern `{ x, y }`, named struct pattern `Point { x, y }`,
-    /// rest pattern `..`, and literal patterns (for use in match/if-let contexts).
-    fn parse_let_pattern(&mut self) -> ParseResult<Pattern> {
-        if self.check(&TokenKind::Mut) {
-            self.advance();
-            let name = self.consume_ident()?;
-            return Ok(Pattern::MutIdent(name));
-        }
-        if self.check(&TokenKind::LBracket) {
-            // Tuple pattern: [a, b, c] or [a, b, ..]
-            self.advance();
-            let mut patterns = Vec::new();
-            if !self.check(&TokenKind::RBracket) {
-                // Check for leading `..`
-                if self.check_dot_dot() {
-                    self.advance();
-                    self.advance();
-                    // Rest-only tuple pattern: [..] — not meaningful, but parse it
-                } else {
-                    patterns.push(self.parse_let_pattern()?);
-                    while self.check(&TokenKind::Comma) {
-                        self.advance();
-                        if self.check(&TokenKind::RBracket) {
-                            break;
-                        }
-                        // Check for trailing `..`
-                        if self.check_dot_dot() {
-                            self.advance();
-                            self.advance();
-                            // Trailing comma after `..` is optional
-                            if self.check(&TokenKind::Comma) {
-                                self.advance();
-                            }
-                            break;
-                        }
-                        patterns.push(self.parse_let_pattern()?);
-                    }
-                }
-            }
-            self.expect(&TokenKind::RBracket)?;
-            Ok(Pattern::Tuple(patterns))
-        } else if self.check(&TokenKind::LBrace) {
-            // Unnamed struct pattern: { x, y }
-            self.parse_struct_pattern_fields(None)
-        } else if let Some(name) = self.peek_kind().as_ident_name() {
-            // Accept identifiers and contextual keywords (flags, type) as pattern names
-            let name = name.to_string();
-            self.advance();
-            if name == "_" {
-                Ok(Pattern::Wildcard)
-            } else if name.chars().next().is_some_and(char::is_uppercase)
-                && self.check(&TokenKind::LBrace)
-            {
-                // Named struct pattern: Point { x, y }
-                self.parse_struct_pattern_fields(Some(name))
-            } else {
-                Ok(Pattern::Ident(name))
-            }
-        } else if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
-            self.advance();
-            Ok(Pattern::Literal(Literal::Number(repr)))
-        } else if let TokenKind::StringLit(raw) = self.peek_kind().clone() {
-            self.advance();
-            Ok(Pattern::Literal(Literal::String(raw)))
-        } else if let TokenKind::CharLit(raw) = self.peek_kind().clone() {
-            self.advance();
-            Ok(Pattern::Literal(Literal::Char(raw)))
-        } else if self.check(&TokenKind::True) {
-            self.advance();
-            Ok(Pattern::Literal(Literal::Bool(true)))
-        } else if self.check(&TokenKind::False) {
-            self.advance();
-            Ok(Pattern::Literal(Literal::Bool(false)))
-        } else if self.check(&TokenKind::Null) {
-            self.advance();
-            Ok(Pattern::Literal(Literal::Null))
-        } else if self.check(&TokenKind::Minus) {
-            self.advance();
-            if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
-                self.advance();
-                Ok(Pattern::Literal(Literal::Number(format!("-{repr}"))))
-            } else {
-                Err(ParseError {
-                    message: format!(
-                        "expected numeric literal after '-', found {:?}",
-                        self.peek_kind()
-                    ),
-                    span: self.peek().span,
-                })
-            }
-        } else {
-            Err(ParseError {
-                message: format!(
-                    "expected identifier, tuple pattern, or struct pattern, found {:?}",
-                    self.peek_kind()
-                ),
-                span: self.peek().span,
-            })
-        }
-    }
-
     /// Parse `{ field, field: pattern, .. }` for struct destructuring.
     /// The `{` token must be the current token.
     fn parse_struct_pattern_fields(&mut self, type_name: Option<String>) -> ParseResult<Pattern> {
@@ -1817,7 +1728,7 @@ impl Parser {
                     // Check for `: pattern` (rename/nested)
                     let pattern = if self.check(&TokenKind::Colon) {
                         self.advance();
-                        self.parse_let_pattern()?
+                        self.parse_pattern()?
                     } else if field_name == "_" {
                         Pattern::Wildcard
                     } else {

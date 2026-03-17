@@ -344,17 +344,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             ast::Pattern::Wildcard => {
                 // Wildcard pattern: let _ = expr; - evaluate but don't bind
-                // We still need a local to store the value temporarily
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
-            ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
-                // These patterns are not valid in let statements
-                let _ = self.logger.error(TypeError::InvalidPattern {
-                    message: "literal and variant patterns are not allowed in let statements"
-                        .to_string(),
-                    span: let_stmt.span,
-                });
-                // Return a dummy statement
+            ast::Pattern::Variant { variant_name, bindings, .. }
+                if bindings.is_empty() && !self.is_variant_or_enum_type(type_id) =>
+            {
+                // Bare uppercase identifier used as a variable binding (e.g., `let K = 27`).
+                // The unified parser produces Pattern::Variant for all uppercase names;
+                // when the RHS type is not a variant/enum, the name is a plain binding.
+                let is_mut = let_stmt.is_mut;
+                let local_index = ctx.add_local(variant_name.clone(), type_id, is_mut);
+                TirStmt::new(
+                    TirStmtKind::Let {
+                        name: variant_name.clone(),
+                        local_index,
+                        is_mut,
+                        is_reactive: let_stmt.is_reactive,
+                        type_id,
+                        value,
+                        skip_value_copy: false,
+                    },
+                    let_stmt.span,
+                )
+            }
+            _ => {
+                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
         }
@@ -396,12 +410,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let_stmt.span,
                 )
             }
+            ast::Pattern::Variant { variant_name, bindings, .. }
+                if bindings.is_empty() && !self.is_variant_or_enum_type(type_id) =>
+            {
+                let is_mut = let_stmt.is_mut;
+                let local_index = ctx.add_local(variant_name.clone(), type_id, is_mut);
+                let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
+                TirStmt::new(
+                    TirStmtKind::Let {
+                        name: variant_name.clone(),
+                        local_index,
+                        is_mut,
+                        is_reactive: let_stmt.is_reactive,
+                        type_id,
+                        value: placeholder,
+                        skip_value_copy: false,
+                    },
+                    let_stmt.span,
+                )
+            }
             _ => {
-                let _ = self.logger.error(TypeError::InvalidPattern {
-                    message: "only simple variable names are allowed in uninitialized declarations"
-                        .to_string(),
-                    span: let_stmt.span,
-                });
+                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
                 TirStmt::new(
                     TirStmtKind::Expr(TirExpr::new(
                         TirExprKind::Unit,
@@ -411,6 +440,52 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let_stmt.span,
                 )
             }
+        }
+    }
+
+    /// Check that a pattern is irrefutable (guaranteed to match).
+    ///
+    /// Irrefutable patterns bind variables unconditionally and are valid in `let` bindings
+    /// and `for` loops. Refutable patterns may fail to match and are only valid in `match`
+    /// arms, `if let`, and `while let`.
+    ///
+    /// Emits a compile error and returns `false` if the pattern is refutable.
+    fn check_irrefutable_pattern(&mut self, pattern: &ast::Pattern, span: Span) -> bool {
+        match pattern {
+            Pattern::Ident(_) | Pattern::MutIdent(_) | Pattern::Wildcard => true,
+            Pattern::Tuple(patterns) => patterns
+                .iter()
+                .all(|p| self.check_irrefutable_pattern(p, span)),
+            Pattern::Struct { fields, .. } => fields
+                .iter()
+                .all(|f| self.check_irrefutable_pattern(&f.pattern, span)),
+            Pattern::Literal(_) => {
+                let _ = self.logger.error(TypeError::InvalidPattern {
+                    message: "refutable pattern in `let` binding: literal patterns may not match; use `if let` instead".to_string(),
+                    span,
+                });
+                false
+            }
+            Pattern::Variant { variant_name, .. } => {
+                let _ = self.logger.error(TypeError::InvalidPattern {
+                    message: format!("refutable pattern in `let` binding: `{variant_name}` may not match; use `if let` instead"),
+                    span,
+                });
+                false
+            }
+        }
+    }
+
+    /// Return true if `type_id` resolves to a variant or enum type.
+    ///
+    /// Used to distinguish bare uppercase identifiers that are variable bindings
+    /// (e.g., `let K = 27`) from actual variant/enum case patterns (`let None = opt`).
+    fn is_variant_or_enum_type(&self, type_id: TypeId) -> bool {
+        let resolved = self.type_table.borrow().get(type_id).clone();
+        match &resolved {
+            ResolvedType::Variant { .. } | ResolvedType::Enum { .. } => true,
+            ResolvedType::GenericInstance { name, .. } => self.variant_cases.contains_key(name),
+            _ => false,
         }
     }
 
@@ -569,13 +644,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
             ast::Pattern::Wildcard => TirPattern::Wildcard,
+            ast::Pattern::Variant { variant_name, bindings, .. }
+                if bindings.is_empty() && !self.is_variant_or_enum_type(type_id) =>
+            {
+                // Bare uppercase binding in a sub-pattern (e.g., `let [K, x] = pair`).
+                let pat_mut = is_mut;
+                let local_index = ctx.add_local(variant_name.clone(), type_id, pat_mut);
+                TirPattern::Binding {
+                    name: variant_name.clone(),
+                    local_index,
+                    type_id,
+                }
+            }
             ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
-                // These patterns are not valid in let statements
-                let _ = self.logger.error(TypeError::InvalidPattern {
-                    message: "literal and variant patterns are not allowed in let statements"
-                        .to_string(),
-                    span,
-                });
+                // Refutable pattern: error was already emitted by check_irrefutable_pattern.
                 TirPattern::Wildcard
             }
         }
