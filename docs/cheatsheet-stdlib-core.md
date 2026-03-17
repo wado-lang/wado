@@ -360,6 +360,22 @@ impl Rem for u128 {
 impl Default for u128 {
     pub fn default() -> u128;
 }
+
+impl From<u8> for u128 {
+    pub fn from(value: u8) -> u128;
+}
+
+impl From<u16> for u128 {
+    pub fn from(value: u16) -> u128;
+}
+
+impl From<u32> for u128 {
+    pub fn from(value: u32) -> u128;
+}
+
+impl From<u64> for u128 {
+    pub fn from(value: u64) -> u128;
+}
 ```
 
 ```wado
@@ -467,6 +483,22 @@ impl Rem for i128 {
 
 impl Default for i128 {
     pub fn default() -> i128;
+}
+
+impl From<i8> for i128 {
+    pub fn from(value: i8) -> i128;
+}
+
+impl From<i16> for i128 {
+    pub fn from(value: i16) -> i128;
+}
+
+impl From<i32> for i128 {
+    pub fn from(value: i32) -> i128;
+}
+
+impl From<i64> for i128 {
+    pub fn from(value: i64) -> i128;
 }
 ```
 
@@ -704,6 +736,10 @@ impl Ord for bool {
 
 impl Default for bool {
     pub fn default() -> bool;
+}
+
+impl From<bool> for bool {
+    pub fn from(value: bool) -> bool;
 }
 ```
 

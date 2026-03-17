@@ -59,7 +59,7 @@ The optimizer runs after lowering and before Wasm emission:
 3. Hot Field Scalarization (HFS): runs once after the fixed-point loop converges
 4. Final DCE: clean up code made dead by optimizations (e.g., functions inlined away) (all levels)
 5. Post-optimization rewrites (labeled block simplification, select lowering, move insertion; all levels)
-6. WIR-level optimizations (multi-value SROA, constant array data promotion, large array splitting; see [WIR Optimizations](#wir-optimizations))
+6. WIR-level optimizations (multi-value SROA, DRVE, dead type/global elimination, constant array data promotion; see [WIR Optimizations](#wir-optimizations))
 
 ## Implemented Optimizations
 
@@ -466,6 +466,30 @@ Rewrites functions that take `ref null S` parameters (where `S` is any single-fi
 The primary trigger is `Box<T>`, a single-field GC struct synthesized by the lower phase to wrap primitives for reference semantics (e.g., `Display::fmt` receives `&self` as `ref null Box<T>`). At call sites where `StructNew(S, [val])` is passed, the value is passed directly as a scalar. For call sites that pass an existing struct reference, a `StructGet` extracts the scalar value.
 
 Impacts all code paths that use template string interpolation (`\`{value}\``), which is the primary trigger for`Box<T>`creation, as well as any user-defined single-field structs with`&self` methods.
+
+### Dead Multi-Field Struct Local Elimination
+
+Extends single-field struct local elimination to structs with N > 1 fields. After `flatten_seq_assignments` makes `LocalSet(x, StructNew { N fields })` visible at statement level, this pass substitutes each `StructGet(LocalGet(x), field_k)` with the corresponding field expression directly when:
+
+- Exactly one `LocalSet` defines `x`
+- Every `LocalGet(x)` is the direct `expr` of a `StructGet`
+- Each of the N fields is accessed exactly once
+
+### Dead Return Value Elimination (DRVE)
+
+Converts functions whose return value is always immediately dropped at every call site (`Drop(Call(f, args))`) to void return. The GC struct allocation in the return (`StructNew`) is eliminated, and the `Drop` wrapper is removed at each call site. Field expressions in the return must be side-effect-free for elimination to apply. Runs after SROA so that functions not handled by multi-value SROA (because call sites drop the result) are caught here.
+
+### Write-Only Local Elimination
+
+Converts `LocalSet(x, expr)` to `Nop` (if `expr` is side-effect-free) or `Drop(expr)` (if `expr` has side effects) when local `x` is never read. This cleans up temporaries left by DRVE and other passes. Runs iteratively until no changes occur.
+
+### Trivial Init-Guard Removal
+
+Removes compiler-generated module-initialization guard blocks of the form `Block { If { GlobalGet(x), Br 1 }; GlobalSet { x, 1 } }` when global `x` has no other uses and is not exported. Both the guard block and the global declaration are eliminated when no actual initialization work remains (e.g., after DCE removes the initializer body).
+
+### Dead Type Elimination
+
+Marks GC type definitions (`WirTypeDef`) not referenced by any live function signature, body instruction, import, or global initializer as dead. Dead types are excluded from Wasm emission. Operates transitively: a struct field type that is only referenced from a dead type is also dead.
 
 ### Split Large Array Literals
 

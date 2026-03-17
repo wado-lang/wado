@@ -229,13 +229,11 @@ impl<'a> WirEmitter<'a> {
             types.ty().rec(gc_subtypes);
         }
 
-        // Emit function types standalone (outside rec group), excluding gc-referenced
-        // and dead (extracted to wasm_module) ones
+        // Emit function types standalone (outside rec group), excluding gc-referenced ones
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
             let wir_idx = u32::try_from(wir_idx).unwrap();
             if let WirTypeDef::Func(f) = typedef
                 && !gc_func_types.contains(&wir_idx)
-                && !self.wir.dead_type_indices.contains(&wir_idx)
             {
                 self.emit_standalone_func_type(&mut types, f, wir_idx);
             }
@@ -269,31 +267,34 @@ impl<'a> WirEmitter<'a> {
                     next_idx += 1;
                 }
                 WirTypeDef::Variant(v) => {
-                    // Base type
-                    self.type_index_map.insert(wir_idx, next_idx);
-                    let base_idx = next_idx;
-                    next_idx += 1;
-
-                    // Case subtypes
-                    let mut case_types = Vec::new();
-                    for case in &v.cases {
-                        case_types.push((case.index, next_idx));
-                        next_idx += 1;
-                    }
-
-                    // Map variant case WIR type indices to their Wasm type indices
-                    for (&case_wir_idx, &(variant_wir_idx, case_idx)) in &self.wir.variant_case_info
                     {
-                        if variant_wir_idx == wir_idx
-                            && let Some(&(_, wasm_idx)) =
-                                case_types.iter().find(|(idx, _)| *idx == case_idx)
-                        {
-                            self.type_index_map.insert(case_wir_idx, wasm_idx);
-                        }
-                    }
+                        // Base type
+                        self.type_index_map.insert(wir_idx, next_idx);
+                        let base_idx = next_idx;
+                        next_idx += 1;
 
-                    self.variant_pre_assigned
-                        .insert(wir_idx, (base_idx, case_types));
+                        // Case subtypes
+                        let mut case_types = Vec::new();
+                        for case in &v.cases {
+                            case_types.push((case.index, next_idx));
+                            next_idx += 1;
+                        }
+
+                        // Map variant case WIR type indices to their Wasm type indices
+                        for (&case_wir_idx, &(variant_wir_idx, case_idx)) in
+                            &self.wir.variant_case_info
+                        {
+                            if variant_wir_idx == wir_idx
+                                && let Some(&(_, wasm_idx)) =
+                                    case_types.iter().find(|(idx, _)| *idx == case_idx)
+                            {
+                                self.type_index_map.insert(case_wir_idx, wasm_idx);
+                            }
+                        }
+
+                        self.variant_pre_assigned
+                            .insert(wir_idx, (base_idx, case_types));
+                    }
                 }
                 WirTypeDef::Func(_) if gc_func_types.contains(&wir_idx) => {
                     // Func type referenced from a GC struct field — must be in rec group
@@ -312,7 +313,6 @@ impl<'a> WirEmitter<'a> {
             let wir_idx = u32::try_from(wir_idx).unwrap();
             if let WirTypeDef::Func(_) = typedef
                 && !gc_func_types.contains(&wir_idx)
-                && !self.wir.dead_type_indices.contains(&wir_idx)
             {
                 self.type_index_map.insert(wir_idx, next_idx);
                 next_idx += 1;
@@ -579,14 +579,7 @@ impl<'a> WirEmitter<'a> {
     fn emit_function_section(&self) -> FunctionSection {
         let mut funcs = FunctionSection::new();
 
-        for (i, func) in self.wir.functions.iter().enumerate() {
-            if self
-                .wir
-                .dead_func_indices
-                .contains(&u32::try_from(i).unwrap())
-            {
-                continue;
-            }
+        for func in &self.wir.functions {
             let wasm_type_idx = self
                 .type_index_map
                 .get(&func.type_id.index())
@@ -623,31 +616,15 @@ impl<'a> WirEmitter<'a> {
         let mut wasm_idx = self.func_index_offset;
         for (i, _func) in self.wir.functions.iter().enumerate() {
             let wir_func_idx = DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
-            if self
-                .wir
-                .dead_func_indices
-                .contains(&u32::try_from(i).unwrap())
-            {
-                continue;
-            }
             self.func_index_map.insert(wir_func_idx, wasm_idx);
             wasm_idx += 1;
         }
     }
 
     fn build_global_name_map(&mut self) {
-        let mut wasm_idx = 0u32;
-        for (i, global) in self.wir.globals.iter().enumerate() {
-            if self
-                .wir
-                .dead_global_indices
-                .contains(&u32::try_from(i).unwrap())
-            {
-                continue;
-            }
+        for (wasm_idx, global) in self.wir.globals.iter().enumerate() {
             self.global_name_map
-                .insert(global.name.fq.clone(), wasm_idx);
-            wasm_idx += 1;
+                .insert(global.name.fq.clone(), u32::try_from(wasm_idx).unwrap());
         }
     }
 
@@ -670,14 +647,7 @@ impl<'a> WirEmitter<'a> {
 
     fn emit_global_section(&self) -> GlobalSection {
         let mut globals = GlobalSection::new();
-        for (i, g) in self.wir.globals.iter().enumerate() {
-            if self
-                .wir
-                .dead_global_indices
-                .contains(&u32::try_from(i).unwrap())
-            {
-                continue;
-            }
+        for g in &self.wir.globals {
             let val_type = self.wir_type_to_val_type(&g.ty);
             let init = self.emit_const_expr(&g.init);
             globals.global(
@@ -728,13 +698,6 @@ impl<'a> WirEmitter<'a> {
         let mut code = CodeSection::new();
 
         for (i, func) in self.wir.functions.iter().enumerate() {
-            if self
-                .wir
-                .dead_func_indices
-                .contains(&u32::try_from(i).unwrap())
-            {
-                continue;
-            }
             self.current_branch_hints.clear();
             let wasm_func = self.emit_function(func);
             code.function(&wasm_func);
@@ -2673,14 +2636,7 @@ impl<'a> WirEmitter<'a> {
     /// These need to be declared in a declarative element segment.
     fn collect_ref_func_indices(&self) -> Vec<u32> {
         let mut indices = IndexSet::default();
-        for (i, func) in self.wir.functions.iter().enumerate() {
-            if self
-                .wir
-                .dead_func_indices
-                .contains(&u32::try_from(i).unwrap())
-            {
-                continue;
-            }
+        for func in &self.wir.functions {
             if let Some(ref body) = func.body {
                 self.scan_ref_func_instrs(body, &mut indices);
             }

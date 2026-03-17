@@ -19,12 +19,6 @@ struct String {
     mut used: i32,
 }
 
-struct WaitEvent {
-    mut code: i32,
-    mut handle: i32,
-    mut payload: u32,
-}
-
 struct Formatter {
     mut fill: char,
     mut align: i32,
@@ -34,11 +28,6 @@ struct Formatter {
     mut width: i32,
     mut precision: i32,
     mut buf: ref String,
-}
-
-struct [Stream<u8>, StreamWritable<u8>] {
-    mut 0: i32,
-    mut 1: i32,
 }
 
 struct [String, i32] {
@@ -62,16 +51,6 @@ struct ArrayIter<Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> w
     mut index: i32,
 }
 
-variant Option<char> {
-    Some(char),
-    None,
-}
-
-struct Option<char>::Some {
-    discriminant: i32,
-    payload_0: char,
-}
-
 variant Option<i32> {
     Some(i32),
     None,
@@ -82,16 +61,6 @@ struct Option<i32>::Some {
     payload_0: i32,
 }
 
-variant Option<Tuple<String,i32>> {
-    Some(ref "tuple/[String, i32]"),
-    None,
-}
-
-struct Option<Tuple<String,i32>>::Some {
-    discriminant: i32,
-    payload_0: ref "tuple/[String, i32]",
-}
-
 struct Array<bool> {  // Array<T> with T=bool
     mut repr: ref array<bool>,
     mut used: i32,
@@ -99,13 +68,6 @@ struct Array<bool> {  // Array<T> with T=bool
 
 struct Array<String> {  // Array<T> with T=String
     mut repr: ref array<String>,
-    mut used: i32,
-}
-
-array array<u64> (mut u64);
-
-struct Array<u64> {  // Array<T> with T=u64
-    mut repr: ref array<u64>,
     mut used: i32,
 }
 
@@ -177,12 +139,6 @@ type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
-type "functype/core:allocator/grow_memory" = fn(i32);
-
-type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
-
-type "functype/core:allocator/debug_realloc" = fn(i32, i32, i32, i32) -> i32;
-
 type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:cli/println" = fn(ref String);
@@ -203,13 +159,9 @@ type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
 
 type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
 
-type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> ref WaitEvent;
-
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
-
-type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
 
@@ -220,8 +172,6 @@ type "functype/String::append" = fn(ref String, ref String);
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
 type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
-
-type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
 type "functype/String::append_char" = fn(ref String, char);
 
@@ -234,8 +184,6 @@ type "functype/Array<bool>::append" = fn(ref Array<bool>, bool);
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 type "functype/TreeMap<String,i32>::needs_compaction" = fn(ref TreeMap<String,i32>) -> bool;
-
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> ref Option<Tuple<String,i32>>;
 
 type "functype/TreeMap<String,i32>::iter" = fn(ref TreeMap<String,i32>) -> ref Array<Tuple<String,i32>>;
 
@@ -283,6 +231,8 @@ type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:alloc
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
+type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
+
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
 import fn task-return from "wasi/task-return";
@@ -296,9 +246,6 @@ import memory (1) from "mem/memory";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
-
-global mut heap_offset: i32 = 8;  // from core:allocator
-global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let map: ref TreeMap<String,i32>;
@@ -366,12 +313,6 @@ fn run() with Stdout {
     let __local_107: ref Formatter;
     let __local_112: ref String;
     let __local_114: ref Formatter;
-    __inline___initialize_modules_0: block {
-        if __modules_initialized {
-            break __inline___initialize_modules_0;
-        };
-        __modules_initialized = 1;
-    };
     map = TreeMap<String,i32> { root: Option<BTreeNode<String,i32>> { 1 }, t: 3, size: 0, deleted_count: 0 };
     self_33 = map;
     key_34 = String { repr: array.new_data<u8>("apple"), used: 5 };
@@ -479,8 +420,8 @@ fn run() with Stdout {
 === Iteration (sorted) ==="), used: 27 });
     entries = TreeMap<String,i32>::iter(map);
     __iter_2 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
-    b2: block {
-        l3: loop {
+    b1: block {
+        l2: loop {
             let __sroa___pattern_temp_0_29_discriminant: i32;
             let __sroa___pattern_temp_0_29_payload_0: ref null "tuple/[String, i32]";
             multivalue_bind [__sroa___pattern_temp_0_29_discriminant, __sroa___pattern_temp_0_29_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_2);
@@ -503,9 +444,9 @@ fn run() with Stdout {
                     break __tmpl: __local_21;
                 });
             } else {
-                break b2;
+                break b1;
             };
-            continue l3;
+            continue l2;
         };
     };
     "core:cli/println"(String { repr: array.new_data<u8>("
@@ -550,8 +491,8 @@ fn run() with Stdout {
 === Final iteration ==="), used: 24 });
     final_entries = TreeMap<String,i32>::iter(map);
     __iter_7 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(final_entries.repr), used: final_entries.used, index: 0 };
-    b7: block {
-        l8: loop {
+    b6: block {
+        l7: loop {
             let __sroa___pattern_temp_1_discriminant: i32;
             let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, i32]";
             multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_7);
@@ -574,9 +515,9 @@ fn run() with Stdout {
                     break __tmpl: __local_27;
                 });
             } else {
-                break b7;
+                break b6;
             };
-            continue l8;
+            continue l7;
         };
     };
 }
@@ -590,60 +531,6 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 fn __cm_export__run() {
     run();
     "wasi/task-return"(0);
-}
-
-fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
-    let current_bytes: i32;
-    let deficit: i32;
-    let normal_grow: i32;
-    let grow_bytes: i32;
-    let grow_pages: i32;
-    current_bytes = builtin::memory_size() * 65536;
-    deficit = new_offset - current_bytes;
-    normal_grow = select i32(current_bytes < 16777216, current_bytes, 16777216);
-    grow_bytes = if deficit > normal_grow -> i32 {
-        1 << (32 - builtin::i32_clz(deficit - 1));
-    } else {
-        normal_grow;
-    };
-    grow_pages = (grow_bytes + 65535) / 65536;
-    drop(builtin::memory_grow(grow_pages));
-}
-
-fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
-    let aligned: i32;
-    let new_offset: i32;
-    if newsize == 0 {
-        if (oldptr + oldsize) == heap_offset {
-            heap_offset = oldptr;
-        };
-        return 0;
-    };
-    aligned = ((heap_offset + align) - 1) & (0 - align);
-    new_offset = aligned + newsize;
-    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
-        "core:allocator/grow_memory"(new_offset);
-    };
-    heap_offset = new_offset;
-    return aligned;
-}
-
-fn "core:allocator/debug_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
-    let aligned: i32;
-    let new_offset: i32;
-    if newsize == 0 {
-        if oldsize > 0 {
-            builtin::memory_fill(oldptr, 255, oldsize);
-        };
-        return 0;
-    };
-    aligned = ((heap_offset + align) - 1) & (0 - align);
-    new_offset = aligned + newsize;
-    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
-        "core:allocator/grow_memory"(new_offset);
-    };
-    heap_offset = new_offset;
-    return aligned;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
@@ -667,12 +554,10 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     let rx: i32;
     let tx: i32;
     let subtask: i32;
-    let __pattern_temp_0: ref "tuple/[Stream<u8>, StreamWritable<u8>]";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
-    __pattern_temp_0 = "tuple/[Stream<u8>, StreamWritable<u8>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
-    rx = __pattern_temp_0.0;
-    tx = __pattern_temp_0.1;
+    rx = builtin::i32_wrap_i64(__pair_temp_1);
+    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     subtask = __cm_adapter__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
@@ -683,13 +568,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l19: loop {
+            l11: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l19;
+                continue l11;
             };
         };
     };
@@ -728,7 +613,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             "wasi/waitable-join"(__local_4, __local_5);
             break __inline_cm_waitable_join_0: __local_4;
         });
-        drop("core:internal/cm_waitable_set_wait"(ws));
+        "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
         "wasi/waitable-set-drop"(ws);
     };
@@ -738,12 +623,10 @@ fn "core:internal/log_stderr"(message) {  // from core:internal
     let rx: i32;
     let tx: i32;
     let subtask: i32;
-    let __pattern_temp_0: ref "tuple/[Stream<u8>, StreamWritable<u8>]";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
-    __pattern_temp_0 = "tuple/[Stream<u8>, StreamWritable<u8>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
-    rx = __pattern_temp_0.0;
-    tx = __pattern_temp_0.1;
+    rx = builtin::i32_wrap_i64(__pair_temp_1);
+    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
     "core:internal/write_string_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
@@ -764,15 +647,13 @@ fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
 fn "core:internal/wait_for_blocked"(handle) {  // from core:internal
     let ws: i32;
     let evt_ptr: i32;
-    let code: i32;
     let payload: i32;
-    let freed: i32;
     ws = "wasi/waitable-set-new"();
     "wasi/waitable-join"(handle, ws);
     evt_ptr = "mem/realloc"(0, 0, 4, 8);
-    code = "wasi/waitable-set-wait"(ws, evt_ptr);
+    drop("wasi/waitable-set-wait"(ws, evt_ptr));
     payload = builtin::load_i32(evt_ptr + 4);
-    freed = "mem/realloc"(evt_ptr, 8, 4, 0);
+    drop("mem/realloc"(evt_ptr, 8, 4, 0));
     "wasi/waitable-set-drop"(ws);
     return payload;
 }
@@ -782,30 +663,22 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    let payload: i32;
-    let freed: i32;
     packed = "core:internal/cm_lower_list_u8"(data, len);
     ptr = builtin::i32_wrap_i64(packed);
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
-        payload = "core:internal/wait_for_blocked"(handle);
+        drop("core:internal/wait_for_blocked"(handle));
     };
-    freed = "mem/realloc"(ptr, raw_len, 1, 0);
+    drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
 fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     let out_ptr: i32;
-    let code: i32;
-    let evt_handle: i32;
-    let payload: i32;
-    let freed: i32;
     out_ptr = "mem/realloc"(0, 0, 4, 8);
-    code = "wasi/waitable-set-wait"(ws, out_ptr);
-    evt_handle = builtin::load_i32(out_ptr);
-    payload = builtin::load_i32(out_ptr + 4);
-    freed = "mem/realloc"(out_ptr, 8, 4, 0);
-    return WaitEvent { code: code, handle: evt_handle, payload: payload };
+    drop("wasi/waitable-set-wait"(ws, out_ptr));
+    drop("mem/realloc"(out_ptr, 8, 4, 0));
+    return;
 }
 
 fn count_digits_i64(val) {
@@ -818,13 +691,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l26: loop {
+            l18: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l26;
+                continue l18;
             };
         };
     };
@@ -841,14 +714,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l30: loop {
+                l22: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l30;
+                    continue l22;
                 };
             };
         };
@@ -940,7 +813,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l39: loop {
+            l31: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -948,7 +821,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l39;
+                continue l31;
             };
         };
     };
@@ -972,7 +845,7 @@ fn String^Ord::cmp(self, other) {
     __for_2: block {
         i = 0;
         block {
-            l43: loop {
+            l35: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
                 };
@@ -985,7 +858,7 @@ fn String^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l43;
+                continue l35;
             };
         };
     };
@@ -1101,13 +974,13 @@ fn Array<String>::append(self, value) {
         __for_0: block {
             i = 0;
             block {
-                l59: loop {
+                l51: loop {
                     if (i < used) == 0 {
                         break __for_0;
                     };
                     builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
                     i = i + 1;
-                    continue l59;
+                    continue l51;
                 };
             };
         };
@@ -1166,7 +1039,7 @@ fn BTreeNode<String,i32>::compact(self) {
         _licm_used_35 = _licm_values_30.used;
         _licm_repr_36 = _licm_values_30.repr;
         block {
-            l62: loop {
+            l54: loop {
                 if (i_7 < _licm_used_31) == 0 {
                     break __for_1;
                 };
@@ -1193,7 +1066,7 @@ fn BTreeNode<String,i32>::compact(self) {
                     Array<bool>::append(new_deleted, 0);
                 };
                 i_7 = i_7 + 1;
-                continue l62;
+                continue l54;
             };
         };
     };
@@ -1207,7 +1080,7 @@ fn BTreeNode<String,i32>::compact(self) {
             _licm_used_38 = _licm_children_37.used;
             _licm_repr_39 = _licm_children_37.repr;
             block {
-                l69: loop {
+                l61: loop {
                     if (i_8 < _licm_used_38) == 0 {
                         break __for_2;
                     };
@@ -1216,7 +1089,7 @@ fn BTreeNode<String,i32>::compact(self) {
                         break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_14: builtin::array_get<ref BTreeNode<String,i32>>(_licm_repr_39, __local_27);
                     });
                     i_8 = i_8 + 1;
-                    continue l69;
+                    continue l61;
                 };
             };
         };
@@ -1243,13 +1116,13 @@ fn Array<bool>::append(self, value) {
         __for_0: block {
             i = 0;
             block {
-                l73: loop {
+                l65: loop {
                     if (i < used) == 0 {
                         break __for_0;
                     };
                     builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
                     i = i + 1;
-                    continue l73;
+                    continue l65;
                 };
             };
         };
@@ -1279,13 +1152,13 @@ fn Array<i32>::append(self, value) {
         __for_0: block {
             i = 0;
             block {
-                l77: loop {
+                l69: loop {
                     if (i < used) == 0 {
                         break __for_0;
                     };
                     builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                     i = i + 1;
-                    continue l77;
+                    continue l69;
                 };
             };
         };
@@ -1366,10 +1239,10 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
     _licm_repr_27 = _licm_keys_17.repr;
     _licm_used_28 = _licm_values_21.used;
     _licm_repr_29 = _licm_values_21.repr;
-    b82: block {
-        l83: loop {
+    b74: block {
+        l75: loop {
             if (i < _licm_used_22) == 0 {
-                break b82;
+                break b74;
             };
             if if _licm_is_leaf_18 == 0 -> i32 {
                 i < _licm_used_23;
@@ -1406,7 +1279,7 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
                 } });
             };
             i = i + 1;
-            continue l83;
+            continue l75;
         };
     };
     if if node.is_leaf == 0 -> i32 {
@@ -1449,13 +1322,13 @@ fn Array<Tuple<String,i32>>::append(self, value) {
         __for_0: block {
             i = 0;
             block {
-                l96: loop {
+                l88: loop {
                     if (i < used) == 0 {
                         break __for_0;
                     };
                     builtin::array_set<ref "tuple/[String, i32]">(new_repr, i, builtin::array_get<ref "tuple/[String, i32]">(old_repr, i));
                     i = i + 1;
-                    continue l96;
+                    continue l88;
                 };
             };
         };
@@ -1484,8 +1357,8 @@ fn TreeMap<String,i32>::delete_in_node(self, node, key) {
     _licm_keys_17 = node.keys;
     _licm_used_18 = _licm_keys_17.used;
     _licm_repr_19 = _licm_keys_17.repr;
-    b98: block {
-        l99: loop {
+    b90: block {
+        l91: loop {
             if if i < _licm_used_18 -> i32 {
                 String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_1: block -> ref String {
                     __local_6 = i;
@@ -1498,10 +1371,10 @@ fn TreeMap<String,i32>::delete_in_node(self, node, key) {
             } else {
                 0;
             } == 0 {
-                break b98;
+                break b90;
             };
             i = i + 1;
-            continue l99;
+            continue l91;
         };
     };
     if if i < __inline_Array_String___len_2: block -> i32 {
@@ -1610,8 +1483,8 @@ fn TreeMap<String,i32>::search_in_node(self, node, key) {
     _licm_keys_16 = node.keys;
     _licm_used_17 = _licm_keys_16.used;
     _licm_repr_18 = _licm_keys_16.repr;
-    b113: block {
-        l114: loop {
+    b105: block {
+        l106: loop {
             if if i < _licm_used_17 -> i32 {
                 String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_1: block -> ref String {
                     __local_6 = i;
@@ -1624,10 +1497,10 @@ fn TreeMap<String,i32>::search_in_node(self, node, key) {
             } else {
                 0;
             } == 0 {
-                break b113;
+                break b105;
             };
             i = i + 1;
-            continue l114;
+            continue l106;
         };
     };
     if if i < __inline_Array_String___len_2: block -> i32 {
@@ -1747,8 +1620,8 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
         _licm_keys_30 = node.keys;
         _licm_used_31 = _licm_keys_30.used;
         _licm_repr_32 = _licm_keys_30.repr;
-        b131: block {
-            l132: loop {
+        b123: block {
+            l124: loop {
                 if if pos_4 < _licm_used_31 -> i32 {
                     String^Ord::cmp(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
                         __local_8 = pos_4;
@@ -1761,10 +1634,10 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
                 } else {
                     0;
                 } == 0 {
-                    break b131;
+                    break b123;
                 };
                 pos_4 = pos_4 + 1;
-                continue l132;
+                continue l124;
             };
         };
         if if pos_4 < __inline_Array_String___len_2: block -> i32 {
@@ -1820,8 +1693,8 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
         _licm_keys_33 = node.keys;
         _licm_used_34 = _licm_keys_33.used;
         _licm_repr_35 = _licm_keys_33.repr;
-        b143: block {
-            l144: loop {
+        b135: block {
+            l136: loop {
                 if if pos_5 < _licm_used_34 -> i32 {
                     String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_8: block -> ref String {
                         __local_22 = pos_5;
@@ -1834,10 +1707,10 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
                 } else {
                     0;
                 } == 0 {
-                    break b143;
+                    break b135;
                 };
                 pos_5 = pos_5 + 1;
-                continue l144;
+                continue l136;
             };
         };
         if BTreeNode<String,i32>::is_full(__inline_Array_BTreeNode_String_i32___IndexValue__index_value_9: block -> ref BTreeNode<String,i32> {
@@ -1918,14 +1791,14 @@ fn TreeMap<String,i32>::sort_node_entries(self, node) {
         _licm_used_50 = _licm_deleted_45.used;
         _licm_repr_51 = _licm_deleted_45.repr;
         block {
-            l154: loop {
+            l146: loop {
                 if (i < _licm_used_46) == 0 {
                     break __for_5;
                 };
                 __for_6: block {
                     j = i + 1;
                     block {
-                        l157: loop {
+                        l149: loop {
                             if (j < _licm_used_46) == 0 {
                                 break __for_6;
                             };
@@ -2022,12 +1895,12 @@ fn TreeMap<String,i32>::sort_node_entries(self, node) {
                                 builtin::array_set<bool>(_licm_repr_51, index_41, temp_d);
                             };
                             j = j + 1;
-                            continue l157;
+                            continue l149;
                         };
                     };
                 };
                 i = i + 1;
-                continue l154;
+                continue l146;
             };
         };
     };
@@ -2094,7 +1967,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
         _licm_used_39 = _licm_deleted_34.used;
         _licm_repr_40 = _licm_deleted_34.repr;
         block {
-            l175: loop {
+            l167: loop {
                 if (i_6 < _licm_used_35) == 0 {
                     break __for_3;
                 };
@@ -2119,7 +1992,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
                     break __inline_Array_bool__IndexValue__index_value_4: builtin::array_get<bool>(_licm_repr_40, __local_19);
                 });
                 i_6 = i_6 + 1;
-                continue l175;
+                continue l167;
             };
         };
     };
@@ -2131,7 +2004,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
             _licm_used_43 = _licm_children_41.used;
             _licm_repr_44 = _licm_children_41.repr;
             block {
-                l181: loop {
+                l173: loop {
                     if (i_7 < _licm_used_43) == 0 {
                         break __for_4;
                     };
@@ -2140,7 +2013,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
                         break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: builtin::array_get<ref BTreeNode<String,i32>>(_licm_repr_44, __local_22);
                     });
                     i_7 = i_7 + 1;
-                    continue l181;
+                    continue l173;
                 };
             };
         };
@@ -2196,13 +2069,13 @@ fn Array<BTreeNode<String,i32>>::append(self, value) {
         __for_0: block {
             i = 0;
             block {
-                l188: loop {
+                l180: loop {
                     if (i < used) == 0 {
                         break __for_0;
                     };
                     builtin::array_set<ref BTreeNode<String,i32>>(new_repr, i, builtin::array_get<ref BTreeNode<String,i32>>(old_repr, i));
                     i = i + 1;
-                    continue l188;
+                    continue l180;
                 };
             };
         };
@@ -2250,7 +2123,7 @@ fn BTreeNode<String,i32>::is_full(self, max_keys) {
         _licm_used_10 = _licm_deleted_8.used;
         _licm_repr_11 = _licm_deleted_8.repr;
         block {
-            l191: loop {
+            l183: loop {
                 if (i < _licm_used_9) == 0 {
                     break __for_0;
                 };
@@ -2265,7 +2138,7 @@ fn BTreeNode<String,i32>::is_full(self, max_keys) {
                     count = count + 1;
                 };
                 i = i + 1;
-                continue l191;
+                continue l183;
             };
         };
     };
@@ -2299,13 +2172,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l196: loop {
+            l188: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l196;
+                continue l188;
             };
         };
     };
@@ -2406,8 +2279,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b215: block {
-        l216: loop {
+    b207: block {
+        l208: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -2432,9 +2305,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b215;
+                break b207;
             };
-            continue l216;
+            continue l208;
         };
     };
     String::append_char(f.buf, 34);
