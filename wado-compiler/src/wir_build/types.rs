@@ -284,13 +284,8 @@ fn register_struct(
             if matches!(ty, WirType::Unit) {
                 return None;
             }
-            // Struct fields use non-nullable refs, except for NullableRef variant fields
-            // which are inherently nullable (null = unit case).
-            let ty = if matches!(ty, WirType::Ref { nullable: true, .. }) {
-                ty
-            } else {
-                ty.as_nonnull()
-            };
+            // Struct fields use non-nullable refs.
+            let ty = ty.as_nonnull();
             Some(WirField {
                 name: f.name.clone(),
                 ty,
@@ -331,27 +326,6 @@ fn register_struct(
     ctx.struct_type_map.insert(struct_name, type_id);
 }
 
-/// Determine the representation for a variant given its cases' WIR types.
-///
-/// Returns `NullableRef { payload_case }` when the variant has exactly 2 cases,
-/// one unit case and one payload case whose WirType has a null niche (i.e., is a
-/// non-nullable concrete or abstract reference). Otherwise returns `SubtypeHierarchy`.
-fn compute_variant_repr(cases: &[(String, Vec<WirType>)]) -> WirVariantRepr {
-    if cases.len() != 2 {
-        return WirVariantRepr::SubtypeHierarchy;
-    }
-    let unit_idx = cases.iter().position(|(_, p)| p.is_empty());
-    let payload_idx = cases.iter().position(|(_, p)| p.len() == 1);
-    match (unit_idx, payload_idx) {
-        (Some(u), Some(p)) if u != p && cases[p].1[0].is_nonnull_ref() => {
-            WirVariantRepr::NullableRef {
-                payload_case: u32::try_from(p).unwrap(),
-            }
-        }
-        _ => WirVariantRepr::SubtypeHierarchy,
-    }
-}
-
 /// Register a single variant type.
 fn register_variant(
     ctx: &mut WirContext<'_>,
@@ -381,8 +355,6 @@ fn register_variant(
         })
         .collect();
 
-    let repr = compute_variant_repr(&raw_cases);
-
     let cases: Vec<WirVariantCase> = raw_cases
         .iter()
         .enumerate()
@@ -404,7 +376,7 @@ fn register_variant(
                 fq: fq.clone(),
             },
             cases: cases.clone(),
-            repr: repr.clone(),
+            repr: WirVariantRepr::default(),
             meta: WirMeta {
                 module_source: Some(module_source.clone()),
                 ..WirMeta::default()
@@ -415,12 +387,6 @@ fn register_variant(
     );
 
     ctx.variant_type_map.insert(fq.clone(), type_id.clone());
-
-    // NullableRef variants don't need phantom case struct types — they use the
-    // payload type directly as the Wasm representation.
-    if matches!(repr, WirVariantRepr::NullableRef { .. }) {
-        return;
-    }
 
     // Register case-specific struct types so the translator can reference them.
     // These are "phantom" types — the emitter will skip them and instead map their
@@ -959,8 +925,6 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
             if ctx.variant_type_map.contains_key(&fq) {
                 continue;
             }
-            let repr = compute_variant_repr(&cases);
-
             let wir_cases: Vec<WirVariantCase> = cases
                 .iter()
                 .enumerate()
@@ -979,7 +943,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         fq: fq.clone(),
                     },
                     cases: wir_cases.clone(),
-                    repr: repr.clone(),
+                    repr: WirVariantRepr::default(),
                     meta: WirMeta {
                         module_source: Some(module_source),
                         ..WirMeta::default()
@@ -990,11 +954,6 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
             );
 
             ctx.variant_type_map.insert(fq.clone(), type_id.clone());
-
-            // NullableRef variants don't need phantom case struct types.
-            if matches!(repr, WirVariantRepr::NullableRef { .. }) {
-                continue;
-            }
 
             // Register case-specific struct types
             for case in &wir_cases {
@@ -1350,14 +1309,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         let field_type_id = tir_struct.fields[field_idx].type_id;
                         let wir_type = ctx.type_id_to_wir_type(type_table, field_type_id);
                         if !is_abstract_ref(&wir_type) {
-                            // Make struct fields non-nullable (same as register_struct),
-                            // except for NullableRef variant fields which are inherently nullable.
-                            let wir_type = if matches!(wir_type, WirType::Ref { nullable: true, .. }) {
-                                wir_type
-                            } else {
-                                wir_type.as_nonnull()
-                            };
-                            resolved = Some(wir_type);
+                            // Make struct fields non-nullable (same as register_struct).
+                            resolved = Some(wir_type.as_nonnull());
                             break;
                         }
                     }
@@ -1382,14 +1335,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                                 let elem_type_id = elements[field_idx];
                                 let wir_type = ctx.type_id_to_wir_type(type_table, elem_type_id);
                                 if !is_abstract_ref(&wir_type) {
-                                    // Make tuple fields non-nullable, except for
-                                    // NullableRef variant fields which are inherently nullable.
-                                    let wir_type = if matches!(wir_type, WirType::Ref { nullable: true, .. }) {
-                                        wir_type
-                                    } else {
-                                        wir_type.as_nonnull()
-                                    };
-                                    resolved = Some(wir_type);
+                                    // Make tuple fields non-nullable.
+                                    resolved = Some(wir_type.as_nonnull());
                                     break;
                                 }
                             }
@@ -1436,13 +1383,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 let tir_payload_id = tir_case.payload;
                 let new_ty = ctx.type_id_to_wir_type(type_table, tir_payload_id);
                 if !is_abstract_ref(&new_ty) {
-                    // Preserve nullability for NullableRef variant payloads
-                    let new_ty = if matches!(new_ty, WirType::Ref { nullable: true, .. }) {
-                        new_ty
-                    } else {
-                        new_ty.as_nonnull()
-                    };
-                    variant_payload_fixups.push((wir_idx, case_idx, payload_idx, new_ty));
+                    variant_payload_fixups.push((wir_idx, case_idx, payload_idx, new_ty.as_nonnull()));
                 }
             }
         }
@@ -1497,13 +1438,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             if is_abstract_ref(&payload_ty) {
                 continue; // Still abstract; can't resolve
             }
-            // Preserve nullability for NullableRef variant payloads
-            let payload_ty = if matches!(payload_ty, WirType::Ref { nullable: true, .. }) {
-                payload_ty
-            } else {
-                payload_ty.as_nonnull()
-            };
-            case_struct_fixups.push((case_struct_idx, field_idx, payload_ty));
+            case_struct_fixups.push((case_struct_idx, field_idx, payload_ty.as_nonnull()));
         }
     }
     for (type_idx, field_idx, new_type) in case_struct_fixups {

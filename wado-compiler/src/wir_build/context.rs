@@ -529,9 +529,6 @@ impl<'a> WirContext<'a> {
                     // Try as variant (in type_map)
                     let variant_fq = format!("{module_source}//{mangled}");
                     if let Some(tid) = self.type_map.get(&variant_fq) {
-                        if let Some(nullable_ty) = self.nullable_ref_payload_type(tid) {
-                            return nullable_ty;
-                        }
                         WirType::Ref {
                             type_id: tid.clone(),
                             nullable: false,
@@ -561,9 +558,6 @@ impl<'a> WirContext<'a> {
                             }
                             let resolved_fq = format!("{module_source}//{resolved_mangled}");
                             if let Some(tid) = self.type_map.get(&resolved_fq) {
-                                if let Some(nullable_ty) = self.nullable_ref_payload_type(tid) {
-                                    return nullable_ty;
-                                }
                                 return WirType::Ref {
                                     type_id: tid.clone(),
                                     nullable: false,
@@ -610,8 +604,7 @@ impl<'a> WirContext<'a> {
                     }
                 }
             }
-            // Option<T> is now handled as GenericInstance (SubtypeHierarchy variant)
-            // TODO: Future optimization: use NullableRef for Option<T> when T is non-nullable
+            // Option<T> is handled as GenericInstance (variant).
             ResolvedType::Enum {
                 name,
                 module_source,
@@ -633,9 +626,6 @@ impl<'a> WirContext<'a> {
             } => {
                 let fq = format!("{module_source}//{name}");
                 if let Some(type_id) = self.type_map.get(&fq) {
-                    if let Some(nullable_ty) = self.nullable_ref_payload_type(type_id) {
-                        return nullable_ty;
-                    }
                     WirType::Ref {
                         type_id: type_id.clone(),
                         nullable: false,
@@ -715,20 +705,6 @@ impl<'a> WirContext<'a> {
     pub fn is_variant_type(&self, type_id: &WirTypeId) -> bool {
         let idx = type_id.index() as usize;
         idx < self.types.len() && matches!(&self.types[idx], WirTypeDef::Variant(_))
-    }
-
-    /// If `type_id` refers to a `NullableRef` variant, return the payload type as nullable.
-    ///
-    /// Returns `None` for `SubtypeHierarchy` variants and non-variant types.
-    fn nullable_ref_payload_type(&self, type_id: &WirTypeId) -> Option<WirType> {
-        let idx = type_id.index() as usize;
-        if let Some(WirTypeDef::Variant(v)) = self.types.get(idx) {
-            if let crate::wir::WirVariantRepr::NullableRef { payload_case } = v.repr {
-                let payload_ty = v.cases[payload_case as usize].payload[0].clone();
-                return Some(payload_ty.as_nullable());
-            }
-        }
-        None
     }
 
     /// Get the number of fields in a WIR struct type.

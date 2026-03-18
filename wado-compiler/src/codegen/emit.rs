@@ -8,7 +8,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirCopyType, WirExportDesc, WirFuncType, WirFunction,
     WirImportDesc, WirInstr, WirModule, WirStructType, WirType, WirTypeDef, WirTypeId,
-    WirVariantRepr, WirVariantType,
+    WirVariantType,
 };
 
 use wasm_encoder::{
@@ -267,10 +267,6 @@ impl<'a> WirEmitter<'a> {
                     next_idx += 1;
                 }
                 WirTypeDef::Variant(v) => {
-                    if matches!(v.repr, WirVariantRepr::NullableRef { .. }) {
-                        // NullableRef variants emit no Wasm types — they reuse the payload type.
-                        continue;
-                    }
                     {
                         // Base type
                         self.type_index_map.insert(wir_idx, next_idx);
@@ -410,11 +406,6 @@ impl<'a> WirEmitter<'a> {
         wir_idx: u32,
         subtypes: &mut Vec<SubType>,
     ) {
-        if matches!(v.repr, WirVariantRepr::NullableRef { .. }) {
-            // NullableRef variants emit no Wasm types — the payload type is used directly.
-            return;
-        }
-
         // Type indices already pre-assigned by pre_assign_type_indices
         let base_type_idx = self.type_index_map[&wir_idx];
         let case_types = self
@@ -1754,6 +1745,14 @@ impl<'a> WirEmitter<'a> {
             }
             WirInstr::RefIsNull(o) => self.emit_unary(f, o, Instruction::RefIsNull),
             WirInstr::RefAsNonNull(o) => {
+                // If inner is a LocalGet for a ref_local, that handler already
+                // emits ref.as_non_null — don't emit it again (would double-wrap).
+                if let WirInstr::LocalGet { name } = o.as_ref() {
+                    if self.ref_locals.contains(name.as_str()) {
+                        self.emit_instr(f, o);
+                        return;
+                    }
+                }
                 self.emit_unary(f, o, Instruction::RefAsNonNull);
             }
             WirInstr::RefEq(l, r) => self.emit_binary(f, l, r, Instruction::RefEq),
