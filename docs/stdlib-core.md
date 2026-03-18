@@ -1127,6 +1127,8 @@ _Fields are private._
 
 ##### `pub fn with_capacity(capacity: i32) -> Array<T>`
 
+##### `pub fn grow(&mut self)`
+
 ##### `pub fn filled(n: i32, element: T) -> Array<T>`
 
 ##### `pub fn len(&self) -> i32`
