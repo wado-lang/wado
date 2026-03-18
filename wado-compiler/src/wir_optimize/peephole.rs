@@ -1,16 +1,19 @@
-//! Peephole optimization and cleanup passes for WIR.
+//! Peephole optimization pass for WIR.
 //!
-//! - **`optimize_instrs`**: constant folding, copy elision, multi-value struct elision.
-//! - **`cleanup_wir`**: removes dead locals, nops, and redundant `ref.as_non_null`.
+//! Per-function pass that applies local rewrites:
+//! - Constant folding on integer comparisons
+//! - Dead `If` elimination (constant condition)
+//! - Redundant `ValueCopy` elision
+//! - Copy-used-only-for-field-reads elision
+//! - Multi-value struct elision (`MultiValueStructNew` + `StructGet` → `MultiValueLocalBind`)
 
-use crate::hashmap::IndexSet;
-use crate::wir::{WirInstr, WirModule, WirTypeDef};
+use crate::wir::{WirInstr, WirTypeDef};
 
 /// Recursively optimize a list of instructions.
 ///
 /// First descends into nested instruction bodies (Block, Loop, If, Seq),
 /// then applies flat-level optimizations on the current list.
-pub(super) fn optimize_instrs(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
+pub(super) fn run_peephole(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
     for instr in instrs.iter_mut() {
         optimize_nested(instr, types);
     }
@@ -24,7 +27,7 @@ pub(super) fn optimize_instrs(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) 
 fn optimize_nested(instr: &mut WirInstr, types: &[WirTypeDef]) {
     match instr {
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            optimize_instrs(body, types);
+            run_peephole(body, types);
         }
         WirInstr::If {
             condition,
@@ -32,9 +35,9 @@ fn optimize_nested(instr: &mut WirInstr, types: &[WirTypeDef]) {
             else_body,
             result,
         } => {
-            optimize_instrs(then_body, types);
+            run_peephole(then_body, types);
             if let Some(eb) = else_body {
-                optimize_instrs(eb, types);
+                run_peephole(eb, types);
             }
             // Dead If elimination: replace with surviving branch when condition is constant
             if let Some(const_val) = try_fold_wir_to_bool(condition) {
@@ -62,7 +65,7 @@ fn optimize_nested(instr: &mut WirInstr, types: &[WirTypeDef]) {
             }
         }
         WirInstr::Seq(body) => {
-            optimize_instrs(body, types);
+            run_peephole(body, types);
         }
         WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. } => {
             optimize_nested(value, types);
@@ -523,148 +526,4 @@ fn match_field_get(
         return None;
     }
     Some((idx, target.clone()))
-}
-
-pub(super) fn cleanup_wir(module: &mut WirModule) {
-    for func in &mut module.functions {
-        if let Some(body) = &mut func.body {
-            // Remove DeclareLocal for locals that are never used (no LocalGet/LocalSet/LocalTee).
-            eliminate_dead_locals(body);
-            cleanup_instrs(body);
-        }
-    }
-}
-
-/// Remove `DeclareLocal` instructions for locals that are never referenced
-/// by any `LocalGet`, `LocalSet`, `LocalTee`, or `MultiValueLocalBind`.
-fn eliminate_dead_locals(body: &mut [WirInstr]) {
-    let mut used: IndexSet<String> = IndexSet::default();
-    for instr in body.iter() {
-        collect_local_uses(instr, &mut used);
-    }
-    for instr in body.iter_mut() {
-        nop_unused_declare_locals(instr, &used);
-    }
-}
-
-fn collect_local_uses(instr: &WirInstr, used: &mut IndexSet<String>) {
-    match instr {
-        WirInstr::LocalGet { name } => {
-            used.insert(name.clone());
-        }
-        WirInstr::LocalSet { name, value } => {
-            used.insert(name.clone());
-            collect_local_uses(value, used);
-        }
-        WirInstr::LocalTee { name, value } => {
-            used.insert(name.clone());
-            collect_local_uses(value, used);
-        }
-        WirInstr::MultiValueLocalBind { instr, locals } => {
-            collect_local_uses(instr, used);
-            for local in locals.iter().flatten() {
-                used.insert(local.clone());
-            }
-        }
-        WirInstr::DeclareLocal { .. } | WirInstr::Nop => {}
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            for i in body {
-                collect_local_uses(i, used);
-            }
-        }
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            collect_local_uses(condition, used);
-            for i in then_body {
-                collect_local_uses(i, used);
-            }
-            if let Some(eb) = else_body {
-                for i in eb {
-                    collect_local_uses(i, used);
-                }
-            }
-        }
-        _ => {
-            instr.for_each_child(&mut |child| collect_local_uses(child, used));
-        }
-    }
-}
-
-fn nop_unused_declare_locals(instr: &mut WirInstr, used: &IndexSet<String>) {
-    match instr {
-        WirInstr::DeclareLocal { name, .. } => {
-            if !used.contains(name.as_str()) {
-                *instr = WirInstr::Nop;
-            }
-        }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            for i in body {
-                nop_unused_declare_locals(i, used);
-            }
-        }
-        WirInstr::If {
-            then_body,
-            else_body,
-            ..
-        } => {
-            for i in then_body {
-                nop_unused_declare_locals(i, used);
-            }
-            if let Some(eb) = else_body {
-                for i in eb {
-                    nop_unused_declare_locals(i, used);
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-fn cleanup_instrs(instrs: &mut Vec<WirInstr>) {
-    for instr in instrs.iter_mut() {
-        cleanup_instr(instr);
-    }
-    // Remove nops.
-    instrs.retain(|i| !matches!(i, WirInstr::Nop));
-    // Truncate after first unreachable (dead code elimination).
-    if let Some(pos) = instrs
-        .iter()
-        .position(|i| matches!(i, WirInstr::Unreachable))
-    {
-        instrs.truncate(pos + 1);
-    }
-}
-
-fn cleanup_instr(instr: &mut WirInstr) {
-    // Recurse into nested bodies first (bottom-up).
-    match instr {
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            cleanup_instrs(body);
-        }
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            cleanup_instr(condition);
-            cleanup_instrs(then_body);
-            if let Some(eb) = else_body {
-                cleanup_instrs(eb);
-            }
-        }
-        _ => {
-            instr.for_each_boxed_child_mut(&mut |child| cleanup_instr(child));
-        }
-    }
-    // Elide redundant RefAsNonNull wrapping a non-null-producing instruction.
-    if let WirInstr::RefAsNonNull(inner) = instr
-        && inner.is_nonnull_result()
-    {
-        *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
-    }
 }

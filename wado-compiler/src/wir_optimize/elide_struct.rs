@@ -1,16 +1,15 @@
-//! Struct local elimination and write-only local cleanup passes for WIR.
+//! Struct local elimination passes for WIR.
 //!
-//! - **Dead single-field struct local elimination**: substitutes field access directly.
-//! - **Dead multi-field struct local elimination**: substitutes each field access once.
-//! - **Flatten seq assignments**: canonicalizes LocalSet(x, Seq([preamble, final])).
-//! - **Write-only local elimination**: drops LocalSet(x, expr) when x is never read.
+//! - **Single-field struct local elimination**: substitutes field access directly
+//!   when a local holds a `StructNew { [inner] }` and is only read via `StructGet`.
+//! - **Multi-field struct local elimination**: same as above but for structs with
+//!   N > 1 fields where each field is accessed exactly once.
+//! - **Flatten seq assignments**: canonicalizes `LocalSet(x, Seq([preamble, final]))`.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirModule, WirTypeDef};
 
-use super::{collect_local_gets_deep, is_side_effect_free};
-
-pub(super) fn elide_dead_single_field_struct_locals(module: &mut WirModule) {
+pub(super) fn elide_single_field_struct_locals(module: &mut WirModule) {
     for func in &mut module.functions {
         let Some(body) = &mut func.body else {
             continue;
@@ -25,7 +24,7 @@ pub(super) fn elide_dead_single_field_struct_locals(module: &mut WirModule) {
 /// field is accessed exactly once via `StructGet`. Substitutes each field access
 /// with the corresponding initializer expression and nops the original assignment.
 /// This eliminates the struct type from the binary.
-pub(super) fn elide_dead_multi_field_struct_locals(module: &mut WirModule) {
+pub(super) fn elide_multi_field_struct_locals(module: &mut WirModule) {
     // Collect type info needed before mutably borrowing functions.
     let type_field_names: Vec<Option<Vec<String>>> = module
         .types
@@ -401,69 +400,6 @@ fn flatten_seq_in_instr(instr: &mut WirInstr) {
             flatten_seq_in_body(then_body);
             if let Some(eb) = else_body {
                 flatten_seq_in_body(eb);
-            }
-        }
-        _ => {}
-    }
-}
-
-pub(super) fn elide_write_only_locals(module: &mut WirModule) {
-    for func in &mut module.functions {
-        if let Some(body) = &mut func.body {
-            loop {
-                if !elide_write_only_locals_in_body(body) {
-                    break;
-                }
-            }
-        }
-    }
-}
-
-fn elide_write_only_locals_in_body(body: &mut Vec<WirInstr>) -> bool {
-    let mut read_locals: IndexSet<String> = IndexSet::default();
-    for instr in body.iter() {
-        collect_local_gets_deep(instr, &mut read_locals);
-    }
-
-    let mut changed = false;
-    for instr in body.iter_mut() {
-        elide_write_only_in_instr(instr, &read_locals, &mut changed);
-    }
-    changed
-}
-
-fn elide_write_only_in_instr(
-    instr: &mut WirInstr,
-    read_locals: &IndexSet<String>,
-    changed: &mut bool,
-) {
-    match instr {
-        WirInstr::LocalSet { name, value } if !read_locals.contains(name.as_str()) => {
-            let value_expr = std::mem::replace(value.as_mut(), WirInstr::Nop);
-            if is_side_effect_free(&value_expr) {
-                *instr = WirInstr::Nop;
-            } else {
-                *instr = WirInstr::Drop(Box::new(value_expr));
-            }
-            *changed = true;
-        }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            for child in body.iter_mut() {
-                elide_write_only_in_instr(child, read_locals, changed);
-            }
-        }
-        WirInstr::If {
-            then_body,
-            else_body,
-            ..
-        } => {
-            for child in then_body.iter_mut() {
-                elide_write_only_in_instr(child, read_locals, changed);
-            }
-            if let Some(eb) = else_body {
-                for child in eb.iter_mut() {
-                    elide_write_only_in_instr(child, read_locals, changed);
-                }
             }
         }
         _ => {}
