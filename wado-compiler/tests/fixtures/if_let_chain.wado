@@ -62,6 +62,22 @@ fn bool_then_let() with Stdout {
     }
 }
 
+// Logical && inside parentheses — not treated as a chain separator
+fn paren_logical_and() with Stdout {
+    let opt = Option::<i32>::Some(5);
+    let flag1 = true;
+    let flag2 = true;
+    if let Some(x) = opt && (flag1 && flag2) {
+        println(`paren: x={x}`);
+    }
+    // false case
+    if let Some(x) = opt && (flag1 && false) {
+        println(`should not print: {x}`);
+    } else {
+        println("paren false");
+    }
+}
+
 export fn run() with Stdout {
     simple_guard();
     guard_with_else();
@@ -70,9 +86,10 @@ export fn run() with Stdout {
     chained_lets();
     chain_with_guard();
     bool_then_let();
+    paren_logical_and();
 }
 
 __DATA__
 {
-    "stdout": "x = 10\nsmall: 3\n6\nbig: 42\n10 20\nsum ok: 30\nflag and x=5\n"
+    "stdout": "x = 10\nsmall: 3\n6\nbig: 42\n10 20\nsum ok: 30\nflag and x=5\nparen: x=5\nparen false\n"
 }
