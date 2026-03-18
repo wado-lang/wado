@@ -16,8 +16,9 @@ use crate::hashmap::IndexSet;
 use crate::hashmap::IndexMap;
 
 use crate::ast::{
-    AssertStmt, Block, ClosureExpr, Condition, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
-    IfExpr, IfStmt, Item, LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt, Stmt, WhileStmt,
+    AssertStmt, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt, ForOfStmt,
+    ForStmt, Function, IfExpr, IfStmt, Item, LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt,
+    Stmt, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
 use crate::logger::{Bail, Logger};
@@ -395,19 +396,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Bind an if statement
     fn bind_if_stmt(&mut self, if_stmt: &IfStmt) -> Result<(), Bail> {
-        // Handle optional init binding (scoped to this if statement)
-        if if_stmt.init.is_some() {
-            self.enter_scope();
-        }
-
-        if let Some(init) = &if_stmt.init {
-            self.bind_let(init)?;
-        }
-
-        // For pattern conditions, enter scope before the condition so pattern bindings
-        // are only visible in then_block (not in else_block or outer scope)
-        let is_pattern = matches!(if_stmt.condition, Condition::Pattern { .. });
-        if is_pattern {
+        let is_let_chain = matches!(if_stmt.condition, Condition::LetChain { .. });
+        if is_let_chain {
+            // Enter one scope for all chain elements and then_block.
+            // Pattern bindings are visible in subsequent elements and then_block,
+            // but NOT in else_block (scoped out before else).
             self.enter_scope();
         }
 
@@ -419,7 +412,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         self.bind_block(&if_stmt.then_block)?;
         let uninit_after_then = self.possibly_uninit.clone();
 
-        if is_pattern {
+        if is_let_chain {
             self.exit_scope();
         }
 
@@ -438,18 +431,13 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             self.possibly_uninit = uninit_before;
         }
 
-        if if_stmt.init.is_some() {
-            self.exit_scope();
-        }
         Ok(())
     }
 
     /// Bind a while statement
     fn bind_while(&mut self, while_stmt: &WhileStmt) -> Result<(), Bail> {
-        // For pattern conditions, enter scope before the condition so pattern bindings
-        // are visible in the body
-        let is_pattern = matches!(while_stmt.condition, Condition::Pattern { .. });
-        if is_pattern {
+        let is_let_chain = matches!(while_stmt.condition, Condition::LetChain { .. });
+        if is_let_chain {
             self.enter_scope();
         }
 
@@ -460,7 +448,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         self.bind_block(&while_stmt.body)?;
         self.possibly_uninit = uninit_before;
 
-        if is_pattern {
+        if is_let_chain {
             self.exit_scope();
         }
         Ok(())
@@ -722,19 +710,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Bind an if expression
     fn bind_if_expr(&mut self, if_expr: &IfExpr) -> Result<(), Bail> {
-        // Handle optional init binding (scoped to this if expression)
-        if if_expr.init.is_some() {
-            self.enter_scope();
-        }
-
-        if let Some(init) = &if_expr.init {
-            self.bind_let(init)?;
-        }
-
-        // For pattern conditions, enter scope before the condition so pattern bindings
-        // are only visible in then_block (not in else_block or outer scope)
-        let is_pattern = matches!(if_expr.condition, Condition::Pattern { .. });
-        if is_pattern {
+        let is_let_chain = matches!(if_expr.condition, Condition::LetChain { .. });
+        if is_let_chain {
             self.enter_scope();
         }
 
@@ -746,7 +723,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         self.bind_block(&if_expr.then_block)?;
         let uninit_after_then = self.possibly_uninit.clone();
 
-        if is_pattern {
+        if is_let_chain {
             self.exit_scope();
         }
 
@@ -762,25 +739,29 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             self.possibly_uninit = uninit_before;
         }
 
-        if if_expr.init.is_some() {
-            self.exit_scope();
-        }
         Ok(())
     }
 
-    /// Bind an if condition (expression or pattern match)
+    /// Bind an if condition (expression or let chain)
     fn bind_condition(&mut self, condition: &Condition) -> Result<(), Bail> {
         match condition {
             Condition::Expr(expr) => {
                 self.bind_expr(expr)?;
             }
-            Condition::Pattern { pattern, expr, .. } => {
-                // First bind the expression being matched
-                self.bind_expr(expr)?;
-                // Then bind the pattern (introduces variables)
-                // Note: pattern variables are scoped to the then-block
-                // This is handled by the caller entering/exiting scope
-                self.bind_pattern(pattern, expr.span())?;
+            Condition::LetChain { elements, .. } => {
+                // Process each element in order. Let elements introduce bindings
+                // visible in subsequent elements (caller must have entered a scope).
+                for elem in elements {
+                    match elem {
+                        ConditionElement::Let { pattern, expr, .. } => {
+                            self.bind_expr(expr)?;
+                            self.bind_pattern(pattern, expr.span())?;
+                        }
+                        ConditionElement::Expr(expr) => {
+                            self.bind_expr(expr)?;
+                        }
+                    }
+                }
             }
         }
         Ok(())

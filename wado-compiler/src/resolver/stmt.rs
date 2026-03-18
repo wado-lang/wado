@@ -1,8 +1,9 @@
 //! Statement resolution (let, return, if, loop, break, continue, etc.).
 
 use crate::ast::{
-    self, Block, BreakStmt, Condition, ContinueStmt, Expr, ExprStmt, ForOfStmt, IdentExpr, IfStmt,
-    LetStmt, Literal, LoopStmt, MethodCallExpr, Pattern, ReturnStmt, Stmt, TaskReturnStmt,
+    self, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt, ForOfStmt,
+    IdentExpr, IfStmt, LetStmt, Literal, LoopStmt, MethodCallExpr, Pattern, ReturnStmt, Stmt,
+    TaskReturnStmt,
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
@@ -344,17 +345,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             ast::Pattern::Wildcard => {
                 // Wildcard pattern: let _ = expr; - evaluate but don't bind
-                // We still need a local to store the value temporarily
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
-            ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
-                // These patterns are not valid in let statements
-                let _ = self.logger.error(TypeError::InvalidPattern {
-                    message: "literal and variant patterns are not allowed in let statements"
-                        .to_string(),
-                    span: let_stmt.span,
-                });
-                // Return a dummy statement
+            ast::Pattern::Variant {
+                variant_name,
+                bindings,
+                ..
+            } if bindings.is_empty() && !self.is_variant_or_enum_type(type_id) => {
+                // Bare uppercase identifier used as a variable binding (e.g., `let K = 27`).
+                // The unified parser produces Pattern::Variant for all uppercase names;
+                // when the RHS type is not a variant/enum, the name is a plain binding.
+                let is_mut = let_stmt.is_mut;
+                let local_index = ctx.add_local(variant_name.clone(), type_id, is_mut);
+                TirStmt::new(
+                    TirStmtKind::Let {
+                        name: variant_name.clone(),
+                        local_index,
+                        is_mut,
+                        is_reactive: let_stmt.is_reactive,
+                        type_id,
+                        value,
+                        skip_value_copy: false,
+                    },
+                    let_stmt.span,
+                )
+            }
+            _ => {
+                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
         }
@@ -396,12 +413,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let_stmt.span,
                 )
             }
+            ast::Pattern::Variant {
+                variant_name,
+                bindings,
+                ..
+            } if bindings.is_empty() && !self.is_variant_or_enum_type(type_id) => {
+                let is_mut = let_stmt.is_mut;
+                let local_index = ctx.add_local(variant_name.clone(), type_id, is_mut);
+                let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
+                TirStmt::new(
+                    TirStmtKind::Let {
+                        name: variant_name.clone(),
+                        local_index,
+                        is_mut,
+                        is_reactive: let_stmt.is_reactive,
+                        type_id,
+                        value: placeholder,
+                        skip_value_copy: false,
+                    },
+                    let_stmt.span,
+                )
+            }
             _ => {
-                let _ = self.logger.error(TypeError::InvalidPattern {
-                    message: "only simple variable names are allowed in uninitialized declarations"
-                        .to_string(),
-                    span: let_stmt.span,
-                });
+                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
                 TirStmt::new(
                     TirStmtKind::Expr(TirExpr::new(
                         TirExprKind::Unit,
@@ -411,6 +445,71 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let_stmt.span,
                 )
             }
+        }
+    }
+
+    /// Check that a pattern is irrefutable (guaranteed to match).
+    ///
+    /// Irrefutable patterns bind variables unconditionally and are valid in `let` bindings
+    /// and `for` loops. Refutable patterns may fail to match and are only valid in `match`
+    /// arms, `if let`, and `while let`.
+    ///
+    /// Emits a compile error and returns `false` if the pattern is refutable.
+    fn check_irrefutable_pattern(&mut self, pattern: &ast::Pattern, span: Span) -> bool {
+        match pattern {
+            Pattern::Ident(_) | Pattern::MutIdent(_) | Pattern::Wildcard => true,
+            Pattern::Tuple(patterns) => patterns
+                .iter()
+                .all(|p| self.check_irrefutable_pattern(p, span)),
+            Pattern::Struct { fields, .. } => fields
+                .iter()
+                .all(|f| self.check_irrefutable_pattern(&f.pattern, span)),
+            Pattern::Literal(_) => {
+                let _ = self.logger.error(TypeError::InvalidPattern {
+                    message: "refutable pattern in `let` binding: literal patterns may not match; use `if let` instead".to_string(),
+                    span,
+                });
+                false
+            }
+            Pattern::Variant { variant_name, .. } => {
+                let _ = self.logger.error(TypeError::InvalidPattern {
+                    message: format!("refutable pattern in `let` binding: `{variant_name}` may not match; use `if let` instead"),
+                    span,
+                });
+                false
+            }
+        }
+    }
+
+    /// Return true if `type_id` resolves to a variant or enum type.
+    ///
+    /// Used to distinguish bare uppercase identifiers that are variable bindings
+    /// (e.g., `let K = 27`) from actual variant/enum case patterns (`let None = opt`).
+    fn is_variant_or_enum_type(&self, type_id: TypeId) -> bool {
+        let resolved = self.type_table.borrow().get(type_id).clone();
+        match &resolved {
+            ResolvedType::Variant { .. } | ResolvedType::Enum { .. } => true,
+            ResolvedType::GenericInstance { name, .. } => self.variant_cases.contains_key(name),
+            _ => false,
+        }
+    }
+
+    fn is_known_case_of_type(&self, type_id: TypeId, case_name: &str) -> bool {
+        let resolved = self.type_table.borrow().get(type_id).clone();
+        match &resolved {
+            ResolvedType::Enum { name, .. } => self
+                .enum_cases
+                .get(name)
+                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
+            ResolvedType::Variant { name, .. } => self
+                .variant_cases
+                .get(name)
+                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
+            ResolvedType::GenericInstance { name, .. } => self
+                .variant_cases
+                .get(name)
+                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
+            _ => false,
         }
     }
 
@@ -569,13 +668,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
             ast::Pattern::Wildcard => TirPattern::Wildcard,
+            ast::Pattern::Variant {
+                variant_name,
+                bindings,
+                ..
+            } if bindings.is_empty() && !self.is_variant_or_enum_type(type_id) => {
+                // Bare uppercase binding in a sub-pattern (e.g., `let [K, x] = pair`).
+                let pat_mut = is_mut;
+                let local_index = ctx.add_local(variant_name.clone(), type_id, pat_mut);
+                TirPattern::Binding {
+                    name: variant_name.clone(),
+                    local_index,
+                    type_id,
+                }
+            }
             ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
-                // These patterns are not valid in let statements
-                let _ = self.logger.error(TypeError::InvalidPattern {
-                    message: "literal and variant patterns are not allowed in let statements"
-                        .to_string(),
-                    span,
-                });
+                // Refutable pattern: error was already emitted by check_irrefutable_pattern.
                 TirPattern::Wildcard
             }
         }
@@ -644,75 +752,124 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if_stmt: &IfStmt,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
-        let mut result = Vec::new();
-
-        // Handle optional init binding (scoped to this if statement)
-        if if_stmt.init.is_some() {
-            ctx.enter_scope();
-        }
-
-        if let Some(init) = &if_stmt.init {
-            result.push(self.resolve_let(init, ctx));
-        }
-
         match &if_stmt.condition {
             ast::Condition::Expr(expr) => {
-                // Regular expression condition
                 let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
                 let then_block = self.resolve_block(&if_stmt.then_block, ctx, None);
                 let else_block = if_stmt
                     .else_block
                     .as_ref()
                     .map(|b| self.resolve_block(b, ctx, None));
-
-                result.push(TirStmt::new(
+                vec![TirStmt::new(
                     TirStmtKind::If {
                         condition,
                         then_block,
                         else_block,
                     },
                     if_stmt.span,
-                ));
+                )]
             }
-            ast::Condition::Pattern { pattern, expr, .. } => {
-                // Pattern match condition: if let Some(x) = expr { ... }
-                let scrutinee = self.resolve_expr(expr, ctx, None);
-                let scrutinee_type = scrutinee.type_id;
-
-                // Enter scope for pattern bindings (they're only visible in then_block)
-                ctx.enter_scope();
-
-                // Resolve the pattern with type information from scrutinee
-                let tir_pattern =
-                    self.resolve_if_pattern(pattern, scrutinee_type, ctx, if_stmt.span);
-
-                let then_block = self.resolve_block(&if_stmt.then_block, ctx, None);
-
-                // Exit pattern binding scope before resolving else block
-                ctx.exit_scope();
-
+            ast::Condition::LetChain { elements, .. } => {
+                // Resolve else_block in outer scope (chain bindings are not visible there)
                 let else_block = if_stmt
                     .else_block
                     .as_ref()
                     .map(|b| self.resolve_block(b, ctx, None));
 
-                result.push(TirStmt::new(
+                // Enter scope for chain element bindings and then_block
+                ctx.enter_scope();
+                let stmts = self.resolve_let_chain_stmts(
+                    elements,
+                    &if_stmt.then_block,
+                    else_block.as_ref(),
+                    ctx,
+                    None,
+                    if_stmt.span,
+                );
+                ctx.exit_scope();
+
+                stmts
+            }
+        }
+    }
+
+    /// Resolve a let-chain condition into a nested sequence of IfLet/If TIR statements.
+    ///
+    /// Each element of the chain adds one nesting level: a `Let` element becomes an `IfLet`
+    /// node (scrutinee + pattern), and an `Expr` element becomes an `If` node (boolean guard).
+    /// All levels that fail fall through to `else_block`; the innermost level runs `then_block`.
+    ///
+    /// The `else_block` TIR is cloned for each failure path. This duplicates else-block code
+    /// in the output, but is typically small (e.g., `None` or a single `panic` call).
+    pub(super) fn resolve_let_chain_stmts(
+        &mut self,
+        elements: &[ConditionElement],
+        then_block_ast: &ast::Block,
+        else_block: Option<&TirBlock>,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        span: Span,
+    ) -> Vec<TirStmt> {
+        if elements.is_empty() {
+            return self.resolve_block(then_block_ast, ctx, expected_type).stmts;
+        }
+        // Process the current element first so its bindings are visible when resolving
+        // subsequent elements and the then_block (via recursive calls below).
+        let stmt = match &elements[0] {
+            ConditionElement::Let {
+                pattern,
+                expr,
+                span: elem_span,
+            } => {
+                let scrutinee = self.resolve_expr(expr, ctx, None);
+                let scrutinee_type = scrutinee.type_id;
+                // Adds pattern bindings to ctx — subsequent elements can see them
+                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx, *elem_span);
+                let inner_block = TirBlock::new(
+                    self.resolve_let_chain_stmts(
+                        &elements[1..],
+                        then_block_ast,
+                        else_block,
+                        ctx,
+                        expected_type,
+                        span,
+                    ),
+                    span,
+                );
+                TirStmt::new(
                     TirStmtKind::IfLet {
                         scrutinee,
                         pattern: tir_pattern,
-                        then_block,
-                        else_block,
+                        then_block: inner_block,
+                        else_block: else_block.cloned(),
                     },
-                    if_stmt.span,
-                ));
+                    span,
+                )
             }
-        }
-
-        if if_stmt.init.is_some() {
-            ctx.exit_scope();
-        }
-
-        result
+            ConditionElement::Expr(expr) => {
+                let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                let inner_block = TirBlock::new(
+                    self.resolve_let_chain_stmts(
+                        &elements[1..],
+                        then_block_ast,
+                        else_block,
+                        ctx,
+                        expected_type,
+                        span,
+                    ),
+                    span,
+                );
+                TirStmt::new(
+                    TirStmtKind::If {
+                        condition,
+                        then_block: inner_block,
+                        else_block: else_block.cloned(),
+                    },
+                    span,
+                )
+            }
+        };
+        vec![stmt]
     }
 
     /// Resolve a pattern in an if-pattern context with type information from the scrutinee.
@@ -847,6 +1004,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 bindings,
                 span,
             } => {
+                // Bare uppercase identifier that is not a known case of the scrutinee type
+                // is treated as a variable binding (e.g. `if let VAL = opt`).
+                if bindings.is_empty() && !self.is_known_case_of_type(scrutinee_type, variant_name)
+                {
+                    let binding_type = if ref_binding {
+                        self.type_table
+                            .borrow_mut()
+                            .intern(ResolvedType::Ref(scrutinee_type))
+                    } else {
+                        scrutinee_type
+                    };
+                    let index = ctx.add_local(variant_name.clone(), binding_type, false);
+                    return TirPattern::Binding {
+                        name: variant_name.clone(),
+                        local_index: index,
+                        type_id: binding_type,
+                    };
+                }
+
                 let resolved_type = self.type_table.borrow().get(scrutinee_type).clone();
 
                 // Handle enum types (no payload, just discriminant matching)
@@ -1432,10 +1608,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // if let Some(v) = __iter_N.next() { body } else { break; }
         let if_let = IfStmt {
-            init: None,
-            condition: Condition::Pattern {
-                pattern: some_pattern,
-                expr: next_call,
+            condition: Condition::LetChain {
+                elements: vec![ConditionElement::Let {
+                    pattern: some_pattern,
+                    expr: next_call,
+                    span,
+                }],
                 span,
             },
             then_block: for_of.body.clone(),

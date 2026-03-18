@@ -1,0 +1,111 @@
+// if let chains: `if let PAT = EXPR && ...` syntax
+// Replaces Go-style `if let x = expr; cond` and adds chained let bindings.
+use { println, Stdout } from "core:cli";
+
+// Simple binding with guard (replaces Go-style `if let x = 10; x > 5`)
+fn simple_guard() with Stdout {
+    if let x = 10 && x > 5 {
+        println(`x = {x}`);
+    }
+}
+
+// Binding with else — binding not visible in else block
+fn guard_with_else() with Stdout {
+    let val = 3;
+    if let x = val && x > 5 {
+        println("big");
+    } else {
+        println(`small: {val}`);
+    }
+}
+
+// Mutable binding with guard
+fn mut_binding() with Stdout {
+    if let mut x = 5 && x > 0 {
+        x = x + 1;
+        println(`{x}`);
+    }
+}
+
+// Pattern match with guard
+fn pattern_with_guard() with Stdout {
+    let opt = Option::<i32>::Some(42);
+    if let Some(x) = opt && x > 10 {
+        println(`big: {x}`);
+    }
+}
+
+// Chained lets: `if let A = e1 && let B = e2 { ... }`
+fn chained_lets() with Stdout {
+    let a = Option::<i32>::Some(10);
+    let b = Option::<i32>::Some(20);
+    if let Some(x) = a && let Some(y) = b {
+        println(`{x} {y}`);
+    }
+}
+
+// Let chain with guard after chained lets
+fn chain_with_guard() with Stdout {
+    let a = Option::<i32>::Some(10);
+    let b = Option::<i32>::Some(20);
+    if let Some(x) = a && let Some(y) = b && x + y > 25 {
+        println(`sum ok: {x + y}`);
+    }
+}
+
+// Bool expression first, then let
+fn bool_then_let() with Stdout {
+    let opt = Option::<i32>::Some(5);
+    let flag = true;
+    if flag && let Some(x) = opt {
+        println(`flag and x={x}`);
+    }
+}
+
+// Second let uses binding from first let (original motivation: `if let Some(x) = opt && let Some(y) = x`)
+fn chained_lets_dependent() with Stdout {
+    let outer: Option<Option<i32>> = Option::Some(Option::Some(99));
+    if let Some(inner) = outer && let Some(n) = inner {
+        println(`nested: {n}`);
+    }
+    // outer is Some(None) — second let fails
+    let outer2: Option<Option<i32>> = Option::Some(null);
+    if let Some(inner2) = outer2 && let Some(n2) = inner2 {
+        println(`should not print: {n2}`);
+    } else {
+        println("inner none");
+    }
+}
+
+// Logical && inside parentheses — not treated as a chain separator
+fn paren_logical_and() with Stdout {
+    let opt = Option::<i32>::Some(5);
+    let flag1 = true;
+    let flag2 = true;
+    if let Some(x) = opt && (flag1 && flag2) {
+        println(`paren: x={x}`);
+    }
+    // false case
+    if let Some(x) = opt && (flag1 && false) {
+        println(`should not print: {x}`);
+    } else {
+        println("paren false");
+    }
+}
+
+export fn run() with Stdout {
+    simple_guard();
+    guard_with_else();
+    mut_binding();
+    pattern_with_guard();
+    chained_lets();
+    chain_with_guard();
+    bool_then_let();
+    chained_lets_dependent();
+    paren_logical_and();
+}
+
+__DATA__
+{
+    "stdout": "x = 10\nsmall: 3\n6\nbig: 42\n10 20\nsum ok: 30\nflag and x=5\nnested: 99\ninner none\nparen: x=5\nparen false\n"
+}

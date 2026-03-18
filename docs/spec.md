@@ -327,17 +327,6 @@ let grade = if score >= 90 { "A" } else if score >= 80 { "B" } else { "C" };
 
 Trailing semicolons are optional in expression blocks (like trailing commas).
 
-**If with Init (Go-style):**
-
-```wado
-if let x = get_value(); x > 0 {
-    println(`positive: {x}`);
-} else {
-    println(`non-positive: {x}`);
-}
-// x is not in scope here
-```
-
 **If Let Pattern Matching:**
 
 ```wado
