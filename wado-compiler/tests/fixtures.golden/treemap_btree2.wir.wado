@@ -87,7 +87,7 @@ struct Array<BTreeNode<String,i32>> {  // Array<T> with T=BTreeNode<String,i32>
 }
 
 struct TreeMap<String,i32> {  // TreeMap<T> with T=String, i32
-    mut root: ref Option<BTreeNode<String,i32>>,
+    mut root: ref null BTreeNode<String,i32>,
     mut t: i32,
     mut size: i32,
     mut deleted_count: i32,
@@ -104,11 +104,6 @@ struct BTreeNode<String,i32> {  // BTreeNode<T> with T=String, i32
 variant Option<BTreeNode<String,i32>> {
     Some(ref BTreeNode<String,i32>),
     None,
-}
-
-struct Option<BTreeNode<String,i32>>::Some {
-    discriminant: i32,
-    payload_0: ref BTreeNode<String,i32>,
 }
 
 enum Ordering { Less = 0, Equal = 1, Greater = 2 };
@@ -191,6 +186,8 @@ type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
 type "functype/TreeMap<String,i32>::needs_compaction" = fn(ref TreeMap<String,i32>) -> bool;
 
+type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> ref null "tuple/[String, i32]";
+
 type "functype/TreeMap<String,i32>::iter" = fn(ref TreeMap<String,i32>) -> ref Array<Tuple<String,i32>>;
 
 type "functype/TreeMap<String,i32>::collect_entries" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>, ref Array<Tuple<String,i32>>);
@@ -236,8 +233,6 @@ type "functype/wasi/stream-new" = fn() -> i64;
 type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
-
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> [i32, ref null "tuple/[String, i32]"];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -287,6 +282,8 @@ fn run() with Stdout {
     let __local_26: ref Formatter;
     let __local_27: ref String;
     let __local_28: ref Formatter;
+    let __pattern_temp_0_29: ref null "tuple/[String, i32]";
+    let __pattern_temp_1: ref null "tuple/[String, i32]";
     let self_33: ref TreeMap<String,i32>;
     let key_34: ref String;
     let self_36: ref TreeMap<String,i32>;
@@ -310,20 +307,20 @@ fn run() with Stdout {
     let __local_76: ref TreeMap<String,i32>;
     let __local_77: ref String;
     let __local_78: ref BTreeNode<String,i32>;
-    let __local_79: ref Option<BTreeNode<String,i32>>;
+    let __local_79: ref null BTreeNode<String,i32>;
     let __local_81: ref String;
     let __local_83: ref Formatter;
     let __local_89: ref String;
     let __local_91: ref Formatter;
     let root: ref BTreeNode<String,i32>;
-    let __pattern_temp_0_96: ref Option<BTreeNode<String,i32>>;
+    let __pattern_temp_0_96: ref null BTreeNode<String,i32>;
     let __local_98: ref String;
     let __local_100: ref Formatter;
     let __local_105: ref String;
     let __local_107: ref Formatter;
     let __local_112: ref String;
     let __local_114: ref Formatter;
-    map = TreeMap<String,i32> { root: Option<BTreeNode<String,i32>> { 1 }, t: 3, size: 0, deleted_count: 0 };
+    map = TreeMap<String,i32> { root: ref.null none, t: 3, size: 0, deleted_count: 0 };
     self_33 = map;
     key_34 = String { repr: array.new_data<u8>("apple"), used: 5 };
     TreeMap<String,i32>::insert(self_33, key_34, 1);
@@ -404,8 +401,8 @@ fn run() with Stdout {
         __local_76 = map;
         __local_77 = String { repr: array.new_data<u8>("cherry"), used: 6 };
         __local_79 = __local_76.root;
-        if ref.test Option<BTreeNode<String,i32>>::Some(__local_79) {
-            __local_78 = ref.cast Option<BTreeNode<String,i32>>::Some(__local_79).payload_0;
+        if ref.is_null(__local_79) == 0 {
+            __local_78 = ref.as_non_null(__local_79);
             break __inline_TreeMap_String_i32___delete_27: TreeMap<String,i32>::delete_in_node(__local_76, __local_78, __local_77);
         };
         break __inline_TreeMap_String_i32___delete_27: 0;
@@ -432,11 +429,9 @@ fn run() with Stdout {
     __iter_2 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
     b1: block {
         l2: loop {
-            let __sroa___pattern_temp_0_29_discriminant: i32;
-            let __sroa___pattern_temp_0_29_payload_0: ref null "tuple/[String, i32]";
-            multivalue_bind [__sroa___pattern_temp_0_29_discriminant, __sroa___pattern_temp_0_29_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_2);
-            if __sroa___pattern_temp_0_29_discriminant == 0 {
-                entry_3 = ref.as_non_null(__sroa___pattern_temp_0_29_payload_0);
+            __pattern_temp_0_29 = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_2);
+            if ref.is_null(__pattern_temp_0_29) == 0 {
+                entry_3 = ref.as_non_null(__pattern_temp_0_29);
                 key_4 = entry_3.0;
                 value_5 = entry_3.1;
                 "core:cli/println"(__tmpl: block -> ref String {
@@ -464,8 +459,8 @@ fn run() with Stdout {
     if TreeMap<String,i32>::needs_compaction(map) {
         "core:cli/println"(String { repr: array.new_data<u8>("Compaction needed, running..."), used: 29 });
         __pattern_temp_0_96 = value_copy Option<BTreeNode<String,i32>>(map.root);
-        if ref.test Option<BTreeNode<String,i32>>::Some(__pattern_temp_0_96) {
-            root = ref.cast Option<BTreeNode<String,i32>>::Some(__pattern_temp_0_96).payload_0;
+        if ref.is_null(__pattern_temp_0_96) == 0 {
+            root = ref.as_non_null(__pattern_temp_0_96);
             BTreeNode<String,i32>::compact(root);
             map.deleted_count = 0;
         };
@@ -503,11 +498,9 @@ fn run() with Stdout {
     __iter_7 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(final_entries.repr), used: final_entries.used, index: 0 };
     b6: block {
         l7: loop {
-            let __sroa___pattern_temp_1_discriminant: i32;
-            let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, i32]";
-            multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_7);
-            if __sroa___pattern_temp_1_discriminant == 0 {
-                entry_8 = ref.as_non_null(__sroa___pattern_temp_1_payload_0);
+            __pattern_temp_1 = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_7);
+            if ref.is_null(__pattern_temp_1) == 0 {
+                entry_8 = ref.as_non_null(__pattern_temp_1);
                 key_9 = entry_8.0;
                 value_10 = entry_8.1;
                 "core:cli/println"(__tmpl: block -> ref String {
@@ -1207,25 +1200,25 @@ fn TreeMap<String,i32>::needs_compaction(self) {
 fn ArrayIter<Tuple<String,i32>>^Iterator::next(self) {
     let item: ref "tuple/[String, i32]";
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref "tuple/[String, i32]">(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 fn TreeMap<String,i32>::iter(self) {
     let __local_1: ref Array<Tuple<String,i32>>;
     let result: ref Array<Tuple<String,i32>>;
     let root: ref BTreeNode<String,i32>;
-    let __pattern_temp_0: ref Option<BTreeNode<String,i32>>;
+    let __pattern_temp_0: ref null BTreeNode<String,i32>;
     result = __seq_lit: block -> ref Array<Tuple<String,i32>> {
         __local_1 = Array<Tuple<String,i32>> { repr: builtin::array_new<ref "tuple/[String, i32]">(0), used: 0 };
         break __seq_lit: __local_1;
     };
     __pattern_temp_0 = value_copy Option<BTreeNode<String,i32>>(self.root);
-    if ref.test Option<BTreeNode<String,i32>>::Some(__pattern_temp_0) {
-        root = ref.cast Option<BTreeNode<String,i32>>::Some(__pattern_temp_0).payload_0;
+    if ref.is_null(__pattern_temp_0) == 0 {
+        root = ref.as_non_null(__pattern_temp_0);
         TreeMap<String,i32>::collect_entries(self, root, result);
     };
     return result;
@@ -1470,13 +1463,13 @@ fn TreeMap<String,i32>^Index::index(self, key) {
     let __pattern_temp_0: ref Option<i32>;
     let __local_7: ref String;
     let __local_8: ref BTreeNode<String,i32>;
-    let __local_9: ref Option<BTreeNode<String,i32>>;
+    let __local_9: ref null BTreeNode<String,i32>;
     let __local_11: ref String;
     __pattern_temp_0 = __inline_TreeMap_String_i32___get_0: block -> ref Option<i32> {
         __local_7 = key;
         __local_9 = value_copy Option<BTreeNode<String,i32>>(self.root);
-        if ref.test Option<BTreeNode<String,i32>>::Some(__local_9) {
-            __local_8 = ref.cast Option<BTreeNode<String,i32>>::Some(__local_9).payload_0;
+        if ref.is_null(__local_9) == 0 {
+            __local_8 = ref.as_non_null(__local_9);
             break __inline_TreeMap_String_i32___get_0: TreeMap<String,i32>::search_in_node(self, __local_8, __local_7);
         };
         break __inline_TreeMap_String_i32___get_0: Option<i32> { 1 };
@@ -1593,31 +1586,31 @@ fn TreeMap<String,i32>::insert(self, key, value) {
     let root: ref BTreeNode<String,i32>;
     let new_root_5: ref BTreeNode<String,i32>;
     let r: ref BTreeNode<String,i32>;
-    let __pattern_temp_0: ref Option<BTreeNode<String,i32>>;
-    let __pattern_temp_1: ref Option<BTreeNode<String,i32>>;
-    let __pattern_temp_2: ref Option<BTreeNode<String,i32>>;
+    let __pattern_temp_0: ref null BTreeNode<String,i32>;
+    let __pattern_temp_1: ref null BTreeNode<String,i32>;
+    let __pattern_temp_2: ref null BTreeNode<String,i32>;
     __pattern_temp_0 = value_copy Option<BTreeNode<String,i32>>(self.root);
-    if __pattern_temp_0.discriminant == 1 {
+    if ref.is_null(__pattern_temp_0) {
         new_root_3 = BTreeNode<String,i32>::new_leaf();
         Array<String>::append(new_root_3.keys, key);
         Array<i32>::append(new_root_3.values, value);
         Array<bool>::append(new_root_3.deleted, 0);
-        self.root = Option<BTreeNode<String,i32>>::Some { discriminant: 0, payload_0: ref.as_non_null(new_root_3) };
+        self.root = new_root_3;
         self.size = 1;
         return;
     };
     __pattern_temp_1 = value_copy Option<BTreeNode<String,i32>>(self.root);
-    if ref.test Option<BTreeNode<String,i32>>::Some(__pattern_temp_1) {
-        root = ref.cast Option<BTreeNode<String,i32>>::Some(__pattern_temp_1).payload_0;
+    if ref.is_null(__pattern_temp_1) == 0 {
+        root = ref.as_non_null(__pattern_temp_1);
         if BTreeNode<String,i32>::is_full(root, (2 * self.t) - 1) {
             new_root_5 = BTreeNode<String,i32>::new_internal();
             Array<BTreeNode<String,i32>>::append(new_root_5.children, root);
             TreeMap<String,i32>::split_child(self, new_root_5, 0);
-            self.root = Option<BTreeNode<String,i32>>::Some { discriminant: 0, payload_0: ref.as_non_null(new_root_5) };
+            self.root = new_root_5;
         };
         __pattern_temp_2 = value_copy Option<BTreeNode<String,i32>>(self.root);
-        if ref.test Option<BTreeNode<String,i32>>::Some(__pattern_temp_2) {
-            r = ref.cast Option<BTreeNode<String,i32>>::Some(__pattern_temp_2).payload_0;
+        if ref.is_null(__pattern_temp_2) == 0 {
+            r = ref.as_non_null(__pattern_temp_2);
             TreeMap<String,i32>::insert_non_full(self, r, key, value);
         };
     };

@@ -47,16 +47,6 @@ struct ArrayIter<Tagged> {  // from core:allocator  // ArrayIter<T> with T=Tagge
     mut index: i32,
 }
 
-variant Option<Point> {
-    Some(ref Point),
-    None,
-}
-
-struct Option<Point>::Some {
-    discriminant: i32,
-    payload_0: ref Point,
-}
-
 struct Array<Tagged> {  // Array<T> with T=Tagged
     mut repr: ref array<Tagged>,
     mut used: i32,
@@ -112,6 +102,8 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
+type "functype/ArrayIter<Tagged>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tagged>") -> ref null Tagged;
+
 type "functype/Array<Tagged>::append" = fn(ref Array<Tagged>, ref Tagged);
 
 type "functype/Array<Tagged>::grow" = fn(ref Array<Tagged>);
@@ -125,8 +117,6 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/ArrayIter<Tagged>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tagged>") -> [i32, ref null Tagged];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -158,7 +148,7 @@ fn run() with Stdout {
     let __local_17: i32;
     let __local_18: i32;
     let desc: ref String;
-    let opt: ref Option<Point>;
+    let opt: ref null Point;
     let x: i32;
     let y: i32;
     let __local_23: ref String;
@@ -171,6 +161,7 @@ fn run() with Stdout {
     let __local_30: ref Formatter;
     let __local_31: ref String;
     let __local_32: ref Formatter;
+    let __pattern_temp_4: ref null Tagged;
     let __pattern_temp_5: ref Tagged;
     let __pattern_temp_6: ref "tuple/[i32, i32]";
     let __pattern_temp_8: ref Point;
@@ -245,11 +236,9 @@ fn run() with Stdout {
     __iter_10 = "core:allocator/ArrayIter<Tagged>" { repr: ref.as_non_null(items.repr), used: 2, index: 0 };
     b0: block {
         l1: loop {
-            let __sroa___pattern_temp_4_discriminant: i32;
-            let __sroa___pattern_temp_4_payload_0: ref null Tagged;
-            multivalue_bind [__sroa___pattern_temp_4_discriminant, __sroa___pattern_temp_4_payload_0] = ArrayIter<Tagged>^Iterator::next(__iter_10);
-            if __sroa___pattern_temp_4_discriminant == 0 {
-                __pattern_temp_5 = ref.as_non_null(__sroa___pattern_temp_4_payload_0);
+            __pattern_temp_4 = ArrayIter<Tagged>^Iterator::next(__iter_10);
+            if ref.is_null(__pattern_temp_4) == 0 {
+                __pattern_temp_5 = ref.as_non_null(__pattern_temp_4);
                 l = __pattern_temp_5.label;
                 __pattern_temp_6 = __pattern_temp_5.coords;
                 a = __pattern_temp_6.0;
@@ -313,9 +302,9 @@ fn run() with Stdout {
         };
     });
     "core:cli/println"(desc);
-    opt = Option<Point>::Some { discriminant: 0, payload_0: Point { x: 7, y: 8 } };
-    if ref.test Option<Point>::Some(opt) {
-        __pattern_temp_8 = value_copy Point(ref.cast Option<Point>::Some(opt).payload_0);
+    opt = Point { x: 7, y: 8 };
+    if ref.is_null(opt) == 0 {
+        __pattern_temp_8 = ref.as_non_null(opt);
         x = __pattern_temp_8.x;
         y = __pattern_temp_8.y;
         "core:cli/println"(__tmpl: block -> ref String {
@@ -601,11 +590,11 @@ fn String::append_char(self, c) {
 fn ArrayIter<Tagged>^Iterator::next(self) {
     let item: ref Tagged;
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref Tagged>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 fn Array<Tagged>::append(self, value) {

@@ -42,16 +42,6 @@ struct Array<i32> {  // Array<T> with T=i32
     mut used: i32,
 }
 
-variant Option<Array<u8>> {
-    Some(ref Array<u8>),
-    None,
-}
-
-struct Option<Array<u8>>::Some {
-    discriminant: i32,
-    payload_0: ref Array<u8>,
-}
-
 variant Result<Array<i32>,String> {
     Ok(ref Array<i32>),
     Err(ref String),
@@ -86,6 +76,8 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
+
+type "functype/return_non_empty" = fn() -> ref null Array<u8>;
 
 type "functype/return_result_array" = fn() -> ref Result<Array<i32>,String>;
 
@@ -149,8 +141,6 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/return_non_empty" = fn() -> [i32, ref null Array<u8>];
-
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
@@ -171,7 +161,7 @@ import fn subtask-drop from "wasi/subtask-drop";
 
 fn return_non_empty() {
     let __local_0: ref Array<u8>;
-    return 0; ref.as_non_null(__seq_lit: block -> ref Array<u8> {
+    return ref.as_non_null(__seq_lit: block -> ref Array<u8> {
         __local_0 = Array<u8> { repr: array.new_fixed<u8>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
     });
@@ -204,7 +194,7 @@ fn variant_construct_literal_coercion() with Stdout {
     let __cond_15: bool;
     let opt_i32: ref Option<i32>;
     let __local_17: ref Array<u8>;
-    let opt_arr: ref Option<Array<u8>>;
+    let opt_arr: ref null Array<u8>;
     let __local_19: i32;
     let __cond_20: bool;
     let __local_21: ref Array<u8>;
@@ -225,7 +215,8 @@ fn variant_construct_literal_coercion() with Stdout {
     let __local_36: ref Formatter;
     let __local_37: ref String;
     let __local_38: ref Formatter;
-    let __pattern_temp_0: ref Option<Array<u8>>;
+    let __pattern_temp_0: ref null Array<u8>;
+    let __pattern_temp_1: ref null Array<u8>;
     let __pattern_temp_2: ref Result<Array<i32>,String>;
     let __pattern_temp_3: ref Result<Array<i32>,String>;
     let __local_43: ref Array<u8>;
@@ -258,12 +249,12 @@ fn variant_construct_literal_coercion() with Stdout {
     let __local_135: ref Formatter;
     let __local_140: ref String;
     let __local_142: ref Formatter;
-    __pattern_temp_0 = Option<Array<u8>>::Some { discriminant: 0, payload_0: ref.as_non_null(__seq_lit: block -> ref Array<u8> {
+    __pattern_temp_0 = ref.as_non_null(__seq_lit: block -> ref Array<u8> {
         __local_43 = Array<u8> { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_43;
-    }) };
-    if ref.test Option<Array<u8>>::Some(__pattern_temp_0) {
-        arr_0 = value_copy Array<u8>(ref.cast Option<Array<u8>>::Some(__pattern_temp_0).payload_0);
+    });
+    if ref.is_null(__pattern_temp_0) == 0 {
+        arr_0 = ref.as_non_null(__pattern_temp_0);
         __v0_1 = arr_0.used;
         __cond_2 = __v0_1 == 0;
         if __cond_2 == 0 {
@@ -302,11 +293,9 @@ condition: arr.len() == 0
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Some"), used: 13 });
         unreachable;
     };
-    let __sroa___pattern_temp_1_discriminant: i32;
-    let __sroa___pattern_temp_1_payload_0: ref null Array<u8>;
-    multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = return_non_empty();
-    if __sroa___pattern_temp_1_discriminant == 0 {
-        arr_3 = ref.as_non_null(__sroa___pattern_temp_1_payload_0);
+    __pattern_temp_1 = return_non_empty();
+    if ref.is_null(__pattern_temp_1) == 0 {
+        arr_3 = value_copy Array<u8>(ref.as_non_null(__pattern_temp_1));
         __v0_4 = arr_3.used;
         __cond_5 = __v0_4 == 3;
         if __cond_5 == 0 {
@@ -485,7 +474,7 @@ condition: arr[0] == 10
         break __seq_lit: __local_109;
     }) };
     if ref.test Result<Array<i32>,String>::Ok(__pattern_temp_3) {
-        arr_13 = value_copy Array<i32>(ref.cast Result<Array<i32>,String>::Ok(__pattern_temp_3).payload_0);
+        arr_13 = ref.cast Result<Array<i32>,String>::Ok(__pattern_temp_3).payload_0;
         __v0_14 = arr_13.used;
         __cond_15 = __v0_14 == 0;
         if __cond_15 == 0 {
@@ -525,10 +514,10 @@ condition: arr.len() == 0
         unreachable;
     };
     opt_i32 = Option<i32>::Some { discriminant: 0, payload_0: 42 };
-    opt_arr = Option<Array<u8>>::Some { discriminant: 0, payload_0: ref.as_non_null(__seq_lit: block -> ref Array<u8> {
+    opt_arr = ref.as_non_null(__seq_lit: block -> ref Array<u8> {
         __local_17 = Array<u8> { repr: array.new_fixed<u8>(1, 2), used: 2 };
         break __seq_lit: __local_17;
-    }) };
+    });
     let __match_scrut_0: ref Option<i32>;
     __match_scrut_0 = opt_i32;
     __cond_20 = if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
@@ -563,12 +552,12 @@ condition: opt_i32 matches { Some(n) && n == 42 }
         });
         unreachable;
     };
-    let __match_scrut_1: ref Option<Array<u8>>;
+    let __match_scrut_1: ref null Array<u8>;
     __match_scrut_1 = opt_arr;
-    __cond_22 = if ref.test Option<Array<u8>>::Some(__match_scrut_1) -> bool {
-        let __cast_2: ref Option<Array<u8>>::Some;
-        __cast_2 = ref.cast Option<Array<u8>>::Some(__match_scrut_1);
-        __local_21 = __cast_2.payload_0;
+    __cond_22 = if ref.is_null(__match_scrut_1) == 0 -> bool {
+        let __cast_2: ref null Array<u8>;
+        __cast_2 = ref.as_non_null(__match_scrut_1);
+        __local_21 = ref.as_non_null(__cast_2);
         __local_21.used == 2;
     } else {
         0;

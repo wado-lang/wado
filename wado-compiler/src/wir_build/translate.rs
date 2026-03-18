@@ -636,13 +636,10 @@ impl FunctionTranslator<'_, '_> {
         use crate::wir::{WirCopyField, WirCopyType};
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, type_id);
         if let WirType::Ref {
-            type_id: wir_tid, ..
+            type_id: wir_tid,
+            nullable,
         } = wir_type
         {
-            // With SubtypeHierarchy, Option values are non-null refs (None is a valid struct)
-            // TODO: Future optimization: NullableRef Option would need nullable=true here
-            let nullable = false;
-
             // Variants use pass-through copy (immutable structs in the rec group)
             if self.ctx.is_variant_type(&wir_tid) {
                 return WirInstr::ValueCopy {
@@ -1173,8 +1170,7 @@ impl FunctionTranslator<'_, '_> {
                 self.translate_bytes_literal(b)
             }
             TirExprKind::Null => {
-                // For Option types, construct a None variant struct (SubtypeHierarchy)
-                // TODO: Future NullableRef optimization would use RefNull for Option too
+                // For Option types, construct a None variant struct.
                 if let Some(inner) = self.type_table.as_option(expr.type_id) {
                     // If the inner type is unresolved (UNKNOWN), use unreachable
                     // since we can't construct a concrete variant struct without
@@ -5617,9 +5613,6 @@ impl FunctionTranslator<'_, '_> {
                     name: scrut_local.to_string(),
                 };
 
-                // Option is now handled as a regular variant (SubtypeHierarchy)
-                // TODO: Future optimization: NullableRef Option would use RefIsNull here
-
                 // Look up variant type info to find the case WirTypeId
                 let (var_name, var_module) = match self.type_table.get(scrut_type) {
                     ResolvedType::Variant {
@@ -5784,9 +5777,6 @@ impl FunctionTranslator<'_, '_> {
                     return;
                 }
 
-                // Option is now handled as a regular variant (SubtypeHierarchy)
-                // TODO: Future optimization: NullableRef Option would extract from nullable ref
-
                 // Look up the variant type to find the case WirTypeId
                 let (var_name, var_module) = match self.type_table.get(*enum_type) {
                     ResolvedType::Variant {
@@ -5812,6 +5802,7 @@ impl FunctionTranslator<'_, '_> {
                     _ => return,
                 };
                 let fq = format!("{var_module}//{var_name}");
+
                 let case_fq = format!("{fq}::{variant_name}");
 
                 // Try to get the case type for ref.cast + struct.get
@@ -6133,11 +6124,9 @@ impl FunctionTranslator<'_, '_> {
             _ => return WirInstr::Unreachable,
         };
 
-        // Option is now handled as a regular variant (SubtypeHierarchy)
-        // TODO: Future optimization: NullableRef Option would pass-through/null here
+        let fq = format!("{variant_module_source}//{variant_name}");
 
         // Look up case-specific struct type
-        let fq = format!("{variant_module_source}//{variant_name}");
         let case_fq = format!("{fq}::{case_name}");
 
         if let Some(case_type_id) = self.ctx.type_map.get(&case_fq).cloned() {
@@ -6346,25 +6335,26 @@ impl FunctionTranslator<'_, '_> {
 
         let fq = format!("{var_module}//{var_name}");
 
-        // Look up case info to get the case type
+        // Look up variant type info
         if let Some(variant_type_id) = self.ctx.type_map.get(&fq)
             && let crate::wir::WirTypeDef::Variant(vt) =
                 &self.ctx.types[variant_type_id.index() as usize]
-            && let Some(case) = vt.cases.get(case_index as usize)
         {
-            let case_fq = format!("{fq}::{}", case.name);
-            if let Some(case_type_id) = self.ctx.type_map.get(&case_fq) {
-                // ref.cast to case type, then struct.get field 1 (payload)
-                let cast = WirInstr::RefCast {
-                    type_id: case_type_id.clone(),
-                    nullable: false,
-                    expr: Box::new(val),
-                };
-                return WirInstr::StructGet {
-                    type_id: case_type_id.clone(),
-                    field_name: "payload_0".to_string(),
-                    expr: Box::new(cast),
-                };
+            // ref.cast to the case struct, then struct.get the payload field
+            if let Some(case) = vt.cases.get(case_index as usize) {
+                let case_fq = format!("{fq}::{}", case.name);
+                if let Some(case_type_id) = self.ctx.type_map.get(&case_fq) {
+                    let cast = WirInstr::RefCast {
+                        type_id: case_type_id.clone(),
+                        nullable: false,
+                        expr: Box::new(val),
+                    };
+                    return WirInstr::StructGet {
+                        type_id: case_type_id.clone(),
+                        field_name: "payload_0".to_string(),
+                        expr: Box::new(cast),
+                    };
+                }
             }
         }
 

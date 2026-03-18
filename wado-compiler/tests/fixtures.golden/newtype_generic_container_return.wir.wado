@@ -27,16 +27,6 @@ struct Point {
 
 array array<Point> (mut ref Point);
 
-variant Option<Point> {
-    Some(ref Point),
-    None,
-}
-
-struct Option<Point>::Some {
-    discriminant: i32,
-    payload_0: ref Point,
-}
-
 struct Array<Point> {  // Array<T> with T=Point
     mut repr: ref array<Point>,
     mut used: i32,
@@ -134,7 +124,7 @@ import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout {
     let loc: ref Point;
-    let opt: ref Option<Point>;
+    let opt: ref null Point;
     let l: ref Point;
     let arr: ref Array<Point>;
     let first: ref Point;
@@ -157,9 +147,9 @@ fn run() with Stdout {
     let __local_46: ref String;
     let __local_48: ref Formatter;
     loc = Point { x: 5, y: 10 };
-    opt = Option<Point>::Some { discriminant: 0, payload_0: Point { x: loc.x, y: loc.y } };
-    if ref.test Option<Point>::Some(opt) {
-        l = value_copy Point(ref.cast Option<Point>::Some(opt).payload_0);
+    opt = Point { x: loc.x, y: loc.y };
+    if ref.is_null(opt) == 0 {
+        l = value_copy Point(ref.as_non_null(opt));
         "core:cli/println"(__tmpl: block -> ref String {
             __local_5 = String { repr: builtin::array_new<u8>(44), used: 0 };
             String::append(__local_5, String { repr: array.new_data<u8>("option: ("), used: 9 });

@@ -935,14 +935,19 @@ impl<'a> WirEmitter<'a> {
             // Value copy needs a temp local for the source struct ref
             WirInstr::ValueCopy { type_id, expr, .. } => {
                 self.collect_declared_locals_instr(expr, locals);
-                // Declare temp local for the struct copy source
+                // Declare temp local for the struct copy source as nullable.
+                // Using nullable allows the same local to be shared between nullable and
+                // non-nullable ValueCopy nodes for the same type within the same function.
+                // ref.as_non_null is emitted inline before each struct.get.
                 let wasm_type_idx = self.resolve_type_index(type_id.index());
-                let ref_type = RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(wasm_type_idx),
-                };
-                let temp_name = format!("__copy_source_{}", type_id.index());
-                locals.push((temp_name, ValType::Ref(ref_type)));
+                let heap = HeapType::Concrete(wasm_type_idx);
+                locals.push((
+                    format!("__copy_source_{}", type_id.index()),
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: heap,
+                    }),
+                ));
                 // Declare temp locals for array field deep copies
                 if let Some(array_field_infos) = self.get_struct_array_field_infos(type_id.index())
                 {
@@ -1743,6 +1748,14 @@ impl<'a> WirEmitter<'a> {
             }
             WirInstr::RefIsNull(o) => self.emit_unary(f, o, Instruction::RefIsNull),
             WirInstr::RefAsNonNull(o) => {
+                // If inner is a LocalGet for a ref_local, that handler already
+                // emits ref.as_non_null — don't emit it again (would double-wrap).
+                if let WirInstr::LocalGet { name } = o.as_ref()
+                    && self.ref_locals.contains(name.as_str())
+                {
+                    self.emit_instr(f, o);
+                    return;
+                }
                 self.emit_unary(f, o, Instruction::RefAsNonNull);
             }
             WirInstr::RefEq(l, r) => self.emit_binary(f, l, r, Instruction::RefEq),
@@ -2275,7 +2288,10 @@ impl<'a> WirEmitter<'a> {
                 let array_fields = self.get_struct_array_field_infos(type_id.index());
                 // Emit source expression
                 self.emit_instr(f, expr);
-                // Look up the pre-declared temp local
+                // The temp local is always declared as nullable (ref null $type) to avoid
+                // conflicts when the same type appears with both nullable and non-nullable
+                // ValueCopy nodes in the same function. ref.as_non_null is emitted inline
+                // before each struct.get call.
                 let temp_name = format!("__copy_source_{}", type_id.index());
                 let temp_idx = self.resolve_local(&temp_name);
                 // Store source to temp
@@ -2294,7 +2310,7 @@ impl<'a> WirEmitter<'a> {
                     f.instruction(&Instruction::RefNull(heap));
                     f.instruction(&Instruction::Else);
                 }
-                // For each field: load from temp, get field (handle packed fields)
+                // For each field: load temp (nullable), cast to non-null inline, get field
                 for field in fields {
                     // Check if this field needs array deep copy
                     let arr_info = array_fields
@@ -2314,6 +2330,7 @@ impl<'a> WirEmitter<'a> {
                         let len_local = self.resolve_local(&len_name);
                         // Get source array from struct field
                         f.instruction(&Instruction::LocalGet(temp_idx));
+                        f.instruction(&Instruction::RefAsNonNull);
                         f.instruction(&Instruction::StructGet {
                             struct_type_index: wasm_type_idx,
                             field_index: field.index,
@@ -2341,6 +2358,7 @@ impl<'a> WirEmitter<'a> {
                         f.instruction(&Instruction::LocalGet(dst_local));
                     } else {
                         f.instruction(&Instruction::LocalGet(temp_idx));
+                        f.instruction(&Instruction::RefAsNonNull);
                         match self.is_field_packed_by_index(type_id.index(), field.index) {
                             Some(true) => {
                                 f.instruction(&Instruction::StructGetS {

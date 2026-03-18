@@ -87,6 +87,8 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
+type "functype/ArrayIter<Tuple<i32,unit>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,unit>>") -> ref null "tuple/[i32, unit]";
+
 type "functype/Array<Tuple<i32,unit>>::append" = fn(ref Array<Tuple<i32,unit>>, ref "tuple/[i32, unit]");
 
 type "functype/Array<Tuple<i32,unit>>::grow" = fn(ref Array<Tuple<i32,unit>>);
@@ -100,8 +102,6 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/ArrayIter<Tuple<i32,unit>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,unit>>") -> [i32, ref null "tuple/[i32, unit]"];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -127,6 +127,7 @@ fn run() with Stdout {
     let item: ref "tuple/[i32, unit]";
     let __local_4: ref String;
     let __local_5: ref Formatter;
+    let __pattern_temp_0: ref null "tuple/[i32, unit]";
     let __local_19: ref String;
     let __local_21: ref Formatter;
     arr = __seq_lit: block -> ref Array<Tuple<i32,unit>> {
@@ -136,11 +137,9 @@ fn run() with Stdout {
     __iter_2 = "core:allocator/ArrayIter<Tuple<i32,unit>>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
     b0: block {
         l1: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null "tuple/[i32, unit]";
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<i32,unit>>^Iterator::next(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                item = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            __pattern_temp_0 = ArrayIter<Tuple<i32,unit>>^Iterator::next(__iter_2);
+            if ref.is_null(__pattern_temp_0) == 0 {
+                item = value_copy "tuple/[i32, unit]"(ref.as_non_null(__pattern_temp_0));
                 "core:cli/println"(__tmpl: block -> ref String {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_10: block -> ref Formatter {
@@ -429,11 +428,11 @@ fn String::append_char(self, c) {
 fn ArrayIter<Tuple<i32,unit>>^Iterator::next(self) {
     let item: ref "tuple/[i32, unit]";
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref "tuple/[i32, unit]">(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 fn Array<Tuple<i32,unit>>::append(self, value) {

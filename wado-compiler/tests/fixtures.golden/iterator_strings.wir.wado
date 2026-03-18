@@ -62,13 +62,13 @@ type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
 type "functype/Array<String>::grow" = fn(ref Array<String>);
 
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> ref null String;
+
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> [i32, ref null String];
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -90,6 +90,7 @@ fn run() with Stdout {
     let arr: ref Array<String>;
     let iter: ref "core:allocator/ArrayIter<String>";
     let s: ref String;
+    let __pattern_temp_0: ref null String;
     arr = __seq_lit: block -> ref Array<String> {
         __local_0 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("hello"), used: 5 }, String { repr: array.new_data<u8>("world"), used: 5 }, String { repr: array.new_data<u8>("!"), used: 1 }), used: 3 };
         break __seq_lit: __local_0;
@@ -97,11 +98,9 @@ fn run() with Stdout {
     iter = "core:allocator/ArrayIter<String>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
     b0: block {
         l1: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null String;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<String>^Iterator::next(iter);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                s = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            __pattern_temp_0 = ArrayIter<String>^Iterator::next(iter);
+            if ref.is_null(__pattern_temp_0) == 0 {
+                s = value_copy String(ref.as_non_null(__pattern_temp_0));
                 "core:cli/println"(s);
             } else {
                 break b0;
@@ -280,11 +279,11 @@ fn Array<String>::grow(self) {
 fn ArrayIter<String>^Iterator::next(self) {
     let item: ref String;
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref String>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 export fn __cm_export__run as "run"

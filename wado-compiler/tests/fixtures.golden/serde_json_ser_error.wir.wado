@@ -215,9 +215,9 @@ type "functype/f64::fmt_into" = fn(f64, ref Formatter);
 
 type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
 
-type "functype/core:json/JsonSerializer^Serializer::serialize_f32" = fn(ref String, f32) -> [i32, ref null "core:serde/SerializeError"];
+type "functype/core:json/JsonSerializer^Serializer::serialize_f32" = fn(ref String, f32) -> ref null "core:serde/SerializeError";
 
-type "functype/core:json/JsonSerializer^Serializer::serialize_f64" = fn(ref String, f64) -> [i32, ref null "core:serde/SerializeError"];
+type "functype/core:json/JsonSerializer^Serializer::serialize_f64" = fn(ref String, f64) -> ref null "core:serde/SerializeError";
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -845,15 +845,16 @@ fn __cm_export____test_7_normal_f32_succeeds() {
 
 fn "core/json/to_string<f32>"(value) {
     let ser: ref "core:json/JsonSerializer";
+    let r: ref null "core:serde/SerializeError";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
-    let __sroa_r_discriminant: i32;
-    let __sroa_r_payload_0: ref null "core:serde/SerializeError";
-    __local_6 = ser;
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_payload_0] = "core:json/JsonSerializer^Serializer::serialize_f32"(__local_6.buf, value);
-    if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_payload_0);
+    r = __inline_f32_Serialize__serialize_JsonSerializer__0: block -> ref null "core:serde/SerializeError" {
+        __local_6 = ser;
+        break __inline_f32_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_f32"(__local_6.buf, value);
+    };
+    if ref.is_null(r) == 0 {
+        e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
         return Result<String,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
     };
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
@@ -861,15 +862,16 @@ fn "core/json/to_string<f32>"(value) {
 
 fn "core/json/to_string<f64>"(value) {
     let ser: ref "core:json/JsonSerializer";
+    let r: ref null "core:serde/SerializeError";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
-    let __sroa_r_discriminant: i32;
-    let __sroa_r_payload_0: ref null "core:serde/SerializeError";
-    __local_6 = ser;
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_payload_0] = "core:json/JsonSerializer^Serializer::serialize_f64"(__local_6.buf, value);
-    if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_payload_0);
+    r = __inline_f64_Serialize__serialize_JsonSerializer__0: block -> ref null "core:serde/SerializeError" {
+        __local_6 = ser;
+        break __inline_f64_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_f64"(__local_6.buf, value);
+    };
+    if ref.is_null(r) == 0 {
+        e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
         return Result<String,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
     };
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
@@ -2266,13 +2268,13 @@ fn "core:json/JsonSerializer^Serializer::serialize_f32"(self, v) {  // from core
     let __local_7: ref String;
     let __local_9: ref Formatter;
     if v != v {
-        return 1; "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
+        return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
     };
     if __inline_f32__is_finite_1: block -> bool {
         __local_5 = "core:internal/Box<f32>" { value: v };
         break __inline_f32__is_finite_1: (__local_5.value - __local_5.value) == 0_f32;
     } == 0 {
-        return 1; "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
+        return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
     };
     String::append(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
@@ -2284,7 +2286,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_f32"(self, v) {  // from core
         f64::fmt_into(builtin::f64_promote_f32(v), __local_9);
         break __tmpl: __local_2;
     });
-    return 0; ref.null none;
+    return ref.null none;
 }
 
 fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core:json
@@ -2294,13 +2296,13 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core
     let __local_7: ref String;
     let __local_9: ref Formatter;
     if v != v {
-        return 1; "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
+        return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
     };
     if __inline_f64__is_finite_1: block -> bool {
         __local_5 = "core:internal/Box<f64>" { value: v };
         break __inline_f64__is_finite_1: (__local_5.value - __local_5.value) == 0;
     } == 0 {
-        return 1; "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
+        return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
     };
     String::append(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
@@ -2312,7 +2314,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core
         f64::fmt_into(v, __local_9);
         break __tmpl: __local_2;
     });
-    return 0; ref.null none;
+    return ref.null none;
 }
 
 fn Formatter::write_char_n(self, c, n) {

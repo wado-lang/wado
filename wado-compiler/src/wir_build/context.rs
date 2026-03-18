@@ -604,8 +604,7 @@ impl<'a> WirContext<'a> {
                     }
                 }
             }
-            // Option<T> is now handled as GenericInstance (SubtypeHierarchy variant)
-            // TODO: Future optimization: use NullableRef for Option<T> when T is non-nullable
+            // Option<T> is handled as GenericInstance (variant).
             ResolvedType::Enum {
                 name,
                 module_source,

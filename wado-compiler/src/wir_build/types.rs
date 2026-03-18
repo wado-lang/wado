@@ -9,7 +9,7 @@ use crate::name::{ModuleSource, StructName};
 use crate::tir::{ResolvedType, TirModule, TirStruct, TirVariantDecl, TypeId, TypeTable};
 use crate::wir::{
     WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin, WirMeta, WirName,
-    WirStructType, WirType, WirTypeDef, WirVariantCase, WirVariantType,
+    WirStructType, WirType, WirTypeDef, WirVariantCase, WirVariantRepr, WirVariantType,
 };
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -284,7 +284,7 @@ fn register_struct(
             if matches!(ty, WirType::Unit) {
                 return None;
             }
-            // Struct fields use non-nullable refs
+            // Struct fields use non-nullable refs.
             let ty = ty.as_nonnull();
             Some(WirField {
                 name: f.name.clone(),
@@ -342,21 +342,26 @@ fn register_variant(
 
     let display = variant.name.clone();
 
-    let cases: Vec<WirVariantCase> = variant
+    let raw_cases: Vec<(String, Vec<WirType>)> = variant
         .cases
         .iter()
-        .enumerate()
-        .map(|(i, case)| {
+        .map(|case| {
             let payload = if type_table.get(case.payload) == &ResolvedType::Unit {
                 Vec::new()
             } else {
                 vec![ctx.type_id_to_wir_type(type_table, case.payload)]
             };
-            WirVariantCase {
-                name: case.name.clone(),
-                index: u32::try_from(i).expect("too many variant cases"),
-                payload,
-            }
+            (case.name.clone(), payload)
+        })
+        .collect();
+
+    let cases: Vec<WirVariantCase> = raw_cases
+        .iter()
+        .enumerate()
+        .map(|(i, (name, payload))| WirVariantCase {
+            name: name.clone(),
+            index: u32::try_from(i).expect("too many variant cases"),
+            payload: payload.clone(),
         })
         .collect();
 
@@ -371,6 +376,7 @@ fn register_variant(
                 fq: fq.clone(),
             },
             cases: cases.clone(),
+            repr: WirVariantRepr::default(),
             meta: WirMeta {
                 module_source: Some(module_source.clone()),
                 ..WirMeta::default()
@@ -937,6 +943,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         fq: fq.clone(),
                     },
                     cases: wir_cases.clone(),
+                    repr: WirVariantRepr::default(),
                     meta: WirMeta {
                         module_source: Some(module_source),
                         ..WirMeta::default()
@@ -1302,9 +1309,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         let field_type_id = tir_struct.fields[field_idx].type_id;
                         let wir_type = ctx.type_id_to_wir_type(type_table, field_type_id);
                         if !is_abstract_ref(&wir_type) {
-                            // Make struct fields non-nullable (same as register_struct)
-                            let wir_type = wir_type.as_nonnull();
-                            resolved = Some(wir_type);
+                            // Make struct fields non-nullable (same as register_struct).
+                            resolved = Some(wir_type.as_nonnull());
                             break;
                         }
                     }
@@ -1329,9 +1335,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                                 let elem_type_id = elements[field_idx];
                                 let wir_type = ctx.type_id_to_wir_type(type_table, elem_type_id);
                                 if !is_abstract_ref(&wir_type) {
-                                    // Make tuple fields non-nullable
-                                    let wir_type = wir_type.as_nonnull();
-                                    resolved = Some(wir_type);
+                                    // Make tuple fields non-nullable.
+                                    resolved = Some(wir_type.as_nonnull());
                                     break;
                                 }
                             }
@@ -1350,6 +1355,113 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
     }
 
     for (type_idx, field_idx, new_type) in struct_fixups {
+        if let WirTypeDef::Struct(s) = &mut ctx.types[type_idx] {
+            s.fields[field_idx].ty = new_type;
+        }
+    }
+
+    // Phase 1b: Fix variant type case payload types (may be abstract if the payload's
+    // generic variant type was not registered when the parent variant was registered).
+    // For non-generic variants: look up the TIR variant declaration by module_source + name.
+    let mut variant_payload_fixups: Vec<(usize, usize, usize, WirType)> = Vec::new();
+    for (wir_idx, typedef) in ctx.types.iter().enumerate() {
+        let WirTypeDef::Variant(vt) = typedef else {
+            continue;
+        };
+        let variant_module_source = vt.meta.module_source.clone();
+        // Extract the base variant name from the FQ (e.g. "Module//Name" → "Name")
+        let variant_display = vt.name.display.clone();
+        for (case_idx, case) in vt.cases.iter().enumerate() {
+            for (payload_idx, payload_ty) in case.payload.iter().enumerate() {
+                if !is_abstract_ref(payload_ty) {
+                    continue;
+                }
+                // Try to find the TIR variant by module_source and display name
+                let Some(ms) = &variant_module_source else {
+                    continue;
+                };
+                let Some(tir_mod) = ctx.project.tir_modules.get(ms) else {
+                    continue;
+                };
+                let type_table = &*tir_mod.type_table.borrow();
+                let Some(tir_variant) = tir_mod.variants.iter().find(|v| v.name == variant_display)
+                else {
+                    continue;
+                };
+                let Some(tir_case) = tir_variant.cases.get(case_idx) else {
+                    continue;
+                };
+                let tir_payload_id = tir_case.payload;
+                let new_ty = ctx.type_id_to_wir_type(type_table, tir_payload_id);
+                if !is_abstract_ref(&new_ty) {
+                    variant_payload_fixups.push((
+                        wir_idx,
+                        case_idx,
+                        payload_idx,
+                        new_ty.as_nonnull(),
+                    ));
+                }
+            }
+        }
+    }
+    for (wir_idx, case_idx, payload_idx, new_type) in variant_payload_fixups {
+        if let WirTypeDef::Variant(vt) = &mut ctx.types[wir_idx]
+            && let Some(payload) = vt.cases[case_idx].payload.get_mut(payload_idx)
+        {
+            *payload = new_type;
+        }
+    }
+
+    // Phase 1c: Fix variant case struct fields from the (now-resolved) parent variant's
+    // case payload types. Variant case structs are generated (not TIR structs), so Phase 1
+    // cannot resolve their abstract ref fields.
+    let mut case_struct_fixups: Vec<(usize, usize, WirType)> = Vec::new();
+    let case_info_snapshot: Vec<(u32, (u32, u32))> = ctx
+        .variant_case_info
+        .iter()
+        .map(|(k, v)| (*k, *v))
+        .collect();
+    for (case_struct_idx, (variant_wir_idx, case_idx)) in case_info_snapshot {
+        let case_struct_idx = case_struct_idx as usize;
+        let variant_wir_idx = variant_wir_idx as usize;
+        let case_idx = case_idx as usize;
+        // Get the case struct's field count
+        let field_count = if let WirTypeDef::Struct(s) = &ctx.types[case_struct_idx] {
+            s.fields.len()
+        } else {
+            continue;
+        };
+        for field_idx in 0..field_count {
+            let is_abstract = if let WirTypeDef::Struct(s) = &ctx.types[case_struct_idx] {
+                is_abstract_ref(&s.fields[field_idx].ty)
+            } else {
+                false
+            };
+            if !is_abstract {
+                continue;
+            }
+            // Payload fields start at field_idx 1 (field_idx 0 = discriminant)
+            let payload_idx = if field_idx == 0 {
+                continue;
+            } else {
+                field_idx - 1
+            };
+            // Get the parent variant's case payload type
+            let payload_ty = if let WirTypeDef::Variant(vt) = &ctx.types[variant_wir_idx]
+                && let Some(case) = vt.cases.get(case_idx)
+                && let Some(ty) = case.payload.get(payload_idx)
+            {
+                ty.clone()
+            } else {
+                continue;
+            };
+            if is_abstract_ref(&payload_ty) {
+                continue; // Still abstract; can't resolve
+            }
+            case_struct_fixups.push((case_struct_idx, field_idx, payload_ty.as_nonnull()));
+        }
+    }
+    for (type_idx, field_idx, new_type) in case_struct_fixups {
         if let WirTypeDef::Struct(s) = &mut ctx.types[type_idx] {
             s.fields[field_idx].ty = new_type;
         }

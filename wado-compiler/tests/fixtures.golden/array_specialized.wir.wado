@@ -334,9 +334,13 @@ type "functype/Array<u16>::append" = fn(ref Array<u16>, u16);
 
 type "functype/Array<u16>::grow" = fn(ref Array<u16>);
 
+type "functype/ArrayIter<Tuple<bool,i32,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<bool,i32,String>>") -> ref null "tuple/[bool, i32, String]";
+
 type "functype/Array<Tuple<bool,i32,String>>::append" = fn(ref Array<Tuple<bool,i32,String>>, ref "tuple/[bool, i32, String]");
 
 type "functype/Array<Tuple<bool,i32,String>>::grow" = fn(ref Array<Tuple<bool,i32,String>>);
+
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> ref null String;
 
 type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
@@ -413,10 +417,6 @@ type "functype/ArrayIter<u64>^Iterator::next" = fn(ref "core:allocator/ArrayIter
 type "functype/ArrayIter<u32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u32>") -> [i32, u32];
 
 type "functype/ArrayIter<u16>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u16>") -> [i32, u16];
-
-type "functype/ArrayIter<Tuple<bool,i32,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<bool,i32,String>>") -> [i32, ref null "tuple/[bool, i32, String]"];
-
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> [i32, ref null String];
 
 type "functype/ArrayIter<i8>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i8>") -> [i32, i8];
 
@@ -812,6 +812,7 @@ fn array_specialized_string() with Stdout {
     let arr: ref Array<String>;
     let __iter_2: ref "core:allocator/ArrayIter<String>";
     let x: ref String;
+    let __pattern_temp_0: ref null String;
     arr = __seq_lit: block -> ref Array<String> {
         __local_0 = Array<String> { repr: builtin::array_new<ref String>(0), used: 0 };
         break __seq_lit: __local_0;
@@ -822,11 +823,9 @@ fn array_specialized_string() with Stdout {
     __iter_2 = "core:allocator/ArrayIter<String>" { repr: ref.as_non_null(arr.repr), used: arr.used, index: 0 };
     b25: block {
         l26: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null String;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<String>^Iterator::next(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                x = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            __pattern_temp_0 = ArrayIter<String>^Iterator::next(__iter_2);
+            if ref.is_null(__pattern_temp_0) == 0 {
+                x = value_copy String(ref.as_non_null(__pattern_temp_0));
                 "core:cli/println"(x);
             } else {
                 break b25;
@@ -843,6 +842,7 @@ fn array_specialized_tuple() with Stdout {
     let x: ref "tuple/[bool, i32, String]";
     let __local_4: ref String;
     let __local_5: ref Formatter;
+    let __pattern_temp_0: ref null "tuple/[bool, i32, String]";
     let __local_12: ref String;
     let __local_14: ref Formatter;
     let __local_17: ref String;
@@ -857,11 +857,9 @@ fn array_specialized_tuple() with Stdout {
     __iter_2 = "core:allocator/ArrayIter<Tuple<bool,i32,String>>" { repr: ref.as_non_null(arr.repr), used: arr.used, index: 0 };
     b28: block {
         l29: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null "tuple/[bool, i32, String]";
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<bool,i32,String>>^Iterator::next(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                x = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            __pattern_temp_0 = ArrayIter<Tuple<bool,i32,String>>^Iterator::next(__iter_2);
+            if ref.is_null(__pattern_temp_0) == 0 {
+                x = value_copy "tuple/[bool, i32, String]"(ref.as_non_null(__pattern_temp_0));
                 "core:cli/println"(__tmpl: block -> ref String {
                     __local_4 = String { repr: builtin::array_new<u8>(50), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
@@ -2993,11 +2991,11 @@ fn Array<u16>::grow(self) {
 fn ArrayIter<Tuple<bool,i32,String>>^Iterator::next(self) {
     let item: ref "tuple/[bool, i32, String]";
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref "tuple/[bool, i32, String]">(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 fn Array<Tuple<bool,i32,String>>::append(self, value) {
@@ -3045,11 +3043,11 @@ fn Array<Tuple<bool,i32,String>>::grow(self) {
 fn ArrayIter<String>^Iterator::next(self) {
     let item: ref String;
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref String>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 fn Array<String>::append(self, value) {

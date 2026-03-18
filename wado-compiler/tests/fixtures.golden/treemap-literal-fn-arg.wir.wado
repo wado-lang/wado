@@ -36,7 +36,7 @@ struct ArrayIter<Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> w
 }
 
 struct TreeMap<String,i32> {  // from core:allocator  // TreeMap<T> with T=String, i32
-    mut root: ref Option<TreeMapNode<String>>,
+    mut root: ref null "core:allocator/TreeMapNode<String>",
     mut entries: ref Array<TreeMapEntry<String,i32>>,
     mut size: i32,
     mut deleted_count: i32,
@@ -52,8 +52,8 @@ struct TreeMapNode<String> {  // from core:allocator  // TreeMapNode<T> with T=S
     mut key: ref String,
     mut index: i32,
     mut level: i32,
-    mut left: ref Option<TreeMapNode<String>>,
-    mut right: ref Option<TreeMapNode<String>>,
+    mut left: ref null "core:allocator/TreeMapNode<String>",
+    mut right: ref null "core:allocator/TreeMapNode<String>",
 }
 
 struct ArrayIter<TreeMapEntry<String,i32>> {  // from wasi:cli  // ArrayIter<T> with T=TreeMapEntry<String,i32>
@@ -65,11 +65,6 @@ struct ArrayIter<TreeMapEntry<String,i32>> {  // from wasi:cli  // ArrayIter<T> 
 variant Option<TreeMapNode<String>> {
     Some(ref "core:allocator/TreeMapNode<String>"),
     None,
-}
-
-struct Option<TreeMapNode<String>>::Some {
-    discriminant: i32,
-    payload_0: ref "core:allocator/TreeMapNode<String>",
 }
 
 struct Array<Tuple<String,i32>> {  // Array<T> with T=Tuple<String,i32>
@@ -150,11 +145,11 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/TreeMap<String,i32>::insert" = fn(ref "core:allocator/TreeMap<String,i32>", ref String, i32);
 
-type "functype/TreeMap<String,i32>::insert_node" = fn(ref "core:allocator/TreeMap<String,i32>", ref Option<TreeMapNode<String>>, ref String, i32) -> ref Option<TreeMapNode<String>>;
+type "functype/TreeMap<String,i32>::insert_node" = fn(ref "core:allocator/TreeMap<String,i32>", ref null "core:allocator/TreeMapNode<String>", ref String, i32) -> ref null "core:allocator/TreeMapNode<String>";
 
-type "functype/TreeMap<String,i32>::split" = fn(ref "core:allocator/TreeMap<String,i32>", ref Option<TreeMapNode<String>>) -> ref Option<TreeMapNode<String>>;
+type "functype/TreeMap<String,i32>::split" = fn(ref "core:allocator/TreeMap<String,i32>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
 
-type "functype/TreeMap<String,i32>::skew" = fn(ref "core:allocator/TreeMap<String,i32>", ref Option<TreeMapNode<String>>) -> ref Option<TreeMapNode<String>>;
+type "functype/TreeMap<String,i32>::skew" = fn(ref "core:allocator/TreeMap<String,i32>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
 
 type "functype/Array<TreeMapEntry<String,i32>>::append" = fn(ref Array<TreeMapEntry<String,i32>>, ref "core:allocator/TreeMapEntry<String,i32>");
 
@@ -162,11 +157,15 @@ type "functype/Array<TreeMapEntry<String,i32>>::grow" = fn(ref Array<TreeMapEntr
 
 type "functype/TreeMap<String,i32>::find_index" = fn(ref "core:allocator/TreeMap<String,i32>", ref String) -> i32;
 
+type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> ref null "tuple/[String, i32]";
+
 type "functype/TreeMap<String,i32>::entries" = fn(ref "core:allocator/TreeMap<String,i32>") -> ref Array<Tuple<String,i32>>;
 
 type "functype/Array<Tuple<String,i32>>::append" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
 
 type "functype/Array<Tuple<String,i32>>::grow" = fn(ref Array<Tuple<String,i32>>);
+
+type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>") -> ref null "core:allocator/TreeMapEntry<String,i32>";
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -177,10 +176,6 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> [i32, ref null "tuple/[String, i32]"];
-
-type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,i32>"];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -204,6 +199,7 @@ fn sum_values(m) {
     let total: i32;
     let __iter_2: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
     let entry: ref "tuple/[String, i32]";
+    let __pattern_temp_0: ref null "tuple/[String, i32]";
     let __local_5: ref Array<Tuple<String,i32>>;
     total = 0;
     __iter_2 = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<Tuple<String,i32>>" {
@@ -212,11 +208,9 @@ fn sum_values(m) {
     };
     b0: block {
         l1: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null "tuple/[String, i32]";
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                entry = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            __pattern_temp_0 = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_2);
+            if ref.is_null(__pattern_temp_0) == 0 {
+                entry = value_copy "tuple/[String, i32]"(ref.as_non_null(__pattern_temp_0));
                 total = total + entry.1;
             } else {
                 break b0;
@@ -245,7 +239,7 @@ fn run() with Stdout {
     let __local_25: ref String;
     let __local_27: ref Formatter;
     total = sum_values(__kv_lit: block -> ref "core:allocator/TreeMap<String,i32>" {
-        __local_0 = "core:allocator/TreeMap<String,i32>" { root: Option<TreeMapNode<String>> { 1 }, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
+        __local_0 = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
             __local_8 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
             break __seq_lit: __local_8;
         }), size: 0, deleted_count: 0 };
@@ -704,77 +698,77 @@ fn TreeMap<String,i32>::insert(self, key, value) {
     };
     entry = "core:allocator/TreeMapEntry<String,i32>" { key: ref.as_non_null(key), value: value, deleted: 0 };
     Array<TreeMapEntry<String,i32>>::append(self.entries, entry);
-    self.root = ref.as_non_null(TreeMap<String,i32>::insert_node(self, self.root, key, new_index));
+    self.root = TreeMap<String,i32>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
 
 fn TreeMap<String,i32>::insert_node(self, node, key, index) {
     let n: ref "core:allocator/TreeMapNode<String>";
-    let after_skew: ref Option<TreeMapNode<String>>;
+    let after_skew: ref null "core:allocator/TreeMapNode<String>";
     let new_node: ref "core:allocator/TreeMapNode<String>";
-    if ref.test Option<TreeMapNode<String>>::Some(node) {
-        n = ref.cast Option<TreeMapNode<String>>::Some(node).payload_0;
+    if ref.is_null(node) == 0 {
+        n = ref.as_non_null(node);
         if String^Eq::eq(key, n.key) {
             n.index = index;
-            return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) };
+            return ref.as_non_null(n);
         };
         if String^Ord::cmp(key, n.key) == 0 {
-            n.left = ref.as_non_null(TreeMap<String,i32>::insert_node(self, n.left, key, index));
+            n.left = TreeMap<String,i32>::insert_node(self, n.left, key, index);
         } else {
-            n.right = ref.as_non_null(TreeMap<String,i32>::insert_node(self, n.right, key, index));
+            n.right = TreeMap<String,i32>::insert_node(self, n.right, key, index);
         };
-        after_skew = TreeMap<String,i32>::skew(self, Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) });
+        after_skew = TreeMap<String,i32>::skew(self, ref.as_non_null(n));
         return TreeMap<String,i32>::split(self, after_skew);
     };
-    new_node = "core:allocator/TreeMapNode<String>" { key: ref.as_non_null(key), index: index, level: 1, left: Option<TreeMapNode<String>> { 1 }, right: Option<TreeMapNode<String>> { 1 } };
-    return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(new_node) };
+    new_node = "core:allocator/TreeMapNode<String>" { key: ref.as_non_null(key), index: index, level: 1, left: ref.null none, right: ref.null none };
+    return ref.as_non_null(new_node);
 }
 
 fn TreeMap<String,i32>::split(self, node) {
     let n: ref "core:allocator/TreeMapNode<String>";
     let right: ref "core:allocator/TreeMapNode<String>";
     let rr: ref "core:allocator/TreeMapNode<String>";
-    let __pattern_temp_1: ref Option<TreeMapNode<String>>;
-    let __pattern_temp_2: ref Option<TreeMapNode<String>>;
-    if ref.test Option<TreeMapNode<String>>::Some(node) {
-        n = ref.cast Option<TreeMapNode<String>>::Some(node).payload_0;
+    let __pattern_temp_1: ref null "core:allocator/TreeMapNode<String>";
+    let __pattern_temp_2: ref null "core:allocator/TreeMapNode<String>";
+    if ref.is_null(node) == 0 {
+        n = ref.as_non_null(node);
         __pattern_temp_1 = n.right;
-        if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_1) {
-            right = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_1).payload_0;
+        if ref.is_null(__pattern_temp_1) == 0 {
+            right = ref.as_non_null(__pattern_temp_1);
             __pattern_temp_2 = right.right;
-            if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_2) {
-                rr = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_2).payload_0;
+            if ref.is_null(__pattern_temp_2) == 0 {
+                rr = ref.as_non_null(__pattern_temp_2);
                 if rr.level == n.level {
-                    n.right = ref.as_non_null(right.left);
-                    right.left = Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) };
+                    n.right = right.left;
+                    right.left = n;
                     right.level = right.level + 1;
-                    return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(right) };
+                    return ref.as_non_null(right);
                 };
             };
         };
-        return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) };
+        return ref.as_non_null(n);
     };
-    return Option<TreeMapNode<String>> { 1 };
+    return ref.null none;
 }
 
 fn TreeMap<String,i32>::skew(self, node) {
     let n: ref "core:allocator/TreeMapNode<String>";
     let left: ref "core:allocator/TreeMapNode<String>";
-    let __pattern_temp_1: ref Option<TreeMapNode<String>>;
-    if ref.test Option<TreeMapNode<String>>::Some(node) {
-        n = ref.cast Option<TreeMapNode<String>>::Some(node).payload_0;
+    let __pattern_temp_1: ref null "core:allocator/TreeMapNode<String>";
+    if ref.is_null(node) == 0 {
+        n = ref.as_non_null(node);
         __pattern_temp_1 = n.left;
-        if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_1) {
-            left = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_1).payload_0;
+        if ref.is_null(__pattern_temp_1) == 0 {
+            left = ref.as_non_null(__pattern_temp_1);
             if left.level == n.level {
-                n.left = ref.as_non_null(left.right);
-                left.right = Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) };
-                return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(left) };
+                n.left = left.right;
+                left.right = n;
+                return ref.as_non_null(left);
             };
         };
-        return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) };
+        return ref.as_non_null(n);
     };
-    return Option<TreeMapNode<String>> { 1 };
+    return ref.null none;
 }
 
 fn Array<TreeMapEntry<String,i32>>::append(self, value) {
@@ -820,10 +814,10 @@ fn Array<TreeMapEntry<String,i32>>::grow(self) {
 }
 
 fn TreeMap<String,i32>::find_index(self, key) {
-    let current: ref Option<TreeMapNode<String>>;
+    let current: ref null "core:allocator/TreeMapNode<String>";
     let n: ref "core:allocator/TreeMapNode<String>";
     let entry: ref "core:allocator/TreeMapEntry<String,i32>";
-    let __pattern_temp_0: ref Option<TreeMapNode<String>>;
+    let __pattern_temp_0: ref null "core:allocator/TreeMapNode<String>";
     let __local_7: i32;
     let _licm_entries_8: ref Array<TreeMapEntry<String,i32>>;
     let _licm_used_9: i32;
@@ -835,8 +829,8 @@ fn TreeMap<String,i32>::find_index(self, key) {
     b56: block {
         l57: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
-            if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
-                n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
+            if ref.is_null(__pattern_temp_0) == 0 {
+                n = ref.as_non_null(__pattern_temp_0);
                 if String^Eq::eq(key, n.key) {
                     entry = __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: block -> ref "core:allocator/TreeMapEntry<String,i32>" {
                         __local_7 = n.index;
@@ -852,9 +846,9 @@ fn TreeMap<String,i32>::find_index(self, key) {
                     return n.index;
                 };
                 if String^Ord::cmp(key, n.key) == 0 {
-                    current = value_copy Option<TreeMapNode<String>>(n.left);
+                    current = n.left;
                 } else {
-                    current = value_copy Option<TreeMapNode<String>>(n.right);
+                    current = n.right;
                 };
             } else {
                 break b56;
@@ -868,11 +862,11 @@ fn TreeMap<String,i32>::find_index(self, key) {
 fn ArrayIter<Tuple<String,i32>>^Iterator::next(self) {
     let item: ref "tuple/[String, i32]";
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref "tuple/[String, i32]">(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 fn TreeMap<String,i32>::entries(self) {
@@ -880,6 +874,7 @@ fn TreeMap<String,i32>::entries(self) {
     let result: ref Array<Tuple<String,i32>>;
     let __iter_3: ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>";
     let entry: ref "core:allocator/TreeMapEntry<String,i32>";
+    let __pattern_temp_0: ref null "core:allocator/TreeMapEntry<String,i32>";
     let __local_9: ref Array<TreeMapEntry<String,i32>>;
     result = __seq_lit: block -> ref Array<Tuple<String,i32>> {
         __local_1 = Array<Tuple<String,i32>> { repr: builtin::array_new<ref "tuple/[String, i32]">(0), used: 0 };
@@ -891,11 +886,9 @@ fn TreeMap<String,i32>::entries(self) {
     };
     b64: block {
         l65: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,i32>";
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(__iter_3);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                entry = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            __pattern_temp_0 = ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(__iter_3);
+            if ref.is_null(__pattern_temp_0) == 0 {
+                entry = value_copy "core:allocator/TreeMapEntry<String,i32>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
                     Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: ref.as_non_null(entry.key), 1: entry.value });
                 };
@@ -953,11 +946,11 @@ fn Array<Tuple<String,i32>>::grow(self) {
 fn ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(self) {
     let item: ref "core:allocator/TreeMapEntry<String,i32>";
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 fn Formatter::write_char_n(self, c, n) {

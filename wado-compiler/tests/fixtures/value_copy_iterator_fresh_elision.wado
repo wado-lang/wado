@@ -1,0 +1,31 @@
+// Test that value_copy is elided when destructuring a struct obtained from an
+// iterator (for-of), where the key pattern is:
+//
+//   __pattern_temp_0 = iter.next()   // fresh Call result
+//   if ref.is_null(__pattern_temp_0) == 0 {
+//     __pattern_temp_1 = value_copy T(ref.as_non_null(__pattern_temp_0))
+//   }
+//
+// Since __pattern_temp_0 holds a fresh value (Call result), and
+// RefAsNonNull(LocalGet{__pattern_temp_0}) propagates that freshness,
+// the value_copy is unnecessary and should be elided at O2.
+
+use { println } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout {
+    let points: Array<Point> = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    for let Point { x, y } of points {
+        println(`{x} {y}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "1 2\n3 4\n",
+    "wir_not_expect:O2": ["value_copy Point"]
+}

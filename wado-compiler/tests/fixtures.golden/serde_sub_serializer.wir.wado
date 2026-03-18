@@ -38,16 +38,6 @@ struct SerializeError {
     mut message: ref String,
 }
 
-variant Result<unit,SerializeError> {
-    Ok,
-    Err(ref SerializeError),
-}
-
-struct Result<unit,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref SerializeError,
-}
-
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -98,7 +88,7 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/TextStructSerializer^SerializeStruct::field<String>" = fn(ref TextStructSerializer, ref String, ref String) -> ref Result<unit,SerializeError>;
+type "functype/TextStructSerializer^SerializeStruct::field<String>" = fn(ref TextStructSerializer, ref String, ref String) -> ref null SerializeError;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -112,13 +102,13 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
-type "functype/TextSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref Result<unit,SerializeError>;
+type "functype/TextSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref null SerializeError;
 
-type "functype/TextSerializer^Serializer::serialize_string" = fn(ref String, ref String) -> ref Result<unit,SerializeError>;
+type "functype/TextSerializer^Serializer::serialize_string" = fn(ref String, ref String) -> ref null SerializeError;
 
-type "functype/TextStructSerializer^SerializeStruct::field<i32>" = fn(ref TextStructSerializer, ref String, i32) -> ref Result<unit,SerializeError>;
+type "functype/TextStructSerializer^SerializeStruct::field<i32>" = fn(ref TextStructSerializer, ref String, i32) -> ref null SerializeError;
 
-type "functype/TextSeqSerializer^SerializeSeq::element<i32>" = fn(ref TextSeqSerializer, i32) -> ref Result<unit,SerializeError>;
+type "functype/TextSeqSerializer^SerializeSeq::element<i32>" = fn(ref TextSeqSerializer, i32) -> ref null SerializeError;
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -155,9 +145,9 @@ fn run() with Stdout {
         drop(TextSeqSerializer^SerializeSeq::element<i32>(s_2, 1));
         drop(TextSeqSerializer^SerializeSeq::element<i32>(s_2, 2));
         drop(TextSeqSerializer^SerializeSeq::element<i32>(s_2, 3));
-        drop(__inline_TextSeqSerializer_SerializeSeq__end_3: block -> ref Result<unit,SerializeError> {
+        drop(__inline_TextSeqSerializer_SerializeSeq__end_3: block -> ref null SerializeError {
             String::append_char(s_2.parent.buf, 93);
-            break __inline_TextSeqSerializer_SerializeSeq__end_3: Result<unit,SerializeError> { 0, nop };
+            break __inline_TextSeqSerializer_SerializeSeq__end_3: ref.null none;
         });
         break __fused___inline_TextSerializer_Serializer__begin_seq_2;
     };
@@ -180,9 +170,9 @@ fn run() with Stdout {
         name_8 = String { repr: array.new_data<u8>("Alice"), used: 5 };
         drop(TextStructSerializer^SerializeStruct::field<String>(s_7, String { repr: array.new_data<u8>("name"), used: 4 }, name_8));
         drop(TextStructSerializer^SerializeStruct::field<i32>(s_7, String { repr: array.new_data<u8>("age"), used: 3 }, 30));
-        drop(__inline_TextStructSerializer_SerializeStruct__end_6: block -> ref Result<unit,SerializeError> {
+        drop(__inline_TextStructSerializer_SerializeStruct__end_6: block -> ref null SerializeError {
             String::append_char(s_7.parent.buf, 125);
-            break __inline_TextStructSerializer_SerializeStruct__end_6: Result<unit,SerializeError> { 0, nop };
+            break __inline_TextStructSerializer_SerializeStruct__end_6: ref.null none;
         });
         break __fused___inline_TextSerializer_Serializer__begin_struct_5;
     };
@@ -483,7 +473,7 @@ fn TextSerializer^Serializer::serialize_i32(self, v) {
         i32::fmt_decimal(v, __local_7);
         break __tmpl: __local_2;
     });
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn TextSerializer^Serializer::serialize_string(self, v) {
@@ -495,7 +485,7 @@ fn TextSerializer^Serializer::serialize_string(self, v) {
         String::append_char(__local_2, 34);
         break __tmpl: __local_2;
     });
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn TextStructSerializer^SerializeStruct::field<i32>(self, name, value) {
@@ -512,12 +502,12 @@ fn TextStructSerializer^SerializeStruct::field<i32>(self, name, value) {
         String::append_char(__local_3, 58);
         break __tmpl: __local_3;
     });
-    drop(__inline_i32_Serialize__serialize_TextSerializer__1: block -> ref Result<unit,SerializeError> {
+    drop(__inline_i32_Serialize__serialize_TextSerializer__1: block -> ref null SerializeError {
         __local_6 = self.parent;
         break __inline_i32_Serialize__serialize_TextSerializer__1: TextSerializer^Serializer::serialize_i32(__local_6.buf, value);
     });
     self.count = self.count + 1;
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn TextStructSerializer^SerializeStruct::field<String>(self, name, value) {
@@ -534,12 +524,12 @@ fn TextStructSerializer^SerializeStruct::field<String>(self, name, value) {
         String::append_char(__local_3, 58);
         break __tmpl: __local_3;
     });
-    drop(__inline_String_Serialize__serialize_TextSerializer__1: block -> ref Result<unit,SerializeError> {
+    drop(__inline_String_Serialize__serialize_TextSerializer__1: block -> ref null SerializeError {
         __local_6 = self.parent;
         break __inline_String_Serialize__serialize_TextSerializer__1: TextSerializer^Serializer::serialize_string(__local_6.buf, value);
     });
     self.count = self.count + 1;
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn TextSeqSerializer^SerializeSeq::element<i32>(self, value) {
@@ -547,12 +537,12 @@ fn TextSeqSerializer^SerializeSeq::element<i32>(self, value) {
     if self.count > 0 {
         String::append_char(self.parent.buf, 44);
     };
-    drop(__inline_i32_Serialize__serialize_TextSerializer__0: block -> ref Result<unit,SerializeError> {
+    drop(__inline_i32_Serialize__serialize_TextSerializer__0: block -> ref null SerializeError {
         __local_3 = self.parent;
         break __inline_i32_Serialize__serialize_TextSerializer__0: TextSerializer^Serializer::serialize_i32(__local_3.buf, value);
     });
     self.count = self.count + 1;
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn Formatter::write_char_n(self, c, n) {

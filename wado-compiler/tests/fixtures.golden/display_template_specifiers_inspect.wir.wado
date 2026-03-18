@@ -47,16 +47,6 @@ struct [u128, u128] {
 
 array array<u64> (mut u64);
 
-variant Option<String> {
-    Some(ref String),
-    None,
-}
-
-struct Option<String>::Some {
-    discriminant: i32,
-    payload_0: ref String,
-}
-
 variant Option<i32> {
     Some(i32),
     None,
@@ -95,16 +85,6 @@ struct Result<String,i32>::Ok {
 struct Result<String,i32>::Err {
     discriminant: i32,
     payload_0: i32,
-}
-
-variant Option<Option<i32>> {
-    Some(ref Option<i32>),
-    None,
-}
-
-struct Option<Option<i32>>::Some {
-    discriminant: i32,
-    payload_0: ref Option<i32>,
 }
 
 struct Array<u64> {  // Array<T> with T=u64
@@ -282,9 +262,9 @@ type "functype/Result<String,i32>^Inspect::inspect" = fn(ref Result<String,i32>,
 
 type "functype/Result<i32,String>^Inspect::inspect" = fn(ref Result<i32,String>, ref Formatter);
 
-type "functype/Option<Option<i32>>^Inspect::inspect" = fn(ref Option<Option<i32>>, ref Formatter);
+type "functype/Option<Option<i32>>^Inspect::inspect" = fn(ref null Option<i32>, ref Formatter);
 
-type "functype/Option<String>^Inspect::inspect" = fn(ref Option<String>, ref Formatter);
+type "functype/Option<String>^Inspect::inspect" = fn(ref null String, ref Formatter);
 
 type "functype/Option<i32>^Inspect::inspect" = fn(ref Option<i32>, ref Formatter);
 
@@ -358,11 +338,11 @@ fn run() with Stdout {
     let none_i32: ref Option<i32>;
     let __cond_69: bool;
     let __cond_70: bool;
-    let some_str: ref Option<String>;
+    let some_str: ref null String;
     let __cond_72: bool;
-    let some_some: ref Option<Option<i32>>;
+    let some_some: ref null Option<i32>;
     let __cond_74: bool;
-    let some_none: ref Option<Option<i32>>;
+    let some_none: ref null Option<i32>;
     let __cond_76: bool;
     let ok_val: ref Result<i32,String>;
     let __cond_78: bool;
@@ -2287,14 +2267,14 @@ condition: `{none_i32}` == \"Option::None\"
         });
         unreachable;
     };
-    some_str = Option<String>::Some { discriminant: 0, payload_0: String { repr: array.new_data<u8>("world"), used: 5 } };
+    some_str = String { repr: array.new_data<u8>("world"), used: 5 };
     __cond_72 = String^Eq::eq(__tmpl: block -> ref String {
         __local_258 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_259 = __inline_Formatter__new_288: block -> ref Formatter {
             __local_727 = __local_258;
             break __inline_Formatter__new_288: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_727) };
         };
-        Option<String>^Inspect::inspect(ref.as_non_null(some_str), __local_259);
+        Option<String>^Inspect::inspect(some_str, __local_259);
         break __tmpl: __local_258;
     }, String { repr: array.new_data<u8>("Option::Some(\"world\")"), used: 21 });
     if __cond_72 == 0 {
@@ -2323,14 +2303,14 @@ condition: `{some_str:?}` == \"Option::Some(\\\"world\\\")\"
         });
         unreachable;
     };
-    some_some = Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32>::Some { discriminant: 0, payload_0: 7 } };
+    some_some = Option<i32>::Some { discriminant: 0, payload_0: 7 };
     __cond_74 = String^Eq::eq(__tmpl: block -> ref String {
         __local_262 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_263 = __inline_Formatter__new_294: block -> ref Formatter {
             __local_735 = __local_262;
             break __inline_Formatter__new_294: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_735) };
         };
-        Option<Option<i32>>^Inspect::inspect(ref.as_non_null(some_some), __local_263);
+        Option<Option<i32>>^Inspect::inspect(some_some, __local_263);
         break __tmpl: __local_262;
     }, String { repr: array.new_data<u8>("Option::Some(Option::Some(7))"), used: 29 });
     if __cond_74 == 0 {
@@ -2359,14 +2339,14 @@ condition: `{some_some:?}` == \"Option::Some(Option::Some(7))\"
         });
         unreachable;
     };
-    some_none = Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32> { 1 } };
+    some_none = Option<i32> { 1 };
     __cond_76 = String^Eq::eq(__tmpl: block -> ref String {
         __local_266 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_267 = __inline_Formatter__new_300: block -> ref Formatter {
             __local_743 = __local_266;
             break __inline_Formatter__new_300: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_743) };
         };
-        Option<Option<i32>>^Inspect::inspect(ref.as_non_null(some_none), __local_267);
+        Option<Option<i32>>^Inspect::inspect(some_none, __local_267);
         break __tmpl: __local_266;
     }, String { repr: array.new_data<u8>("Option::Some(Option::None)"), used: 26 });
     if __cond_76 == 0 {
@@ -5181,13 +5161,13 @@ fn Option<Option<i32>>^Inspect::inspect(self, f) {
     let __local_3: ref String;
     let __local_5: ref String;
     let __local_7: ref String;
-    if ref.test Option<Option<i32>>::Some(self) {
+    if ref.is_null(self) == 0 {
         __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
         String::append(f.buf, __local_3);
-        Option<i32>^Inspect::inspect(ref.as_non_null(ref.cast Option<Option<i32>>::Some(self).payload_0), f);
+        Option<i32>^Inspect::inspect(ref.as_non_null(self), f);
         __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
         String::append(f.buf, __local_5);
-    } else if self.discriminant == 1 {
+    } else if ref.is_null(self) {
         __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
         String::append(f.buf, __local_7);
     };
@@ -5197,13 +5177,13 @@ fn Option<String>^Inspect::inspect(self, f) {
     let __local_3: ref String;
     let __local_5: ref String;
     let __local_7: ref String;
-    if ref.test Option<String>::Some(self) {
+    if ref.is_null(self) == 0 {
         __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
         String::append(f.buf, __local_3);
-        String^Inspect::inspect(ref.cast Option<String>::Some(self).payload_0, f);
+        String^Inspect::inspect(ref.as_non_null(self), f);
         __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
         String::append(f.buf, __local_5);
-    } else if self.discriminant == 1 {
+    } else if ref.is_null(self) {
         __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
         String::append(f.buf, __local_7);
     };

@@ -44,16 +44,6 @@ struct SerializeError {
 
 array array<u64> (mut u64);
 
-variant Result<unit,SerializeError> {
-    Ok,
-    Err(ref SerializeError),
-}
-
-struct Result<unit,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref SerializeError,
-}
-
 variant Result<JsonVariantSerializer,SerializeError> {
     Ok(ref JsonVariantSerializer),
     Err(ref SerializeError),
@@ -180,11 +170,11 @@ type "functype/f64::fmt_into" = fn(f64, ref Formatter);
 
 type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
 
-type "functype/JsonSerializer^Serializer::serialize_f64" = fn(ref String, f64) -> ref Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_f64" = fn(ref String, f64) -> ref null SerializeError;
 
-type "functype/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref String, ref String, ref String, i32) -> ref Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref String, ref String, ref String, i32) -> ref null SerializeError;
 
-type "functype/Shape^Serialize::serialize<JsonSerializer>" = fn(ref Shape, ref JsonSerializer) -> ref Result<unit,SerializeError>;
+type "functype/Shape^Serialize::serialize<JsonSerializer>" = fn(ref Shape, ref JsonSerializer) -> ref null SerializeError;
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -1483,7 +1473,7 @@ fn JsonSerializer^Serializer::serialize_f64(self, v) {
         f64::fmt_into(v, __local_7);
         break __tmpl: __local_2;
     });
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn JsonSerializer^Serializer::serialize_unit_variant(self, type_name, variant_name, disc) {
@@ -1495,7 +1485,7 @@ fn JsonSerializer^Serializer::serialize_unit_variant(self, type_name, variant_na
         String::append(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
         break __tmpl: __local_4;
     });
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn JsonSerializer^Serializer::begin_variant(self, type_name, variant_name, disc) {
@@ -1507,23 +1497,23 @@ fn Shape^Serialize::serialize<JsonSerializer>(self, s) {
     let __local_3: ref Result<JsonVariantSerializer,SerializeError>;
     let __local_4: ref JsonVariantSerializer;
     let __local_9: ref JsonSerializer;
-    return let __match_scrut_0: ref Shape; __match_scrut_0 = self; if ref.test Shape::Circle(__match_scrut_0) -> ref Result<unit,SerializeError> {
+    return let __match_scrut_0: ref Shape; __match_scrut_0 = self; if ref.test Shape::Circle(__match_scrut_0) -> ref null SerializeError {
         let __cast_1: ref Shape::Circle;
         __cast_1 = ref.cast Shape::Circle(__match_scrut_0);
         __local_3 = JsonSerializer^Serializer::begin_variant(s, String { repr: array.new_data<u8>("Shape"), used: 5 }, String { repr: array.new_data<u8>("Circle"), used: 6 }, 0);
         if ref.test Result<JsonVariantSerializer,SerializeError>::Ok(__local_3) {
             __local_4 = value_copy JsonVariantSerializer(ref.cast Result<JsonVariantSerializer,SerializeError>::Ok(__local_3).payload_0);
-            drop(__inline_f64_Serialize__serialize_JsonSerializer__1: block -> ref Result<unit,SerializeError> {
+            drop(__inline_f64_Serialize__serialize_JsonSerializer__1: block -> ref null SerializeError {
                 __local_9 = __local_4.ser;
                 break __inline_f64_Serialize__serialize_JsonSerializer__1: JsonSerializer^Serializer::serialize_f64(__local_9.buf, __cast_1.payload_0);
             });
-            return __inline_JsonVariantSerializer_SerializeVariant__end_2: block -> ref Result<unit,SerializeError> {
+            return __inline_JsonVariantSerializer_SerializeVariant__end_2: block -> ref null SerializeError {
                 String::append(__local_4.ser.buf, String { repr: array.new_data<u8>("}"), used: 1 });
-                break __inline_JsonVariantSerializer_SerializeVariant__end_2: Result<unit,SerializeError> { 0, nop };
+                break __inline_JsonVariantSerializer_SerializeVariant__end_2: ref.null none;
             };
         };
-        return Result<unit,SerializeError>::Err { discriminant: 1, payload_0: SerializeError { message: String { repr: array.new_data<u8>("begin_variant failed"), used: 20 } } };
-    } else if __match_scrut_0.discriminant == 1 -> ref Result<unit,SerializeError> {
+        return SerializeError { message: String { repr: array.new_data<u8>("begin_variant failed"), used: 20 } };
+    } else if __match_scrut_0.discriminant == 1 -> ref null SerializeError {
         JsonSerializer^Serializer::serialize_unit_variant(s.buf, String { repr: array.new_data<u8>("Shape"), used: 5 }, String { repr: array.new_data<u8>("Point"), used: 5 }, 1);
     } else {
         unreachable;

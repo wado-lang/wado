@@ -10,17 +10,17 @@ struct String {
 }
 
 struct FieldSizePayload {  // from wasi:http/types.wado
-    mut field_name: ref Option<String>,
+    mut field_name: ref null String,
     mut field_size: ref Option<u32>,
 }
 
 struct TlsAlertReceivedPayload {  // from wasi:http/types.wado
     mut alert_id: ref Option<u8>,
-    mut alert_message: ref Option<String>,
+    mut alert_message: ref null String,
 }
 
 struct DnsErrorPayload {  // from wasi:http/types.wado
-    mut rcode: ref Option<String>,
+    mut rcode: ref null String,
     mut info_code: ref Option<u16>,
 }
 
@@ -47,7 +47,7 @@ variant ErrorCode {  // from wasi:http/types.wado
     HttpRequestUriInvalid,
     HttpRequestUriTooLong,
     HttpRequestHeaderSectionSize(ref Option<u32>),
-    HttpRequestHeaderSize(ref Option<FieldSizePayload>),
+    HttpRequestHeaderSize(ref null "wasi:http/types.wado/FieldSizePayload"),
     HttpRequestTrailerSectionSize(ref Option<u32>),
     HttpRequestTrailerSize(ref "wasi:http/types.wado/FieldSizePayload"),
     HttpResponseIncomplete,
@@ -56,14 +56,14 @@ variant ErrorCode {  // from wasi:http/types.wado
     HttpResponseBodySize(ref Option<u64>),
     HttpResponseTrailerSectionSize(ref Option<u32>),
     HttpResponseTrailerSize(ref "wasi:http/types.wado/FieldSizePayload"),
-    HttpResponseTransferCoding(ref Option<String>),
-    HttpResponseContentCoding(ref Option<String>),
+    HttpResponseTransferCoding(ref null String),
+    HttpResponseContentCoding(ref null String),
     HttpResponseTimeout,
     HttpUpgradeFailed,
     HttpProtocolError,
     LoopDetected,
     ConfigurationError,
-    InternalError(ref Option<String>),
+    InternalError(ref null String),
 }
 
 struct ErrorCode::DnsError {
@@ -78,22 +78,22 @@ struct ErrorCode::TlsAlertReceived {
 
 struct ErrorCode::HttpRequestBodySize {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref Option<u64>,
 }
 
 struct ErrorCode::HttpRequestHeaderSectionSize {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref Option<u32>,
 }
 
 struct ErrorCode::HttpRequestHeaderSize {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref null "wasi:http/types.wado/FieldSizePayload",
 }
 
 struct ErrorCode::HttpRequestTrailerSectionSize {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref Option<u32>,
 }
 
 struct ErrorCode::HttpRequestTrailerSize {
@@ -103,7 +103,7 @@ struct ErrorCode::HttpRequestTrailerSize {
 
 struct ErrorCode::HttpResponseHeaderSectionSize {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref Option<u32>,
 }
 
 struct ErrorCode::HttpResponseHeaderSize {
@@ -113,12 +113,12 @@ struct ErrorCode::HttpResponseHeaderSize {
 
 struct ErrorCode::HttpResponseBodySize {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref Option<u64>,
 }
 
 struct ErrorCode::HttpResponseTrailerSectionSize {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref Option<u32>,
 }
 
 struct ErrorCode::HttpResponseTrailerSize {
@@ -128,27 +128,22 @@ struct ErrorCode::HttpResponseTrailerSize {
 
 struct ErrorCode::HttpResponseTransferCoding {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref null String,
 }
 
 struct ErrorCode::HttpResponseContentCoding {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref null String,
 }
 
 struct ErrorCode::InternalError {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref null String,
 }
 
 variant Option<String> {
     Some(ref String),
     None,
-}
-
-struct Option<String>::Some {
-    discriminant: i32,
-    payload_0: ref String,
 }
 
 variant Option<u16> {
@@ -196,11 +191,6 @@ variant Option<FieldSizePayload> {
     None,
 }
 
-struct Option<FieldSizePayload>::Some {
-    discriminant: i32,
-    payload_0: ref "wasi:http/types.wado/FieldSizePayload",
-}
-
 variant Result<Response,ErrorCode> {
     Ok(i32),
     Err(ref "wasi:http/types.wado/ErrorCode"),
@@ -235,7 +225,7 @@ type "functype/wasi/wasi:http/Response::set_status_code" = fn(i32, i32) -> i32;
 
 type "functype/handle" = fn(i32);
 
-type "functype/__cm_adapter__Request_get_path_with_query" = fn(i32) -> ref Option<String>;
+type "functype/__cm_adapter__Request_get_path_with_query" = fn(i32) -> ref null String;
 
 type "functype/__cm_adapter__Fields_new" = fn() -> i32;
 
@@ -277,7 +267,7 @@ import fn waitable-join from "wasi/waitable-join";
 import fn waitable-set-wait from "wasi/waitable-set-wait";
 
 fn handle(request) {
-    let path: ref Option<String>;
+    let path: ref null String;
     let trailers_future: i32;
     let trailers_tx: i32;
     let headers: i32;
@@ -294,7 +284,7 @@ fn handle(request) {
     let __ok_val: i32;
     let __err_val: ref "wasi:http/types.wado/ErrorCode";
     let __case_payload_20: ref "wasi:http/types.wado/DnsErrorPayload";
-    let __opt_val_22: ref Option<String>;
+    let __opt_val_22: ref null String;
     let __opt_disc_23: i32;
     let __opt_inner_0_24: i32;
     let __opt_inner_1_25: i32;
@@ -310,7 +300,7 @@ fn handle(request) {
     let __opt_disc_36: i32;
     let __opt_inner_0_37: i32;
     let __flat_38: i32;
-    let __opt_val_39: ref Option<String>;
+    let __opt_val_39: ref null String;
     let __opt_disc_40: i32;
     let __opt_inner_0_41: i32;
     let __opt_inner_1_42: i32;
@@ -325,7 +315,7 @@ fn handle(request) {
     let __opt_disc_53: i32;
     let __opt_inner_0_54: i32;
     let __flat_55: i32;
-    let __case_payload_56: ref Option<FieldSizePayload>;
+    let __case_payload_56: ref null "wasi:http/types.wado/FieldSizePayload";
     let __opt_disc_58: i32;
     let __opt_inner_0_59: i32;
     let __opt_inner_1_60: i32;
@@ -333,7 +323,7 @@ fn handle(request) {
     let __opt_inner_3: i32;
     let __opt_inner_4: i32;
     let __struct_val: ref "wasi:http/types.wado/FieldSizePayload";
-    let __opt_val_65: ref Option<String>;
+    let __opt_val_65: ref null String;
     let __opt_disc_66: i32;
     let __opt_inner_0_67: i32;
     let __opt_inner_1_68: i32;
@@ -349,7 +339,7 @@ fn handle(request) {
     let __opt_inner_0_79: i32;
     let __flat_80: i32;
     let __case_payload_81: ref "wasi:http/types.wado/FieldSizePayload";
-    let __opt_val_83: ref Option<String>;
+    let __opt_val_83: ref null String;
     let __opt_disc_84: i32;
     let __opt_inner_0_85: i32;
     let __opt_inner_1_86: i32;
@@ -365,7 +355,7 @@ fn handle(request) {
     let __opt_inner_0_97: i32;
     let __flat_98: i32;
     let __case_payload_99: ref "wasi:http/types.wado/FieldSizePayload";
-    let __opt_val_101: ref Option<String>;
+    let __opt_val_101: ref null String;
     let __opt_disc_102: i32;
     let __opt_inner_0_103: i32;
     let __opt_inner_1_104: i32;
@@ -385,7 +375,7 @@ fn handle(request) {
     let __opt_inner_0_120: i32;
     let __flat_121: i32;
     let __case_payload_122: ref "wasi:http/types.wado/FieldSizePayload";
-    let __opt_val_124: ref Option<String>;
+    let __opt_val_124: ref null String;
     let __opt_disc_125: i32;
     let __opt_inner_0_126: i32;
     let __opt_inner_1_127: i32;
@@ -396,21 +386,21 @@ fn handle(request) {
     let __opt_disc_132: i32;
     let __opt_inner_0_133: i32;
     let __flat_134: i32;
-    let __case_payload_135: ref Option<String>;
+    let __case_payload_135: ref null String;
     let __opt_disc_137: i32;
     let __opt_inner_0_138: i32;
     let __opt_inner_1_139: i32;
     let __packed_140: i64;
     let __ptr_141: i32;
     let __len_142: i32;
-    let __case_payload_143: ref Option<String>;
+    let __case_payload_143: ref null String;
     let __opt_disc_145: i32;
     let __opt_inner_0_146: i32;
     let __opt_inner_1_147: i32;
     let __packed_148: i64;
     let __ptr_149: i32;
     let __len_150: i32;
-    let __case_payload_151: ref Option<String>;
+    let __case_payload_151: ref null String;
     let __opt_disc_153: i32;
     let __opt_inner_0_154: i32;
     let __opt_inner_1_155: i32;
@@ -427,8 +417,8 @@ fn handle(request) {
     let __sroa___pattern_temp_1_1: i32;
     multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
     response = __sroa___pattern_temp_1_0;
-    if ref.test Option<String>::Some(path) {
-        p = value_copy String(ref.cast Option<String>::Some(path).payload_0);
+    if ref.is_null(path) == 0 {
+        p = value_copy String(ref.as_non_null(path));
         if String^Eq::eq(p, String { repr: array.new_data<u8>("/not-found"), used: 10 }) {
             drop(__cm_adapter__Response_set_status_code(response, 404));
         } else if String^Eq::eq(p, String { repr: array.new_data<u8>("/created"), used: 8 }) {
@@ -451,13 +441,13 @@ fn handle(request) {
         __err_val = value_copy "wasi:http/types.wado/ErrorCode"(ref.cast Result<Response,ErrorCode>::Err(__task_ret).payload_0);
         __tv_1 = __err_val.discriminant;
         if ref.test "wasi:http/types.wado/ErrorCode::DnsError"(__err_val) {
-            __case_payload_20 = value_copy "wasi:http/types.wado/DnsErrorPayload"(ref.cast "wasi:http/types.wado/ErrorCode::DnsError"(__err_val).payload_0);
+            __case_payload_20 = ref.cast "wasi:http/types.wado/ErrorCode::DnsError"(__err_val).payload_0;
             __opt_val_22 = __case_payload_20.rcode;
-            __opt_disc_23 = ref.test Option<String>::Some(__opt_val_22);
+            __opt_disc_23 = ref.is_null(__opt_val_22) == 0;
             __opt_inner_0_24 = 0;
             __opt_inner_1_25 = 0;
             if __opt_disc_23 != 0 {
-                __packed_26 = "core:internal/cm_lower_string"(ref.cast Option<String>::Some(__opt_val_22).payload_0);
+                __packed_26 = "core:internal/cm_lower_string"(ref.as_non_null(__opt_val_22));
                 __ptr_27 = builtin::i32_wrap_i64(__packed_26);
                 __len_28 = builtin::i32_wrap_i64(__packed_26 >> 32_i64);
                 __opt_inner_0_24 = __ptr_27;
@@ -477,7 +467,7 @@ fn handle(request) {
             __tv_6 = __opt_inner_0_31;
         };
         if ref.test "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__err_val) {
-            __case_payload_33 = value_copy "wasi:http/types.wado/TlsAlertReceivedPayload"(ref.cast "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__err_val).payload_0);
+            __case_payload_33 = ref.cast "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__err_val).payload_0;
             __opt_val_35 = __case_payload_33.alert_id;
             __opt_disc_36 = ref.test Option<u8>::Some(__opt_val_35);
             __opt_inner_0_37 = 0;
@@ -486,11 +476,11 @@ fn handle(request) {
                 __opt_inner_0_37 = __flat_38;
             };
             __opt_val_39 = __case_payload_33.alert_message;
-            __opt_disc_40 = ref.test Option<String>::Some(__opt_val_39);
+            __opt_disc_40 = ref.is_null(__opt_val_39) == 0;
             __opt_inner_0_41 = 0;
             __opt_inner_1_42 = 0;
             if __opt_disc_40 != 0 {
-                __packed_43 = "core:internal/cm_lower_string"(ref.cast Option<String>::Some(__opt_val_39).payload_0);
+                __packed_43 = "core:internal/cm_lower_string"(ref.as_non_null(__opt_val_39));
                 __ptr_44 = builtin::i32_wrap_i64(__packed_43);
                 __len_45 = builtin::i32_wrap_i64(__packed_43 >> 32_i64);
                 __opt_inner_0_41 = __ptr_44;
@@ -526,20 +516,20 @@ fn handle(request) {
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize"(__err_val) {
             __case_payload_56 = value_copy Option<FieldSizePayload>(ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize"(__err_val).payload_0);
-            __opt_disc_58 = ref.test Option<FieldSizePayload>::Some(__case_payload_56);
+            __opt_disc_58 = ref.is_null(__case_payload_56) == 0;
             __opt_inner_0_59 = 0;
             __opt_inner_1_60 = 0;
             __opt_inner_2 = 0;
             __opt_inner_3 = 0;
             __opt_inner_4 = 0;
             if __opt_disc_58 != 0 {
-                __struct_val = value_copy "wasi:http/types.wado/FieldSizePayload"(ref.cast Option<FieldSizePayload>::Some(__case_payload_56).payload_0);
+                __struct_val = ref.as_non_null(__case_payload_56);
                 __opt_val_65 = __struct_val.field_name;
-                __opt_disc_66 = ref.test Option<String>::Some(__opt_val_65);
+                __opt_disc_66 = ref.is_null(__opt_val_65) == 0;
                 __opt_inner_0_67 = 0;
                 __opt_inner_1_68 = 0;
                 if __opt_disc_66 != 0 {
-                    __packed_69 = "core:internal/cm_lower_string"(ref.cast Option<String>::Some(__opt_val_65).payload_0);
+                    __packed_69 = "core:internal/cm_lower_string"(ref.as_non_null(__opt_val_65));
                     __ptr_70 = builtin::i32_wrap_i64(__packed_69);
                     __len_71 = builtin::i32_wrap_i64(__packed_69 >> 32_i64);
                     __opt_inner_0_67 = __ptr_70;
@@ -577,13 +567,13 @@ fn handle(request) {
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_79);
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize"(__err_val) {
-            __case_payload_81 = value_copy "wasi:http/types.wado/FieldSizePayload"(ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize"(__err_val).payload_0);
+            __case_payload_81 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize"(__err_val).payload_0;
             __opt_val_83 = __case_payload_81.field_name;
-            __opt_disc_84 = ref.test Option<String>::Some(__opt_val_83);
+            __opt_disc_84 = ref.is_null(__opt_val_83) == 0;
             __opt_inner_0_85 = 0;
             __opt_inner_1_86 = 0;
             if __opt_disc_84 != 0 {
-                __packed_87 = "core:internal/cm_lower_string"(ref.cast Option<String>::Some(__opt_val_83).payload_0);
+                __packed_87 = "core:internal/cm_lower_string"(ref.as_non_null(__opt_val_83));
                 __ptr_88 = builtin::i32_wrap_i64(__packed_87);
                 __len_89 = builtin::i32_wrap_i64(__packed_87 >> 32_i64);
                 __opt_inner_0_85 = __ptr_88;
@@ -614,13 +604,13 @@ fn handle(request) {
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_97);
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize"(__err_val) {
-            __case_payload_99 = value_copy "wasi:http/types.wado/FieldSizePayload"(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize"(__err_val).payload_0);
+            __case_payload_99 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize"(__err_val).payload_0;
             __opt_val_101 = __case_payload_99.field_name;
-            __opt_disc_102 = ref.test Option<String>::Some(__opt_val_101);
+            __opt_disc_102 = ref.is_null(__opt_val_101) == 0;
             __opt_inner_0_103 = 0;
             __opt_inner_1_104 = 0;
             if __opt_disc_102 != 0 {
-                __packed_105 = "core:internal/cm_lower_string"(ref.cast Option<String>::Some(__opt_val_101).payload_0);
+                __packed_105 = "core:internal/cm_lower_string"(ref.as_non_null(__opt_val_101));
                 __ptr_106 = builtin::i32_wrap_i64(__packed_105);
                 __len_107 = builtin::i32_wrap_i64(__packed_105 >> 32_i64);
                 __opt_inner_0_103 = __ptr_106;
@@ -662,13 +652,13 @@ fn handle(request) {
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_120);
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize"(__err_val) {
-            __case_payload_122 = value_copy "wasi:http/types.wado/FieldSizePayload"(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize"(__err_val).payload_0);
+            __case_payload_122 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize"(__err_val).payload_0;
             __opt_val_124 = __case_payload_122.field_name;
-            __opt_disc_125 = ref.test Option<String>::Some(__opt_val_124);
+            __opt_disc_125 = ref.is_null(__opt_val_124) == 0;
             __opt_inner_0_126 = 0;
             __opt_inner_1_127 = 0;
             if __opt_disc_125 != 0 {
-                __packed_128 = "core:internal/cm_lower_string"(ref.cast Option<String>::Some(__opt_val_124).payload_0);
+                __packed_128 = "core:internal/cm_lower_string"(ref.as_non_null(__opt_val_124));
                 __ptr_129 = builtin::i32_wrap_i64(__packed_128);
                 __len_130 = builtin::i32_wrap_i64(__packed_128 >> 32_i64);
                 __opt_inner_0_126 = __ptr_129;
@@ -689,11 +679,11 @@ fn handle(request) {
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding"(__err_val) {
             __case_payload_135 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding"(__err_val).payload_0);
-            __opt_disc_137 = ref.test Option<String>::Some(__case_payload_135);
+            __opt_disc_137 = ref.is_null(__case_payload_135) == 0;
             __opt_inner_0_138 = 0;
             __opt_inner_1_139 = 0;
             if __opt_disc_137 != 0 {
-                __packed_140 = "core:internal/cm_lower_string"(ref.cast Option<String>::Some(__case_payload_135).payload_0);
+                __packed_140 = "core:internal/cm_lower_string"(ref.as_non_null(__case_payload_135));
                 __ptr_141 = builtin::i32_wrap_i64(__packed_140);
                 __len_142 = builtin::i32_wrap_i64(__packed_140 >> 32_i64);
                 __opt_inner_0_138 = __ptr_141;
@@ -705,11 +695,11 @@ fn handle(request) {
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseContentCoding"(__err_val) {
             __case_payload_143 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseContentCoding"(__err_val).payload_0);
-            __opt_disc_145 = ref.test Option<String>::Some(__case_payload_143);
+            __opt_disc_145 = ref.is_null(__case_payload_143) == 0;
             __opt_inner_0_146 = 0;
             __opt_inner_1_147 = 0;
             if __opt_disc_145 != 0 {
-                __packed_148 = "core:internal/cm_lower_string"(ref.cast Option<String>::Some(__case_payload_143).payload_0);
+                __packed_148 = "core:internal/cm_lower_string"(ref.as_non_null(__case_payload_143));
                 __ptr_149 = builtin::i32_wrap_i64(__packed_148);
                 __len_150 = builtin::i32_wrap_i64(__packed_148 >> 32_i64);
                 __opt_inner_0_146 = __ptr_149;
@@ -721,11 +711,11 @@ fn handle(request) {
         };
         if ref.test "wasi:http/types.wado/ErrorCode::InternalError"(__err_val) {
             __case_payload_151 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::InternalError"(__err_val).payload_0);
-            __opt_disc_153 = ref.test Option<String>::Some(__case_payload_151);
+            __opt_disc_153 = ref.is_null(__case_payload_151) == 0;
             __opt_inner_0_154 = 0;
             __opt_inner_1_155 = 0;
             if __opt_disc_153 != 0 {
-                __packed_156 = "core:internal/cm_lower_string"(ref.cast Option<String>::Some(__case_payload_151).payload_0);
+                __packed_156 = "core:internal/cm_lower_string"(ref.as_non_null(__case_payload_151));
                 __ptr_157 = builtin::i32_wrap_i64(__packed_156);
                 __len_158 = builtin::i32_wrap_i64(__packed_156 >> 32_i64);
                 __opt_inner_0_154 = __ptr_157;
@@ -762,21 +752,21 @@ fn handle(request) {
 fn __cm_adapter__Request_get_path_with_query(self) {
     let __outptr: i32;
     let __disc: i32;
-    let __option_result: ref Option<String>;
+    let __option_result: ref null String;
     let __local_4: i32;
     let __local_5: i32;
     let __local_6: ref array<u8>;
     __outptr = "mem/realloc"(0, 0, 4, 12);
     "wasi/wasi:http/Request::get_path_with_query"(self, __outptr);
     __disc = builtin::load_u8(__outptr);
-    __option_result = Option<String> { 1 };
+    __option_result = ref.null none;
     if __disc != 0 {
-        __option_result = Option<String>::Some { discriminant: 0, payload_0: ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref String {
+        __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref String {
             __local_4 = builtin::load_i32(__outptr + 4);
             __local_5 = builtin::load_i32((__outptr + 4) + 4);
             __local_6 = "core:internal/memory_to_gc_array"(__local_4, __local_5);
             break __inline_memory_to_gc_string_0: String { repr: ref.as_non_null(__local_6), used: __local_5 };
-        }) };
+        });
         drop("mem/realloc"(builtin::load_i32(__outptr + 4), builtin::load_i32((__outptr + 4) + 4), 1, 0));
     };
     drop("mem/realloc"(__outptr, 12, 4, 0));

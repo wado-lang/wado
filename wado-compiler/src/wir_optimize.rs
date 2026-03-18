@@ -37,6 +37,7 @@ mod drve;
 mod elide;
 mod forward;
 mod init_guard;
+mod nullable_ref;
 mod peephole;
 mod sroa;
 mod string;
@@ -57,6 +58,7 @@ use elide::{
 };
 use forward::{eliminate_loop_guarded_bounds_checks, forward_struct_field_constants};
 use init_guard::remove_trivial_init_globals;
+use nullable_ref::nullable_ref_optimize;
 use peephole::{cleanup_wir, optimize_instrs};
 use sroa::{sroa_multi_value_returns, sroa_single_field_parameters};
 use string::simplify_short_string_appends;
@@ -70,6 +72,12 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
         dce::compact_dead_items(module);
         return;
     }
+    // Whole-module pass: rewrite eligible variants (2 cases: one unit, one non-null ref
+    // payload) to use null-niche representation (NullableRef), eliminating the discriminant
+    // struct overhead. Runs first so that downstream passes (SROA, elide, etc.) see the
+    // already-optimized types and don't try to transform the now-dead SubtypeHierarchy structs.
+    nullable_ref_optimize(module);
+
     // Whole-module pass: rewrite struct-returning functions to multi-value.
     sroa_multi_value_returns(module);
 
