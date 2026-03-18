@@ -196,6 +196,65 @@ test "Value whitespace tolerance" {
     assert r matches { Ok(v) && v == Value::Object(obj([["x", Value::Number(1.0)]])) };
 }
 
+test "inspect null" {
+    assert `{Value::Null:?}` == "null";
+}
+
+test "inspect bool" {
+    assert `{Value::Bool(true):?}` == "true";
+    assert `{Value::Bool(false):?}` == "false";
+}
+
+test "inspect number" {
+    assert `{Value::Number(42.0):?}` == "42.0";
+    assert `{Value::Number(3.14):?}` == "3.14";
+}
+
+test "inspect string" {
+    assert `{Value::String("hello"):?}` == "\"hello\"";
+}
+
+test "inspect array" {
+    let v = Value::Array([Value::Number(1.0), Value::Bool(true), Value::Null]);
+    assert `{v:?}` == "[1.0, true, null]";
+}
+
+test "inspect empty array" {
+    assert `{Value::Array([]):?}` == "[]";
+}
+
+test "inspect object" {
+    let v = Value::Object(obj([["a", Value::Number(1.0)]]));
+    assert `{v:?}` == "{\"a\": 1.0}";
+}
+
+test "inspect empty object" {
+    assert `{Value::Object(obj([])):?}` == "{}";
+}
+
+test "pretty-print object" {
+    let v = Value::Object(obj([
+        ["name", Value::String("Alice")],
+        ["age", Value::Number(30.0)],
+    ]));
+    assert `{v:#?}` == "{
+  \"name\": \"Alice\",
+  \"age\": 30.0,
+}";
+}
+
+test "pretty-print nested" {
+    let v = Value::Object(obj([
+        ["items", Value::Array([Value::Number(1.0), Value::Number(2.0)])],
+    ]));
+    assert `{v:#?}` == "{
+  \"items\": [
+    1.0,
+    2.0,
+  ],
+}";
+}
+
 test "Value eq null" {
     assert Value::Null == Value::Null;
     assert !(Value::Null == Value::Bool(false));

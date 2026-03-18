@@ -519,6 +519,80 @@ impl<V: Deserialize> Deserialize for TreeMap<String, V> {
     }
 }
 
+impl<K: Inspect, V: Inspect> Inspect for TreeMap<K, V> {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_char('{');
+        let mut first = true;
+        for let entry of self.entries {
+            if !entry.deleted {
+                if !first {
+                    f.write_str(", ");
+                }
+                first = false;
+                entry.key.inspect(f);
+                f.write_str(": ");
+                entry.value.inspect(f);
+            }
+        }
+        f.write_char('}');
+    }
+}
+
+impl<K: InspectAlt, V: InspectAlt> InspectAlt for TreeMap<K, V> {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        if self.is_empty() {
+            f.write_str("{}");
+            return;
+        }
+        f.open_brace("{");
+        for let entry of self.entries {
+            if !entry.deleted {
+                f.write_newline_indent();
+                entry.key.inspect_alt(f);
+                f.write_str(": ");
+                entry.value.inspect_alt(f);
+                f.write_char(',');
+            }
+        }
+        f.close_brace("}");
+    }
+}
+
+impl<T: Inspect + Ord> Inspect for TreeSet<T> {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_char('{');
+        let mut first = true;
+        for let entry of self.inner.entries {
+            if !entry.deleted {
+                if !first {
+                    f.write_str(", ");
+                }
+                first = false;
+                entry.key.inspect(f);
+            }
+        }
+        f.write_char('}');
+    }
+}
+
+impl<T: InspectAlt + Ord> InspectAlt for TreeSet<T> {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        if self.inner.is_empty() {
+            f.write_str("{}");
+            return;
+        }
+        f.open_brace("{");
+        for let entry of self.inner.entries {
+            if !entry.deleted {
+                f.write_newline_indent();
+                entry.key.inspect_alt(f);
+                f.write_char(',');
+            }
+        }
+        f.close_brace("}");
+    }
+}
+
 impl<K: Ord, V> Default for TreeMap<K, V> {
     pub fn default() -> TreeMap<K, V> {
         return TreeMap::<K, V>::new();
