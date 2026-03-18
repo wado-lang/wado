@@ -9,16 +9,6 @@ struct String {
     mut used: i32,
 }
 
-variant Option<String> {
-    Some(ref String),
-    None,
-}
-
-struct Option<String>::Some {
-    discriminant: i32,
-    payload_0: ref String,
-}
-
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
@@ -83,7 +73,9 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn option_match_else() with Stdout {
-    if 0 {
+    let opt: ref null String;
+    opt = String { repr: array.new_data<u8>("value"), used: 5 };
+    if ref.is_null(opt) {
         "core:cli/println"(String { repr: array.new_data<u8>("matched none"), used: 12 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("not none"), used: 8 });
@@ -91,7 +83,9 @@ fn option_match_else() with Stdout {
 }
 
 fn option_match_none() with Stdout {
-    if 1 {
+    let opt: ref null String;
+    opt = ref.null none;
+    if ref.is_null(opt) {
         "core:cli/println"(String { repr: array.new_data<u8>("matched none"), used: 12 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("has value"), used: 9 });
@@ -99,11 +93,11 @@ fn option_match_none() with Stdout {
 }
 
 fn option_match_some() with Stdout {
-    let opt: ref Option<String>;
+    let opt: ref null String;
     let x: ref String;
-    opt = Option<String>::Some { discriminant: 0, payload_0: String { repr: array.new_data<u8>("hello"), used: 5 } };
-    if ref.test Option<String>::Some(opt) {
-        x = value_copy String(ref.cast Option<String>::Some(opt).payload_0);
+    opt = String { repr: array.new_data<u8>("hello"), used: 5 };
+    if ref.is_null(opt) == 0 {
+        x = value_copy String(ref.as_non_null(opt));
         "core:cli/println"(x);
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("none"), used: 4 });

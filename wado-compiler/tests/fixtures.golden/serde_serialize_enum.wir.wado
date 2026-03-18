@@ -17,16 +17,6 @@ struct SerializeError {
     mut message: ref String,
 }
 
-variant Result<unit,SerializeError> {
-    Ok,
-    Err(ref SerializeError),
-}
-
-struct Result<unit,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref SerializeError,
-}
-
 enum Color { Red = 0, Green = 1, Blue = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -75,9 +65,9 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref String, ref String, ref String, i32) -> ref Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref String, ref String, ref String, i32) -> ref null SerializeError;
 
-type "functype/Color^Serialize::serialize<JsonSerializer>" = fn(enum:Color, ref String) -> ref Result<unit,SerializeError>;
+type "functype/Color^Serialize::serialize<JsonSerializer>" = fn(enum:Color, ref String) -> ref null SerializeError;
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -278,15 +268,15 @@ fn JsonSerializer^Serializer::serialize_unit_variant(self, type_name, variant_na
         String::append(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
         break __tmpl: __local_4;
     });
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn Color^Serialize::serialize<JsonSerializer>(self, s) {
-    return let __match_scrut_0: enum:Color; __match_scrut_0 = self; if __match_scrut_0 == 0 -> ref Result<unit,SerializeError> {
+    return let __match_scrut_0: enum:Color; __match_scrut_0 = self; if __match_scrut_0 == 0 -> ref null SerializeError {
         JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Color"), used: 5 }, String { repr: array.new_data<u8>("Red"), used: 3 }, 0);
-    } else if __match_scrut_0 == 1 -> ref Result<unit,SerializeError> {
+    } else if __match_scrut_0 == 1 -> ref null SerializeError {
         JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Color"), used: 5 }, String { repr: array.new_data<u8>("Green"), used: 5 }, 1);
-    } else if __match_scrut_0 == 2 -> ref Result<unit,SerializeError> {
+    } else if __match_scrut_0 == 2 -> ref null SerializeError {
         JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Color"), used: 5 }, String { repr: array.new_data<u8>("Blue"), used: 4 }, 2);
     } else {
         unreachable;

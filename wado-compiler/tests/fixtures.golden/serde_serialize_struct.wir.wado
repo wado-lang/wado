@@ -39,16 +39,6 @@ struct SerializeError {
     mut message: ref String,
 }
 
-variant Result<unit,SerializeError> {
-    Ok,
-    Err(ref SerializeError),
-}
-
-struct Result<unit,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref SerializeError,
-}
-
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -99,9 +89,9 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/User^Serialize::serialize<JsonSerializer>" = fn(ref User, ref JsonSerializer) -> ref Result<unit,SerializeError>;
+type "functype/User^Serialize::serialize<JsonSerializer>" = fn(ref User, ref JsonSerializer) -> ref null SerializeError;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<String>" = fn(ref JsonStructSerializer, ref String, ref String) -> ref Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<String>" = fn(ref JsonStructSerializer, ref String, ref String) -> ref null SerializeError;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -115,15 +105,15 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
-type "functype/JsonSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref null SerializeError;
 
-type "functype/JsonSerializer^Serializer::serialize_string" = fn(ref String, ref String) -> ref Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_string" = fn(ref String, ref String) -> ref null SerializeError;
 
-type "functype/JsonSerializer^Serializer::serialize_bool" = fn(ref String, bool) -> ref Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_bool" = fn(ref String, bool) -> ref null SerializeError;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref JsonStructSerializer, ref String, i32) -> ref Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref JsonStructSerializer, ref String, i32) -> ref null SerializeError;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref JsonStructSerializer, ref String, bool) -> ref Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref JsonStructSerializer, ref String, bool) -> ref null SerializeError;
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -431,7 +421,7 @@ fn JsonSerializer^Serializer::serialize_i32(self, v) {
         i32::fmt_decimal(v, __local_7);
         break __tmpl: __local_2;
     });
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn JsonSerializer^Serializer::serialize_string(self, v) {
@@ -443,7 +433,7 @@ fn JsonSerializer^Serializer::serialize_string(self, v) {
         String::append_char(__local_2, 34);
         break __tmpl: __local_2;
     });
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn JsonSerializer^Serializer::serialize_bool(self, v) {
@@ -459,7 +449,7 @@ fn JsonSerializer^Serializer::serialize_bool(self, v) {
         String::append_char(self, 115);
         String::append_char(self, 101);
     };
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn User^Serialize::serialize<JsonSerializer>(self, s) {
@@ -472,13 +462,13 @@ fn User^Serialize::serialize<JsonSerializer>(self, s) {
         drop(JsonStructSerializer^SerializeStruct::field<String>(st, String { repr: array.new_data<u8>("userName"), used: 8 }, self.name));
         drop(JsonStructSerializer^SerializeStruct::field<i32>(st, String { repr: array.new_data<u8>("age"), used: 3 }, self.age));
         drop(JsonStructSerializer^SerializeStruct::field<bool>(st, String { repr: array.new_data<u8>("active"), used: 6 }, self.active));
-        return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref Result<unit,SerializeError> {
+        return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null SerializeError {
             String::append_char(st.ser.buf, 125);
-            break __inline_JsonStructSerializer_SerializeStruct__end_1: Result<unit,SerializeError> { 0, nop };
+            break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
         };
         break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
     };
-    return Result<unit,SerializeError>::Err { discriminant: 1, payload_0: SerializeError { message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 } } };
+    return SerializeError { message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 } };
 }
 
 fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
@@ -495,12 +485,12 @@ fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
         String::append_char(__local_3, 58);
         break __tmpl: __local_3;
     });
-    drop(__inline_bool_Serialize__serialize_JsonSerializer__1: block -> ref Result<unit,SerializeError> {
+    drop(__inline_bool_Serialize__serialize_JsonSerializer__1: block -> ref null SerializeError {
         __local_6 = self.ser;
         break __inline_bool_Serialize__serialize_JsonSerializer__1: JsonSerializer^Serializer::serialize_bool(__local_6.buf, value);
     });
     self.count = self.count + 1;
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
@@ -517,12 +507,12 @@ fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
         String::append_char(__local_3, 58);
         break __tmpl: __local_3;
     });
-    drop(__inline_i32_Serialize__serialize_JsonSerializer__1: block -> ref Result<unit,SerializeError> {
+    drop(__inline_i32_Serialize__serialize_JsonSerializer__1: block -> ref null SerializeError {
         __local_6 = self.ser;
         break __inline_i32_Serialize__serialize_JsonSerializer__1: JsonSerializer^Serializer::serialize_i32(__local_6.buf, value);
     });
     self.count = self.count + 1;
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
@@ -539,12 +529,12 @@ fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
         String::append_char(__local_3, 58);
         break __tmpl: __local_3;
     });
-    drop(__inline_String_Serialize__serialize_JsonSerializer__1: block -> ref Result<unit,SerializeError> {
+    drop(__inline_String_Serialize__serialize_JsonSerializer__1: block -> ref null SerializeError {
         __local_6 = self.ser;
         break __inline_String_Serialize__serialize_JsonSerializer__1: JsonSerializer^Serializer::serialize_string(__local_6.buf, value);
     });
     self.count = self.count + 1;
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn Formatter::write_char_n(self, c, n) {

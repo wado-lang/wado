@@ -10,8 +10,8 @@ use crate::tir::{
     TypeId, TypeTable,
 };
 use crate::wir::{
-    CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirFuncId, WirInstr,
-    WirName, WirType, WirTypeDef, WirTypeId,
+    CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirFuncId, WirInstr, WirName, WirType,
+    WirTypeDef, WirTypeId,
 };
 
 use super::context::WirContext;
@@ -640,7 +640,6 @@ impl FunctionTranslator<'_, '_> {
             nullable,
         } = wir_type
         {
-
             // Variants use pass-through copy (immutable structs in the rec group)
             if self.ctx.is_variant_type(&wir_tid) {
                 return WirInstr::ValueCopy {

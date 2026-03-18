@@ -9,12 +9,12 @@ variant Value {  // from ./sub/cross_module_treemap_variant_helper.wado
 
 struct Value::Str {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref String,
 }
 
 struct Value::Obj {
     discriminant: i32,
-    payload_0: ref struct,
+    payload_0: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>",
 }
 
 array array<u8> (mut u8);
@@ -34,7 +34,7 @@ array array<TreeMapEntry<String,Value>> (mut ref "./sub/cross_module_treemap_var
 array array<Tuple<String,Value>> (mut ref "tuple/[String, Value]");
 
 struct TreeMap<String,Value> {  // from ./sub/cross_module_treemap_variant_helper.wado  // TreeMap<T> with T=String, Value
-    mut root: ref Option<TreeMapNode<String>>,
+    mut root: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>",
     mut entries: ref Array<TreeMapEntry<String,Value>>,
     mut size: i32,
     mut deleted_count: i32,
@@ -50,8 +50,8 @@ struct TreeMapNode<String> {  // from ./sub/cross_module_treemap_variant_helper.
     mut key: ref String,
     mut index: i32,
     mut level: i32,
-    mut left: ref Option<TreeMapNode<String>>,
-    mut right: ref Option<TreeMapNode<String>>,
+    mut left: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>",
+    mut right: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>",
 }
 
 struct ArrayIter<TreeMapEntry<String,Value>> {  // from ./sub/cross_module_treemap_variant_helper.wado  // ArrayIter<T> with T=TreeMapEntry<String,Value>
@@ -63,11 +63,6 @@ struct ArrayIter<TreeMapEntry<String,Value>> {  // from ./sub/cross_module_treem
 variant Option<TreeMapNode<String>> {
     Some(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>"),
     None,
-}
-
-struct Option<TreeMapNode<String>>::Some {
-    discriminant: i32,
-    payload_0: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>",
 }
 
 struct Array<Tuple<String,Value>> {  // Array<T> with T=Tuple<String,Value>
@@ -130,6 +125,8 @@ type "functype/./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Val
 
 type "functype/./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::append" = fn(ref Array<Tuple<String,Value>>, ref "tuple/[String, Value]");
 
+type "functype/./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>") -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
+
 type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::append" = fn(ref String, ref String);
@@ -140,11 +137,11 @@ type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
 
 type "functype/TreeMap<String,Value>::insert" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>", ref String, ref "./sub/cross_module_treemap_variant_helper.wado/Value");
 
-type "functype/TreeMap<String,Value>::insert_node" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>", ref Option<TreeMapNode<String>>, ref String, i32) -> ref Option<TreeMapNode<String>>;
+type "functype/TreeMap<String,Value>::insert_node" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>", ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>", ref String, i32) -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
 
-type "functype/TreeMap<String,Value>::split" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>", ref Option<TreeMapNode<String>>) -> ref Option<TreeMapNode<String>>;
+type "functype/TreeMap<String,Value>::split" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>", ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>") -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
 
-type "functype/TreeMap<String,Value>::skew" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>", ref Option<TreeMapNode<String>>) -> ref Option<TreeMapNode<String>>;
+type "functype/TreeMap<String,Value>::skew" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>", ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>") -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
 
 type "functype/Array<TreeMapEntry<String,Value>>::append" = fn(ref Array<TreeMapEntry<String,Value>>, ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>");
 
@@ -155,8 +152,6 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>") -> [i32, ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>"];
 
 type "functype/./sub/cross_module_treemap_variant_helper.wado/stringify" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/Value") -> ref String;
 
@@ -182,7 +177,7 @@ fn run() with Stdout {
     let self: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>";
     let key: ref String;
     let value: ref "./sub/cross_module_treemap_variant_helper.wado/Value";
-    map = "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>" { root: Option<TreeMapNode<String>> { 1 }, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,Value>> {
+    map = "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,Value>> {
         __local_3 = Array<TreeMapEntry<String,Value>> { repr: builtin::array_new<ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>">(0), used: 0 };
         break __seq_lit: __local_3;
     }), size: 0, deleted_count: 0 };
@@ -436,6 +431,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entrie
     let result: ref Array<Tuple<String,Value>>;
     let __iter_3: ref "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>";
     let entry: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
+    let __pattern_temp_0: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
     let __local_9: ref Array<TreeMapEntry<String,Value>>;
     result = __seq_lit: block -> ref Array<Tuple<String,Value>> {
         __local_1 = Array<Tuple<String,Value>> { repr: builtin::array_new<ref "tuple/[String, Value]">(0), used: 0 };
@@ -447,11 +443,9 @@ fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entrie
     };
     b14: block {
         l15: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next"(__iter_3);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                entry = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            __pattern_temp_0 = "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next"(__iter_3);
+            if ref.is_null(__pattern_temp_0) == 0 {
+                entry = value_copy "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
                     "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::append"(result, "tuple/[String, Value]" { 0: ref.as_non_null(entry.key), 1: ref.as_non_null(entry.value) });
                 };
@@ -503,11 +497,11 @@ fn "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::a
 fn "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next"(self) {  // from ./sub/cross_module_treemap_variant_helper.wado
     let item: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>">(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 fn String::grow(self, min_capacity) {
@@ -645,77 +639,77 @@ fn TreeMap<String,Value>::insert(self, key, value) {
     };
     entry = "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>" { key: ref.as_non_null(key), value: ref.as_non_null(value), deleted: 0 };
     Array<TreeMapEntry<String,Value>>::append(self.entries, entry);
-    self.root = ref.as_non_null(TreeMap<String,Value>::insert_node(self, self.root, key, new_index));
+    self.root = TreeMap<String,Value>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
 
 fn TreeMap<String,Value>::insert_node(self, node, key, index) {
     let n: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
-    let after_skew: ref Option<TreeMapNode<String>>;
+    let after_skew: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
     let new_node: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
-    if ref.test Option<TreeMapNode<String>>::Some(node) {
-        n = ref.cast Option<TreeMapNode<String>>::Some(node).payload_0;
+    if ref.is_null(node) == 0 {
+        n = ref.as_non_null(node);
         if String^Eq::eq(key, n.key) {
             n.index = index;
-            return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) };
+            return ref.as_non_null(n);
         };
         if String^Ord::cmp(key, n.key) == 0 {
-            n.left = ref.as_non_null(TreeMap<String,Value>::insert_node(self, n.left, key, index));
+            n.left = TreeMap<String,Value>::insert_node(self, n.left, key, index);
         } else {
-            n.right = ref.as_non_null(TreeMap<String,Value>::insert_node(self, n.right, key, index));
+            n.right = TreeMap<String,Value>::insert_node(self, n.right, key, index);
         };
-        after_skew = TreeMap<String,Value>::skew(self, Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) });
+        after_skew = TreeMap<String,Value>::skew(self, ref.as_non_null(n));
         return TreeMap<String,Value>::split(self, after_skew);
     };
-    new_node = "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>" { key: ref.as_non_null(key), index: index, level: 1, left: Option<TreeMapNode<String>> { 1 }, right: Option<TreeMapNode<String>> { 1 } };
-    return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(new_node) };
+    new_node = "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>" { key: ref.as_non_null(key), index: index, level: 1, left: ref.null none, right: ref.null none };
+    return ref.as_non_null(new_node);
 }
 
 fn TreeMap<String,Value>::split(self, node) {
     let n: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
     let right: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
     let rr: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
-    let __pattern_temp_1: ref Option<TreeMapNode<String>>;
-    let __pattern_temp_2: ref Option<TreeMapNode<String>>;
-    if ref.test Option<TreeMapNode<String>>::Some(node) {
-        n = ref.cast Option<TreeMapNode<String>>::Some(node).payload_0;
+    let __pattern_temp_1: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
+    let __pattern_temp_2: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
+    if ref.is_null(node) == 0 {
+        n = ref.as_non_null(node);
         __pattern_temp_1 = n.right;
-        if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_1) {
-            right = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_1).payload_0;
+        if ref.is_null(__pattern_temp_1) == 0 {
+            right = ref.as_non_null(__pattern_temp_1);
             __pattern_temp_2 = right.right;
-            if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_2) {
-                rr = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_2).payload_0;
+            if ref.is_null(__pattern_temp_2) == 0 {
+                rr = ref.as_non_null(__pattern_temp_2);
                 if rr.level == n.level {
-                    n.right = ref.as_non_null(right.left);
-                    right.left = Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) };
+                    n.right = right.left;
+                    right.left = n;
                     right.level = right.level + 1;
-                    return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(right) };
+                    return ref.as_non_null(right);
                 };
             };
         };
-        return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) };
+        return ref.as_non_null(n);
     };
-    return Option<TreeMapNode<String>> { 1 };
+    return ref.null none;
 }
 
 fn TreeMap<String,Value>::skew(self, node) {
     let n: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
     let left: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
-    let __pattern_temp_1: ref Option<TreeMapNode<String>>;
-    if ref.test Option<TreeMapNode<String>>::Some(node) {
-        n = ref.cast Option<TreeMapNode<String>>::Some(node).payload_0;
+    let __pattern_temp_1: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
+    if ref.is_null(node) == 0 {
+        n = ref.as_non_null(node);
         __pattern_temp_1 = n.left;
-        if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_1) {
-            left = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_1).payload_0;
+        if ref.is_null(__pattern_temp_1) == 0 {
+            left = ref.as_non_null(__pattern_temp_1);
             if left.level == n.level {
-                n.left = ref.as_non_null(left.right);
-                left.right = Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) };
-                return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(left) };
+                n.left = left.right;
+                left.right = n;
+                return ref.as_non_null(left);
             };
         };
-        return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: ref.as_non_null(n) };
+        return ref.as_non_null(n);
     };
-    return Option<TreeMapNode<String>> { 1 };
+    return ref.null none;
 }
 
 fn Array<TreeMapEntry<String,Value>>::append(self, value) {
@@ -755,10 +749,10 @@ fn Array<TreeMapEntry<String,Value>>::append(self, value) {
 }
 
 fn TreeMap<String,Value>::find_index(self, key) {
-    let current: ref Option<TreeMapNode<String>>;
+    let current: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
     let n: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
     let entry: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
-    let __pattern_temp_0: ref Option<TreeMapNode<String>>;
+    let __pattern_temp_0: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
     let __local_7: i32;
     let _licm_entries_8: ref Array<TreeMapEntry<String,Value>>;
     let _licm_used_9: i32;
@@ -770,8 +764,8 @@ fn TreeMap<String,Value>::find_index(self, key) {
     b54: block {
         l55: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
-            if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
-                n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
+            if ref.is_null(__pattern_temp_0) == 0 {
+                n = ref.as_non_null(__pattern_temp_0);
                 if String^Eq::eq(key, n.key) {
                     entry = __inline_Array_TreeMapEntry_String_Value___IndexValue__index_value_0: block -> ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>" {
                         __local_7 = n.index;

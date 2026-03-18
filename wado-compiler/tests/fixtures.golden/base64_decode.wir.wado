@@ -31,16 +31,6 @@ struct Array<u8> {  // Array<T> with T=u8
     mut used: i32,
 }
 
-variant Option<Array<u8>> {
-    Some(ref Array<u8>),
-    None,
-}
-
-struct Option<Array<u8>>::Some {
-    discriminant: i32,
-    payload_0: ref Array<u8>,
-}
-
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -71,7 +61,7 @@ type "functype/core:base64/build_decode_table" = fn() -> ref Array<u8>;
 
 type "functype/core:base64/encode_impl" = fn(ref Array<u8>, ref Array<u8>, bool) -> ref String;
 
-type "functype/core:base64/decode_impl" = fn(ref Array<u8>, i32) -> ref Option<Array<u8>>;
+type "functype/core:base64/decode_impl" = fn(ref Array<u8>, i32) -> ref null Array<u8>;
 
 type "functype/core:base64/__initialize_module" = fn();
 
@@ -229,15 +219,15 @@ fn run() with Stdout {
     hello = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_2: block -> ref StrUtf8ByteIter {
         break __inline_String__bytes_2: StrUtf8ByteIter { repr: array.new_data<u8>("Hello"), used: 5, index: 0 };
     });
-    let __match_scrut_0: ref Option<Array<u8>>;
-    __match_scrut_0 = __inline_decode_3: block -> ref Option<Array<u8>> {
+    let __match_scrut_0: ref null Array<u8>;
+    __match_scrut_0 = __inline_decode_3: block -> ref null Array<u8> {
         __local_40 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("SGVsbG8="), used: 8, index: 0 });
         break __inline_decode_3: "core:base64/decode_impl"(__local_40, __local_40.used);
     };
-    __cond_2 = if ref.test Option<Array<u8>>::Some(__match_scrut_0) -> bool {
-        let __cast_1: ref Option<Array<u8>>::Some;
-        __cast_1 = ref.cast Option<Array<u8>>::Some(__match_scrut_0);
-        __local_1 = __cast_1.payload_0;
+    __cond_2 = if ref.is_null(__match_scrut_0) == 0 -> bool {
+        let __cast_1: ref null Array<u8>;
+        __cast_1 = ref.as_non_null(__match_scrut_0);
+        __local_1 = ref.as_non_null(__cast_1);
         Array<u8>^Eq::eq(__local_1, hello);
     } else {
         0;
@@ -268,15 +258,15 @@ condition: decode(\"SGVsbG8=\") matches { Some(d) && d == hello }
         });
         unreachable;
     };
-    let __match_scrut_1: ref Option<Array<u8>>;
-    __match_scrut_1 = __inline_decode_8: block -> ref Option<Array<u8>> {
+    let __match_scrut_1: ref null Array<u8>;
+    __match_scrut_1 = __inline_decode_8: block -> ref null Array<u8> {
         __local_48 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("SGVsbG8"), used: 7, index: 0 });
         break __inline_decode_8: "core:base64/decode_impl"(__local_48, __local_48.used);
     };
-    __cond_4 = if ref.test Option<Array<u8>>::Some(__match_scrut_1) -> bool {
-        let __cast_2: ref Option<Array<u8>>::Some;
-        __cast_2 = ref.cast Option<Array<u8>>::Some(__match_scrut_1);
-        __local_3 = __cast_2.payload_0;
+    __cond_4 = if ref.is_null(__match_scrut_1) == 0 -> bool {
+        let __cast_2: ref null Array<u8>;
+        __cast_2 = ref.as_non_null(__match_scrut_1);
+        __local_3 = ref.as_non_null(__cast_2);
         Array<u8>^Eq::eq(__local_3, hello);
     } else {
         0;
@@ -307,15 +297,15 @@ condition: decode(\"SGVsbG8\") matches { Some(d) && d == hello }
         });
         unreachable;
     };
-    let __match_scrut_2: ref Option<Array<u8>>;
-    __match_scrut_2 = __inline_decode_13: block -> ref Option<Array<u8>> {
+    let __match_scrut_2: ref null Array<u8>;
+    __match_scrut_2 = __inline_decode_13: block -> ref null Array<u8> {
         __local_56 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: builtin::array_new<u8>(0), used: 0, index: 0 });
         break __inline_decode_13: "core:base64/decode_impl"(__local_56, __local_56.used);
     };
-    __cond_6 = if ref.test Option<Array<u8>>::Some(__match_scrut_2) -> bool {
-        let __cast_3: ref Option<Array<u8>>::Some;
-        __cast_3 = ref.cast Option<Array<u8>>::Some(__match_scrut_2);
-        __local_5 = __cast_3.payload_0;
+    __cond_6 = if ref.is_null(__match_scrut_2) == 0 -> bool {
+        let __cast_3: ref null Array<u8>;
+        __cast_3 = ref.as_non_null(__match_scrut_2);
+        __local_5 = ref.as_non_null(__cast_3);
         __local_5.used == 0;
     } else {
         0;
@@ -350,8 +340,8 @@ condition: decode(\"\") matches { Some(d) && d.len() == 0 }
         __local_7 = Array<u8> { repr: array.new_fixed<u8>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_7;
     };
-    let __match_scrut_3: ref Option<Array<u8>>;
-    __match_scrut_3 = __inline_decode_28: block -> ref Option<Array<u8>> {
+    let __match_scrut_3: ref null Array<u8>;
+    __match_scrut_3 = __inline_decode_28: block -> ref null Array<u8> {
         __local_78 = __inline_encode_27: block -> ref String {
             __local_77 = data;
             break __inline_encode_27: "core:base64/encode_impl"(__local_77, STANDARD_TABLE, 1);
@@ -359,10 +349,10 @@ condition: decode(\"\") matches { Some(d) && d.len() == 0 }
         __local_79 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_78.repr), used: __local_78.used, index: 0 });
         break __inline_decode_28: "core:base64/decode_impl"(__local_79, __local_79.used);
     };
-    __cond_10 = if ref.test Option<Array<u8>>::Some(__match_scrut_3) -> bool {
-        let __cast_4: ref Option<Array<u8>>::Some;
-        __cast_4 = ref.cast Option<Array<u8>>::Some(__match_scrut_3);
-        __local_9 = __cast_4.payload_0;
+    __cond_10 = if ref.is_null(__match_scrut_3) == 0 -> bool {
+        let __cast_4: ref null Array<u8>;
+        __cast_4 = ref.as_non_null(__match_scrut_3);
+        __local_9 = ref.as_non_null(__cast_4);
         Array<u8>^Eq::eq(__local_9, data);
     } else {
         0;
@@ -393,8 +383,8 @@ condition: decode(encode(&data)) matches { Some(d) && d == data }
         });
         unreachable;
     };
-    let __match_scrut_4: ref Option<Array<u8>>;
-    __match_scrut_4 = __inline_decode_34: block -> ref Option<Array<u8>> {
+    let __match_scrut_4: ref null Array<u8>;
+    __match_scrut_4 = __inline_decode_34: block -> ref null Array<u8> {
         __local_87 = __inline_encode_url_33: block -> ref String {
             __local_86 = data;
             break __inline_encode_url_33: "core:base64/encode_impl"(__local_86, URL_SAFE_TABLE, 0);
@@ -402,10 +392,10 @@ condition: decode(encode(&data)) matches { Some(d) && d == data }
         __local_88 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_87.repr), used: __local_87.used, index: 0 });
         break __inline_decode_34: "core:base64/decode_impl"(__local_88, __local_88.used);
     };
-    __cond_12 = if ref.test Option<Array<u8>>::Some(__match_scrut_4) -> bool {
-        let __cast_5: ref Option<Array<u8>>::Some;
-        __cast_5 = ref.cast Option<Array<u8>>::Some(__match_scrut_4);
-        __local_11 = __cast_5.payload_0;
+    __cond_12 = if ref.is_null(__match_scrut_4) == 0 -> bool {
+        let __cast_5: ref null Array<u8>;
+        __cast_5 = ref.as_non_null(__match_scrut_4);
+        __local_11 = ref.as_non_null(__cast_5);
         Array<u8>^Eq::eq(__local_11, data);
     } else {
         0;
@@ -439,15 +429,15 @@ condition: decode(encode_url(&data)) matches { Some(d) && d == data }
     raw = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_39: block -> ref StrUtf8ByteIter {
         break __inline_String__bytes_39: StrUtf8ByteIter { repr: array.new_data<u8>("SGVsbG8="), used: 8, index: 0 };
     });
-    let __match_scrut_5: ref Option<Array<u8>>;
-    __match_scrut_5 = __inline_decode_bytes_40: block -> ref Option<Array<u8>> {
+    let __match_scrut_5: ref null Array<u8>;
+    __match_scrut_5 = __inline_decode_bytes_40: block -> ref null Array<u8> {
         __local_96 = raw;
         break __inline_decode_bytes_40: "core:base64/decode_impl"(__local_96, __local_96.used);
     };
-    __cond_15 = if ref.test Option<Array<u8>>::Some(__match_scrut_5) -> bool {
-        let __cast_6: ref Option<Array<u8>>::Some;
-        __cast_6 = ref.cast Option<Array<u8>>::Some(__match_scrut_5);
-        __local_14 = __cast_6.payload_0;
+    __cond_15 = if ref.is_null(__match_scrut_5) == 0 -> bool {
+        let __cast_6: ref null Array<u8>;
+        __cast_6 = ref.as_non_null(__match_scrut_5);
+        __local_14 = ref.as_non_null(__cast_6);
         Array<u8>^Eq::eq(__local_14, hello);
     } else {
         0;
@@ -478,14 +468,14 @@ condition: decode_bytes(&raw) matches { Some(d) && d == hello }
         });
         unreachable;
     };
-    let __match_scrut_6: ref Option<Array<u8>>;
-    __match_scrut_6 = __inline_decode_45: block -> ref Option<Array<u8>> {
+    let __match_scrut_6: ref null Array<u8>;
+    __match_scrut_6 = __inline_decode_45: block -> ref null Array<u8> {
         __local_104 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("abc+def_ghi"), used: 11, index: 0 });
         break __inline_decode_45: "core:base64/decode_impl"(__local_104, __local_104.used);
     };
-    __cond_16 = if ref.test Option<Array<u8>>::Some(__match_scrut_6) -> bool {
-        let __cast_7: ref Option<Array<u8>>::Some;
-        __cast_7 = ref.cast Option<Array<u8>>::Some(__match_scrut_6);
+    __cond_16 = if ref.is_null(__match_scrut_6) == 0 -> bool {
+        let __cast_7: ref null Array<u8>;
+        __cast_7 = ref.as_non_null(__match_scrut_6);
         1;
     } else {
         0;
@@ -516,12 +506,12 @@ condition: decode(\"abc+def_ghi\") matches { Some(_) }
         });
         unreachable;
     };
-    let __match_scrut_7: ref Option<Array<u8>>;
-    __match_scrut_7 = __inline_decode_50: block -> ref Option<Array<u8>> {
+    let __match_scrut_7: ref null Array<u8>;
+    __match_scrut_7 = __inline_decode_50: block -> ref null Array<u8> {
         __local_112 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("!!!"), used: 3, index: 0 });
         break __inline_decode_50: "core:base64/decode_impl"(__local_112, __local_112.used);
     };
-    __cond_17 = if __match_scrut_7.discriminant == 1 -> bool {
+    __cond_17 = if ref.is_null(__match_scrut_7) -> bool {
         1;
     } else {
         0;
@@ -552,12 +542,12 @@ condition: decode(\"!!!\") matches { None }
         });
         unreachable;
     };
-    let __match_scrut_8: ref Option<Array<u8>>;
-    __match_scrut_8 = __inline_decode_55: block -> ref Option<Array<u8>> {
+    let __match_scrut_8: ref null Array<u8>;
+    __match_scrut_8 = __inline_decode_55: block -> ref null Array<u8> {
         __local_120 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("A"), used: 1, index: 0 });
         break __inline_decode_55: "core:base64/decode_impl"(__local_120, __local_120.used);
     };
-    __cond_18 = if __match_scrut_8.discriminant == 1 -> bool {
+    __cond_18 = if ref.is_null(__match_scrut_8) -> bool {
         1;
     } else {
         0;
@@ -970,7 +960,7 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
         };
     };
     if (end % 4) == 1 {
-        return Option<Array<u8>> { 1 };
+        return ref.null none;
     };
     full_groups = end / 4;
     remainder = end % 4;
@@ -1068,7 +1058,7 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
             } else {
                 v3 >= 254;
             } {
-                return Option<Array<u8>> { 1 };
+                return ref.null none;
             };
             "core:base64/Array<u8>::append"(out, ((v0_9 << 2) | (v1_10 >> 4)) & 255);
             "core:base64/Array<u8>::append"(out, (((v1_10 & 15) << 4) | (v2_11 >> 2)) & 255);
@@ -1113,7 +1103,7 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
         } else {
             v1_14 >= 254;
         } {
-            return Option<Array<u8>> { 1 };
+            return ref.null none;
         };
         "core:base64/Array<u8>::append"(out, ((v0_13 << 2) | (v1_14 >> 4)) & 255);
     } else if remainder == 3 {
@@ -1171,12 +1161,12 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
         } else {
             v2_17 >= 254;
         } {
-            return Option<Array<u8>> { 1 };
+            return ref.null none;
         };
         "core:base64/Array<u8>::append"(out, ((v0_15 << 2) | (v1_16 >> 4)) & 255);
         "core:base64/Array<u8>::append"(out, (((v1_16 & 15) << 4) | (v2_17 >> 2)) & 255);
     };
-    return Option<Array<u8>>::Some { discriminant: 0, payload_0: ref.as_non_null(out) };
+    return ref.as_non_null(out);
 }
 
 fn "core:base64/__initialize_module"() {  // from core:base64

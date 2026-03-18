@@ -943,7 +943,10 @@ impl<'a> WirEmitter<'a> {
                 let heap = HeapType::Concrete(wasm_type_idx);
                 locals.push((
                     format!("__copy_source_{}", type_id.index()),
-                    ValType::Ref(RefType { nullable: true, heap_type: heap }),
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: heap,
+                    }),
                 ));
                 // Declare temp locals for array field deep copies
                 if let Some(array_field_infos) = self.get_struct_array_field_infos(type_id.index())
@@ -1747,11 +1750,11 @@ impl<'a> WirEmitter<'a> {
             WirInstr::RefAsNonNull(o) => {
                 // If inner is a LocalGet for a ref_local, that handler already
                 // emits ref.as_non_null — don't emit it again (would double-wrap).
-                if let WirInstr::LocalGet { name } = o.as_ref() {
-                    if self.ref_locals.contains(name.as_str()) {
-                        self.emit_instr(f, o);
-                        return;
-                    }
+                if let WirInstr::LocalGet { name } = o.as_ref()
+                    && self.ref_locals.contains(name.as_str())
+                {
+                    self.emit_instr(f, o);
+                    return;
                 }
                 self.emit_unary(f, o, Instruction::RefAsNonNull);
             }

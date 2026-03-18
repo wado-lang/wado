@@ -72,16 +72,6 @@ struct Result<String,DeserializeError>::Err {
     payload_0: ref "core:serde/DeserializeError",
 }
 
-variant Result<unit,SerializeError> {
-    Ok,
-    Err(ref "core:serde/SerializeError"),
-}
-
-struct Result<unit,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/SerializeError",
-}
-
 variant Result<char,DeserializeError> {
     Ok(char),
     Err(ref "core:serde/DeserializeError"),
@@ -889,16 +879,16 @@ fn "core/json/from_string<String>"(input) {
 }
 
 fn "core/json/to_string<String>"(value) {
-    let r: ref Result<unit,SerializeError>;
+    let r: ref null "core:serde/SerializeError";
     let e: ref "core:serde/SerializeError";
     let __sroa_ser_buf: ref String;
     __sroa_ser_buf = String { repr: builtin::array_new<u8>(0), used: 0 };
-    r = __inline_JsonSerializer_Serializer__serialize_string_1: block -> ref Result<unit,SerializeError> {
+    r = __inline_JsonSerializer_Serializer__serialize_string_1: block -> ref null "core:serde/SerializeError" {
         "core:json/write_escaped_string"(__sroa_ser_buf, value);
-        break __inline_JsonSerializer_Serializer__serialize_string_1: Result<unit,SerializeError> { 0, nop };
+        break __inline_JsonSerializer_Serializer__serialize_string_1: ref.null none;
     };
-    if ref.test Result<unit,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<unit,SerializeError>::Err(r).payload_0);
+    if ref.is_null(r) == 0 {
+        e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
         return Result<String,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
     };
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(__sroa_ser_buf) };

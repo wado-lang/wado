@@ -148,7 +148,11 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
+type "functype/ArrayIter<Option<i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Option<i32>>") -> ref null Option<i32>;
+
 type "functype/Array<Option<i32>>::append" = fn(ref Array<Option<i32>>, ref Option<i32>);
+
+type "functype/ArrayIter<Tree>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tree>") -> ref null Tree;
 
 type "functype/Array<Tree>::append" = fn(ref Array<Tree>, ref Tree);
 
@@ -163,10 +167,6 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/ArrayIter<Option<i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Option<i32>>") -> [i32, ref null Option<i32>];
-
-type "functype/ArrayIter<Tree>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tree>") -> [i32, ref null Tree];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -350,6 +350,7 @@ fn match_variant_comprehensive() with Stdout {
     let __local_11: ref Formatter;
     let __local_12: ref String;
     let __local_13: ref Formatter;
+    let __pattern_temp_0: ref null Tree;
     let __local_28: ref String;
     let __local_30: ref Formatter;
     let __local_34: ref String;
@@ -368,11 +369,9 @@ fn match_variant_comprehensive() with Stdout {
     __iter_2 = "core:allocator/ArrayIter<Tree>" { repr: ref.as_non_null(trees.repr), used: 4, index: 0 };
     b8: block {
         l9: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null Tree;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tree>^Iterator::next(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                tree = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            __pattern_temp_0 = ArrayIter<Tree>^Iterator::next(__iter_2);
+            if ref.is_null(__pattern_temp_0) == 0 {
+                tree = value_copy Tree(ref.as_non_null(__pattern_temp_0));
                 desc = value_copy String(let __match_scrut_0: ref Tree; __match_scrut_0 = tree; if ref.test Tree::Leaf(__match_scrut_0) -> ref String {
                     let __cast_4: ref Tree::Leaf;
                     __cast_4 = ref.cast Tree::Leaf(__match_scrut_0);
@@ -521,6 +520,7 @@ fn match_in_loop() with Stdout {
     let __local_5: i32;
     let __local_6: ref String;
     let __local_7: ref Formatter;
+    let __pattern_temp_0: ref null Option<i32>;
     let __local_24: ref String;
     let __local_26: ref Formatter;
     items = __seq_lit: block -> ref Array<Option<i32>> {
@@ -531,11 +531,9 @@ fn match_in_loop() with Stdout {
     __iter_3 = "core:allocator/ArrayIter<Option<i32>>" { repr: ref.as_non_null(items.repr), used: 5, index: 0 };
     b19: block {
         l20: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null Option<i32>;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Option<i32>>^Iterator::next(__iter_3);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                item = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            __pattern_temp_0 = ArrayIter<Option<i32>>^Iterator::next(__iter_3);
+            if ref.is_null(__pattern_temp_0) == 0 {
+                item = value_copy Option<i32>(ref.as_non_null(__pattern_temp_0));
                 let __match_scrut_0: ref Option<i32>;
                 __match_scrut_0 = item;
                 if ref.test Option<i32>::Some(__match_scrut_0) {
@@ -743,6 +741,7 @@ fn if_let_with_else() with Stdout {
     let n: i32;
     let __local_5: ref String;
     let __local_6: ref Formatter;
+    let __pattern_temp_0: ref null Option<i32>;
     let __local_20: ref String;
     let __local_22: ref Formatter;
     values = __seq_lit: block -> ref Array<Option<i32>> {
@@ -752,11 +751,9 @@ fn if_let_with_else() with Stdout {
     __iter_2 = "core:allocator/ArrayIter<Option<i32>>" { repr: ref.as_non_null(values.repr), used: 3, index: 0 };
     b36: block {
         l37: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null Option<i32>;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Option<i32>>^Iterator::next(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                v = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            __pattern_temp_0 = ArrayIter<Option<i32>>^Iterator::next(__iter_2);
+            if ref.is_null(__pattern_temp_0) == 0 {
+                v = value_copy Option<i32>(ref.as_non_null(__pattern_temp_0));
                 if ref.test Option<i32>::Some(v) {
                     n = ref.cast Option<i32>::Some(v).payload_0;
                     "core:cli/println"(__tmpl: block -> ref String {
@@ -1063,11 +1060,11 @@ fn String::append_char(self, c) {
 fn ArrayIter<Option<i32>>^Iterator::next(self) {
     let item: ref Option<i32>;
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref Option<i32>>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 fn Array<Option<i32>>::append(self, value) {
@@ -1109,11 +1106,11 @@ fn Array<Option<i32>>::append(self, value) {
 fn ArrayIter<Tree>^Iterator::next(self) {
     let item: ref Tree;
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref Tree>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 fn Array<Tree>::append(self, value) {

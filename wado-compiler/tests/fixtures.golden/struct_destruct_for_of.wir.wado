@@ -88,6 +88,8 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
+type "functype/ArrayIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Point>") -> ref null Point;
+
 type "functype/Array<Point>::append" = fn(ref Array<Point>, ref Point);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
@@ -99,8 +101,6 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/ArrayIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Point>") -> [i32, ref null Point];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -132,7 +132,9 @@ fn run() with Stdout {
     let __local_9: ref Formatter;
     let __local_10: ref String;
     let __local_11: ref Formatter;
+    let __pattern_temp_0: ref null Point;
     let __pattern_temp_1: ref Point;
+    let __pattern_temp_2: ref null Point;
     let __pattern_temp_3: ref Point;
     let __local_28: ref String;
     let __local_30: ref Formatter;
@@ -145,11 +147,9 @@ fn run() with Stdout {
     __iter_2 = "core:allocator/ArrayIter<Point>" { repr: ref.as_non_null(points.repr), used: 3, index: 0 };
     b0: block {
         l1: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null Point;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Point>^Iterator::next(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                __pattern_temp_1 = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            __pattern_temp_0 = ArrayIter<Point>^Iterator::next(__iter_2);
+            if ref.is_null(__pattern_temp_0) == 0 {
+                __pattern_temp_1 = value_copy Point(ref.as_non_null(__pattern_temp_0));
                 x = __pattern_temp_1.x;
                 y = __pattern_temp_1.y;
                 "core:cli/println"(__tmpl: block -> ref String {
@@ -171,11 +171,9 @@ fn run() with Stdout {
     __iter_5 = "core:allocator/ArrayIter<Point>" { repr: ref.as_non_null(points.repr), used: 3, index: 0 };
     b3: block {
         l4: loop {
-            let __sroa___pattern_temp_2_discriminant: i32;
-            let __sroa___pattern_temp_2_payload_0: ref null Point;
-            multivalue_bind [__sroa___pattern_temp_2_discriminant, __sroa___pattern_temp_2_payload_0] = ArrayIter<Point>^Iterator::next(__iter_5);
-            if __sroa___pattern_temp_2_discriminant == 0 {
-                __pattern_temp_3 = ref.as_non_null(__sroa___pattern_temp_2_payload_0);
+            __pattern_temp_2 = ArrayIter<Point>^Iterator::next(__iter_5);
+            if ref.is_null(__pattern_temp_2) == 0 {
+                __pattern_temp_3 = value_copy Point(ref.as_non_null(__pattern_temp_2));
                 a = __pattern_temp_3.x;
                 b = __pattern_temp_3.y;
                 "core:cli/println"(__tmpl: block -> ref String {
@@ -466,11 +464,11 @@ fn String::append_char(self, c) {
 fn ArrayIter<Point>^Iterator::next(self) {
     let item: ref Point;
     if self.index >= self.used {
-        return 1; ref.null none;
+        return ref.null none;
     };
     item = builtin::array_get<ref Point>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
+    return ref.as_non_null(item);
 }
 
 fn Array<Point>::append(self, value) {

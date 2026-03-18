@@ -38,16 +38,6 @@ struct Counter::Value {
 
 array array<i32> (mut i32);
 
-variant Option<String> {
-    Some(ref String),
-    None,
-}
-
-struct Option<String>::Some {
-    discriminant: i32,
-    payload_0: ref String,
-}
-
 variant Option<i32> {
     Some(i32),
     None,
@@ -61,16 +51,6 @@ struct Option<i32>::Some {
 struct Array<i32> {  // Array<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
-}
-
-variant Option<Array<i32>> {
-    Some(ref Array<i32>),
-    None,
-}
-
-struct Option<Array<i32>>::Some {
-    discriminant: i32,
-    payload_0: ref Array<i32>,
 }
 
 enum Alignment { Left = 0, Center = 1, Right = 2 };
@@ -180,7 +160,7 @@ fn run() with Stdout {
     let __cond_11: bool;
     let orig_12: i32;
     let __cond_14: bool;
-    let opt_str: ref Option<String>;
+    let opt_str: ref null String;
     let s: ref String;
     let __v0_17: ref String;
     let __cond_18: bool;
@@ -188,7 +168,7 @@ fn run() with Stdout {
     let __v0_20: ref String;
     let __cond_21: bool;
     let __local_22: ref Array<i32>;
-    let opt_arr: ref Option<Array<i32>>;
+    let opt_arr: ref null Array<i32>;
     let arr: ref Array<i32>;
     let __v0_25: i32;
     let __cond_26: bool;
@@ -227,10 +207,10 @@ fn run() with Stdout {
     let __local_59: ref Formatter;
     let __pattern_temp_0: ref Option<i32>;
     let __pattern_temp_1: ref Option<i32>;
-    let __pattern_temp_3: ref Option<String>;
-    let __pattern_temp_4: ref Option<String>;
-    let __pattern_temp_5: ref Option<Array<i32>>;
-    let __pattern_temp_6: ref Option<Array<i32>>;
+    let __pattern_temp_3: ref null String;
+    let __pattern_temp_4: ref null String;
+    let __pattern_temp_5: ref null Array<i32>;
+    let __pattern_temp_6: ref null Array<i32>;
     let __local_69: ref String;
     let __local_71: ref Formatter;
     let __local_74: ref String;
@@ -511,10 +491,10 @@ condition: orig == 100
             break __tmpl: __local_44;
         });
     };
-    opt_str = Option<String>::Some { discriminant: 0, payload_0: String { repr: array.new_data<u8>("hello"), used: 5 } };
+    opt_str = String { repr: array.new_data<u8>("hello"), used: 5 };
     __pattern_temp_3 = opt_str;
-    if ref.test Option<String>::Some(__pattern_temp_3) {
-        s = value_copy String(ref.cast Option<String>::Some(__pattern_temp_3).payload_0);
+    if ref.is_null(__pattern_temp_3) == 0 {
+        s = value_copy String(ref.as_non_null(__pattern_temp_3));
         String::append_char(s, 32);
         String::append_char(s, 119);
         String::append_char(s, 111);
@@ -566,8 +546,8 @@ condition: s == \"hello world\"
         });
     };
     __pattern_temp_4 = opt_str;
-    if ref.test Option<String>::Some(__pattern_temp_4) {
-        orig_19 = value_copy String(ref.cast Option<String>::Some(__pattern_temp_4).payload_0);
+    if ref.is_null(__pattern_temp_4) == 0 {
+        orig_19 = value_copy String(ref.as_non_null(__pattern_temp_4));
         __v0_20 = orig_19;
         __cond_21 = String^Eq::eq(__v0_20, String { repr: array.new_data<u8>("hello"), used: 5 });
         if __cond_21 == 0 {
@@ -615,13 +595,13 @@ condition: orig == \"hello\"
             break __tmpl: __local_51;
         });
     };
-    opt_arr = Option<Array<i32>>::Some { discriminant: 0, payload_0: ref.as_non_null(__seq_lit: block -> ref Array<i32> {
+    opt_arr = ref.as_non_null(__seq_lit: block -> ref Array<i32> {
         __local_22 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_22;
-    }) };
+    });
     __pattern_temp_5 = opt_arr;
-    if ref.test Option<Array<i32>>::Some(__pattern_temp_5) {
-        arr = value_copy Array<i32>(ref.cast Option<Array<i32>>::Some(__pattern_temp_5).payload_0);
+    if ref.is_null(__pattern_temp_5) == 0 {
+        arr = value_copy Array<i32>(ref.as_non_null(__pattern_temp_5));
         Array<i32>::append(arr, 4);
         __v0_25 = arr.used;
         __cond_26 = __v0_25 == 4;
@@ -672,8 +652,8 @@ condition: arr.len() == 4
         });
     };
     __pattern_temp_6 = opt_arr;
-    if ref.test Option<Array<i32>>::Some(__pattern_temp_6) {
-        orig_27 = value_copy Array<i32>(ref.cast Option<Array<i32>>::Some(__pattern_temp_6).payload_0);
+    if ref.is_null(__pattern_temp_6) == 0 {
+        orig_27 = value_copy Array<i32>(ref.as_non_null(__pattern_temp_6));
         __v0_28 = orig_27.used;
         __cond_29 = __v0_28 == 3;
         if __cond_29 == 0 {

@@ -65,16 +65,6 @@ struct Option<i32>::Some {
     payload_0: i32,
 }
 
-variant Option<Point> {
-    Some(ref Point),
-    None,
-}
-
-struct Option<Point>::Some {
-    discriminant: i32,
-    payload_0: ref Point,
-}
-
 struct Array<i32> {  // Array<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
@@ -230,7 +220,7 @@ type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/Option<i32>^Inspect::inspect" = fn(ref Option<i32>, ref Formatter);
 
-type "functype/Option<Point>^Inspect::inspect" = fn(ref Option<Point>, ref Formatter);
+type "functype/Option<Point>^Inspect::inspect" = fn(ref null Point, ref Formatter);
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -252,8 +242,8 @@ fn inspect_nested() with Stdout {
     let line: ref Line;
     let __local_1: ref Array<Point>;
     let points: ref Array<Point>;
-    let opt_p: ref Option<Point>;
-    let none_p: ref Option<Point>;
+    let opt_p: ref null Point;
+    let none_p: ref null Point;
     let __local_5: ref String;
     let __local_6: ref Formatter;
     let __local_7: ref String;
@@ -289,24 +279,24 @@ fn inspect_nested() with Stdout {
         Array<Point>^Inspect::inspect(points, __local_8);
         break __tmpl: __local_7;
     });
-    opt_p = Option<Point>::Some { discriminant: 0, payload_0: Point { x: 10, y: 20 } };
+    opt_p = Point { x: 10, y: 20 };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_10 = __inline_Formatter__new_10: block -> ref Formatter {
             __local_25 = __local_9;
             break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_25) };
         };
-        Option<Point>^Inspect::inspect(ref.as_non_null(opt_p), __local_10);
+        Option<Point>^Inspect::inspect(opt_p, __local_10);
         break __tmpl: __local_9;
     });
-    none_p = Option<Point> { 1 };
+    none_p = ref.null none;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_12 = __inline_Formatter__new_12: block -> ref Formatter {
             __local_27 = __local_11;
             break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_27) };
         };
-        Option<Point>^Inspect::inspect(ref.as_non_null(none_p), __local_12);
+        Option<Point>^Inspect::inspect(none_p, __local_12);
         break __tmpl: __local_11;
     });
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
@@ -1298,13 +1288,13 @@ fn Option<Point>^Inspect::inspect(self, f) {
     let __local_3: ref String;
     let __local_5: ref String;
     let __local_7: ref String;
-    if ref.test Option<Point>::Some(self) {
+    if ref.is_null(self) == 0 {
         __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
         String::append(f.buf, __local_3);
-        Point^Inspect::inspect(ref.cast Option<Point>::Some(self).payload_0, f);
+        Point^Inspect::inspect(ref.as_non_null(self), f);
         __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
         String::append(f.buf, __local_5);
-    } else if self.discriminant == 1 {
+    } else if ref.is_null(self) {
         __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
         String::append(f.buf, __local_7);
     };

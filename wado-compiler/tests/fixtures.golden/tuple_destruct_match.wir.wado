@@ -29,16 +29,6 @@ struct [i32, i32] {
     mut 1: i32,
 }
 
-variant Option<Tuple<i32,i32>> {
-    Some(ref "tuple/[i32, i32]"),
-    None,
-}
-
-struct Option<Tuple<i32,i32>>::Some {
-    discriminant: i32,
-    payload_0: ref "tuple/[i32, i32]",
-}
-
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -127,7 +117,7 @@ fn run() with Stdout {
     let label: ref String;
     let __local_8: i32;
     let first: i32;
-    let opt: ref Option<Tuple<i32,i32>>;
+    let opt: ref null "tuple/[i32, i32]";
     let __local_11: i32;
     let __local_12: i32;
     let sum: i32;
@@ -205,18 +195,18 @@ fn run() with Stdout {
         i32::fmt_decimal(first, __local_36);
         break __tmpl: __local_16;
     });
-    opt = Option<Tuple<i32,i32>>::Some { discriminant: 0, payload_0: "tuple/[i32, i32]" { 0: 3, 1: 4 } };
-    let __match_scrut_2: ref Option<Tuple<i32,i32>>;
+    opt = "tuple/[i32, i32]" { 0: 3, 1: 4 };
+    let __match_scrut_2: ref null "tuple/[i32, i32]";
     __match_scrut_2 = opt;
-    sum = if ref.test Option<Tuple<i32,i32>>::Some(__match_scrut_2) -> i32 {
-        let __cast_1: ref Option<Tuple<i32,i32>>::Some;
-        __cast_1 = ref.cast Option<Tuple<i32,i32>>::Some(__match_scrut_2);
+    sum = if ref.is_null(__match_scrut_2) == 0 -> i32 {
+        let __cast_1: ref null "tuple/[i32, i32]";
+        __cast_1 = ref.as_non_null(__match_scrut_2);
         let __tuple_payload_2: ref "tuple/[i32, i32]";
-        __tuple_payload_2 = __cast_1.payload_0;
+        __tuple_payload_2 = ref.as_non_null(__cast_1);
         __local_11 = __tuple_payload_2.0;
         __local_12 = __tuple_payload_2.1;
         __local_11 + __local_12;
-    } else if __match_scrut_2.discriminant == 1 -> i32 {
+    } else if ref.is_null(__match_scrut_2) -> i32 {
         0;
     } else {
         unreachable;

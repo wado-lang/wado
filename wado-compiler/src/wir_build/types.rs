@@ -1365,7 +1365,9 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
     // For non-generic variants: look up the TIR variant declaration by module_source + name.
     let mut variant_payload_fixups: Vec<(usize, usize, usize, WirType)> = Vec::new();
     for (wir_idx, typedef) in ctx.types.iter().enumerate() {
-        let WirTypeDef::Variant(vt) = typedef else { continue };
+        let WirTypeDef::Variant(vt) = typedef else {
+            continue;
+        };
         let variant_module_source = vt.meta.module_source.clone();
         // Extract the base variant name from the FQ (e.g. "Module//Name" → "Name")
         let variant_display = vt.name.display.clone();
@@ -1375,24 +1377,38 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                     continue;
                 }
                 // Try to find the TIR variant by module_source and display name
-                let Some(ms) = &variant_module_source else { continue };
-                let Some(tir_mod) = ctx.project.tir_modules.get(ms) else { continue };
+                let Some(ms) = &variant_module_source else {
+                    continue;
+                };
+                let Some(tir_mod) = ctx.project.tir_modules.get(ms) else {
+                    continue;
+                };
                 let type_table = &*tir_mod.type_table.borrow();
-                let Some(tir_variant) = tir_mod.variants.iter().find(|v| v.name == variant_display) else { continue };
-                let Some(tir_case) = tir_variant.cases.get(case_idx) else { continue };
+                let Some(tir_variant) = tir_mod.variants.iter().find(|v| v.name == variant_display)
+                else {
+                    continue;
+                };
+                let Some(tir_case) = tir_variant.cases.get(case_idx) else {
+                    continue;
+                };
                 let tir_payload_id = tir_case.payload;
                 let new_ty = ctx.type_id_to_wir_type(type_table, tir_payload_id);
                 if !is_abstract_ref(&new_ty) {
-                    variant_payload_fixups.push((wir_idx, case_idx, payload_idx, new_ty.as_nonnull()));
+                    variant_payload_fixups.push((
+                        wir_idx,
+                        case_idx,
+                        payload_idx,
+                        new_ty.as_nonnull(),
+                    ));
                 }
             }
         }
     }
     for (wir_idx, case_idx, payload_idx, new_type) in variant_payload_fixups {
-        if let WirTypeDef::Variant(vt) = &mut ctx.types[wir_idx] {
-            if let Some(payload) = vt.cases[case_idx].payload.get_mut(payload_idx) {
-                *payload = new_type;
-            }
+        if let WirTypeDef::Variant(vt) = &mut ctx.types[wir_idx]
+            && let Some(payload) = vt.cases[case_idx].payload.get_mut(payload_idx)
+        {
+            *payload = new_type;
         }
     }
 
@@ -1413,7 +1429,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
         let field_count = if let WirTypeDef::Struct(s) = &ctx.types[case_struct_idx] {
             s.fields.len()
         } else {
-            continue
+            continue;
         };
         for field_idx in 0..field_count {
             let is_abstract = if let WirTypeDef::Struct(s) = &ctx.types[case_struct_idx] {
@@ -1425,7 +1441,11 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 continue;
             }
             // Payload fields start at field_idx 1 (field_idx 0 = discriminant)
-            let payload_idx = if field_idx == 0 { continue } else { field_idx - 1 };
+            let payload_idx = if field_idx == 0 {
+                continue;
+            } else {
+                field_idx - 1
+            };
             // Get the parent variant's case payload type
             let payload_ty = if let WirTypeDef::Variant(vt) = &ctx.types[variant_wir_idx]
                 && let Some(case) = vt.cases.get(case_idx)
@@ -1433,7 +1453,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             {
                 ty.clone()
             } else {
-                continue
+                continue;
             };
             if is_abstract_ref(&payload_ty) {
                 continue; // Still abstract; can't resolve

@@ -664,7 +664,7 @@ pub enum WirVariantRepr {
     /// Nullable reference: the variant value IS the payload reference (or null for the unit case).
     ///
     /// Applicable when the variant has exactly 2 cases: one unit case (no payload) and one
-    /// payload case whose type is a non-nullable reference (struct, array, SubtypeHierarchy
+    /// payload case whose type is a non-nullable reference (struct, array, `SubtypeHierarchy`
     /// variant, i128/u128). The unit case maps to `ref.null none`; the payload case is the
     /// value itself. No Wasm types are emitted for the variant.
     ///

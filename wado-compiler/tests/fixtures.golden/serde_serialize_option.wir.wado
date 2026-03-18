@@ -38,16 +38,6 @@ struct Option<i32>::Some {
     payload_0: i32,
 }
 
-variant Result<unit,SerializeError> {
-    Ok,
-    Err(ref SerializeError),
-}
-
-struct Result<unit,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref SerializeError,
-}
-
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -110,7 +100,7 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
-type "functype/JsonSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref null SerializeError;
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -139,18 +129,18 @@ fn run() with Stdout {
     let __local_25: i32;
     ser = JsonSerializer { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
     some_val = Option<i32>::Some { discriminant: 0, payload_0: 42 };
-    drop(__inline_Option_i32__Serialize__serialize_JsonSerializer__2: block -> ref Result<unit,SerializeError> {
+    drop(__inline_Option_i32__Serialize__serialize_JsonSerializer__2: block -> ref null SerializeError {
         __local_7 = ser;
         if ref.test Option<i32>::Some(some_val) {
             __local_24 = ref.cast Option<i32>::Some(some_val).payload_0;
             break __inline_Option_i32__Serialize__serialize_JsonSerializer__2: JsonSerializer^Serializer::serialize_i32(__local_7.buf, __local_24);
         };
-        __inline_JsonSerializer_Serializer__serialize_null_4: block -> ref Result<unit,SerializeError> {
+        __inline_JsonSerializer_Serializer__serialize_null_4: block -> ref null SerializeError {
             String::append_char(__local_7.buf, 110);
             String::append_char(__local_7.buf, 117);
             String::append_char(__local_7.buf, 108);
             String::append_char(__local_7.buf, 108);
-            break __inline_JsonSerializer_Serializer__serialize_null_4: Result<unit,SerializeError> { 0, nop };
+            break __inline_JsonSerializer_Serializer__serialize_null_4: ref.null none;
         };
         break __inline_Option_i32__Serialize__serialize_JsonSerializer__2;
     });
@@ -167,18 +157,18 @@ fn run() with Stdout {
     });
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
     none_val = Option<i32> { 1 };
-    drop(__inline_Option_i32__Serialize__serialize_JsonSerializer__6: block -> ref Result<unit,SerializeError> {
+    drop(__inline_Option_i32__Serialize__serialize_JsonSerializer__6: block -> ref null SerializeError {
         __local_15 = ser;
         if ref.test Option<i32>::Some(none_val) {
             __local_25 = ref.cast Option<i32>::Some(none_val).payload_0;
             break __inline_Option_i32__Serialize__serialize_JsonSerializer__6: JsonSerializer^Serializer::serialize_i32(__local_15.buf, __local_25);
         };
-        __inline_JsonSerializer_Serializer__serialize_null_8: block -> ref Result<unit,SerializeError> {
+        __inline_JsonSerializer_Serializer__serialize_null_8: block -> ref null SerializeError {
             String::append_char(__local_15.buf, 110);
             String::append_char(__local_15.buf, 117);
             String::append_char(__local_15.buf, 108);
             String::append_char(__local_15.buf, 108);
-            break __inline_JsonSerializer_Serializer__serialize_null_8: Result<unit,SerializeError> { 0, nop };
+            break __inline_JsonSerializer_Serializer__serialize_null_8: ref.null none;
         };
         break __inline_Option_i32__Serialize__serialize_JsonSerializer__6;
     });
@@ -477,7 +467,7 @@ fn JsonSerializer^Serializer::serialize_i32(self, v) {
         i32::fmt_decimal(v, __local_7);
         break __tmpl: __local_2;
     });
-    return Result<unit,SerializeError> { 0, nop };
+    return ref.null none;
 }
 
 fn Formatter::write_char_n(self, c, n) {
