@@ -1995,31 +1995,17 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
     let seq: ref "core:json/JsonSeqAccess";
     let first: ref Result<Option<i32>,DeserializeError>;
     let first_opt: ref Option<i32>;
+    let end_result_5: ref Result<unit,DeserializeError>;
+    let e_6: ref "core:serde/DeserializeError";
+    let __local_7: ref Array<i32>;
     let first_elem: i32;
     let items: ref Array<i32>;
     let next: ref Result<Option<i32>,DeserializeError>;
-<<<<<<< HEAD
-    let opt: ref Option<i32>;
-    let end_result: ref Result<unit,DeserializeError>;
-    let e_8: ref "core:serde/DeserializeError";
-    let item: i32;
-    let e_10: ref "core:serde/DeserializeError";
-||||||| 7c33707
-    let opt: ref Option<i32>;
-    let item: i32;
-    let end_result: ref Result<unit,DeserializeError>;
-    let e_9: ref "core:serde/DeserializeError";
-    let e_10: ref "core:serde/DeserializeError";
-=======
     let next_opt: ref Option<i32>;
+    let end_result_12: ref Result<unit,DeserializeError>;
+    let e_13: ref "core:serde/DeserializeError";
     let item: i32;
-    let end_result_10: ref Result<unit,DeserializeError>;
->>>>>>> origin/main
-    let e_11: ref "core:serde/DeserializeError";
-    let e_12: ref "core:serde/DeserializeError";
-    let end_result_13: ref Result<unit,DeserializeError>;
-    let e_14: ref "core:serde/DeserializeError";
-    let __local_15: ref Array<i32>;
+    let e_15: ref "core:serde/DeserializeError";
     let e_16: ref "core:serde/DeserializeError";
     let e_17: ref "core:serde/DeserializeError";
     let __pattern_temp_0: ref Result<JsonSeqAccess,DeserializeError>;
@@ -2032,45 +2018,6 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
     __pattern_temp_0 = seq_result;
     if ref.test Result<JsonSeqAccess,DeserializeError>::Ok(__pattern_temp_0) {
         seq = value_copy "core:json/JsonSeqAccess"(ref.cast Result<JsonSeqAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0);
-<<<<<<< HEAD
-        items = __seq_lit: block -> ref Array<i32> {
-            __local_3 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
-            break __seq_lit: __local_3;
-        };
-        block {
-            l166: loop {
-                next = JsonSeqAccess^DeserializeSeq::next_element<i32>(seq);
-                __pattern_temp_1 = next;
-                if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
-                    opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
-                    if ref.test Option<i32>::Some(opt) {
-                        item = ref.cast Option<i32>::Some(opt).payload_0;
-                        Array<i32>::append(items, item);
-                    } else {
-                        end_result = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
-                        if ref.test Result<unit,DeserializeError>::Err(end_result) {
-                            e_8 = value_copy "core:serde/DeserializeError"(ref.cast Result<unit,DeserializeError>::Err(end_result).payload_0);
-                            return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_8) };
-||||||| 7c33707
-        items = __seq_lit: block -> ref Array<i32> {
-            __local_3 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
-            break __seq_lit: __local_3;
-        };
-        block {
-            l166: loop {
-                next = JsonSeqAccess^DeserializeSeq::next_element<i32>(seq);
-                __pattern_temp_1 = next;
-                if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
-                    opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
-                    if ref.test Option<i32>::Some(opt) {
-                        item = ref.cast Option<i32>::Some(opt).payload_0;
-                        Array<i32>::append(items, item);
-                    } else {
-                        end_result = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
-                        if ref.test Result<unit,DeserializeError>::Err(end_result) {
-                            e_9 = value_copy "core:serde/DeserializeError"(ref.cast Result<unit,DeserializeError>::Err(end_result).payload_0);
-                            return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_9) };
-=======
         first = JsonSeqAccess^DeserializeSeq::next_element<i32>(seq);
         __pattern_temp_1 = first;
         if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
@@ -2089,32 +2036,31 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
                                 item = ref.cast Option<i32>::Some(next_opt).payload_0;
                                 Array<i32>::append(items, item);
                             } else {
-                                end_result_10 = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
-                                if ref.test Result<unit,DeserializeError>::Err(end_result_10) {
-                                    e_11 = value_copy "core:serde/DeserializeError"(ref.cast Result<unit,DeserializeError>::Err(end_result_10).payload_0);
-                                    return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_11) };
+                                end_result_12 = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
+                                if ref.test Result<unit,DeserializeError>::Err(end_result_12) {
+                                    e_13 = value_copy "core:serde/DeserializeError"(ref.cast Result<unit,DeserializeError>::Err(end_result_12).payload_0);
+                                    return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_13) };
                                 };
                                 return Result<Array<i32>,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(items) };
                             };
->>>>>>> origin/main
                         };
                         __pattern_temp_6 = next;
                         if ref.test Result<Option<i32>,DeserializeError>::Err(__pattern_temp_6) {
-                            e_12 = value_copy "core:serde/DeserializeError"(ref.cast Result<Option<i32>,DeserializeError>::Err(__pattern_temp_6).payload_0);
-                            return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_12) };
+                            e_15 = value_copy "core:serde/DeserializeError"(ref.cast Result<Option<i32>,DeserializeError>::Err(__pattern_temp_6).payload_0);
+                            return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_15) };
                         };
                         continue l168;
                     };
                 };
             } else {
-                end_result_13 = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
-                if ref.test Result<unit,DeserializeError>::Err(end_result_13) {
-                    e_14 = value_copy "core:serde/DeserializeError"(ref.cast Result<unit,DeserializeError>::Err(end_result_13).payload_0);
-                    return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_14) };
+                end_result_5 = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
+                if ref.test Result<unit,DeserializeError>::Err(end_result_5) {
+                    e_6 = value_copy "core:serde/DeserializeError"(ref.cast Result<unit,DeserializeError>::Err(end_result_5).payload_0);
+                    return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_6) };
                 };
                 return Result<Array<i32>,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(__seq_lit: block -> ref Array<i32> {
-                    __local_15 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
-                    break __seq_lit: __local_15;
+                    __local_7 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
+                    break __seq_lit: __local_7;
                 }) };
             };
         };
