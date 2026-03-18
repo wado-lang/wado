@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773832965136,
+  "lastUpdate": 1773843497859,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4133,6 +4133,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22460,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ec4024cd57fd43eace1bcec53831c5c7db5d5be3",
+          "message": "Merge pull request #603 from wado-lang/claude/optimize-option-type-V1g6T\n\nImplement NullableRef optimization for eligible variant types",
+          "timestamp": "2026-03-18T23:15:41+09:00",
+          "tree_id": "2bffe600ea907256dabf23092eea823ae50ce997",
+          "url": "https://github.com/wado-lang/wado/commit/ec4024cd57fd43eace1bcec53831c5c7db5d5be3"
+        },
+        "date": 1773843497650,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
             "unit": "bytes"
           }
         ]
