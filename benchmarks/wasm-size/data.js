@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773826773236,
+  "lastUpdate": 1773832965136,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4079,6 +4079,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cdf65027fcfdcfdc06db4f384b13857477d67124"
         },
         "date": 1773826773030,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9123,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22460,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9b35224fcfec2e709dbc97b8579df03f82518c5f",
+          "message": "Merge pull request #604 from wado-lang/claude/refactor-parser-patterns-AFBP4\n\nReplace Go-style if-let with Rust-style if-let chains",
+          "timestamp": "2026-03-18T20:20:14+09:00",
+          "tree_id": "189e52f7a41f70cbe9356f0d08f7f21d511a8861",
+          "url": "https://github.com/wado-lang/wado/commit/9b35224fcfec2e709dbc97b8579df03f82518c5f"
+        },
+        "date": 1773832964928,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
