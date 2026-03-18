@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773787558600,
+  "lastUpdate": 1773826773236,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4055,6 +4055,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22373,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cdf65027fcfdcfdc06db4f384b13857477d67124",
+          "message": "Merge pull request #602 from wado-lang/claude/optimize-json-benchmark-1XXI5\n\nOptimize array deserialization with lazy allocation",
+          "timestamp": "2026-03-18T18:37:02+09:00",
+          "tree_id": "66b1c065316679ec0d72bed6ab0bc0bc34d6d9fb",
+          "url": "https://github.com/wado-lang/wado/commit/cdf65027fcfdcfdc06db4f384b13857477d67124"
+        },
+        "date": 1773826773030,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9123,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22460,
             "unit": "bytes"
           }
         ]
