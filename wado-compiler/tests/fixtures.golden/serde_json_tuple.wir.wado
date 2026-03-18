@@ -515,7 +515,7 @@ fn __test_1_tuple_roundtrip__i32__string_() {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         parsed_r = "core/json/from_string<Tuple<i32,String>>"(json);
         if ref.test Result<Tuple<i32,String>,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy "tuple/[i32, String]"(ref.cast Result<Tuple<i32,String>,DeserializeError>::Ok(parsed_r).payload_0);
+            parsed = ref.cast Result<Tuple<i32,String>,DeserializeError>::Ok(parsed_r).payload_0;
             __v0_5 = parsed.0;
             __cond_6 = __v0_5 == 10;
             if __cond_6 == 0 {
@@ -2339,7 +2339,7 @@ fn Tuple<i32,String>^Deserialize::deserialize<JsonDeserializer>(d) {
             __opt1 = value_copy Option<String>(ref.cast Result<Option<String>,DeserializeError>::Ok(__pattern_temp_3).payload_0);
             if ref.is_null(__opt1) == 0 {
                 __val_10 = value_copy String(ref.as_non_null(__opt1));
-                __local_4 = value_copy String(__val_10);
+                __local_4 = __val_10;
             } else {
                 return Result<Tuple<i32,String>,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("expected tuple element at index 1"), used: 33 }, offset: -1_i64 } };
             };

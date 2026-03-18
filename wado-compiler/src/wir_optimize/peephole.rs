@@ -16,6 +16,7 @@ pub(super) fn optimize_instrs(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) 
     }
     fold_constant_comparisons(instrs);
     elide_redundant_value_copies(instrs);
+    elide_copy_used_only_for_field_reads(instrs);
     elide_multi_value_structs(instrs, types);
 }
 
@@ -177,6 +178,108 @@ fn elide_redundant_value_copies(instrs: &mut [WirInstr]) {
             }
         }
     }
+}
+
+/// Elide `value_copy T(expr)` when the copy result is used exclusively for
+/// struct field reads (`StructGet`).
+///
+/// This is safe because:
+/// - Reading a primitive field from the original or a copy yields the same value.
+/// - Reading a complex (GC) field is safe when the extracted value itself goes
+///   through its own `value_copy` (which provides the necessary isolation).
+/// - If `t` were used for any mutation (e.g. `StructSet`, `Call` taking `t` by
+///   reference), the check would fail and the copy would be preserved.
+///
+/// The canonical case is struct destructuring in a for-of loop:
+/// ```text
+/// __pattern_temp_1 = value_copy Point(ref.as_non_null(__pattern_temp_0))
+/// x = __pattern_temp_1.x    // StructGet → safe
+/// y = __pattern_temp_1.y    // StructGet → safe
+/// ```
+fn elide_copy_used_only_for_field_reads(instrs: &mut [WirInstr]) {
+    for i in 0..instrs.len() {
+        let var_name = match &instrs[i] {
+            WirInstr::LocalSet { name, value }
+                if matches!(value.as_ref(), WirInstr::ValueCopy { .. }) =>
+            {
+                name.clone()
+            }
+            _ => continue,
+        };
+        let all_reads_only = instrs[i + 1..]
+            .iter()
+            .all(|instr| uses_of_var_are_field_reads_only(instr, &var_name));
+        if all_reads_only && let WirInstr::LocalSet { value, .. } = &mut instrs[i] {
+            let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
+            if let WirInstr::ValueCopy { expr, .. } = old {
+                *value.as_mut() = *expr;
+            }
+        }
+    }
+}
+
+/// Returns `true` if every use of `var_name` in `instr` is a struct field read,
+/// or if `var_name` does not appear in `instr` at all.
+fn uses_of_var_are_field_reads_only(instr: &WirInstr, var_name: &str) -> bool {
+    match instr {
+        WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. } => {
+            match value.as_ref() {
+                // `x = t.field` — direct field read.
+                WirInstr::StructGet { expr, .. } => {
+                    if let WirInstr::LocalGet { name } = expr.as_ref()
+                        && name == var_name
+                    {
+                        return true;
+                    }
+                    !instr_contains_local_get(value, var_name)
+                }
+                // `x = value_copy T(t.field)` — field read wrapped in value_copy.
+                WirInstr::ValueCopy { expr, .. } => {
+                    if let WirInstr::StructGet { expr: inner, .. } = expr.as_ref()
+                        && let WirInstr::LocalGet { name } = inner.as_ref()
+                        && name == var_name
+                    {
+                        return true;
+                    }
+                    !instr_contains_local_get(value, var_name)
+                }
+                _ => !instr_contains_local_get(value, var_name),
+            }
+        }
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => body
+            .iter()
+            .all(|i| uses_of_var_are_field_reads_only(i, var_name)),
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            !instr_contains_local_get(condition, var_name)
+                && then_body
+                    .iter()
+                    .all(|i| uses_of_var_are_field_reads_only(i, var_name))
+                && else_body.as_ref().is_none_or(|eb| {
+                    eb.iter()
+                        .all(|i| uses_of_var_are_field_reads_only(i, var_name))
+                })
+        }
+        _ => !instr_contains_local_get(instr, var_name),
+    }
+}
+
+/// Returns `true` if `var_name` appears as a `LocalGet` anywhere in `instr`.
+fn instr_contains_local_get(instr: &WirInstr, var_name: &str) -> bool {
+    if let WirInstr::LocalGet { name } = instr {
+        return name == var_name;
+    }
+    let mut found = false;
+    instr.for_each_child(&mut |child| {
+        if instr_contains_local_get(child, var_name) {
+            found = true;
+        }
+    });
+    found
 }
 
 /// Check if a WIR instruction provably produces a fresh value (no aliases).

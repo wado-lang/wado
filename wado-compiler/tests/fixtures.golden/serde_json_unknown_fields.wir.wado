@@ -364,7 +364,7 @@ fn __test_0_unknown_fields_ignored() {
     };
     r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1.0,\"z\":999,\"y\":2.0,\"extra\":\"ignored\"}"), used: 43 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
-        p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
+        p = ref.cast Result<Point,DeserializeError>::Ok(r).payload_0;
         __v0_2 = p.x;
         __cond_3 = __v0_2 == 1;
         if __cond_3 == 0 {
@@ -475,7 +475,7 @@ fn __test_1_unknown_field_with_object_value() {
     };
     r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1.0,\"meta\":{\"a\":1,\"b\":2},\"y\":2.0}"), used: 38 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
-        p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
+        p = ref.cast Result<Point,DeserializeError>::Ok(r).payload_0;
         __v0_2 = p.x;
         __cond_3 = __v0_2 == 1;
         if __cond_3 == 0 {
@@ -586,7 +586,7 @@ fn __test_2_unknown_field_with_array_value() {
     };
     r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1.0,\"items\":[1,2,3],\"y\":2.0}"), used: 33 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
-        p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
+        p = ref.cast Result<Point,DeserializeError>::Ok(r).payload_0;
         __v0_2 = p.x;
         __cond_3 = __v0_2 == 1;
         if __cond_3 == 0 {

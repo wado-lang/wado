@@ -356,7 +356,7 @@ fn __test_0_duplicate_field_last_value_wins() {
     };
     r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1.0,\"y\":2.0,\"x\":99.0}"), used: 26 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
-        p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
+        p = ref.cast Result<Point,DeserializeError>::Ok(r).payload_0;
         __v0_2 = p.x;
         __cond_3 = __v0_2 == 99;
         if __cond_3 == 0 {

@@ -2573,7 +2573,7 @@ condition: json == \"[]\"
         };
         parsed_r = "core/json/from_string<Array<Inner>>"(json);
         if ref.test Result<Array<Inner>,DeserializeError>::Ok(parsed_r) {
-            arr = value_copy Array<Inner>(ref.cast Result<Array<Inner>,DeserializeError>::Ok(parsed_r).payload_0);
+            arr = ref.cast Result<Array<Inner>,DeserializeError>::Ok(parsed_r).payload_0;
             __v0_8 = arr.used;
             __cond_9 = __v0_8 == 0;
             if __cond_9 == 0 {
@@ -3210,7 +3210,7 @@ condition: json == \"{}\"
         };
         parsed_r = "core/json/from_string<TreeMap<String,i32>>"(json);
         if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r) {
-            m = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r).payload_0);
+            m = ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r).payload_0;
             __v0_7 = m.size;
             __cond_8 = __v0_7 == 0;
             if __cond_8 == 0 {
@@ -3690,7 +3690,7 @@ fn __test_14_variant_payload_struct_roundtrip() {
         if ref.test Result<Shape,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy Shape(ref.cast Result<Shape,DeserializeError>::Ok(parsed_r).payload_0);
             if ref.test Shape::Rectangle(parsed) {
-                inner = value_copy Inner(ref.cast Shape::Rectangle(parsed).payload_0);
+                inner = ref.cast Shape::Rectangle(parsed).payload_0;
                 __v0_6 = inner.value;
                 __cond_7 = __v0_6 == 10;
                 if __cond_7 == 0 {
@@ -8007,7 +8007,7 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_13 = value_copy Result<TreeMap<String,i32>,DeserializeError>(__local_8);
                             if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(__local_13) {
                                 __local_9 = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(__local_13).payload_0);
-                                settings = value_copy "core:allocator/TreeMap<String,i32>"(__local_9);
+                                settings = __local_9;
                                 seen = seen | 1;
                             } else {
                                 return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Err(__local_8).payload_0) };
@@ -8279,9 +8279,9 @@ fn TreeMap<String,i32>::find_index(self, key) {
                     return n.index;
                 };
                 if String^Ord::cmp(key, n.key) == 0 {
-                    current = value_copy Option<TreeMapNode<String>>(n.left);
+                    current = n.left;
                 } else {
-                    current = value_copy Option<TreeMapNode<String>>(n.right);
+                    current = n.right;
                 };
             } else {
                 break b572;
@@ -8692,7 +8692,7 @@ fn Inner^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_17 = value_copy Result<String,DeserializeError>(__local_11);
                             if ref.test Result<String,DeserializeError>::Ok(__local_17) {
                                 __local_12 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_17).payload_0);
-                                label = value_copy String(__local_12);
+                                label = __local_12;
                                 seen = seen | 2;
                             } else {
                                 return Result<Inner,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<String,DeserializeError>::Err(__local_11).payload_0) };
@@ -9119,9 +9119,9 @@ fn TreeMap<String,String>::find_index(self, key) {
                     return n.index;
                 };
                 if String^Ord::cmp(key, n.key) == 0 {
-                    current = value_copy Option<TreeMapNode<String>>(n.left);
+                    current = n.left;
                 } else {
-                    current = value_copy Option<TreeMapNode<String>>(n.right);
+                    current = n.right;
                 };
             } else {
                 break b665;
@@ -9375,7 +9375,7 @@ fn TreeMap<String,String>^Serialize::serialize<JsonSerializer>(self, s) {
             l700: loop {
                 __pattern_temp_1 = ArrayIter<Tuple<String,String>>^Iterator::next(__iter_5);
                 if ref.is_null(__pattern_temp_1) == 0 {
-                    entry = value_copy "tuple/[String, String]"(ref.as_non_null(__pattern_temp_1));
+                    entry = ref.as_non_null(__pattern_temp_1);
                     k = entry.0;
                     v = entry.1;
                     kr = JsonMapSerializer^SerializeMap::key<String>(m, k);
@@ -9973,7 +9973,7 @@ fn Outer^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_16 = value_copy Result<Inner,DeserializeError>(__local_9);
                             if ref.test Result<Inner,DeserializeError>::Ok(__local_16) {
                                 __local_10 = value_copy Inner(ref.cast Result<Inner,DeserializeError>::Ok(__local_16).payload_0);
-                                inner = value_copy Inner(__local_10);
+                                inner = __local_10;
                                 seen = seen | 1;
                             } else {
                                 return Result<Outer,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Inner,DeserializeError>::Err(__local_9).payload_0) };
@@ -10116,7 +10116,7 @@ fn FullStruct^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_31 = value_copy Result<String,DeserializeError>(__local_14);
                             if ref.test Result<String,DeserializeError>::Ok(__local_31) {
                                 __local_15 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_31).payload_0);
-                                name = value_copy String(__local_15);
+                                name = __local_15;
                                 seen = seen | 1;
                             } else {
                                 return Result<FullStruct,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<String,DeserializeError>::Err(__local_14).payload_0) };
@@ -10165,7 +10165,7 @@ fn FullStruct^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_35 = value_copy Result<Array<String>,DeserializeError>(__local_22);
                             if ref.test Result<Array<String>,DeserializeError>::Ok(__local_35) {
                                 __local_23 = value_copy Array<String>(ref.cast Result<Array<String>,DeserializeError>::Ok(__local_35).payload_0);
-                                tags = value_copy Array<String>(__local_23);
+                                tags = __local_23;
                                 seen = seen | 16;
                             } else {
                                 return Result<FullStruct,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Array<String>,DeserializeError>::Err(__local_22).payload_0) };
@@ -10175,7 +10175,7 @@ fn FullStruct^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_36 = value_copy Result<Option<String>,DeserializeError>(__local_24);
                             if ref.test Result<Option<String>,DeserializeError>::Ok(__local_36) {
                                 __local_25 = value_copy Option<String>(ref.cast Result<Option<String>,DeserializeError>::Ok(__local_36).payload_0);
-                                address = value_copy Option<String>(__local_25);
+                                address = __local_25;
                                 seen = seen | 32;
                             } else {
                                 return Result<FullStruct,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Option<String>,DeserializeError>::Err(__local_24).payload_0) };
@@ -10185,7 +10185,7 @@ fn FullStruct^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_37 = value_copy Result<Option<i32>,DeserializeError>(__local_26);
                             if ref.test Result<Option<i32>,DeserializeError>::Ok(__local_37) {
                                 __local_27 = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__local_37).payload_0);
-                                rating = value_copy Option<i32>(__local_27);
+                                rating = __local_27;
                                 seen = seen | 64;
                             } else {
                                 return Result<FullStruct,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Option<i32>,DeserializeError>::Err(__local_26).payload_0) };

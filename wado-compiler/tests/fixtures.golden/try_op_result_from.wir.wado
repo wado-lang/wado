@@ -258,7 +258,7 @@ condition: high_op(false) matches { Ok(n) && n == 101 }
     if ref.test Result<i32,HighError>::Err(r2) {
         e = value_copy HighError(ref.cast Result<i32,HighError>::Err(r2).payload_0);
         if ref.test HighError::Low(e) {
-            inner = value_copy LowError(ref.cast HighError::Low(e).payload_0);
+            inner = ref.cast HighError::Low(e).payload_0;
             __v0 = inner.code;
             __cond_6 = __v0 == 42;
             if __cond_6 == 0 {

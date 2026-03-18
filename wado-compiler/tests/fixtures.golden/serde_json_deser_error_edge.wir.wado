@@ -706,7 +706,7 @@ fn __test_2_number_where_bool_expected() {
     };
     r = "core/json/from_string<bool>"(String { repr: array.new_data<u8>("42"), used: 2 });
     if ref.test Result<bool,DeserializeError>::Err(r) {
-        e = value_copy "core:serde/DeserializeError"(ref.cast Result<bool,DeserializeError>::Err(r).payload_0);
+        e = ref.cast Result<bool,DeserializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("expected bool"), used: 13 });
         if __cond == 0 {
@@ -765,7 +765,7 @@ fn __test_3_number_where_string_expected() {
     };
     r = "core/json/from_string<String>"(String { repr: array.new_data<u8>("42"), used: 2 });
     if ref.test Result<String,DeserializeError>::Err(r) {
-        e = value_copy "core:serde/DeserializeError"(ref.cast Result<String,DeserializeError>::Err(r).payload_0);
+        e = ref.cast Result<String,DeserializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("expected string"), used: 15 });
         if __cond == 0 {
@@ -914,7 +914,7 @@ fn __test_9_truncated_string() {
     };
     r = "core/json/from_string<String>"(String { repr: array.new_data<u8>("\"hello"), used: 6 });
     if ref.test Result<String,DeserializeError>::Err(r) {
-        e = value_copy "core:serde/DeserializeError"(ref.cast Result<String,DeserializeError>::Err(r).payload_0);
+        e = ref.cast Result<String,DeserializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("unexpected end of input"), used: 23 });
         if __cond == 0 {
@@ -973,7 +973,7 @@ fn __test_10_trailing_garbage() {
     };
     r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("42 garbage"), used: 10 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
-        e = value_copy "core:serde/DeserializeError"(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
+        e = ref.cast Result<i32,DeserializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("trailing data after value"), used: 25 });
         if __cond == 0 {
@@ -1032,7 +1032,7 @@ fn __test_11_multiple_values() {
     };
     r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("1 2"), used: 3 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
-        e = value_copy "core:serde/DeserializeError"(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
+        e = ref.cast Result<i32,DeserializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("trailing data after value"), used: 25 });
         if __cond == 0 {
@@ -1109,7 +1109,7 @@ fn __test_13_u32_too_large() {
     };
     r = "core/json/from_string<u32>"(String { repr: array.new_data<u8>("4294967296"), used: 10 });
     if ref.test Result<u32,DeserializeError>::Err(r) {
-        e = value_copy "core:serde/DeserializeError"(ref.cast Result<u32,DeserializeError>::Err(r).payload_0);
+        e = ref.cast Result<u32,DeserializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("value out of range for u32"), used: 26 });
         if __cond == 0 {
@@ -1168,7 +1168,7 @@ fn __test_14_f64_nan_serialize_error() {
     };
     r = "core/json/to_string<f64>"(0 / 0);
     if ref.test Result<String,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
+        e = ref.cast Result<String,SerializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 });
         if __cond == 0 {
@@ -1227,7 +1227,7 @@ fn __test_15_f64_infinity_serialize_error() {
     };
     r = "core/json/to_string<f64>"(inf);
     if ref.test Result<String,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
+        e = ref.cast Result<String,SerializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 });
         if __cond == 0 {
@@ -1286,7 +1286,7 @@ fn __test_16_f64_negative_infinity_serialize_error() {
     };
     r = "core/json/to_string<f64>"(-inf);
     if ref.test Result<String,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
+        e = ref.cast Result<String,SerializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 });
         if __cond == 0 {
@@ -1345,7 +1345,7 @@ fn __test_17_f32_nan_serialize_error() {
     };
     r = "core/json/to_string<f32>"(0_f32 / 0_f32);
     if ref.test Result<String,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
+        e = ref.cast Result<String,SerializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 });
         if __cond == 0 {
@@ -1404,7 +1404,7 @@ fn __test_18_f32_infinity_serialize_error() {
     };
     r = "core/json/to_string<f32>"(inf_f32);
     if ref.test Result<String,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
+        e = ref.cast Result<String,SerializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 });
         if __cond == 0 {
@@ -1499,7 +1499,7 @@ fn __test_21_struct_missing_required_field() {
     };
     r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1}"), used: 7 });
     if ref.test Result<Point,DeserializeError>::Err(r) {
-        e = value_copy "core:serde/DeserializeError"(ref.cast Result<Point,DeserializeError>::Err(r).payload_0);
+        e = ref.cast Result<Point,DeserializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("required field missing"), used: 22 });
         if __cond == 0 {
@@ -1704,7 +1704,7 @@ fn __test_27_enum_unknown_variant() {
     };
     r = "core/json/from_string<Color>"(String { repr: array.new_data<u8>("\"Yellow\""), used: 8 });
     if ref.test Result<Color,DeserializeError>::Err(r) {
-        e = value_copy "core:serde/DeserializeError"(ref.cast Result<Color,DeserializeError>::Err(r).payload_0);
+        e = ref.cast Result<Color,DeserializeError>::Err(r).payload_0;
         __v0 = e.message;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("unknown variant"), used: 15 });
         if __cond == 0 {

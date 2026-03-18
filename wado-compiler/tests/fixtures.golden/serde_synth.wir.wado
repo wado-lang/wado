@@ -549,7 +549,7 @@ fn __test_0_synthesized_deserialize_point() {
     };
     r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1.5,\"y\":2.5}"), used: 17 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
-        p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
+        p = ref.cast Result<Point,DeserializeError>::Ok(r).payload_0;
         __v0_2 = p.x;
         __cond_3 = __v0_2 == 1.5;
         if __cond_3 == 0 {
@@ -660,7 +660,7 @@ fn __test_1_synthesized_deserialize_point_out_of_order_fields() {
     };
     r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"y\":3.0,\"x\":7.0}"), used: 17 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
-        p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
+        p = ref.cast Result<Point,DeserializeError>::Ok(r).payload_0;
         __v0_2 = p.x;
         __cond_3 = __v0_2 == 7;
         if __cond_3 == 0 {
@@ -778,7 +778,7 @@ fn __test_2_synthesized_deserialize_user_with_camelcase_keys() {
     };
     r = "core/json/from_string<User>"(String { repr: array.new_data<u8>("{\"userName\":\"Alice\",\"age\":30,\"active\":true}"), used: 43 });
     if ref.test Result<User,DeserializeError>::Ok(r) {
-        u = value_copy User(ref.cast Result<User,DeserializeError>::Ok(r).payload_0);
+        u = ref.cast Result<User,DeserializeError>::Ok(r).payload_0;
         __v0_2 = u.user_name;
         __cond_3 = String^Eq::eq(__v0_2, String { repr: array.new_data<u8>("Alice"), used: 5 });
         if __cond_3 == 0 {
@@ -983,7 +983,7 @@ condition: json == `\\{\"host\":\"localhost\",\"port\":8080,\"debug\":true\\}`
         };
         parsed_r = "core/json/from_string<Config>"(json);
         if ref.test Result<Config,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy Config(ref.cast Result<Config,DeserializeError>::Ok(parsed_r).payload_0);
+            parsed = ref.cast Result<Config,DeserializeError>::Ok(parsed_r).payload_0;
             __v0_7 = parsed.host;
             __cond_8 = String^Eq::eq(__v0_7, String { repr: array.new_data<u8>("localhost"), used: 9 });
             if __cond_8 == 0 {
@@ -3417,7 +3417,7 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_19 = value_copy Result<String,DeserializeError>(__local_10);
                             if ref.test Result<String,DeserializeError>::Ok(__local_19) {
                                 __local_11 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_19).payload_0);
-                                host = value_copy String(__local_11);
+                                host = __local_11;
                                 seen = seen | 1;
                             } else {
                                 return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<String,DeserializeError>::Err(__local_10).payload_0) };
@@ -3534,7 +3534,7 @@ fn User^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_19 = value_copy Result<String,DeserializeError>(__local_10);
                             if ref.test Result<String,DeserializeError>::Ok(__local_19) {
                                 __local_11 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_19).payload_0);
-                                user_name = value_copy String(__local_11);
+                                user_name = __local_11;
                                 seen = seen | 1;
                             } else {
                                 return Result<User,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<String,DeserializeError>::Err(__local_10).payload_0) };

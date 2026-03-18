@@ -421,7 +421,7 @@ fn __test_1_deserialize_with_rename() {
     let __local_29: ref String;
     r = "core/json/from_string<ApiResponse>"(String { repr: array.new_data<u8>("{\"status_code\":200,\"data\":\"ok\"}"), used: 31 });
     if ref.test Result<ApiResponse,DeserializeError>::Ok(r) {
-        resp = value_copy ApiResponse(ref.cast Result<ApiResponse,DeserializeError>::Ok(r).payload_0);
+        resp = ref.cast Result<ApiResponse,DeserializeError>::Ok(r).payload_0;
         __v0_2 = resp.status_code;
         __cond_3 = __v0_2 == 200;
         if __cond_3 == 0 {
@@ -522,7 +522,7 @@ fn __test_2_roundtrip_with_rename() {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         parsed_r = "core/json/from_string<ApiResponse>"(json);
         if ref.test Result<ApiResponse,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy ApiResponse(ref.cast Result<ApiResponse,DeserializeError>::Ok(parsed_r).payload_0);
+            parsed = ref.cast Result<ApiResponse,DeserializeError>::Ok(parsed_r).payload_0;
             __v0_5 = parsed.status_code;
             __cond_6 = __v0_5 == 404;
             if __cond_6 == 0 {
@@ -1585,7 +1585,7 @@ fn ApiResponse^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_17 = value_copy Result<String,DeserializeError>(__local_11);
                             if ref.test Result<String,DeserializeError>::Ok(__local_17) {
                                 __local_12 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_17).payload_0);
-                                response_data = value_copy String(__local_12);
+                                response_data = __local_12;
                                 seen = seen | 2;
                             } else {
                                 return Result<ApiResponse,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<String,DeserializeError>::Err(__local_11).payload_0) };

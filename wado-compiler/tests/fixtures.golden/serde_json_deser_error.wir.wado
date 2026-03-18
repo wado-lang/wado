@@ -804,7 +804,7 @@ fn __test_8_valid_input_still_works() {
     let __local_42: ref Formatter;
     r = "core/json/from_string<User>"(String { repr: array.new_data<u8>("{\"name\":\"Alice\",\"age\":30,\"active\":true}"), used: 39 });
     if ref.test Result<User,DeserializeError>::Ok(r) {
-        u = value_copy User(ref.cast Result<User,DeserializeError>::Ok(r).payload_0);
+        u = ref.cast Result<User,DeserializeError>::Ok(r).payload_0;
         __v0_2 = u.name;
         __cond_3 = String^Eq::eq(__v0_2, String { repr: array.new_data<u8>("Alice"), used: 5 });
         if __cond_3 == 0 {
@@ -1860,7 +1860,7 @@ fn User^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_19 = value_copy Result<String,DeserializeError>(__local_10);
                             if ref.test Result<String,DeserializeError>::Ok(__local_19) {
                                 __local_11 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_19).payload_0);
-                                name = value_copy String(__local_11);
+                                name = __local_11;
                                 seen = seen | 1;
                             } else {
                                 return Result<User,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<String,DeserializeError>::Err(__local_10).payload_0) };
