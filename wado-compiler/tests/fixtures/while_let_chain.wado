@@ -15,9 +15,27 @@ export fn run() with Stdout {
     while let Some(v) = iter2.next() {
         println(`{v}`);
     }
+
+    // Chained lets: consume two iterators in lockstep
+    let xs: Array<i32> = [1, 2, 3];
+    let ys: Array<i32> = [10, 20, 30];
+    let mut ix = xs.iter();
+    let mut iy = ys.iter();
+    while let Some(x) = ix.next() && let Some(y) = iy.next() {
+        println(`{x}+{y}`);
+    }
+
+    // Parenthesised logical && inside guard — not a chain separator
+    let arr3: Array<i32> = [2, 4, 7, 8];
+    let mut iter3 = arr3.iter();
+    let min = 1;
+    let max = 6;
+    while let Some(v) = iter3.next() && (v > min && v < max) {
+        println(`in range: {v}`);
+    }
 }
 
 __DATA__
 {
-    "stdout": "1\n2\n3\n10\n20\n30\n"
+    "stdout": "1\n2\n3\n10\n20\n30\n1+10\n2+20\n3+30\nin range: 2\nin range: 4\n"
 }
