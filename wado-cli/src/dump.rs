@@ -418,6 +418,37 @@ pub async fn run(opts: DumpOptions) {
 /// stack overflow (SIGSEGV).
 const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
+/// Size of the alternate signal stack installed in each compiler thread (8 MB).
+///
+/// Without an alternate signal stack, a stack overflow in a spawned thread
+/// delivers SIGSEGV with no stack to run the signal handler on. The process
+/// then terminates silently — no panic message, no error output. Installing
+/// `sigaltstack` in each thread ensures the signal handler (and Rust's panic
+/// hook) can run even when the main stack is exhausted.
+#[cfg(unix)]
+const ALT_STACK_SIZE: usize = 8 * 1024 * 1024;
+
+/// Install an alternate signal stack for the current thread.
+///
+/// Must be called at the start of each spawned compiler thread so that
+/// SIGSEGV from stack overflow produces a proper panic message instead of
+/// silently killing the process.
+#[cfg(unix)]
+fn install_alt_stack() {
+    // Allocate and intentionally leak: the OS reclaims thread memory on exit.
+    let mem = vec![0u8; ALT_STACK_SIZE].into_boxed_slice();
+    let ptr = Box::into_raw(mem);
+    // SAFETY: ptr is a valid, exclusively-owned allocation of ALT_STACK_SIZE bytes.
+    unsafe {
+        let ss = libc::stack_t {
+            ss_sp: ptr.cast::<libc::c_void>(),
+            ss_flags: 0,
+            ss_size: ALT_STACK_SIZE,
+        };
+        libc::sigaltstack(&raw const ss, std::ptr::null_mut());
+    }
+}
+
 /// Spawn a closure on a dedicated thread with a large stack, returning a
 /// oneshot receiver for the result.
 fn spawn_with_large_stack<F, T>(f: F) -> tokio::sync::oneshot::Receiver<T>
@@ -429,6 +460,8 @@ where
     std::thread::Builder::new()
         .stack_size(COMPILER_STACK_SIZE)
         .spawn(move || {
+            #[cfg(unix)]
+            install_alt_stack();
             let _ = tx.send(f());
         })
         .expect("failed to spawn compiler thread");
@@ -436,12 +469,18 @@ where
 }
 
 /// Bulk file output mode - writes each input to a file based on template (parallel)
+///
+/// Each compilation runs on its own large-stack OS thread with an **isolated**
+/// `current_thread` tokio runtime. This avoids the subtle hazard of multiple
+/// OS threads calling `handle.block_on()` on the same shared multi-thread
+/// runtime handle simultaneously. Concurrency is capped at `parallelism` to
+/// bound peak memory and avoid SIGSEGV under memory pressure.
 async fn run_bulk(opts: &DumpOptions, template: &str) {
     let start = std::time::Instant::now();
 
-    // Limit concurrency to avoid exhausting memory with many large-stack threads.
-    // Each compilation uses ~16 MB stack + significant heap for the optimizer,
-    // so we cap at half the available CPUs (minimum 2) to stay within memory.
+    // Each compilation uses ~16 MB stack + significant heap. Cap at half the
+    // available CPUs (minimum 2) so peak memory stays predictable even right
+    // after a heavyweight `cargo clippy` run.
     let parallelism = std::thread::available_parallelism()
         .map(std::num::NonZero::get)
         .unwrap_or(4)
@@ -476,8 +515,6 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
         let opt_iterations = opts.opt_iterations;
         let sem = semaphore.clone();
 
-        let handle = tokio::runtime::Handle::current();
-
         tasks.push(tokio::spawn(async move {
             // Acquire a permit to limit the number of concurrent compiler threads.
             let _permit = sem.acquire().await.expect("semaphore closed");
@@ -491,7 +528,7 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
 
                 let output_path = template.replace("{name}", &name);
 
-                // Ensure parent directory exists
+                // Ensure parent directory exists.
                 if let Some(parent) = Path::new(&output_path).parent()
                     && !parent.as_os_str().is_empty()
                     && let Err(e) = fs::create_dir_all(parent)
@@ -502,8 +539,16 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
                     ));
                 }
 
-                // Use block_on to run async dump_with_host on this thread
-                match handle.block_on(generate_output_params(
+                // Build an isolated current_thread runtime for this compilation.
+                // Using a per-compilation runtime instead of block_on on the shared
+                // outer multi-thread handle keeps each compilation fully independent
+                // and avoids any subtle interaction between concurrent callers.
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("failed to build per-compilation tokio runtime");
+
+                match rt.block_on(generate_output_params(
                     show_tir,
                     show_wir,
                     opt_level,
