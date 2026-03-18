@@ -485,18 +485,26 @@ fn build_template_block(
                 let is_inspect = format_spec
                     .as_ref()
                     .is_some_and(|fs| fs.type_char == Some('?'));
+                let is_alternate = format_spec
+                    .as_ref()
+                    .is_some_and(|fs| fs.alternate);
 
-                let trait_name = match &format_spec {
-                    Some(fs) => match fs.type_char {
-                        Some('b') => "Binary",
-                        Some('o') => "Octal",
-                        Some('x') => "LowerHex",
-                        Some('X') => "UpperHex",
-                        Some('e') => "LowerExp",
-                        Some('E') => "UpperExp",
-                        _ => "Display",
+                let (trait_name, method_name) = match &format_spec {
+                    Some(fs) => match (fs.type_char, fs.alternate) {
+                        (Some('b'), true) => ("BinaryAlt", "fmt_alt"),
+                        (Some('b'), false) => ("Binary", "fmt"),
+                        (Some('o'), true) => ("OctalAlt", "fmt_alt"),
+                        (Some('o'), false) => ("Octal", "fmt"),
+                        (Some('x'), true) => ("LowerHexAlt", "fmt_alt"),
+                        (Some('x'), false) => ("LowerHex", "fmt"),
+                        (Some('X'), true) => ("UpperHexAlt", "fmt_alt"),
+                        (Some('X'), false) => ("UpperHex", "fmt"),
+                        (Some('e'), _) => ("LowerExp", "fmt"),
+                        (Some('E'), _) => ("UpperExp", "fmt"),
+                        (_, true) => ("DisplayAlt", "fmt_alt"),
+                        _ => ("Display", "fmt"),
                     },
-                    None => "Display",
+                    None => ("Display", "fmt"),
                 };
 
                 // Create or reassign Formatter local
@@ -570,19 +578,29 @@ fn build_template_block(
 
                 if is_inspect {
                     // #:? with closure source text: write source directly.
-                    // This is the only inspect-specific special case in template expansion.
                     let is_closure = matches!(
                         tt.borrow().get(inner_type).clone(),
                         ResolvedType::Function { .. }
                     );
                     if is_closure
-                        && format_spec.as_ref().is_some_and(|fs| fs.alternate)
+                        && is_alternate
                         && let Some(text) = closure_source_text(&resolved, cs)
                     {
                         stmts.push(write_str_stmt(&text, fmt_mut_ref, tt, span));
+                    } else if is_alternate {
+                        // {:#?} → InspectAlt::inspect_alt
+                        let call_stmts = trait_fmt_call(
+                            resolved.type_id,
+                            resolved,
+                            fmt_mut_ref,
+                            "InspectAlt",
+                            "inspect_alt",
+                            tt,
+                            span,
+                        );
+                        stmts.extend(call_stmts);
                     } else {
-                        // All types go through trait_fmt_call, which handles
-                        // refs, tuples, closures, and named types uniformly.
+                        // {:?} → Inspect::inspect
                         let call_stmts = trait_fmt_call(
                             resolved.type_id,
                             resolved,
@@ -595,13 +613,13 @@ fn build_template_block(
                         stmts.extend(call_stmts);
                     }
                 } else {
-                    // Display::fmt (or other format trait).
+                    // Display/DisplayAlt/Binary/BinaryAlt/etc.
                     let call_stmts = trait_fmt_call(
                         inner_type,
                         resolved,
                         fmt_mut_ref,
                         trait_name,
-                        "fmt",
+                        method_name,
                         tt,
                         span,
                     );
@@ -669,7 +687,6 @@ fn build_formatter_expr(
         p.fill.is_some()
             || p.align.is_some()
             || p.sign_plus
-            || p.alternate
             || p.zero_pad
             || p.width.is_some()
             || p.precision.is_some()
@@ -746,22 +763,13 @@ fn build_formatter_expr(
                     field_index: 2,
                 },
                 TirStructField {
-                    name: "alternate".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::BoolLiteral(pf.alternate),
-                        TypeTable::BOOL,
-                        span,
-                    ),
-                    field_index: 3,
-                },
-                TirStructField {
                     name: "zero_pad".to_string(),
                     value: TirExpr::new(
                         TirExprKind::BoolLiteral(pf.zero_pad),
                         TypeTable::BOOL,
                         span,
                     ),
-                    field_index: 4,
+                    field_index: 3,
                 },
                 TirStructField {
                     name: "width".to_string(),
@@ -773,7 +781,7 @@ fn build_formatter_expr(
                         TypeTable::I32,
                         span,
                     ),
-                    field_index: 5,
+                    field_index: 4,
                 },
                 TirStructField {
                     name: "precision".to_string(),
@@ -781,6 +789,18 @@ fn build_formatter_expr(
                         TirExprKind::IntLiteral {
                             value: pf.precision.unwrap_or(-1).cast_unsigned(),
                             repr: pf.precision.unwrap_or(-1).to_string(),
+                        },
+                        TypeTable::I32,
+                        span,
+                    ),
+                    field_index: 5,
+                },
+                TirStructField {
+                    name: "indent".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: 0,
+                            repr: "0".to_string(),
                         },
                         TypeTable::I32,
                         span,
