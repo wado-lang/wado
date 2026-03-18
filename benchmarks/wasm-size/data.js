@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773843497859,
+  "lastUpdate": 1773868351205,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4157,6 +4157,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ec4024cd57fd43eace1bcec53831c5c7db5d5be3"
         },
         "date": 1773843497650,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "34437b753255fade7b028560cf980f2911abb1fd",
+          "message": "Merge pull request #606 from wado-lang/claude/refactor-wir-optimize-UWxzV\n\nRefactor WIR optimization passes into separate modules",
+          "timestamp": "2026-03-19T06:10:03+09:00",
+          "tree_id": "5ec71782a1128df453f413a5715e7c1674e51c2e",
+          "url": "https://github.com/wado-lang/wado/commit/34437b753255fade7b028560cf980f2911abb1fd"
+        },
+        "date": 1773868350997,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
