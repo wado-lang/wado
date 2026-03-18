@@ -5,13 +5,13 @@
 use crate::ast::{
     AssertStmt, AssignExpr, AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr,
     CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt,
-    ForStmt, Function, FunctionType, GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes,
-    IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
-    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
-    StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr,
-    TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
-    UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl,
+    ConditionElement, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt,
+    FieldAccessExpr, ForOfStmt, ForStmt, Function, FunctionType, GlobalDecl, IfExpr, IfStmt,
+    ImplBlock, ImportAttributes, IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt,
+    MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt,
+    SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
+    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl,
+    UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::hashmap::IndexSet;
@@ -1268,25 +1268,6 @@ impl<'a> Unparser<'a> {
     fn unparse_if_stmt(&mut self, i: &IfStmt) {
         self.write_indent();
         self.output.push_str("if ");
-
-        // Handle optional init binding
-        if let Some(init) = &i.init {
-            self.output.push_str("let ");
-            if init.is_mut {
-                self.output.push_str("mut ");
-            }
-            self.unparse_let_pattern(&init.pattern);
-            if let Some(ty) = &init.ty {
-                self.output.push_str(": ");
-                self.unparse_type(ty);
-            }
-            if let Some(ref v) = init.value {
-                self.output.push_str(" = ");
-                self.unparse_expr(v);
-            }
-            self.output.push_str("; ");
-        }
-
         self.unparse_condition(&i.condition);
         self.output.push_str(" {\n");
 
@@ -1321,25 +1302,6 @@ impl<'a> Unparser<'a> {
     /// This skips the initial indent and final newline since they're handled by the parent.
     fn unparse_if_stmt_continuation(&mut self, i: &IfStmt) {
         self.output.push_str("if ");
-
-        // Handle optional init binding
-        if let Some(init) = &i.init {
-            self.output.push_str("let ");
-            if init.is_mut {
-                self.output.push_str("mut ");
-            }
-            self.unparse_let_pattern(&init.pattern);
-            if let Some(ty) = &init.ty {
-                self.output.push_str(": ");
-                self.unparse_type(ty);
-            }
-            if let Some(ref v) = init.value {
-                self.output.push_str(" = ");
-                self.unparse_expr(v);
-            }
-            self.output.push_str("; ");
-        }
-
         self.unparse_condition(&i.condition);
         self.output.push_str(" {\n");
 
@@ -1375,11 +1337,23 @@ impl<'a> Unparser<'a> {
             Condition::Expr(expr) => {
                 self.unparse_expr(expr);
             }
-            Condition::Pattern { pattern, expr, .. } => {
-                self.output.push_str("let ");
-                self.unparse_pattern(pattern);
-                self.output.push_str(" = ");
-                self.unparse_expr(expr);
+            Condition::LetChain { elements, .. } => {
+                for (i, elem) in elements.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(" && ");
+                    }
+                    match elem {
+                        ConditionElement::Let { pattern, expr, .. } => {
+                            self.output.push_str("let ");
+                            self.unparse_pattern(pattern);
+                            self.output.push_str(" = ");
+                            self.unparse_expr(expr);
+                        }
+                        ConditionElement::Expr(expr) => {
+                            self.unparse_expr(expr);
+                        }
+                    }
+                }
             }
         }
     }
@@ -1974,9 +1948,9 @@ impl<'a> Unparser<'a> {
     /// Try to format an if expression on a single line.
     /// Returns true if successful, false if it should fall back to multiline.
     fn try_inline_if_expr(&mut self, i: &IfExpr) -> bool {
-        // Only eligible when: no init, else exists, both arms are single expressions,
+        // Only eligible when: plain condition, else exists, both arms are single expressions,
         // and neither expression is a compound construct
-        if i.init.is_some() {
+        if matches!(i.condition, Condition::LetChain { .. }) {
             return false;
         }
         let Some(else_block) = &i.else_block else {
@@ -2022,25 +1996,6 @@ impl<'a> Unparser<'a> {
 
     fn unparse_if_expr_multiline(&mut self, i: &IfExpr) {
         self.output.push_str("if ");
-
-        // Handle optional init binding
-        if let Some(init) = &i.init {
-            self.output.push_str("let ");
-            if init.is_mut {
-                self.output.push_str("mut ");
-            }
-            self.unparse_let_pattern(&init.pattern);
-            if let Some(ty) = &init.ty {
-                self.output.push_str(": ");
-                self.unparse_type(ty);
-            }
-            if let Some(ref v) = init.value {
-                self.output.push_str(" = ");
-                self.unparse_expr(v);
-            }
-            self.output.push_str("; ");
-        }
-
         self.unparse_condition(&i.condition);
         self.output.push_str(" {\n");
 
@@ -3125,11 +3080,23 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
 fn unparse_condition_into(cond: &Condition, output: &mut String) {
     match cond {
         Condition::Expr(e) => unparse_expr_into(e, output, false),
-        Condition::Pattern { pattern, expr, .. } => {
-            output.push_str("let ");
-            unparse_pattern_into(pattern, output);
-            output.push_str(" = ");
-            unparse_expr_into(expr, output, false);
+        Condition::LetChain { elements, .. } => {
+            for (i, elem) in elements.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(" && ");
+                }
+                match elem {
+                    ConditionElement::Let { pattern, expr, .. } => {
+                        output.push_str("let ");
+                        unparse_pattern_into(pattern, output);
+                        output.push_str(" = ");
+                        unparse_expr_into(expr, output, false);
+                    }
+                    ConditionElement::Expr(expr) => {
+                        unparse_expr_into(expr, output, false);
+                    }
+                }
+            }
         }
     }
 }
@@ -3204,22 +3171,6 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
 
 fn unparse_if_expr_into(i: &IfExpr, output: &mut String) {
     output.push_str("if ");
-    if let Some(init) = &i.init {
-        output.push_str("let ");
-        if init.is_mut {
-            output.push_str("mut ");
-        }
-        unparse_pattern_into(&init.pattern, output);
-        if let Some(ty) = &init.ty {
-            output.push_str(": ");
-            unparse_type_into(ty, output);
-        }
-        if let Some(ref v) = init.value {
-            output.push_str(" = ");
-            unparse_expr_into(v, output, false);
-        }
-        output.push_str("; ");
-    }
     unparse_condition_into(&i.condition, output);
     output.push(' ');
     unparse_block_expr_into(&i.then_block, output);

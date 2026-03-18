@@ -1,12 +1,14 @@
-// If-let-init scope test: variable should not be visible after if statement
+// if-let chain scope test: binding is not visible outside the if block
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    if let x = 10; x > 5 {
+    if let x = 10 && x > 5 {
         println(`{x}`);
     }
     println(`{x}`);
 }
 
 __DATA__
-{"compile_error": "not in scope"}
+{
+    "compile_error": "not in scope"
+}

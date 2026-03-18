@@ -1,0 +1,23 @@
+// while let chains with && guard
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // while let with guard — exits when guard fails (x >= 5)
+    let arr: Array<i32> = [1, 2, 3, 8, 9];
+    let mut iter = arr.iter();
+    while let Some(x) = iter.next() && x < 5 {
+        println(`{x}`);
+    }
+
+    // Simple while let (no guard) still works
+    let arr2: Array<i32> = [10, 20, 30];
+    let mut iter2 = arr2.iter();
+    while let Some(v) = iter2.next() {
+        println(`{v}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "1\n2\n3\n10\n20\n30\n"
+}

@@ -3,23 +3,24 @@ use { println, Stdout } from "core:cli";
 
 // from if_let_init_basic.wado
 fn if_let_init_basic() with Stdout {
-    if let x = 10; x > 5 {
+    if let x = 10 && x > 5 {
         println(`x = {x}`);
     }
 }
 
-// from if_let_init_else.wado
+// binding is not visible in else block; save value before if-let
 fn if_let_init_else() with Stdout {
-    if let x = 3; x > 5 {
+    let val = 3;
+    if let x = val && x > 5 {
         println("big");
     } else {
-        println(`small: {x}`);
+        println(`small: {val}`);
     }
 }
 
 // from if_let_init_mutable.wado
 fn if_let_init_mutable() with Stdout {
-    if let mut x = 5; x > 0 {
+    if let mut x = 5 && x > 0 {
         x = x + 1;
         println(`{x}`);
     }
@@ -32,4 +33,6 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "x = 10\nsmall: 3\n6\n"}
+{
+    "stdout": "x = 10\nsmall: 3\n6\n"
+}

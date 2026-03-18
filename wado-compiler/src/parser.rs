@@ -5,8 +5,8 @@ use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AttrArg,
     Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison,
     ClosureExpr, ClosureParam, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
-    Condition, ContinueStmt, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
+    Condition, ConditionElement, ContinueStmt, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr,
+    ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
     FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
     IndexExpr, InnerAttribute, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
     MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
@@ -1183,38 +1183,12 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::If)?;
 
-        let mut init = None;
-        let condition;
-
-        // Check for if-let: either Rust-style pattern matching or Go-style init
-        if self.check(&TokenKind::Let) {
+        let condition = if self.check(&TokenKind::Let) {
             self.advance(); // consume 'let'
-
-            // Check if this is Rust-style pattern matching (uppercase identifier = pattern start)
-            if self.is_variant_pattern_start() {
-                // Rust-style: `if let Some(x) = expr { ... }` or `if let None = expr { ... }`
-                let pattern_span = self.peek().span;
-                let pattern = self.parse_pattern()?;
-                self.expect(&TokenKind::Eq)?;
-                let expr = self.parse_expr_no_struct_literal()?;
-                let span = pattern_span.merge(&expr.span());
-                condition = Condition::Pattern {
-                    pattern,
-                    expr,
-                    span,
-                };
-            } else {
-                // Go-style: `if let x = expr; condition { ... }`
-                // We already consumed 'let', need to parse variable declaration
-                let let_stmt = self.parse_let_stmt_after_let()?;
-                self.expect(&TokenKind::Semicolon)?;
-                init = Some(Box::new(let_stmt));
-                condition = Condition::Expr(self.parse_expr_no_struct_literal()?);
-            }
+            self.parse_let_chain(start_span)?
         } else {
-            // No 'let', just a regular condition expression
-            condition = Condition::Expr(self.parse_expr_no_struct_literal()?);
-        }
+            self.parse_condition_with_optional_let_chain(start_span)?
+        };
 
         let then_block = self.parse_block()?;
 
@@ -1242,7 +1216,6 @@ impl Parser {
         let span = start_span.merge(end_span);
 
         Ok(Stmt::If(IfStmt {
-            init,
             condition,
             then_block,
             else_block,
@@ -1250,104 +1223,171 @@ impl Parser {
         }))
     }
 
-    /// Check if the next tokens look like a pattern start (variant or struct).
-    /// Detects patterns by presence of parentheses/braces after identifier: `Some(`, `Point {`.
-    /// Also detects unnamed struct patterns starting with `{`.
-    /// Note: Unit variants like `None` are detected by uppercase first letter convention.
-    fn is_variant_pattern_start(&self) -> bool {
-        // Unnamed struct pattern: `{ x, y } = expr`
-        if matches!(self.peek_kind(), TokenKind::LBrace) {
-            return true;
-        }
-        // Tuple pattern: `[a, b] = expr`
-        if matches!(self.peek_kind(), TokenKind::LBracket) {
-            return true;
-        }
-        if let TokenKind::Ident(name) = self.peek_kind() {
-            let next = self.peek_nth(1);
-            // Check if identifier is followed by `(` (variant with payload like `Some(x)`)
-            if matches!(next.kind, TokenKind::LParen) {
-                return true;
+    /// Returns true if the token stream starting at the current position contains
+    /// a `&&` followed immediately by `let` at depth 0 (outside parentheses/brackets).
+    /// Used to decide whether to parse the if/while condition as a let chain.
+    fn condition_has_and_let(&self) -> bool {
+        let mut i = self.pos;
+        let mut depth = 0usize;
+        while i < self.tokens.len() {
+            match &self.tokens[i].kind {
+                TokenKind::LParen | TokenKind::LBracket => depth += 1,
+                TokenKind::RParen | TokenKind::RBracket => depth = depth.saturating_sub(1),
+                // Opening `{` at depth 0 is the then-block — stop scanning
+                TokenKind::LBrace if depth == 0 => break,
+                TokenKind::Eof => break,
+                TokenKind::And if depth == 0 => {
+                    let next = i + 1;
+                    if next < self.tokens.len() && self.tokens[next].kind == TokenKind::Let {
+                        return true;
+                    }
+                }
+                _ => {}
             }
-            // Check if identifier is followed by `{` (named struct pattern like `Point { x, y }`)
-            if matches!(next.kind, TokenKind::LBrace)
-                && name.chars().next().is_some_and(char::is_uppercase)
-            {
-                return true;
-            }
-            // For unit variants like `None`, check if identifier starts with uppercase
-            // and is followed by `=` (to distinguish from Go-style `let x = value`)
-            if matches!(next.kind, TokenKind::Eq)
-                && let Some(first_char) = name.chars().next()
-            {
-                return first_char.is_uppercase();
-            }
-            false
-        } else {
-            false
+            i += 1;
         }
+        false
     }
 
-    /// Parse the rest of a let statement after the 'let' keyword has been consumed
-    fn parse_let_stmt_after_let(&mut self) -> ParseResult<LetStmt> {
-        let start_span = self.peek().span;
+    /// Parse an if/while condition that may or may not contain a let chain.
+    /// Only enters let-chain mode when `&&` + `let` is detected ahead.
+    /// Otherwise falls back to the normal expression parser.
+    fn parse_condition_with_optional_let_chain(
+        &mut self,
+        start_span: Span,
+    ) -> ParseResult<Condition> {
+        if !self.condition_has_and_let() {
+            // No `&& let` in the condition — parse as a regular expression
+            return Ok(Condition::Expr(self.parse_expr_no_struct_literal()?));
+        }
 
-        let is_mut = if self.check(&TokenKind::Mut) {
-            self.advance();
-            true
-        } else {
-            false
-        };
+        // Condition contains `&& let` — parse as a let chain.
+        // The leading elements before any `let` are bool expressions.
+        let mut elements = Vec::new();
 
-        let pattern = self.parse_pattern()?;
+        loop {
+            if self.check(&TokenKind::Let) {
+                self.advance();
+                let elem_span = self.peek().span;
+                let pattern = self.parse_pattern()?;
+                self.expect(&TokenKind::Eq)?;
+                let expr = self.parse_chain_element_expr()?;
+                let span = elem_span.merge(&expr.span());
+                elements.push(ConditionElement::Let {
+                    pattern,
+                    expr,
+                    span,
+                });
+            } else {
+                elements.push(ConditionElement::Expr(self.parse_chain_element_expr()?));
+            }
 
-        let ty = if self.check(&TokenKind::Colon) {
-            self.advance();
-            Some(self.parse_type()?)
-        } else {
-            None
-        };
+            if !self.check(&TokenKind::And) {
+                break;
+            }
+            self.advance(); // consume &&
+        }
 
-        self.expect(&TokenKind::Eq)?;
-        let value = self.parse_expr()?;
-        let end_span = value.span();
-
-        Ok(LetStmt {
-            pattern,
-            is_mut,
-            is_reactive: false,
-            ty,
-            value: Some(value),
+        let end_span = elements
+            .last()
+            .map(|e| match e {
+                ConditionElement::Let { span, .. } => *span,
+                ConditionElement::Expr(e) => e.span(),
+            })
+            .unwrap_or(start_span);
+        Ok(Condition::LetChain {
+            elements,
             span: start_span.merge(&end_span),
         })
+    }
+
+    /// Parse a let-chain condition (after 'let' has been consumed).
+    /// Handles `if let PAT = EXPR && GUARD && let PAT2 = EXPR2 { ... }`.
+    /// In chain context, `&&` is always a chain separator (not logical and).
+    /// To use `&&` inside an expression, wrap it in parentheses.
+    fn parse_let_chain(&mut self, start_span: Span) -> ParseResult<Condition> {
+        let mut elements = Vec::new();
+
+        // Parse first let element
+        let elem_span = self.peek().span;
+        let pattern = self.parse_pattern()?;
+        self.expect(&TokenKind::Eq)?;
+        let expr = self.parse_chain_element_expr()?;
+        let span = elem_span.merge(&expr.span());
+        elements.push(ConditionElement::Let {
+            pattern,
+            expr,
+            span,
+        });
+
+        // Parse subsequent chain elements separated by &&
+        while self.check(&TokenKind::And) {
+            self.advance(); // consume &&
+            if self.check(&TokenKind::Let) {
+                self.advance(); // consume 'let'
+                let elem_span = self.peek().span;
+                let pattern = self.parse_pattern()?;
+                self.expect(&TokenKind::Eq)?;
+                let expr = self.parse_chain_element_expr()?;
+                let span = elem_span.merge(&expr.span());
+                elements.push(ConditionElement::Let {
+                    pattern,
+                    expr,
+                    span,
+                });
+            } else {
+                elements.push(ConditionElement::Expr(self.parse_chain_element_expr()?));
+            }
+        }
+
+        let end_span = elements
+            .last()
+            .map(|e| match e {
+                ConditionElement::Let { span, .. } => *span,
+                ConditionElement::Expr(e) => e.span(),
+            })
+            .unwrap_or(start_span);
+
+        Ok(Condition::LetChain {
+            elements,
+            span: start_span.merge(&end_span),
+        })
+    }
+
+    /// Parse a chain element expression: like `parse_or_expr` but without `&&` handling.
+    /// In a let-chain, `&&` is a chain separator, not a logical-and operator.
+    /// To use `&&` inside a chain expression, wrap it in parentheses.
+    /// Struct literals are suppressed so that `{` is recognized as the then-block.
+    fn parse_chain_element_expr(&mut self) -> ParseResult<Expr> {
+        let saved = self.restrict_struct_literals;
+        self.restrict_struct_literals = true;
+
+        let mut left = self.parse_comparison_expr()?;
+
+        while self.check(&TokenKind::Or) {
+            let left_span = left.span();
+            self.advance();
+            let right = self.parse_comparison_expr()?;
+            let merged_span = left_span.merge(&right.span());
+            left = Expr::Binary(Box::new(BinaryExpr {
+                left,
+                op: BinaryOp::Or,
+                right,
+                span: merged_span,
+            }));
+        }
+
+        self.restrict_struct_literals = saved;
+        Ok(left)
     }
 
     fn parse_while_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::While)?;
 
-        // Check for while-let: `while let Some(x) = expr { ... }`
         let condition = if self.check(&TokenKind::Let) {
             self.advance(); // consume 'let'
-
-            if self.is_variant_pattern_start() {
-                // Rust-style: `while let Some(x) = expr { ... }`
-                let pattern_span = self.peek().span;
-                let pattern = self.parse_pattern()?;
-                self.expect(&TokenKind::Eq)?;
-                let expr = self.parse_expr_no_struct_literal()?;
-                let span = pattern_span.merge(&expr.span());
-                Condition::Pattern {
-                    pattern,
-                    expr,
-                    span,
-                }
-            } else {
-                return Err(ParseError {
-                    message: "expected pattern after 'while let'".to_string(),
-                    span: self.peek().span,
-                });
-            }
+            self.parse_let_chain(start_span)?
         } else {
             Condition::Expr(self.parse_expr_no_struct_literal()?)
         };
@@ -1430,25 +1470,9 @@ impl Parser {
         let condition = if self.check(&TokenKind::Semicolon) {
             None
         } else if self.check(&TokenKind::Let) {
-            // Pattern condition: `let Some(x) = iter.next()`
+            let let_span = self.peek().span;
             self.advance(); // consume 'let'
-            if self.is_variant_pattern_start() {
-                let pattern_span = self.peek().span;
-                let pattern = self.parse_pattern()?;
-                self.expect(&TokenKind::Eq)?;
-                let expr = self.parse_expr_no_struct_literal()?;
-                let span = pattern_span.merge(&expr.span());
-                Some(Condition::Pattern {
-                    pattern,
-                    expr,
-                    span,
-                })
-            } else {
-                return Err(ParseError {
-                    message: "expected pattern after 'let' in for condition".to_string(),
-                    span: self.peek().span,
-                });
-            }
+            Some(self.parse_let_chain(let_span)?)
         } else {
             Some(Condition::Expr(self.parse_expr_no_struct_literal()?))
         };
@@ -1631,6 +1655,30 @@ impl Parser {
                         span: start_span,
                     })
                 }
+            } else if self.check(&TokenKind::LParen) {
+                // Lowercase variant case with payload: just(n), nothing(...)
+                self.advance(); // consume (
+                let mut bindings = Vec::new();
+                if !self.check(&TokenKind::RParen) {
+                    bindings.push(self.parse_pattern()?);
+                    while self.check(&TokenKind::Comma) {
+                        self.advance();
+                        if self.check(&TokenKind::RParen) {
+                            break;
+                        }
+                        bindings.push(self.parse_pattern()?);
+                    }
+                }
+                let end_span = self.peek().span;
+                self.expect(&TokenKind::RParen)?;
+                Ok(Pattern::Variant {
+                    variant_name: name,
+                    bindings,
+                    span: start_span.merge(&end_span),
+                })
+            } else if self.check(&TokenKind::LBrace) {
+                // Named struct pattern with lowercase type: point { x, y }
+                self.parse_struct_pattern_fields(Some(name))
             } else {
                 Ok(Pattern::Ident(name))
             }
@@ -2656,38 +2704,12 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::If)?;
 
-        let mut init = None;
-        let condition;
-
-        // Check for if-let: either Rust-style pattern matching or Go-style init
-        if self.check(&TokenKind::Let) {
+        let condition = if self.check(&TokenKind::Let) {
             self.advance(); // consume 'let'
-
-            // Check if this is Rust-style pattern matching (uppercase identifier = pattern start)
-            if self.is_variant_pattern_start() {
-                // Rust-style: `if let Some(x) = expr { ... }` or `if let None = expr { ... }`
-                let pattern_span = self.peek().span;
-                let pattern = self.parse_pattern()?;
-                self.expect(&TokenKind::Eq)?;
-                let expr = self.parse_expr_no_struct_literal()?;
-                let span = pattern_span.merge(&expr.span());
-                condition = Condition::Pattern {
-                    pattern,
-                    expr,
-                    span,
-                };
-            } else {
-                // Go-style: `if let x = expr; condition { ... }`
-                // We already consumed 'let', need to parse variable declaration
-                let let_stmt = self.parse_let_stmt_after_let()?;
-                self.expect(&TokenKind::Semicolon)?;
-                init = Some(Box::new(let_stmt));
-                condition = Condition::Expr(self.parse_expr_no_struct_literal()?);
-            }
+            self.parse_let_chain(start_span)?
         } else {
-            // No 'let', just a regular condition expression
-            condition = Condition::Expr(self.parse_expr_no_struct_literal()?);
-        }
+            self.parse_condition_with_optional_let_chain(start_span)?
+        };
 
         let then_block = self.parse_block()?;
 
@@ -2715,7 +2737,6 @@ impl Parser {
         let span = start_span.merge(end_span);
 
         Ok(Expr::If(Box::new(IfExpr {
-            init,
             condition,
             then_block,
             else_block,
