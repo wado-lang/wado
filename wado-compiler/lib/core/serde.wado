@@ -507,24 +507,43 @@ impl<T: Deserialize> Deserialize for Array<T> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Array<T>, DeserializeError> {
         let seq_result = d.begin_seq();
         if let Ok(mut seq) = seq_result {
-            let mut items: Array<T> = [];
-            loop {
-                let next = seq.next_element::<T>();
-                if let Ok(opt) = next {
-                    if let Some(item) = opt {
-                        items.append(item);
-                    } else {
-                        let end_result = seq.end();
-                        if let Err(e) = end_result {
+            // Peek at the first element before allocating backing storage.
+            // Empty arrays (very common in practice) avoid any capacity allocation.
+            // Non-empty arrays start at capacity 4, covering 1–4 elements without a grow.
+            let first = seq.next_element::<T>();
+            if let Ok(first_opt) = first {
+                if let Some(first_elem) = first_opt {
+                    let mut items = Array::<T>::with_capacity(2);
+                    items.append(first_elem);
+                    loop {
+                        let next = seq.next_element::<T>();
+                        if let Ok(next_opt) = next {
+                            if let Some(item) = next_opt {
+                                items.append(item);
+                            } else {
+                                let end_result = seq.end();
+                                if let Err(e) = end_result {
+                                    return Result::<Array<T>, DeserializeError>::Err(e);
+                                }
+                                return Result::<Array<T>, DeserializeError>::Ok(items);
+                            }
+                        }
+                        if let Err(e) = next {
                             return Result::<Array<T>, DeserializeError>::Err(e);
                         }
-                        return Result::<Array<T>, DeserializeError>::Ok(items);
                     }
-                }
-                if let Err(e) = next {
-                    return Result::<Array<T>, DeserializeError>::Err(e);
+                } else {
+                    let end_result = seq.end();
+                    if let Err(e) = end_result {
+                        return Result::<Array<T>, DeserializeError>::Err(e);
+                    }
+                    return Result::<Array<T>, DeserializeError>::Ok([] as Array<T>);
                 }
             }
+            if let Err(e) = first {
+                return Result::<Array<T>, DeserializeError>::Err(e);
+            }
+            unreachable();
         }
         if let Err(e) = seq_result {
             return Result::<Array<T>, DeserializeError>::Err(e);
