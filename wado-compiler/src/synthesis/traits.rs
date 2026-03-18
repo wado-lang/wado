@@ -2321,14 +2321,14 @@ fn build_variant_inspect_alt_body(
                 span,
             ));
         } else {
-            // f.write_str("VariantName::CaseName"); f.open_paren();
-            then_stmts.push(write_str_stmt(
-                format!("{variant_name}::{case_name}"),
+            // f.open_brace("VariantName::CaseName(")
+            then_stmts.push(formatter_call(
+                "open_brace",
                 fmt_local(),
+                format!("{variant_name}::{case_name}("),
                 string_type,
                 span,
             ));
-            then_stmts.push(formatter_call_no_arg("open_paren", fmt_local(), span));
             // f.write_newline_indent()
             then_stmts.push(formatter_call_no_arg("write_newline_indent", fmt_local(), span));
             let payload = TirExpr::new(
@@ -2349,8 +2349,8 @@ fn build_variant_inspect_alt_body(
                 span,
             ));
             then_stmts.push(write_str_stmt(",", fmt_local(), string_type, span));
-            // f.close_paren()
-            then_stmts.push(formatter_call_no_arg("close_paren", fmt_local(), span));
+            // f.close_brace(")")
+            then_stmts.push(formatter_call("close_brace", fmt_local(), ")", string_type, span));
         }
 
         let cond = TirExpr::new(
@@ -2404,7 +2404,7 @@ fn generate_tuple_inspect_alt_fn(
     let fmt = || local_expr(1, "f", fmt_type, span);
 
     let mut stmts = Vec::new();
-    stmts.push(formatter_call_no_arg("open_bracket", fmt(), span));
+    stmts.push(formatter_call("open_brace", fmt(), "[", string_type, span));
     for (i, elem_type) in elements.iter().enumerate() {
         stmts.push(formatter_call_no_arg("write_newline_indent", fmt(), span));
         stmts.push(inspect_alt_call(
@@ -2417,7 +2417,7 @@ fn generate_tuple_inspect_alt_fn(
         ));
         stmts.push(write_str_stmt(",", fmt(), string_type, span));
     }
-    stmts.push(formatter_call_no_arg("close_bracket", fmt(), span));
+    stmts.push(formatter_call("close_brace", fmt(), "]", string_type, span));
 
     make_synthetic_method(
         qualified_name,

@@ -264,44 +264,16 @@ impl Formatter {
     }
 
     /// Open a pretty-printed brace: write opening delimiter, increase indent.
-    /// Used by InspectAlt synthesis for struct `{`, array `[`, variant `(`, etc.
     pub fn open_brace(&mut self, open: String) {
         self.write_str(open);
         self.indent += 1;
     }
 
     /// Close a pretty-printed brace: decrease indent, write newline+indent, write closing delimiter.
-    /// Used by InspectAlt synthesis for struct `}`, array `]`, variant `)`, etc.
     pub fn close_brace(&mut self, close: String) {
         self.indent -= 1;
         self.write_newline_indent();
         self.write_str(close);
-    }
-
-    /// Open a pretty-printed bracket: write `[`, increase indent.
-    pub fn open_bracket(&mut self) {
-        self.write_char('[');
-        self.indent += 1;
-    }
-
-    /// Close a pretty-printed bracket: decrease indent, write newline+indent, write `]`.
-    pub fn close_bracket(&mut self) {
-        self.indent -= 1;
-        self.write_newline_indent();
-        self.write_char(']');
-    }
-
-    /// Open a pretty-printed paren: write `(`, increase indent.
-    pub fn open_paren(&mut self) {
-        self.write_char('(');
-        self.indent += 1;
-    }
-
-    /// Close a pretty-printed paren: decrease indent, write newline+indent, write `)`.
-    pub fn close_paren(&mut self) {
-        self.indent -= 1;
-        self.write_newline_indent();
-        self.write_char(')');
     }
 }
 // Defined here (not in string.wado) to avoid string.wado depending on format.wado,
@@ -387,13 +359,13 @@ impl<T: InspectAlt> InspectAlt for Array<T> {
             f.write_str("[]");
             return;
         }
-        f.open_bracket();
+        f.open_brace("[");
         for let mut i = 0; i < self.len(); i += 1 {
             f.write_newline_indent();
             self[i].inspect_alt(f);
             f.write_char(',');
         }
-        f.close_bracket();
+        f.close_brace("]");
     }
 }
 
