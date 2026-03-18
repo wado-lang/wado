@@ -44,7 +44,7 @@ hello-run-wasmtime: hello
 .PHONY: test
 test:
 	touch wado-compiler/tests/e2e.rs
-	RUSTFLAGS="$(RUSTFLAGS)" RUST_TEST_THREADS=12 cargo test
+	RUSTFLAGS="$(RUSTFLAGS)" cargo test
 
 .PHONY: test-wado
 test-wado:
