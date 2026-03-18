@@ -418,6 +418,37 @@ pub async fn run(opts: DumpOptions) {
 /// stack overflow (SIGSEGV).
 const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
+/// Size of the alternate signal stack installed in each compiler thread (8 MB).
+///
+/// Without an alternate signal stack, a stack overflow in a spawned thread
+/// delivers SIGSEGV with no stack to run the signal handler on. The process
+/// then terminates silently — no panic message, no error output. Installing
+/// `sigaltstack` in each thread ensures the signal handler (and Rust's panic
+/// hook) can run even when the main stack is exhausted.
+#[cfg(unix)]
+const ALT_STACK_SIZE: usize = 8 * 1024 * 1024;
+
+/// Install an alternate signal stack for the current thread.
+///
+/// Must be called at the start of each spawned compiler thread so that
+/// SIGSEGV from stack overflow produces a proper panic message instead of
+/// silently killing the process.
+#[cfg(unix)]
+fn install_alt_stack() {
+    // Allocate and intentionally leak: the OS reclaims thread memory on exit.
+    let mem = vec![0u8; ALT_STACK_SIZE].into_boxed_slice();
+    let ptr = Box::into_raw(mem);
+    // SAFETY: ptr is a valid, exclusively-owned allocation of ALT_STACK_SIZE bytes.
+    unsafe {
+        let ss = libc::stack_t {
+            ss_sp: ptr.cast::<libc::c_void>(),
+            ss_flags: 0,
+            ss_size: ALT_STACK_SIZE,
+        };
+        libc::sigaltstack(&ss, std::ptr::null_mut());
+    }
+}
+
 /// Spawn a closure on a dedicated thread with a large stack, returning a
 /// oneshot receiver for the result.
 fn spawn_with_large_stack<F, T>(f: F) -> tokio::sync::oneshot::Receiver<T>
@@ -429,6 +460,8 @@ where
     std::thread::Builder::new()
         .stack_size(COMPILER_STACK_SIZE)
         .spawn(move || {
+            #[cfg(unix)]
+            install_alt_stack();
             let _ = tx.send(f());
         })
         .expect("failed to spawn compiler thread");
