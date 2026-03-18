@@ -435,109 +435,139 @@ where
     rx
 }
 
-/// Bulk file output mode - writes each input to a file based on template (sequential)
+/// Bulk file output mode - writes each input to a file based on template (parallel)
 ///
-/// Files are processed one at a time on a single large-stack thread to avoid
-/// stack overflow (SIGSEGV) from the recursive optimizer passes. Concurrent
-/// execution was found to be flaky: two 16 MB stacks + two compilation heaps
-/// running simultaneously caused intermittent SIGSEGV under memory pressure
-/// (e.g., after `cargo clippy` in `make on-task-done`).
+/// Each compilation runs on its own large-stack OS thread with an **isolated**
+/// `current_thread` tokio runtime. This avoids the subtle hazard of multiple
+/// OS threads calling `handle.block_on()` on the same shared multi-thread
+/// runtime handle simultaneously. Concurrency is capped at `parallelism` to
+/// bound peak memory and avoid SIGSEGV under memory pressure.
 async fn run_bulk(opts: &DumpOptions, template: &str) {
     let start = std::time::Instant::now();
 
-    let inputs = opts.inputs.clone();
-    let template = template.to_owned();
-    let show_tir = opts.show_tir;
-    let show_wir = opts.show_wir;
-    let opt_level = opts.opt_level;
-    let inline_threshold = opts.inline_threshold;
-    let opt_iterations = opts.opt_iterations;
-    let handle = tokio::runtime::Handle::current();
+    // Each compilation uses ~16 MB stack + significant heap. Cap at half the
+    // available CPUs (minimum 2) so peak memory stays predictable even right
+    // after a heavyweight `cargo clippy` run.
+    let parallelism = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(4)
+        / 2;
+    let parallelism = parallelism.max(2);
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(parallelism));
 
-    // Process all files sequentially on a single large-stack thread.
-    // The recursive optimizer passes need more stack than tokio worker threads
-    // provide (2 MB default). A single 16 MB thread eliminates concurrency as
-    // a source of flakiness while keeping peak memory predictable.
-    let rx = spawn_with_large_stack(move || {
-        let mut success_count = 0u32;
-        let mut skip_count = 0u32;
+    let mut skip_count_early = 0u32;
+    let mut tasks: Vec<tokio::task::JoinHandle<Result<String, String>>> = Vec::new();
 
-        for input in &inputs {
-            // Skip files with expected compilation failures: compile_error or TODO tests.
-            if let Ok(source) = fs::read_to_string(input) {
-                let data = source.find("\n__DATA__\n").map_or("", |p| &source[p..]);
-                if data.contains("\"TODO\"") || data.contains("\"compile_error\"") {
-                    let name = Path::new(input)
-                        .file_stem()
-                        .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
-                    let output_path = template.replace("{name}", name);
-                    let _ = fs::remove_file(&output_path);
-                    skip_count += 1;
-                    continue;
-                }
-            }
-
-            let path = Path::new(input);
-            let name = path.file_stem().map_or_else(
-                || "unknown".to_string(),
-                |s| s.to_string_lossy().into_owned(),
-            );
-            let output_path = template.replace("{name}", &name);
-
-            // Ensure parent directory exists.
-            if let Some(parent) = Path::new(&output_path).parent()
-                && !parent.as_os_str().is_empty()
-                && let Err(e) = fs::create_dir_all(parent)
-            {
-                panic!(
-                    "Failed to create directory {}: {e}",
-                    parent.display()
-                );
-            }
-
-            match handle.block_on(generate_output_params(
-                show_tir,
-                show_wir,
-                opt_level,
-                inline_threshold,
-                opt_iterations,
-                input,
-            )) {
-                Ok(content) => {
-                    if content.is_empty() {
-                        let _ = fs::remove_file(&output_path);
-                        // Empty output means the file compiled but produced nothing
-                        // (e.g., wir is absent). Skip silently.
-                    } else {
-                        match fs::write(&output_path, &content) {
-                            Ok(()) => {
-                                eprintln!("  Generated {output_path}");
-                                success_count += 1;
-                            }
-                            Err(e) => {
-                                panic!("Failed to write {output_path}: {e}");
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    let _ = fs::remove_file(&output_path);
-                    panic!(
-                        "Golden fixture generation failed: {e}\n\
-                         If this test is expected to fail at compile time, add \
-                         \"compile_error\" or \"TODO\" to its __DATA__ section."
-                    );
-                }
+    for input in &opts.inputs {
+        // Skip files with expected compilation failures: compile_error or TODO tests.
+        if let Ok(source) = fs::read_to_string(input) {
+            let data = source.find("\n__DATA__\n").map_or("", |p| &source[p..]);
+            if data.contains("\"TODO\"") || data.contains("\"compile_error\"") {
+                let name = Path::new(input)
+                    .file_stem()
+                    .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
+                let output_path = template.replace("{name}", name);
+                let _ = fs::remove_file(&output_path);
+                skip_count_early += 1;
+                continue;
             }
         }
 
-        (success_count, skip_count)
-    });
+        let input = input.clone();
+        let template = template.to_owned();
+        let show_tir = opts.show_tir;
+        let show_wir = opts.show_wir;
+        let opt_level = opts.opt_level;
+        let inline_threshold = opts.inline_threshold;
+        let opt_iterations = opts.opt_iterations;
+        let sem = semaphore.clone();
 
-    let (success_count, skip_count) = rx
-        .await
-        .unwrap_or_else(|_| panic!("Golden fixture generation thread panicked"));
+        tasks.push(tokio::spawn(async move {
+            // Acquire a permit to limit the number of concurrent compiler threads.
+            let _permit = sem.acquire().await.expect("semaphore closed");
 
+            let rx = spawn_with_large_stack(move || {
+                let path = Path::new(&input);
+                let name = path.file_stem().map_or_else(
+                    || "unknown".to_string(),
+                    |s| s.to_string_lossy().into_owned(),
+                );
+
+                let output_path = template.replace("{name}", &name);
+
+                // Ensure parent directory exists.
+                if let Some(parent) = Path::new(&output_path).parent()
+                    && !parent.as_os_str().is_empty()
+                    && let Err(e) = fs::create_dir_all(parent)
+                {
+                    return Err(format!(
+                        "Failed to create directory {}: {e}",
+                        parent.display()
+                    ));
+                }
+
+                // Build an isolated current_thread runtime for this compilation.
+                // Using a per-compilation runtime instead of block_on on the shared
+                // outer multi-thread handle keeps each compilation fully independent
+                // and avoids any subtle interaction between concurrent callers.
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("failed to build per-compilation tokio runtime");
+
+                match rt.block_on(generate_output_params(
+                    show_tir,
+                    show_wir,
+                    opt_level,
+                    inline_threshold,
+                    opt_iterations,
+                    &input,
+                )) {
+                    Ok(content) => {
+                        if content.is_empty() {
+                            let _ = fs::remove_file(&output_path);
+                            Err(format!("Empty output for {output_path} (skipping)"))
+                        } else {
+                            match fs::write(&output_path, content) {
+                                Ok(()) => Ok(output_path),
+                                Err(e) => Err(format!("Failed to write {output_path}: {e}")),
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = fs::remove_file(&output_path);
+                        Err(format!("Failed to generate {output_path}: {e}"))
+                    }
+                }
+            });
+
+            rx.await
+                .unwrap_or_else(|_| Err("compiler thread panicked".to_string()))
+        }));
+    }
+
+    let mut success_count = 0;
+
+    for task in tasks {
+        match task.await {
+            Ok(Ok(output_path)) => {
+                eprintln!("  Generated {output_path}");
+                success_count += 1;
+            }
+            Ok(Err(e)) => {
+                panic!(
+                    "Golden fixture generation failed: {e}\n\
+                     If this test is expected to fail at compile time, add \
+                     \"compile_error\" or \"TODO\" to its __DATA__ section."
+                );
+            }
+            Err(e) => {
+                panic!("Golden fixture generation task panicked: {e}");
+            }
+        }
+    }
+
+    let skip_count = skip_count_early;
     let elapsed = start.elapsed().as_secs_f64();
     eprintln!("Generated {success_count} files ({skip_count} skipped) in {elapsed:.2}s");
 }
