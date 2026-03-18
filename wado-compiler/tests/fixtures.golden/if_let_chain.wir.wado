@@ -30,16 +30,6 @@ struct Option<i32>::Some {
     payload_0: i32,
 }
 
-variant Option<Option<i32>> {
-    Some(ref Option<i32>),
-    None,
-}
-
-struct Option<Option<i32>>::Some {
-    discriminant: i32,
-    payload_0: ref Option<i32>,
-}
-
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -329,10 +319,10 @@ fn bool_then_let() with Stdout {
 }
 
 fn chained_lets_dependent() with Stdout {
-    let outer: ref Option<Option<i32>>;
+    let outer: ref null Option<i32>;
     let inner: ref Option<i32>;
     let n: i32;
-    let outer2: ref Option<Option<i32>>;
+    let outer2: ref null Option<i32>;
     let inner2: ref Option<i32>;
     let n2: i32;
     let __local_6: ref String;
@@ -343,9 +333,9 @@ fn chained_lets_dependent() with Stdout {
     let __local_17: ref Formatter;
     let __local_21: ref String;
     let __local_23: ref Formatter;
-    outer = Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32>::Some { discriminant: 0, payload_0: 99 } };
-    if ref.test Option<Option<i32>>::Some(outer) {
-        inner = value_copy Option<i32>(ref.cast Option<Option<i32>>::Some(outer).payload_0);
+    outer = Option<i32>::Some { discriminant: 0, payload_0: 99 };
+    if ref.is_null(outer) == 0 {
+        inner = value_copy Option<i32>(ref.as_non_null(outer));
         if ref.test Option<i32>::Some(inner) {
             n = ref.cast Option<i32>::Some(inner).payload_0;
             "core:cli/println"(__tmpl: block -> ref String {
@@ -368,9 +358,9 @@ fn chained_lets_dependent() with Stdout {
             });
         };
     };
-    outer2 = Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32> { 1 } };
-    if ref.test Option<Option<i32>>::Some(outer2) {
-        inner2 = value_copy Option<i32>(ref.cast Option<Option<i32>>::Some(outer2).payload_0);
+    outer2 = Option<i32> { 1 };
+    if ref.is_null(outer2) == 0 {
+        inner2 = value_copy Option<i32>(ref.as_non_null(outer2));
         if ref.test Option<i32>::Some(inner2) {
             n2 = ref.cast Option<i32>::Some(inner2).payload_0;
             "core:cli/println"(__tmpl: block -> ref String {
