@@ -610,7 +610,13 @@ fn validate_call_sites(
 
     for func in &module.functions {
         if let Some(body) = &func.body {
-            validate_call_sites_in_body(body, &candidate_ids, &variant_candidate_ids, &mut invalid);
+            validate_call_sites_in_body(
+                body,
+                body,
+                &candidate_ids,
+                &variant_candidate_ids,
+                &mut invalid,
+            );
         }
     }
 
@@ -638,8 +644,14 @@ fn validate_call_sites(
 }
 
 /// Validate call sites of candidate functions within a flat instruction list.
+///
+/// `root_body` is the top-level function body — used when checking that the temp local
+/// is only accessed via valid patterns across all scopes, not just the current scope.
+/// This prevents SROA when a call site is inside a nested block (If/Block) but the temp
+/// local is used in the outer scope in a non-StructGet context (e.g. `return temp`).
 fn validate_call_sites_in_body(
     instrs: &[WirInstr],
+    root_body: &[WirInstr],
     candidate_ids: &IndexSet<u32>,
     variant_candidate_ids: &IndexSet<u32>,
     invalid: &mut IndexSet<u32>,
@@ -648,7 +660,13 @@ fn validate_call_sites_in_body(
         // Recurse into nested statement-level blocks
         match instr {
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-                validate_call_sites_in_body(body, candidate_ids, variant_candidate_ids, invalid);
+                validate_call_sites_in_body(
+                    body,
+                    root_body,
+                    candidate_ids,
+                    variant_candidate_ids,
+                    invalid,
+                );
             }
             WirInstr::If {
                 condition,
@@ -660,16 +678,29 @@ fn validate_call_sites_in_body(
                 find_nested_candidate_calls(condition, candidate_ids, invalid);
                 validate_call_sites_in_body(
                     then_body,
+                    root_body,
                     candidate_ids,
                     variant_candidate_ids,
                     invalid,
                 );
                 if let Some(eb) = else_body {
-                    validate_call_sites_in_body(eb, candidate_ids, variant_candidate_ids, invalid);
+                    validate_call_sites_in_body(
+                        eb,
+                        root_body,
+                        candidate_ids,
+                        variant_candidate_ids,
+                        invalid,
+                    );
                 }
             }
             WirInstr::Seq(body) => {
-                validate_call_sites_in_body(body, candidate_ids, variant_candidate_ids, invalid);
+                validate_call_sites_in_body(
+                    body,
+                    root_body,
+                    candidate_ids,
+                    variant_candidate_ids,
+                    invalid,
+                );
             }
             // For non-block instructions, check for invalid call uses at this level
             _ => {
@@ -681,18 +712,19 @@ fn validate_call_sites_in_body(
     // Check that LocalSet(Call(candidate)) temps are only used via valid patterns.
     // For struct candidates: StructGet(LocalGet(temp))
     // For variant candidates: RefTest(LocalGet(temp)) or StructGet(RefCast(LocalGet(temp)))
+    // Use root_body (the full function body) to catch uses of the temp local in outer scopes.
     for instr in instrs {
         if let WirInstr::LocalSet { name, value } = instr
             && let Some(func_id_idx) = unwrap_to_candidate_call(value, candidate_ids)
         {
             if variant_candidate_ids.contains(&func_id_idx) {
                 // Variant candidate: uses must be RefTest or StructGet(RefCast(...))
-                if !all_uses_are_variant_access(instrs, name) {
+                if !all_uses_are_variant_access(root_body, name) {
                     invalid.insert(func_id_idx);
                 }
             } else {
                 // Struct candidate: uses must be StructGet
-                if !all_uses_are_struct_get(instrs, name) {
+                if !all_uses_are_struct_get(root_body, name) {
                     invalid.insert(func_id_idx);
                 }
             }

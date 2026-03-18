@@ -10,8 +10,8 @@ use crate::tir::{
     TypeId, TypeTable,
 };
 use crate::wir::{
-    CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirFuncId, WirInstr, WirName, WirType,
-    WirTypeDef, WirTypeId,
+    CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirAbstractHeapType, WirFuncId, WirInstr,
+    WirName, WirType, WirTypeDef, WirTypeId,
 };
 
 use super::context::WirContext;
@@ -636,12 +636,10 @@ impl FunctionTranslator<'_, '_> {
         use crate::wir::{WirCopyField, WirCopyType};
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, type_id);
         if let WirType::Ref {
-            type_id: wir_tid, ..
+            type_id: wir_tid,
+            nullable,
         } = wir_type
         {
-            // With SubtypeHierarchy, Option values are non-null refs (None is a valid struct)
-            // TODO: Future optimization: NullableRef Option would need nullable=true here
-            let nullable = false;
 
             // Variants use pass-through copy (immutable structs in the rec group)
             if self.ctx.is_variant_type(&wir_tid) {
@@ -5617,9 +5615,6 @@ impl FunctionTranslator<'_, '_> {
                     name: scrut_local.to_string(),
                 };
 
-                // Option is now handled as a regular variant (SubtypeHierarchy)
-                // TODO: Future optimization: NullableRef Option would use RefIsNull here
-
                 // Look up variant type info to find the case WirTypeId
                 let (var_name, var_module) = match self.type_table.get(scrut_type) {
                     ResolvedType::Variant {
@@ -5652,6 +5647,23 @@ impl FunctionTranslator<'_, '_> {
                     if let crate::wir::WirTypeDef::Variant(vt) =
                         &self.ctx.types[variant_type_id.index() as usize]
                     {
+                        // NullableRef: null = unit case, non-null = payload case
+                        if let crate::wir::WirVariantRepr::NullableRef { payload_case } = vt.repr {
+                            if let Some(case) =
+                                vt.cases.iter().find(|c| c.name == *variant_name)
+                            {
+                                return if case.index == payload_case {
+                                    // Payload case: non-null check
+                                    WirInstr::I32Eqz(Box::new(WirInstr::RefIsNull(
+                                        Box::new(scrut_get),
+                                    )))
+                                } else {
+                                    // Unit case: null check
+                                    WirInstr::RefIsNull(Box::new(scrut_get))
+                                };
+                            }
+                        }
+
                         if let Some(case) = vt.cases.iter().find(|c| c.name == *variant_name) {
                             if case.payload.is_empty() && bindings.is_empty() {
                                 // Unit variant: check discriminant
@@ -5784,9 +5796,6 @@ impl FunctionTranslator<'_, '_> {
                     return;
                 }
 
-                // Option is now handled as a regular variant (SubtypeHierarchy)
-                // TODO: Future optimization: NullableRef Option would extract from nullable ref
-
                 // Look up the variant type to find the case WirTypeId
                 let (var_name, var_module) = match self.type_table.get(*enum_type) {
                     ResolvedType::Variant {
@@ -5812,6 +5821,68 @@ impl FunctionTranslator<'_, '_> {
                     _ => return,
                 };
                 let fq = format!("{var_module}//{var_name}");
+
+                // NullableRef variant: the scrutinee IS the payload ref (nullable).
+                // Bind by casting to non-null (caller ensures we're in the non-null branch).
+                if let Some(variant_type_id) = self.ctx.type_map.get(&fq).cloned()
+                    && let crate::wir::WirTypeDef::Variant(vt) =
+                        &self.ctx.types[variant_type_id.index() as usize]
+                    && let crate::wir::WirVariantRepr::NullableRef { payload_case } = vt.repr
+                {
+                    if let Some(case) = vt.cases.iter().find(|c| c.name == *variant_name)
+                        && case.index == payload_case
+                        && bindings.len() == 1
+                    {
+                        let payload_type = vt.cases[payload_case as usize].payload[0].clone();
+                        let nn_val = WirInstr::RefAsNonNull(Box::new(WirInstr::LocalGet {
+                            name: scrut_local.to_string(),
+                        }));
+                        match &bindings[0] {
+                            TirPattern::Binding { local_index, .. } => {
+                                instrs.push(WirInstr::LocalSet {
+                                    name: self.local_name(*local_index),
+                                    value: Box::new(nn_val),
+                                });
+                            }
+                            TirPattern::Tuple(sub_patterns) => {
+                                // Payload is a tuple struct; extract each field.
+                                if let WirType::Ref { type_id: tuple_tid, .. } = payload_type {
+                                    self.local_counter += 1;
+                                    let tuple_local =
+                                        format!("__nn_payload_{}", self.local_counter);
+                                    instrs.push(WirInstr::DeclareLocal {
+                                        name: tuple_local.clone(),
+                                        ty: WirType::Ref {
+                                            type_id: tuple_tid.clone(),
+                                            nullable: false,
+                                        },
+                                    });
+                                    instrs.push(WirInstr::LocalSet {
+                                        name: tuple_local.clone(),
+                                        value: Box::new(nn_val),
+                                    });
+                                    for (i, sub) in sub_patterns.iter().enumerate() {
+                                        if let TirPattern::Binding { local_index, .. } = sub {
+                                            instrs.push(WirInstr::LocalSet {
+                                                name: self.local_name(*local_index),
+                                                value: Box::new(WirInstr::StructGet {
+                                                    type_id: tuple_tid.clone(),
+                                                    field_name: i.to_string(),
+                                                    expr: Box::new(WirInstr::LocalGet {
+                                                        name: tuple_local.clone(),
+                                                    }),
+                                                }),
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    return;
+                }
+
                 let case_fq = format!("{fq}::{variant_name}");
 
                 // Try to get the case type for ref.cast + struct.get
@@ -6133,11 +6204,28 @@ impl FunctionTranslator<'_, '_> {
             _ => return WirInstr::Unreachable,
         };
 
-        // Option is now handled as a regular variant (SubtypeHierarchy)
-        // TODO: Future optimization: NullableRef Option would pass-through/null here
-
-        // Look up case-specific struct type
+        // Check for NullableRef repr.
         let fq = format!("{variant_module_source}//{variant_name}");
+        if let Some(variant_type_id) = self.ctx.type_map.get(&fq).cloned()
+            && let crate::wir::WirTypeDef::Variant(vt) =
+                &self.ctx.types[variant_type_id.index() as usize]
+            && let crate::wir::WirVariantRepr::NullableRef { payload_case } = vt.repr
+        {
+            if case_index == payload_case {
+                // Payload case (Some/Ok): emit the payload expression directly.
+                if let Some(payload_expr) = payload {
+                    return self.translate_expr(payload_expr);
+                }
+                return WirInstr::Unreachable;
+            } else {
+                // Unit case (None/Err without payload): emit ref.null none.
+                return WirInstr::RefNull {
+                    heap_type: WirAbstractHeapType::None,
+                };
+            }
+        }
+
+        // Look up case-specific struct type (SubtypeHierarchy)
         let case_fq = format!("{fq}::{case_name}");
 
         if let Some(case_type_id) = self.ctx.type_map.get(&case_fq).cloned() {
@@ -6198,6 +6286,24 @@ impl FunctionTranslator<'_, '_> {
         };
 
         let fq = format!("{variant_module_source}//{variant_name}");
+
+        // Check for NullableRef repr.
+        if let Some(vt_id) = self.ctx.type_map.get(&fq).cloned()
+            && let crate::wir::WirTypeDef::Variant(vt) = &self.ctx.types[vt_id.index() as usize]
+            && let crate::wir::WirVariantRepr::NullableRef { payload_case } = vt.repr
+        {
+            if case_index == payload_case {
+                if let Some(payload_instr) = payload {
+                    return payload_instr;
+                }
+                return WirInstr::Unreachable;
+            } else {
+                return WirInstr::RefNull {
+                    heap_type: WirAbstractHeapType::None,
+                };
+            }
+        }
+
         let case_fq = format!("{fq}::{case_name}");
 
         if let Some(case_type_id) = self.ctx.type_map.get(&case_fq).cloned() {
@@ -6267,7 +6373,21 @@ impl FunctionTranslator<'_, '_> {
 
         let fq = format!("{var_module}//{var_name}");
 
-        // Check if this case has a payload
+        // Check for NullableRef repr.
+        if let Some(variant_type_id) = self.ctx.type_map.get(&fq)
+            && let crate::wir::WirTypeDef::Variant(vt) =
+                &self.ctx.types[variant_type_id.index() as usize]
+            && let crate::wir::WirVariantRepr::NullableRef { payload_case } = vt.repr
+        {
+            // unit case → ref.is_null; payload case → !ref.is_null
+            return if case_index == payload_case {
+                WirInstr::I32Eqz(Box::new(WirInstr::RefIsNull(Box::new(val))))
+            } else {
+                WirInstr::RefIsNull(Box::new(val))
+            };
+        }
+
+        // Check if this case has a payload (SubtypeHierarchy)
         if let Some(variant_type_id) = self.ctx.type_map.get(&fq)
             && let crate::wir::WirTypeDef::Variant(vt) =
                 &self.ctx.types[variant_type_id.index() as usize]
@@ -6346,25 +6466,31 @@ impl FunctionTranslator<'_, '_> {
 
         let fq = format!("{var_module}//{var_name}");
 
-        // Look up case info to get the case type
+        // Look up variant type info
         if let Some(variant_type_id) = self.ctx.type_map.get(&fq)
             && let crate::wir::WirTypeDef::Variant(vt) =
                 &self.ctx.types[variant_type_id.index() as usize]
-            && let Some(case) = vt.cases.get(case_index as usize)
         {
-            let case_fq = format!("{fq}::{}", case.name);
-            if let Some(case_type_id) = self.ctx.type_map.get(&case_fq) {
-                // ref.cast to case type, then struct.get field 1 (payload)
-                let cast = WirInstr::RefCast {
-                    type_id: case_type_id.clone(),
-                    nullable: false,
-                    expr: Box::new(val),
-                };
-                return WirInstr::StructGet {
-                    type_id: case_type_id.clone(),
-                    field_name: "payload_0".to_string(),
-                    expr: Box::new(cast),
-                };
+            // NullableRef: the value IS the payload (a nullable ref); make it non-null.
+            if matches!(vt.repr, crate::wir::WirVariantRepr::NullableRef { .. }) {
+                return WirInstr::RefAsNonNull(Box::new(val));
+            }
+
+            // SubtypeHierarchy: ref.cast + struct.get
+            if let Some(case) = vt.cases.get(case_index as usize) {
+                let case_fq = format!("{fq}::{}", case.name);
+                if let Some(case_type_id) = self.ctx.type_map.get(&case_fq) {
+                    let cast = WirInstr::RefCast {
+                        type_id: case_type_id.clone(),
+                        nullable: false,
+                        expr: Box::new(val),
+                    };
+                    return WirInstr::StructGet {
+                        type_id: case_type_id.clone(),
+                        field_name: "payload_0".to_string(),
+                        expr: Box::new(cast),
+                    };
+                }
             }
         }
 

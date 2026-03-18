@@ -654,15 +654,39 @@ pub struct WirField {
     pub mutable: bool,
 }
 
+/// Runtime representation of a variant type.
+#[derive(Debug, Clone, Default)]
+pub enum WirVariantRepr {
+    /// Subtype hierarchy: base struct with `discriminant: i32` + per-case subtypes.
+    /// This is the general-purpose representation used when no null niche is available.
+    #[default]
+    SubtypeHierarchy,
+    /// Nullable reference: the variant value IS the payload reference (or null for the unit case).
+    ///
+    /// Applicable when the variant has exactly 2 cases: one unit case (no payload) and one
+    /// payload case whose type is a non-nullable reference (struct, array, SubtypeHierarchy
+    /// variant, i128/u128). The unit case maps to `ref.null none`; the payload case is the
+    /// value itself. No Wasm types are emitted for the variant.
+    ///
+    /// Example: `Option<String>` → represented as `(ref null $String)`.
+    NullableRef {
+        /// Index (in `cases`) of the payload case (e.g. `Some`/`Ok`).
+        payload_case: u32,
+    },
+}
+
 /// A variant type (sum type with payloads).
 /// At the Wasm level, expands to a subtype hierarchy: a base struct with a
 /// `discriminant` field, and per-case subtypes that add payload fields.
+/// Unless `repr` is `NullableRef`, in which case no Wasm types are emitted.
 #[derive(Debug)]
 pub struct WirVariantType {
     /// Name (display: "Shape", fq: "./shapes.wado//Shape").
     pub name: WirName,
     /// Cases with names and optional payload types.
     pub cases: Vec<WirVariantCase>,
+    /// Runtime representation strategy.
+    pub repr: WirVariantRepr,
     /// Metadata (module source, span, attributes).
     pub meta: WirMeta,
     /// Generic instantiation origin (None for non-generic types).
