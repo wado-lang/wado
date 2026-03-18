@@ -445,7 +445,7 @@ fn install_alt_stack() {
             ss_flags: 0,
             ss_size: ALT_STACK_SIZE,
         };
-        libc::sigaltstack(&ss, std::ptr::null_mut());
+        libc::sigaltstack(&raw const ss, std::ptr::null_mut());
     }
 }
 
