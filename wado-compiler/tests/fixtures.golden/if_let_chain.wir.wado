@@ -30,6 +30,16 @@ struct Option<i32>::Some {
     payload_0: i32,
 }
 
+variant Option<Option<i32>> {
+    Some(ref Option<i32>),
+    None,
+}
+
+struct Option<Option<i32>>::Some {
+    discriminant: i32,
+    payload_0: ref Option<i32>,
+}
+
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -61,6 +71,10 @@ type "functype/chained_lets" = fn();
 type "functype/chain_with_guard" = fn();
 
 type "functype/bool_then_let" = fn();
+
+type "functype/chained_lets_dependent" = fn();
+
+type "functype/paren_logical_and" = fn();
 
 type "functype/run" = fn();
 
@@ -314,6 +328,103 @@ fn bool_then_let() with Stdout {
     };
 }
 
+fn chained_lets_dependent() with Stdout {
+    let outer: ref Option<Option<i32>>;
+    let inner: ref Option<i32>;
+    let n: i32;
+    let outer2: ref Option<Option<i32>>;
+    let inner2: ref Option<i32>;
+    let n2: i32;
+    let __local_6: ref String;
+    let __local_7: ref Formatter;
+    let __local_8: ref String;
+    let __local_9: ref Formatter;
+    let __local_15: ref String;
+    let __local_17: ref Formatter;
+    let __local_21: ref String;
+    let __local_23: ref Formatter;
+    outer = Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32>::Some { discriminant: 0, payload_0: 99 } };
+    if ref.test Option<Option<i32>>::Some(outer) {
+        inner = value_copy Option<i32>(ref.cast Option<Option<i32>>::Some(outer).payload_0);
+        if ref.test Option<i32>::Some(inner) {
+            n = ref.cast Option<i32>::Some(inner).payload_0;
+            "core:cli/println"(__tmpl: block -> ref String {
+                __local_6 = String { repr: builtin::array_new<u8>(24), used: 0 };
+                String::append_char(__local_6, 110);
+                String::append_char(__local_6, 101);
+                String::append_char(__local_6, 115);
+                String::append_char(__local_6, 116);
+                String::append_char(__local_6, 101);
+                String::append_char(__local_6, 100);
+                String::append_char(__local_6, 58);
+                String::append_char(__local_6, 32);
+                __local_7 = __inline_Formatter__new_1: block -> ref Formatter {
+                    __local_15 = __local_6;
+                    break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_15) };
+                };
+                __local_17 = __local_7;
+                i32::fmt_decimal(n, __local_17);
+                break __tmpl: __local_6;
+            });
+        };
+    };
+    outer2 = Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32> { 1 } };
+    if ref.test Option<Option<i32>>::Some(outer2) {
+        inner2 = value_copy Option<i32>(ref.cast Option<Option<i32>>::Some(outer2).payload_0);
+        if ref.test Option<i32>::Some(inner2) {
+            n2 = ref.cast Option<i32>::Some(inner2).payload_0;
+            "core:cli/println"(__tmpl: block -> ref String {
+                __local_8 = String { repr: builtin::array_new<u8>(34), used: 0 };
+                String::append(__local_8, String { repr: array.new_data<u8>("should not print: "), used: 18 });
+                __local_9 = __inline_Formatter__new_5: block -> ref Formatter {
+                    __local_21 = __local_8;
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
+                };
+                __local_23 = __local_9;
+                i32::fmt_decimal(n2, __local_23);
+                break __tmpl: __local_8;
+            });
+        } else {
+            "core:cli/println"(String { repr: array.new_data<u8>("inner none"), used: 10 });
+        };
+    } else {
+        "core:cli/println"(String { repr: array.new_data<u8>("inner none"), used: 10 });
+    };
+}
+
+fn paren_logical_and() with Stdout {
+    let opt: ref Option<i32>;
+    let x_3: i32;
+    let __local_5: ref String;
+    let __local_6: ref Formatter;
+    let __pattern_temp_0: ref Option<i32>;
+    let __pattern_temp_1: ref Option<i32>;
+    let __local_12: ref String;
+    let __local_14: ref Formatter;
+    opt = Option<i32>::Some { discriminant: 0, payload_0: 5 };
+    __pattern_temp_0 = opt;
+    if ref.test Option<i32>::Some(__pattern_temp_0) {
+        x_3 = ref.cast Option<i32>::Some(__pattern_temp_0).payload_0;
+        "core:cli/println"(__tmpl: block -> ref String {
+            __local_5 = String { repr: builtin::array_new<u8>(25), used: 0 };
+            String::append(__local_5, String { repr: array.new_data<u8>("paren: x="), used: 9 });
+            __local_6 = __inline_Formatter__new_1: block -> ref Formatter {
+                __local_12 = __local_5;
+                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+            };
+            __local_14 = __local_6;
+            i32::fmt_decimal(x_3, __local_14);
+            break __tmpl: __local_5;
+        });
+    };
+    __pattern_temp_1 = opt;
+    if ref.test Option<i32>::Some(__pattern_temp_1) {
+        "core:cli/println"(String { repr: array.new_data<u8>("paren false"), used: 11 });
+    } else {
+        "core:cli/println"(String { repr: array.new_data<u8>("paren false"), used: 11 });
+    };
+}
+
 fn run() with Stdout {
     simple_guard();
     guard_with_else();
@@ -322,6 +433,8 @@ fn run() with Stdout {
     chained_lets();
     chain_with_guard();
     bool_then_let();
+    chained_lets_dependent();
+    paren_logical_and();
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -370,13 +483,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l10: loop {
+            l16: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l10;
+                continue l16;
             };
         };
     };
@@ -458,13 +571,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l16: loop {
+            l22: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l16;
+                continue l22;
             };
         };
     };
@@ -481,14 +594,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l20: loop {
+                l26: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l20;
+                    continue l26;
                 };
             };
         };
@@ -598,13 +711,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l32: loop {
+            l38: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l32;
+                continue l38;
             };
         };
     };
