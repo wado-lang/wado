@@ -409,6 +409,8 @@ type "functype/Array<i32>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
+type "functype/Array<i32>::grow" = fn(ref Array<i32>);
+
 type "functype/JsonSeqAccess^DeserializeSeq::next_element<i32>" = fn(ref "core:json/JsonSeqAccess") -> ref Result<Option<i32>,DeserializeError>;
 
 type "functype/Option<String>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> ref Result<Option<String>,DeserializeError>;
@@ -1991,58 +1993,89 @@ fn User^Deserialize::deserialize<JsonDeserializer>(d) {
 fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
     let seq_result: ref Result<JsonSeqAccess,DeserializeError>;
     let seq: ref "core:json/JsonSeqAccess";
-    let __local_3: ref Array<i32>;
+    let first: ref Result<Option<i32>,DeserializeError>;
+    let first_opt: ref Option<i32>;
+    let first_elem: i32;
     let items: ref Array<i32>;
     let next: ref Result<Option<i32>,DeserializeError>;
-    let opt: ref Option<i32>;
+    let next_opt: ref Option<i32>;
     let item: i32;
-    let end_result: ref Result<unit,DeserializeError>;
-    let e_9: ref "core:serde/DeserializeError";
-    let e_10: ref "core:serde/DeserializeError";
+    let end_result_10: ref Result<unit,DeserializeError>;
     let e_11: ref "core:serde/DeserializeError";
+    let e_12: ref "core:serde/DeserializeError";
+    let end_result_13: ref Result<unit,DeserializeError>;
+    let e_14: ref "core:serde/DeserializeError";
+    let __local_15: ref Array<i32>;
+    let e_16: ref "core:serde/DeserializeError";
+    let e_17: ref "core:serde/DeserializeError";
     let __pattern_temp_0: ref Result<JsonSeqAccess,DeserializeError>;
     let __pattern_temp_1: ref Result<Option<i32>,DeserializeError>;
-    let __pattern_temp_4: ref Result<Option<i32>,DeserializeError>;
-    let __pattern_temp_5: ref Result<JsonSeqAccess,DeserializeError>;
+    let __pattern_temp_3: ref Result<Option<i32>,DeserializeError>;
+    let __pattern_temp_6: ref Result<Option<i32>,DeserializeError>;
+    let __pattern_temp_8: ref Result<Option<i32>,DeserializeError>;
+    let __pattern_temp_9: ref Result<JsonSeqAccess,DeserializeError>;
     seq_result = "core:json/JsonDeserializer^Deserializer::begin_seq"(d);
     __pattern_temp_0 = seq_result;
     if ref.test Result<JsonSeqAccess,DeserializeError>::Ok(__pattern_temp_0) {
         seq = value_copy "core:json/JsonSeqAccess"(ref.cast Result<JsonSeqAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0);
-        items = __seq_lit: block -> ref Array<i32> {
-            __local_3 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
-            break __seq_lit: __local_3;
-        };
-        block {
-            l166: loop {
-                next = JsonSeqAccess^DeserializeSeq::next_element<i32>(seq);
-                __pattern_temp_1 = next;
-                if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
-                    opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
-                    if ref.test Option<i32>::Some(opt) {
-                        item = ref.cast Option<i32>::Some(opt).payload_0;
-                        Array<i32>::append(items, item);
-                    } else {
-                        end_result = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
-                        if ref.test Result<unit,DeserializeError>::Err(end_result) {
-                            e_9 = value_copy "core:serde/DeserializeError"(ref.cast Result<unit,DeserializeError>::Err(end_result).payload_0);
-                            return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_9) };
+        first = JsonSeqAccess^DeserializeSeq::next_element<i32>(seq);
+        __pattern_temp_1 = first;
+        if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
+            first_opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+            if ref.test Option<i32>::Some(first_opt) {
+                first_elem = ref.cast Option<i32>::Some(first_opt).payload_0;
+                items = Array<i32> { repr: builtin::array_new<i32>(2), used: 0 };
+                Array<i32>::append(items, first_elem);
+                block {
+                    l168: loop {
+                        next = JsonSeqAccess^DeserializeSeq::next_element<i32>(seq);
+                        __pattern_temp_3 = next;
+                        if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_3) {
+                            next_opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_3).payload_0);
+                            if ref.test Option<i32>::Some(next_opt) {
+                                item = ref.cast Option<i32>::Some(next_opt).payload_0;
+                                Array<i32>::append(items, item);
+                            } else {
+                                end_result_10 = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
+                                if ref.test Result<unit,DeserializeError>::Err(end_result_10) {
+                                    e_11 = value_copy "core:serde/DeserializeError"(ref.cast Result<unit,DeserializeError>::Err(end_result_10).payload_0);
+                                    return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_11) };
+                                };
+                                return Result<Array<i32>,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(items) };
+                            };
                         };
-                        return Result<Array<i32>,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(items) };
+                        __pattern_temp_6 = next;
+                        if ref.test Result<Option<i32>,DeserializeError>::Err(__pattern_temp_6) {
+                            e_12 = value_copy "core:serde/DeserializeError"(ref.cast Result<Option<i32>,DeserializeError>::Err(__pattern_temp_6).payload_0);
+                            return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_12) };
+                        };
+                        continue l168;
                     };
                 };
-                __pattern_temp_4 = next;
-                if ref.test Result<Option<i32>,DeserializeError>::Err(__pattern_temp_4) {
-                    e_10 = value_copy "core:serde/DeserializeError"(ref.cast Result<Option<i32>,DeserializeError>::Err(__pattern_temp_4).payload_0);
-                    return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_10) };
+            } else {
+                end_result_13 = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
+                if ref.test Result<unit,DeserializeError>::Err(end_result_13) {
+                    e_14 = value_copy "core:serde/DeserializeError"(ref.cast Result<unit,DeserializeError>::Err(end_result_13).payload_0);
+                    return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_14) };
                 };
-                continue l166;
+                return Result<Array<i32>,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(__seq_lit: block -> ref Array<i32> {
+                    __local_15 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
+                    break __seq_lit: __local_15;
+                }) };
             };
         };
+        __pattern_temp_8 = first;
+        if ref.test Result<Option<i32>,DeserializeError>::Err(__pattern_temp_8) {
+            e_16 = value_copy "core:serde/DeserializeError"(ref.cast Result<Option<i32>,DeserializeError>::Err(__pattern_temp_8).payload_0);
+            return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_16) };
+        };
+        "core:internal/unreachable"();
+        unreachable;
     };
-    __pattern_temp_5 = seq_result;
-    if ref.test Result<JsonSeqAccess,DeserializeError>::Err(__pattern_temp_5) {
-        e_11 = value_copy "core:serde/DeserializeError"(ref.cast Result<JsonSeqAccess,DeserializeError>::Err(__pattern_temp_5).payload_0);
-        return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_11) };
+    __pattern_temp_9 = seq_result;
+    if ref.test Result<JsonSeqAccess,DeserializeError>::Err(__pattern_temp_9) {
+        e_17 = value_copy "core:serde/DeserializeError"(ref.cast Result<JsonSeqAccess,DeserializeError>::Err(__pattern_temp_9).payload_0);
+        return Result<Array<i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_17) };
     };
     "core:internal/unreachable"();
     unreachable;
@@ -2050,38 +2083,44 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
 
 fn Array<i32>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<i32>::grow(self);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<i32>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i32>;
     let old_repr: ref array<i32>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l174: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                    i = i + 1;
-                    continue l174;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<i32>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l178: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                i = i + 1;
+                continue l178;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn JsonSeqAccess^DeserializeSeq::next_element<i32>(self) {
@@ -2233,8 +2272,8 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
             __local_16 = self;
             break __inline_Array_i32__IntoIterator__into_iter_2: "core:serde/ArrayIter<i32>" { repr: ref.as_non_null(__local_16.repr), used: __local_16.used, index: 0 };
         };
-        b189: block {
-            l190: loop {
+        b193: block {
+            l194: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: i32;
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -2245,9 +2284,9 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
                         return Result<unit,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_7) };
                     };
                 } else {
-                    break b189;
+                    break b193;
                 };
-                continue l190;
+                continue l194;
             };
         };
         return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref Result<unit,SerializeError> {
@@ -2376,11 +2415,11 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
     _licm_used_6 = _licm_input_5.used;
     _licm_repr_7 = _licm_input_5.repr;
     _hfs_pos_8 = self.pos;
-    b199: block {
-        l200: loop {
+    b203: block {
+        l204: loop {
             if (_hfs_pos_8 < _licm_used_6) == 0 {
                 self.pos = _hfs_pos_8;
-                break b199;
+                break b203;
             };
             b = __inline_String__get_byte_1: block -> u8 {
                 __local_4 = _hfs_pos_8;
@@ -2404,7 +2443,7 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
                 self.pos = _hfs_pos_8;
                 return;
             };
-            continue l200;
+            continue l204;
         };
     };
     self.pos = _hfs_pos_8;
@@ -2487,12 +2526,12 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
     _licm_used_22 = _licm_input_21.used;
     _licm_repr_23 = _licm_input_21.repr;
     _hfs_pos_27 = self.pos;
-    b208: block {
-        l209: loop {
+    b212: block {
+        l213: loop {
             __fused___inline_StrUtf8ByteIter_Iterator__next_2: block {
                 if __sroa___iter_3_index >= __sroa___iter_3_used {
                     self.pos = _hfs_pos_27;
-                    break b208;
+                    break b212;
                     self.pos = _hfs_pos_27;
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
                 };
@@ -2526,7 +2565,7 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
                 self.pos = _hfs_pos_27;
                 break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
             };
-            continue l209;
+            continue l213;
         };
     };
     self.pos = _hfs_pos_27;
@@ -2648,10 +2687,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     _licm_input_89 = self.input;
     _licm_used_90 = _licm_input_89.used;
     _licm_repr_91 = _licm_input_89.repr;
-    b215: block {
-        l216: loop {
+    b219: block {
+        l220: loop {
             if (scan_pos < _licm_used_90) == 0 {
-                break b215;
+                break b219;
             };
             sb = __inline_String__get_byte_5: block -> u8 {
                 __local_47 = scan_pos;
@@ -2662,10 +2701,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             } else {
                 sb == 92;
             } {
-                break b215;
+                break b219;
             };
             scan_pos = scan_pos + 1;
-            continue l216;
+            continue l220;
         };
     };
     prefix_len = scan_pos - prefix_start;
@@ -2689,7 +2728,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             _licm_repr_93 = result_5.repr;
             _licm_repr_94 = _licm_input_92.repr;
             block {
-                l223: loop {
+                l227: loop {
                     if (i_7 < prefix_len) == 0 {
                         break __for_0;
                     };
@@ -2700,7 +2739,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     };
                     builtin::array_set_u8(_licm_repr_93, index_53, value_54);
                     i_7 = i_7 + 1;
-                    continue l223;
+                    continue l227;
                 };
             };
         };
@@ -2718,7 +2757,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
         _licm_repr_96 = result_8.repr;
         _licm_repr_97 = _licm_input_95.repr;
         block {
-            l226: loop {
+            l230: loop {
                 if (i_10 < prefix_len) == 0 {
                     break __for_1;
                 };
@@ -2729,20 +2768,20 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                 };
                 builtin::array_set_u8(_licm_repr_96, index_59, value_60);
                 i_10 = i_10 + 1;
-                continue l226;
+                continue l230;
             };
         };
     };
     self.pos = scan_pos;
     _hfs_pos_98 = self.pos;
-    b228: block {
-        l229: loop {
+    b232: block {
+        l233: loop {
             if (_hfs_pos_98 < __inline_String__len_14: block -> i32 {
                 __local_63 = self.input;
                 break __inline_String__len_14: __local_63.used;
             }) == 0 {
                 self.pos = _hfs_pos_98;
-                break b228;
+                break b232;
             };
             b = __inline_String__get_byte_15: block -> u8 {
                 __local_64 = self.input;
@@ -2898,7 +2937,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                 };
                 _hfs_pos_98 = _hfs_pos_98 + seq_len;
             };
-            continue l229;
+            continue l233;
         };
     };
     self.pos = _hfs_pos_98;
@@ -2942,7 +2981,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
         _licm_pos_16 = self.pos;
         _licm_repr_17 = _licm_input_15.repr;
         block {
-            l254: loop {
+            l258: loop {
                 if (i < 4) == 0 {
                     break __for_2;
                 };
@@ -2977,7 +3016,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
                     }) };
                 };
                 i = i + 1;
-                continue l254;
+                continue l258;
             };
         };
     };
@@ -3047,11 +3086,11 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
     _licm_used_28 = _licm_input_27.used;
     _licm_repr_29 = _licm_input_27.repr;
     _hfs_pos_36 = self.pos;
-    b265: block {
-        l266: loop {
+    b269: block {
+        l270: loop {
             if (_hfs_pos_36 < _licm_used_28) == 0 {
                 self.pos = _hfs_pos_36;
-                break b265;
+                break b269;
             };
             b_1 = __inline_String__get_byte_3: block -> u8 {
                 __local_11 = _hfs_pos_36;
@@ -3065,9 +3104,9 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
                 _hfs_pos_36 = _hfs_pos_36 + 1;
             } else {
                 self.pos = _hfs_pos_36;
-                break b265;
+                break b269;
             };
-            continue l266;
+            continue l270;
         };
     };
     self.pos = _hfs_pos_36;
@@ -3088,11 +3127,11 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
         _licm_used_31 = _licm_input_30.used;
         _licm_repr_32 = _licm_input_30.repr;
         _hfs_pos_37 = self.pos;
-        b272: block {
-            l273: loop {
+        b276: block {
+            l277: loop {
                 if (_hfs_pos_37 < _licm_used_31) == 0 {
                     self.pos = _hfs_pos_37;
-                    break b272;
+                    break b276;
                 };
                 b_2 = __inline_String__get_byte_7: block -> u8 {
                     __local_17 = _hfs_pos_37;
@@ -3106,9 +3145,9 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
                     _hfs_pos_37 = _hfs_pos_37 + 1;
                 } else {
                     self.pos = _hfs_pos_37;
-                    break b272;
+                    break b276;
                 };
-                continue l273;
+                continue l277;
             };
         };
         self.pos = _hfs_pos_37;
@@ -3149,11 +3188,11 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
             _licm_used_34 = _licm_input_33.used;
             _licm_repr_35 = _licm_input_33.repr;
             _hfs_pos_38 = self.pos;
-            b283: block {
-                l284: loop {
+            b287: block {
+                l288: loop {
                     if (_hfs_pos_38 < _licm_used_34) == 0 {
                         self.pos = _hfs_pos_38;
-                        break b283;
+                        break b287;
                     };
                     b2 = __inline_String__get_byte_13: block -> u8 {
                         __local_26 = _hfs_pos_38;
@@ -3167,9 +3206,9 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
                         _hfs_pos_38 = _hfs_pos_38 + 1;
                     } else {
                         self.pos = _hfs_pos_38;
-                        break b283;
+                        break b287;
                     };
-                    continue l284;
+                    continue l288;
                 };
             };
             self.pos = _hfs_pos_38;
@@ -3263,11 +3302,11 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     _licm_used_47 = _licm_input_46.used;
     _licm_repr_48 = _licm_input_46.repr;
     _hfs_pos_51 = self.pos;
-    b293: block {
-        l294: loop {
+    b297: block {
+        l298: loop {
             if (_hfs_pos_51 < _licm_used_47) == 0 {
                 self.pos = _hfs_pos_51;
-                break b293;
+                break b297;
             };
             b = __inline_String__get_byte_8: block -> u8 {
                 __local_28 = _hfs_pos_51;
@@ -3294,12 +3333,12 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                 if b == 46 {
                     _hfs_pos_51 = _hfs_pos_51 + 1;
                     _hfs_pos_49 = _hfs_pos_51;
-                    b302: block {
-                        l303: loop {
+                    b306: block {
+                        l307: loop {
                             if (_hfs_pos_49 < _licm_used_47) == 0 {
                                 _hfs_pos_51 = _hfs_pos_49;
                                 self.pos = _hfs_pos_51;
-                                break b302;
+                                break b306;
                             };
                             b2 = __inline_String__get_byte_10: block -> u8 {
                                 __local_31 = _hfs_pos_49;
@@ -3316,9 +3355,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                             } else {
                                 _hfs_pos_51 = _hfs_pos_49;
                                 self.pos = _hfs_pos_51;
-                                break b302;
+                                break b306;
                             };
-                            continue l303;
+                            continue l307;
                         };
                     };
                     _hfs_pos_51 = _hfs_pos_49;
@@ -3349,12 +3388,12 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                             };
                         };
                         _hfs_pos_50 = _hfs_pos_51;
-                        b313: block {
-                            l314: loop {
+                        b317: block {
+                            l318: loop {
                                 if (_hfs_pos_50 < _licm_used_47) == 0 {
                                     _hfs_pos_51 = _hfs_pos_50;
                                     self.pos = _hfs_pos_51;
-                                    break b313;
+                                    break b317;
                                 };
                                 b3 = __inline_String__get_byte_16: block -> u8 {
                                     __local_40 = _hfs_pos_50;
@@ -3370,9 +3409,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                 } else {
                                     _hfs_pos_51 = _hfs_pos_50;
                                     self.pos = _hfs_pos_51;
-                                    break b313;
+                                    break b317;
                                 };
-                                continue l314;
+                                continue l318;
                             };
                         };
                         _hfs_pos_51 = _hfs_pos_50;
@@ -3409,9 +3448,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                 return Result<i32,DeserializeError>::Ok { discriminant: 0, payload_0: builtin::i32_trunc_f64_s(v_signed) };
             } else {
                 self.pos = _hfs_pos_51;
-                break b293;
+                break b297;
             };
-            continue l294;
+            continue l298;
         };
     };
     self.pos = _hfs_pos_51;
@@ -3437,11 +3476,11 @@ fn "core:json/JsonDeserializer::skip_string"(self) {  // from core:json
     _licm_used_12 = _licm_input_11.used;
     _licm_repr_13 = _licm_input_11.repr;
     _hfs_pos_14 = self.pos;
-    b324: block {
-        l325: loop {
+    b328: block {
+        l329: loop {
             if (_hfs_pos_14 < _licm_used_12) == 0 {
                 self.pos = _hfs_pos_14;
-                break b324;
+                break b328;
             };
             b = __inline_String__get_byte_1: block -> u8 {
                 __local_5 = _hfs_pos_14;
@@ -3470,7 +3509,7 @@ fn "core:json/JsonDeserializer::skip_string"(self) {  // from core:json
                 };
             };
             _hfs_pos_14 = _hfs_pos_14 + 1;
-            continue l325;
+            continue l329;
         };
     };
     self.pos = _hfs_pos_14;
@@ -3573,7 +3612,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
         };
         _hfs_pos_49 = self.pos;
         block {
-            l340: loop {
+            l344: loop {
                 self.pos = _hfs_pos_49;
                 r = "core:json/JsonDeserializer::skip_value"(self);
                 _hfs_pos_49 = self.pos;
@@ -3615,7 +3654,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
                         break __inline_DeserializeError__malformed_8: "core:serde/DeserializeError" { kind: 6, message: ref.as_non_null(__local_29), offset: __local_30 };
                     }) };
                 };
-                continue l340;
+                continue l344;
             };
         };
         self.pos = _hfs_pos_49;
@@ -3640,7 +3679,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
         };
         _hfs_pos_50 = self.pos;
         block {
-            l349: loop {
+            l353: loop {
                 self.pos = _hfs_pos_50;
                 "core:json/JsonDeserializer::skip_whitespace"(self);
                 _hfs_pos_50 = self.pos;
@@ -3720,7 +3759,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
                         break __inline_DeserializeError__malformed_17: "core:serde/DeserializeError" { kind: 6, message: ref.as_non_null(__local_43), offset: __local_44 };
                     }) };
                 };
-                continue l349;
+                continue l353;
             };
         };
         self.pos = _hfs_pos_50;
@@ -3831,13 +3870,13 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field"(self) {  // from c
     self.de.pos = self.de.pos + 1;
     key_start = self.de.pos;
     has_escape = 0;
-    b367: block {
-        l368: loop {
+    b371: block {
+        l372: loop {
             if (self.de.pos < __inline_String__len_6: block -> i32 {
                 __local_34 = self.de.input;
                 break __inline_String__len_6: __local_34.used;
             }) == 0 {
-                break b367;
+                break b371;
             };
             b = __inline_String__get_byte_7: block -> u8 {
                 __local_35 = self.de.input;
@@ -3845,14 +3884,14 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field"(self) {  // from c
                 break __inline_String__get_byte_7: builtin::array_get_u8(__local_35.repr, __local_36);
             };
             if b == 34 {
-                break b367;
+                break b371;
             };
             if b == 92 {
                 has_escape = 1;
-                break b367;
+                break b371;
             };
             self.de.pos = self.de.pos + 1;
-            continue l368;
+            continue l372;
         };
     };
     if has_escape == 0 {
@@ -3984,13 +4023,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l389: loop {
+            l393: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l389;
+                continue l393;
             };
         };
     };
@@ -4123,8 +4162,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b412: block {
-        l413: loop {
+    b416: block {
+        l417: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -4149,9 +4188,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b412;
+                break b416;
             };
-            continue l413;
+            continue l417;
         };
     };
     String::append_char(f.buf, 34);
