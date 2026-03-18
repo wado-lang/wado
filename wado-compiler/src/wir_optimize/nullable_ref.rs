@@ -18,7 +18,7 @@ use crate::hashmap::IndexMap;
 use crate::wir::{WirAbstractHeapType, WirInstr, WirModule, WirType, WirTypeDef, WirVariantRepr};
 
 /// Run the `NullableRef` optimization on the module.
-pub fn nullable_ref_optimize(module: &mut WirModule) {
+pub(super) fn optimize_nullable_refs(module: &mut WirModule) {
     // Phase 1: Identify eligible variants.
     // nullable_map: variant_base_type_idx -> (payload_case_idx, nullable_payload_WirType)
     let nullable_map = collect_nullable_variants(&module.types);

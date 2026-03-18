@@ -7,7 +7,7 @@
 use crate::hashmap::IndexSet;
 use crate::wir::{WirFuncType, WirInstr, WirModule, WirType, WirTypeDef, WirTypeId};
 
-use super::{collect_pinned_func_ids, is_side_effect_free};
+use super::util::{collect_pinned_func_ids, is_side_effect_free};
 
 /// Dead Return Value Elimination (DRVE).
 ///
@@ -17,7 +17,7 @@ use super::{collect_pinned_func_ids, is_side_effect_free};
 ///
 /// Those functions are converted to void return, the `StructNew` is removed from
 /// returns, and the Drop wrapper is removed at each call site.
-pub(super) fn drve_dead_return_values(module: &mut WirModule) {
+pub(super) fn eliminate_dead_return_values(module: &mut WirModule) {
     let pinned = collect_pinned_func_ids(module);
 
     let candidates = find_drve_candidates(module, &pinned);
