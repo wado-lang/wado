@@ -22,14 +22,14 @@ pub struct Array<T> {
 impl Array<T> {
     pub fn with_capacity(capacity: i32) -> Array<T> {
         return Array {
-            repr: builtin::array_new::<T>(i32_max(capacity, 8)),
+            repr: builtin::array_new::<T>(i32_max(capacity, 2)),
             used: 0,
         };
     }
 
     pub fn grow(&mut self) {
         let capacity = builtin::array_len(self.repr);
-        let new_capacity = i32_max(capacity * 2, 32);
+        let new_capacity = i32_max(capacity * 2, 4);
         let new_repr = builtin::array_new::<T>(new_capacity);
         let old_repr = self.repr;
         let used = self.used;
