@@ -605,11 +605,6 @@ if x > 0 {
 // If expression
 let abs = if x < 0 { -x } else { x };
 
-// If with init (Go-style) — x scoped to if/else
-if let x = get_value(); x > 0 {
-    println(`positive: {x}`);
-}
-
 // If let pattern matching
 if let Some(x) = opt {
     println(`Got: {x}`);
