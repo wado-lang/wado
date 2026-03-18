@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773868351205,
+  "lastUpdate": 1773868476203,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4196,6 +4196,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/34437b753255fade7b028560cf980f2911abb1fd"
         },
         "date": 1773868350997,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2c0ed08cd259964c4f132343aad3047a69e2b1fd",
+          "message": "Merge pull request #605 from wado-lang/claude/fix-flaky-on-task-done-vEVKp\n\nAdd alternate signal stack to prevent silent crashes on stack overflow",
+          "timestamp": "2026-03-19T06:11:56+09:00",
+          "tree_id": "06078f25e0e2ef3e711070f89012853ba21a9996",
+          "url": "https://github.com/wado-lang/wado/commit/2c0ed08cd259964c4f132343aad3047a69e2b1fd"
+        },
+        "date": 1773868476014,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
