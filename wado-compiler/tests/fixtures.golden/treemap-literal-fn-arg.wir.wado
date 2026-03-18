@@ -153,6 +153,8 @@ type "functype/TreeMap<String,i32>::skew" = fn(ref "core:allocator/TreeMap<Strin
 
 type "functype/Array<TreeMapEntry<String,i32>>::append" = fn(ref Array<TreeMapEntry<String,i32>>, ref "core:allocator/TreeMapEntry<String,i32>");
 
+type "functype/Array<TreeMapEntry<String,i32>>::grow" = fn(ref Array<TreeMapEntry<String,i32>>);
+
 type "functype/TreeMap<String,i32>::find_index" = fn(ref "core:allocator/TreeMap<String,i32>", ref String) -> i32;
 
 type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> ref null "tuple/[String, i32]";
@@ -161,7 +163,12 @@ type "functype/TreeMap<String,i32>::entries" = fn(ref "core:allocator/TreeMap<St
 
 type "functype/Array<Tuple<String,i32>>::append" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
 
+<<<<<<< HEAD
 type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>") -> ref null "core:allocator/TreeMapEntry<String,i32>";
+||||||| 7c33707
+=======
+type "functype/Array<Tuple<String,i32>>::grow" = fn(ref Array<Tuple<String,i32>>);
+>>>>>>> origin/main
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -769,38 +776,44 @@ fn TreeMap<String,i32>::skew(self, node) {
 
 fn Array<TreeMapEntry<String,i32>>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<TreeMapEntry<String,i32>>::grow(self);
+    };
+    builtin::array_set<ref "core:allocator/TreeMapEntry<String,i32>">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<TreeMapEntry<String,i32>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<TreeMapEntry<String,i32>>;
     let old_repr: ref array<TreeMapEntry<String,i32>>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l54: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<ref "core:allocator/TreeMapEntry<String,i32>">(new_repr, i, builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(old_repr, i));
-                    i = i + 1;
-                    continue l54;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l54: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<ref "core:allocator/TreeMapEntry<String,i32>">(new_repr, i, builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(old_repr, i));
+                i = i + 1;
+                continue l54;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref "core:allocator/TreeMapEntry<String,i32>">(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn TreeMap<String,i32>::find_index(self, key) {
@@ -893,38 +906,44 @@ fn TreeMap<String,i32>::entries(self) {
 
 fn Array<Tuple<String,i32>>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<Tuple<String,i32>>::grow(self);
+    };
+    builtin::array_set<ref "tuple/[String, i32]">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<Tuple<String,i32>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Tuple<String,i32>>;
     let old_repr: ref array<Tuple<String,i32>>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<ref "tuple/[String, i32]">(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l70: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<ref "tuple/[String, i32]">(new_repr, i, builtin::array_get<ref "tuple/[String, i32]">(old_repr, i));
-                    i = i + 1;
-                    continue l70;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "tuple/[String, i32]">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l70: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<ref "tuple/[String, i32]">(new_repr, i, builtin::array_get<ref "tuple/[String, i32]">(old_repr, i));
+                i = i + 1;
+                continue l70;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref "tuple/[String, i32]">(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(self) {

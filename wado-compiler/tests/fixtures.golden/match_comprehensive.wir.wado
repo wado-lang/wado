@@ -152,9 +152,16 @@ type "functype/ArrayIter<Option<i32>>^Iterator::next" = fn(ref "core:allocator/A
 
 type "functype/Array<Option<i32>>::append" = fn(ref Array<Option<i32>>, ref Option<i32>);
 
+<<<<<<< HEAD
 type "functype/ArrayIter<Tree>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tree>") -> ref null Tree;
+||||||| 7c33707
+=======
+type "functype/Array<Option<i32>>::grow" = fn(ref Array<Option<i32>>);
+>>>>>>> origin/main
 
 type "functype/Array<Tree>::append" = fn(ref Array<Tree>, ref Tree);
+
+type "functype/Array<Tree>::grow" = fn(ref Array<Tree>);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -1069,38 +1076,44 @@ fn ArrayIter<Option<i32>>^Iterator::next(self) {
 
 fn Array<Option<i32>>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<Option<i32>>::grow(self);
+    };
+    builtin::array_set<ref Option<i32>>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<Option<i32>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Option<i32>>;
     let old_repr: ref array<Option<i32>>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<ref Option<i32>>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l66: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<ref Option<i32>>(new_repr, i, builtin::array_get<ref Option<i32>>(old_repr, i));
-                    i = i + 1;
-                    continue l66;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref Option<i32>>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l66: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<ref Option<i32>>(new_repr, i, builtin::array_get<ref Option<i32>>(old_repr, i));
+                i = i + 1;
+                continue l66;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref Option<i32>>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<Tree>^Iterator::next(self) {
@@ -1115,38 +1128,44 @@ fn ArrayIter<Tree>^Iterator::next(self) {
 
 fn Array<Tree>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<Tree>::grow(self);
+    };
+    builtin::array_set<ref Tree>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<Tree>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Tree>;
     let old_repr: ref array<Tree>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<ref Tree>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l71: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<ref Tree>(new_repr, i, builtin::array_get<ref Tree>(old_repr, i));
-                    i = i + 1;
-                    continue l71;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref Tree>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l71: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<ref Tree>(new_repr, i, builtin::array_get<ref Tree>(old_repr, i));
+                i = i + 1;
+                continue l71;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref Tree>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Formatter::write_char_n(self, c, n) {

@@ -535,54 +535,42 @@ impl String {
                 }
             } else if b0 < 0xF0 {
                 // 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx
-                if let Some(b1) = iter.next() {
-                    if let Some(b2) = iter.next() {
-                        if b0 == 0xE0 && b1 < 0xA0 {
-                            return Result::Err("invalid UTF-8: overlong sequence");
-                        }
-                        if b0 == 0xED && b1 >= 0xA0 {
-                            return Result::Err("invalid UTF-8: surrogate codepoint");
-                        }
-                        if b1 < 0x80 || b1 > 0xBF {
-                            return Result::Err("invalid UTF-8: bad continuation byte");
-                        }
-                        if b2 < 0x80 || b2 > 0xBF {
-                            return Result::Err("invalid UTF-8: bad continuation byte");
-                        }
-                        code = ((b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F) as u32;
-                    } else {
-                        return Result::Err("invalid UTF-8: truncated sequence");
+                if let Some(b1) = iter.next() && let Some(b2) = iter.next() {
+                    if b0 == 0xE0 && b1 < 0xA0 {
+                        return Result::Err("invalid UTF-8: overlong sequence");
                     }
+                    if b0 == 0xED && b1 >= 0xA0 {
+                        return Result::Err("invalid UTF-8: surrogate codepoint");
+                    }
+                    if b1 < 0x80 || b1 > 0xBF {
+                        return Result::Err("invalid UTF-8: bad continuation byte");
+                    }
+                    if b2 < 0x80 || b2 > 0xBF {
+                        return Result::Err("invalid UTF-8: bad continuation byte");
+                    }
+                    code = ((b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F) as u32;
                 } else {
                     return Result::Err("invalid UTF-8: truncated sequence");
                 }
             } else if b0 < 0xF5 {
                 // 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-                if let Some(b1) = iter.next() {
-                    if let Some(b2) = iter.next() {
-                        if let Some(b3) = iter.next() {
-                            if b0 == 0xF0 && b1 < 0x90 {
-                                return Result::Err("invalid UTF-8: overlong sequence");
-                            }
-                            if b0 == 0xF4 && b1 > 0x8F {
-                                return Result::Err("invalid UTF-8: out of Unicode range");
-                            }
-                            if b1 < 0x80 || b1 > 0xBF {
-                                return Result::Err("invalid UTF-8: bad continuation byte");
-                            }
-                            if b2 < 0x80 || b2 > 0xBF {
-                                return Result::Err("invalid UTF-8: bad continuation byte");
-                            }
-                            if b3 < 0x80 || b3 > 0xBF {
-                                return Result::Err("invalid UTF-8: bad continuation byte");
-                            }
-                            code = ((b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F) as u32;
-                        } else {
-                            return Result::Err("invalid UTF-8: truncated sequence");
-                        }
-                    } else {
-                        return Result::Err("invalid UTF-8: truncated sequence");
+                if let Some(b1) = iter.next() && let Some(b2) = iter.next() && let Some(b3) = iter.next() {
+                    if b0 == 0xF0 && b1 < 0x90 {
+                        return Result::Err("invalid UTF-8: overlong sequence");
                     }
+                    if b0 == 0xF4 && b1 > 0x8F {
+                        return Result::Err("invalid UTF-8: out of Unicode range");
+                    }
+                    if b1 < 0x80 || b1 > 0xBF {
+                        return Result::Err("invalid UTF-8: bad continuation byte");
+                    }
+                    if b2 < 0x80 || b2 > 0xBF {
+                        return Result::Err("invalid UTF-8: bad continuation byte");
+                    }
+                    if b3 < 0x80 || b3 > 0xBF {
+                        return Result::Err("invalid UTF-8: bad continuation byte");
+                    }
+                    code = ((b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F) as u32;
                 } else {
                     return Result::Err("invalid UTF-8: truncated sequence");
                 }

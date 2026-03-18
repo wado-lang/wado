@@ -306,6 +306,8 @@ type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, re
 
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
+type "functype/Array<u64>::grow" = fn(ref Array<u64>);
+
 type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
@@ -318,35 +320,69 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
 
+type "functype/Array<u8>::grow" = fn(ref Array<u8>);
+
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
+
+type "functype/Array<u64>::grow" = fn(ref Array<u64>);
 
 type "functype/Array<u32>::append" = fn(ref Array<u32>, u32);
 
+type "functype/Array<u32>::grow" = fn(ref Array<u32>);
+
 type "functype/Array<u16>::append" = fn(ref Array<u16>, u16);
 
+<<<<<<< HEAD
 type "functype/ArrayIter<Tuple<bool,i32,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<bool,i32,String>>") -> ref null "tuple/[bool, i32, String]";
+||||||| 7c33707
+=======
+type "functype/Array<u16>::grow" = fn(ref Array<u16>);
+>>>>>>> origin/main
 
 type "functype/Array<Tuple<bool,i32,String>>::append" = fn(ref Array<Tuple<bool,i32,String>>, ref "tuple/[bool, i32, String]");
 
+<<<<<<< HEAD
 type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> ref null String;
+||||||| 7c33707
+=======
+type "functype/Array<Tuple<bool,i32,String>>::grow" = fn(ref Array<Tuple<bool,i32,String>>);
+>>>>>>> origin/main
 
 type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
+type "functype/Array<String>::grow" = fn(ref Array<String>);
+
 type "functype/Array<i8>::append" = fn(ref Array<i8>, i8);
+
+type "functype/Array<i8>::grow" = fn(ref Array<i8>);
 
 type "functype/Array<i64>::append" = fn(ref Array<i64>, i64);
 
+type "functype/Array<i64>::grow" = fn(ref Array<i64>);
+
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+
+type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
 type "functype/Array<i16>::append" = fn(ref Array<i16>, i16);
 
+type "functype/Array<i16>::grow" = fn(ref Array<i16>);
+
 type "functype/Array<f64>::append" = fn(ref Array<f64>, f64);
+
+type "functype/Array<f64>::grow" = fn(ref Array<f64>);
 
 type "functype/Array<f32>::append" = fn(ref Array<f32>, f32);
 
+type "functype/Array<f32>::grow" = fn(ref Array<f32>);
+
 type "functype/Array<char>::append" = fn(ref Array<char>, char);
 
+type "functype/Array<char>::grow" = fn(ref Array<char>);
+
 type "functype/Array<bool>::append" = fn(ref Array<bool>, bool);
+
+type "functype/Array<bool>::grow" = fn(ref Array<bool>);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -2207,38 +2243,44 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
 
 fn Array<u64>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<u64>::grow(self);
+    };
+    builtin::array_set<u64>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<u64>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<u64>;
     let old_repr: ref array<u64>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<u64>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l173: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
-                    i = i + 1;
-                    continue l173;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<u64>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l173: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
+                i = i + 1;
+                continue l173;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<u64>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -2756,38 +2798,44 @@ fn ArrayIter<u8>^Iterator::next(self) {
 
 fn Array<u8>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<u8>::grow(self);
+    };
+    builtin::array_set_u8(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<u8>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let old_repr: ref array<u8>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<u8>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l229: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
-                    i = i + 1;
-                    continue l229;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<u8>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l229: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
+                i = i + 1;
+                continue l229;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<u64>^Iterator::next(self) {
@@ -2802,38 +2850,44 @@ fn ArrayIter<u64>^Iterator::next(self) {
 
 fn Array<u64>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<u64>::grow(self);
+    };
+    builtin::array_set<u64>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<u64>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<u64>;
     let old_repr: ref array<u64>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<u64>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l234: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
-                    i = i + 1;
-                    continue l234;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<u64>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l234: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
+                i = i + 1;
+                continue l234;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<u64>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<u32>^Iterator::next(self) {
@@ -2848,38 +2902,44 @@ fn ArrayIter<u32>^Iterator::next(self) {
 
 fn Array<u32>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<u32>::grow(self);
+    };
+    builtin::array_set<u32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<u32>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<u32>;
     let old_repr: ref array<u32>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<u32>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l239: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<u32>(new_repr, i, builtin::array_get<u32>(old_repr, i));
-                    i = i + 1;
-                    continue l239;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<u32>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l239: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<u32>(new_repr, i, builtin::array_get<u32>(old_repr, i));
+                i = i + 1;
+                continue l239;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<u32>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<u16>^Iterator::next(self) {
@@ -2894,38 +2954,44 @@ fn ArrayIter<u16>^Iterator::next(self) {
 
 fn Array<u16>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<u16>::grow(self);
+    };
+    builtin::array_set<u16>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<u16>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<u16>;
     let old_repr: ref array<u16>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<u16>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l244: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<u16>(new_repr, i, builtin::array_get<u16>(old_repr, i));
-                    i = i + 1;
-                    continue l244;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<u16>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l244: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<u16>(new_repr, i, builtin::array_get<u16>(old_repr, i));
+                i = i + 1;
+                continue l244;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<u16>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<Tuple<bool,i32,String>>^Iterator::next(self) {
@@ -2940,38 +3006,44 @@ fn ArrayIter<Tuple<bool,i32,String>>^Iterator::next(self) {
 
 fn Array<Tuple<bool,i32,String>>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<Tuple<bool,i32,String>>::grow(self);
+    };
+    builtin::array_set<ref "tuple/[bool, i32, String]">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<Tuple<bool,i32,String>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Tuple<bool,i32,String>>;
     let old_repr: ref array<Tuple<bool,i32,String>>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<ref "tuple/[bool, i32, String]">(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l249: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<ref "tuple/[bool, i32, String]">(new_repr, i, builtin::array_get<ref "tuple/[bool, i32, String]">(old_repr, i));
-                    i = i + 1;
-                    continue l249;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "tuple/[bool, i32, String]">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l249: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<ref "tuple/[bool, i32, String]">(new_repr, i, builtin::array_get<ref "tuple/[bool, i32, String]">(old_repr, i));
+                i = i + 1;
+                continue l249;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref "tuple/[bool, i32, String]">(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<String>^Iterator::next(self) {
@@ -2986,38 +3058,44 @@ fn ArrayIter<String>^Iterator::next(self) {
 
 fn Array<String>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<String>::grow(self);
+    };
+    builtin::array_set<ref String>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<String>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<String>;
     let old_repr: ref array<String>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<ref String>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l254: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
-                    i = i + 1;
-                    continue l254;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref String>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l254: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
+                i = i + 1;
+                continue l254;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref String>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<i8>^Iterator::next(self) {
@@ -3032,38 +3110,44 @@ fn ArrayIter<i8>^Iterator::next(self) {
 
 fn Array<i8>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<i8>::grow(self);
+    };
+    builtin::array_set<i8>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<i8>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i8>;
     let old_repr: ref array<i8>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<i8>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l259: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<i8>(new_repr, i, builtin::array_get<i8>(old_repr, i));
-                    i = i + 1;
-                    continue l259;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<i8>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l259: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<i8>(new_repr, i, builtin::array_get<i8>(old_repr, i));
+                i = i + 1;
+                continue l259;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<i8>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<i64>^Iterator::next(self) {
@@ -3078,38 +3162,44 @@ fn ArrayIter<i64>^Iterator::next(self) {
 
 fn Array<i64>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<i64>::grow(self);
+    };
+    builtin::array_set<i64>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<i64>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i64>;
     let old_repr: ref array<i64>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<i64>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l264: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<i64>(new_repr, i, builtin::array_get<i64>(old_repr, i));
-                    i = i + 1;
-                    continue l264;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<i64>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l264: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<i64>(new_repr, i, builtin::array_get<i64>(old_repr, i));
+                i = i + 1;
+                continue l264;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<i64>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<i32>^Iterator::next(self) {
@@ -3124,38 +3214,44 @@ fn ArrayIter<i32>^Iterator::next(self) {
 
 fn Array<i32>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<i32>::grow(self);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<i32>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i32>;
     let old_repr: ref array<i32>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l269: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                    i = i + 1;
-                    continue l269;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<i32>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l269: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                i = i + 1;
+                continue l269;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<i16>^Iterator::next(self) {
@@ -3170,38 +3266,44 @@ fn ArrayIter<i16>^Iterator::next(self) {
 
 fn Array<i16>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<i16>::grow(self);
+    };
+    builtin::array_set<i16>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<i16>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i16>;
     let old_repr: ref array<i16>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<i16>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l274: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<i16>(new_repr, i, builtin::array_get<i16>(old_repr, i));
-                    i = i + 1;
-                    continue l274;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<i16>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l274: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<i16>(new_repr, i, builtin::array_get<i16>(old_repr, i));
+                i = i + 1;
+                continue l274;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<i16>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<f64>^Iterator::next(self) {
@@ -3216,38 +3318,44 @@ fn ArrayIter<f64>^Iterator::next(self) {
 
 fn Array<f64>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<f64>::grow(self);
+    };
+    builtin::array_set<f64>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<f64>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<f64>;
     let old_repr: ref array<f64>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<f64>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l279: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<f64>(new_repr, i, builtin::array_get<f64>(old_repr, i));
-                    i = i + 1;
-                    continue l279;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<f64>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l279: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<f64>(new_repr, i, builtin::array_get<f64>(old_repr, i));
+                i = i + 1;
+                continue l279;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<f64>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<f32>^Iterator::next(self) {
@@ -3262,38 +3370,44 @@ fn ArrayIter<f32>^Iterator::next(self) {
 
 fn Array<f32>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<f32>::grow(self);
+    };
+    builtin::array_set<f32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<f32>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<f32>;
     let old_repr: ref array<f32>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<f32>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l284: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<f32>(new_repr, i, builtin::array_get<f32>(old_repr, i));
-                    i = i + 1;
-                    continue l284;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<f32>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l284: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<f32>(new_repr, i, builtin::array_get<f32>(old_repr, i));
+                i = i + 1;
+                continue l284;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<f32>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<char>^Iterator::next(self) {
@@ -3308,38 +3422,44 @@ fn ArrayIter<char>^Iterator::next(self) {
 
 fn Array<char>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<char>::grow(self);
+    };
+    builtin::array_set<char>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<char>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<char>;
     let old_repr: ref array<char>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<char>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l289: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<char>(new_repr, i, builtin::array_get<char>(old_repr, i));
-                    i = i + 1;
-                    continue l289;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<char>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l289: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<char>(new_repr, i, builtin::array_get<char>(old_repr, i));
+                i = i + 1;
+                continue l289;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<char>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<bool>^Iterator::next(self) {
@@ -3354,38 +3474,44 @@ fn ArrayIter<bool>^Iterator::next(self) {
 
 fn Array<bool>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<bool>::grow(self);
+    };
+    builtin::array_set<bool>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<bool>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<bool>;
     let old_repr: ref array<bool>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<bool>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l294: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
-                    i = i + 1;
-                    continue l294;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<bool>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l294: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
+                i = i + 1;
+                continue l294;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<bool>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Formatter::write_char_n(self, c, n) {

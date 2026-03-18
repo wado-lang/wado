@@ -27,6 +27,18 @@ impl Array<T> {
         };
     }
 
+    pub fn grow(&mut self) {
+        let capacity = builtin::array_len(self.repr);
+        let new_capacity = i32_max(capacity * 2, 4);
+        let new_repr = builtin::array_new::<T>(new_capacity);
+        let old_repr = self.repr;
+        let used = self.used;
+        for let mut i = 0; i < used; i += 1 {
+            builtin::array_set::<T>(new_repr, i, builtin::array_get::<T>(old_repr, i));
+        }
+        self.repr = new_repr;
+    }
+
     pub fn filled(n: i32, element: T) -> Array<T> {
         let repr = builtin::array_new::<T>(n);
         builtin::array_fill::<T>(repr, 0, element, n);
@@ -52,17 +64,8 @@ impl Array<T> {
     #[comp_feature("array_append")]
     pub fn append(&mut self, value: T) {
         let used = self.used;
-        let capacity = builtin::array_len(self.repr);
-        if builtin::unlikely(used >= capacity) {
-            let new_capacity = i32_max(capacity * 2, 4);
-            let new_repr = builtin::array_new::<T>(new_capacity);
-            // Use element-by-element loop: Wasm array.copy is a libcall in wasmtime
-            // (~3μs/element), while a JIT-compiled loop runs at ~1ns/element.
-            let old_repr = self.repr;
-            for let mut i = 0; i < used; i += 1 {
-                builtin::array_set::<T>(new_repr, i, builtin::array_get::<T>(old_repr, i));
-            }
-            self.repr = new_repr;
+        if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+            self.grow();
         }
         builtin::array_set::<T>(self.repr, used, value);
         self.used = used + 1;

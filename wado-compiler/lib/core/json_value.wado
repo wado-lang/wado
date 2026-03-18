@@ -152,8 +152,7 @@ impl Visitor for ValueVisitor {
                         items.append(item);
                     },
                     None => {
-                        let end_r = seq.end();
-                        if let Err(e) = end_r {
+                        if let Err(e) = seq.end() {
                             return Result::<Value, DeserializeError>::Err(e);
                         }
                         return Result::<Value, DeserializeError>::Ok(Value::Array(items));
@@ -184,8 +183,7 @@ impl Visitor for ValueVisitor {
                         }
                     },
                     None => {
-                        let end_r = map.end();
-                        if let Err(e) = end_r {
+                        if let Err(e) = map.end() {
                             return Result::<Value, DeserializeError>::Err(e);
                         }
                         return Result::<Value, DeserializeError>::Ok(Value::Object(obj));

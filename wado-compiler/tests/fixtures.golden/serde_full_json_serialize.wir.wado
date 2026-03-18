@@ -152,6 +152,8 @@ type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, re
 
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
+type "functype/Array<u64>::grow" = fn(ref Array<u64>);
+
 type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
@@ -164,7 +166,15 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
+<<<<<<< HEAD
 type "functype/JsonStructSerializer^SerializeStruct::field<Array<String>>" = fn(ref JsonStructSerializer, ref String, ref Array<String>) -> ref null SerializeError;
+||||||| 7c33707
+type "functype/JsonStructSerializer^SerializeStruct::field<Array<String>>" = fn(ref JsonStructSerializer, ref String, ref Array<String>) -> ref Result<unit,SerializeError>;
+=======
+type "functype/Array<String>::grow" = fn(ref Array<String>);
+
+type "functype/JsonStructSerializer^SerializeStruct::field<Array<String>>" = fn(ref JsonStructSerializer, ref String, ref Array<String>) -> ref Result<unit,SerializeError>;
+>>>>>>> origin/main
 
 type "functype/JsonSeqSerializer^SerializeSeq::element<String>" = fn(ref JsonSeqSerializer, ref String) -> ref null SerializeError;
 
@@ -1342,38 +1352,44 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
 
 fn Array<u64>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<u64>::grow(self);
+    };
+    builtin::array_set<u64>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<u64>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<u64>;
     let old_repr: ref array<u64>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<u64>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l122: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
-                    i = i + 1;
-                    continue l122;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<u64>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l122: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
+                i = i + 1;
+                continue l122;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<u64>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1728,38 +1744,44 @@ fn JsonSerializer^Serializer::serialize_string(self, v) {
 
 fn Array<String>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<String>::grow(self);
+    };
+    builtin::array_set<ref String>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<String>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<String>;
     let old_repr: ref array<String>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<ref String>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l156: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
-                    i = i + 1;
-                    continue l156;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref String>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l156: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
+                i = i + 1;
+                continue l156;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref String>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn User^Serialize::serialize<JsonSerializer>(self, s) {

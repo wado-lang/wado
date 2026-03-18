@@ -162,11 +162,17 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
+type "functype/Array<String>::grow" = fn(ref Array<String>);
+
 type "functype/BTreeNode<String,i32>::compact" = fn(ref BTreeNode<String,i32>);
 
 type "functype/Array<bool>::append" = fn(ref Array<bool>, bool);
 
+type "functype/Array<bool>::grow" = fn(ref Array<bool>);
+
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+
+type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
 type "functype/TreeMap<String,i32>::needs_compaction" = fn(ref TreeMap<String,i32>) -> bool;
 
@@ -177,6 +183,8 @@ type "functype/TreeMap<String,i32>::iter" = fn(ref TreeMap<String,i32>) -> ref A
 type "functype/TreeMap<String,i32>::collect_entries" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>, ref Array<Tuple<String,i32>>);
 
 type "functype/Array<Tuple<String,i32>>::append" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
+
+type "functype/Array<Tuple<String,i32>>::grow" = fn(ref Array<Tuple<String,i32>>);
 
 type "functype/TreeMap<String,i32>::delete_in_node" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>, ref String) -> bool;
 
@@ -191,6 +199,8 @@ type "functype/TreeMap<String,i32>::sort_node_entries" = fn(ref TreeMap<String,i
 type "functype/TreeMap<String,i32>::split_child" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>, i32);
 
 type "functype/Array<BTreeNode<String,i32>>::append" = fn(ref Array<BTreeNode<String,i32>>, ref BTreeNode<String,i32>);
+
+type "functype/Array<BTreeNode<String,i32>>::grow" = fn(ref Array<BTreeNode<String,i32>>);
 
 type "functype/BTreeNode<String,i32>::new_internal" = fn() -> ref BTreeNode<String,i32>;
 
@@ -928,38 +938,44 @@ fn String::append_char(self, c) {
 
 fn Array<String>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<String>::grow(self);
+    };
+    builtin::array_set<ref String>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<String>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<String>;
     let old_repr: ref array<String>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<ref String>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l55: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
-                    i = i + 1;
-                    continue l55;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref String>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l55: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
+                i = i + 1;
+                continue l55;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref String>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn BTreeNode<String,i32>::compact(self) {
@@ -1070,74 +1086,86 @@ fn BTreeNode<String,i32>::compact(self) {
 
 fn Array<bool>::append(self, value) {
     let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<bool>;
-    let old_repr: ref array<bool>;
-    let i: i32;
-    let __local_8: i32;
     used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<bool>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l69: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
-                    i = i + 1;
-                    continue l69;
-                };
-            };
-        };
-        self.repr = ref.as_non_null(new_repr);
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<bool>::grow(self);
     };
     builtin::array_set<bool>(self.repr, used, value);
     self.used = used + 1;
 }
 
+fn Array<bool>::grow(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<bool>;
+    let old_repr: ref array<bool>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<bool>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l69: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                };
+                builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
+                i = i + 1;
+                continue l69;
+            };
+        };
+    };
+    self.repr = ref.as_non_null(new_repr);
+}
+
 fn Array<i32>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<i32>::grow(self);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<i32>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i32>;
     let old_repr: ref array<i32>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l73: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                    i = i + 1;
-                    continue l73;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<i32>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l73: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                i = i + 1;
+                continue l73;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn TreeMap<String,i32>::needs_compaction(self) {
@@ -1276,38 +1304,44 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
 
 fn Array<Tuple<String,i32>>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<Tuple<String,i32>>::grow(self);
+    };
+    builtin::array_set<ref "tuple/[String, i32]">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<Tuple<String,i32>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Tuple<String,i32>>;
     let old_repr: ref array<Tuple<String,i32>>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<ref "tuple/[String, i32]">(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l92: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<ref "tuple/[String, i32]">(new_repr, i, builtin::array_get<ref "tuple/[String, i32]">(old_repr, i));
-                    i = i + 1;
-                    continue l92;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "tuple/[String, i32]">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l92: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<ref "tuple/[String, i32]">(new_repr, i, builtin::array_get<ref "tuple/[String, i32]">(old_repr, i));
+                i = i + 1;
+                continue l92;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref "tuple/[String, i32]">(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn TreeMap<String,i32>::delete_in_node(self, node, key) {
@@ -1988,38 +2022,44 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
 
 fn Array<BTreeNode<String,i32>>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<BTreeNode<String,i32>>::grow(self);
+    };
+    builtin::array_set<ref BTreeNode<String,i32>>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<BTreeNode<String,i32>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<BTreeNode<String,i32>>;
     let old_repr: ref array<BTreeNode<String,i32>>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<ref BTreeNode<String,i32>>(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l182: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<ref BTreeNode<String,i32>>(new_repr, i, builtin::array_get<ref BTreeNode<String,i32>>(old_repr, i));
-                    i = i + 1;
-                    continue l182;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref BTreeNode<String,i32>>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l182: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<ref BTreeNode<String,i32>>(new_repr, i, builtin::array_get<ref BTreeNode<String,i32>>(old_repr, i));
+                i = i + 1;
+                continue l182;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref BTreeNode<String,i32>>(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn BTreeNode<String,i32>::new_internal() {

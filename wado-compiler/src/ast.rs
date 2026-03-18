@@ -486,24 +486,35 @@ pub struct TaskReturnStmt {
     pub span: Span,
 }
 
-/// Condition in control flow statements: either a regular expression or a pattern match
+/// A single element in a let-chain condition
+#[derive(Debug, Clone)]
+pub enum ConditionElement {
+    /// `let PAT = EXPR` — pattern match element
+    Let {
+        pattern: Pattern,
+        expr: Expr,
+        span: Span,
+    },
+    /// `BOOL_EXPR` — boolean expression element
+    Expr(Expr),
+}
+
+/// Condition in control flow statements: either a regular expression or a let chain.
 /// Used in `if`, `while`, and `for` statements.
 #[derive(Debug, Clone)]
 pub enum Condition {
     /// Regular boolean expression: `if x > 0 { ... }` or `while x > 0 { ... }`
     Expr(Expr),
-    /// Rust-style pattern match: `if let Some(x) = expr { ... }` or `while let Some(x) = expr { ... }`
-    Pattern {
-        pattern: Pattern,
-        expr: Expr,
+    /// Let chain: `if let PAT = EXPR && BOOL && let PAT2 = EXPR2 { ... }`
+    /// Also handles simple `if let PAT = EXPR { ... }` (single Let element, no guards).
+    LetChain {
+        elements: Vec<ConditionElement>,
         span: Span,
     },
 }
 
 #[derive(Debug, Clone)]
 pub struct IfStmt {
-    /// Optional init binding: `if let x = expr; condition { ... }`
-    pub init: Option<Box<LetStmt>>,
     pub condition: Condition,
     pub then_block: Block,
     pub else_block: Option<Block>,
@@ -968,8 +979,6 @@ pub struct IndexExpr {
 
 #[derive(Debug, Clone)]
 pub struct IfExpr {
-    /// Optional init binding: `if let x = expr; condition { ... }`
-    pub init: Option<Box<LetStmt>>,
     pub condition: Condition,
     pub then_block: Block,
     pub else_block: Option<Block>,

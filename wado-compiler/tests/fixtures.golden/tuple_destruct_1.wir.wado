@@ -103,6 +103,8 @@ type "functype/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref "core:alloc
 
 type "functype/Array<Tuple<i32,String>>::append" = fn(ref Array<Tuple<i32,String>>, ref "tuple/[i32, String]");
 
+type "functype/Array<Tuple<i32,String>>::grow" = fn(ref Array<Tuple<i32,String>>);
+
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
@@ -599,38 +601,44 @@ fn ArrayIter<Tuple<i32,String>>^Iterator::next(self) {
 
 fn Array<Tuple<i32,String>>::append(self, value) {
     let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<Tuple<i32,String>>::grow(self);
+    };
+    builtin::array_set<ref "tuple/[i32, String]">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<Tuple<i32,String>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Tuple<i32,String>>;
     let old_repr: ref array<Tuple<i32,String>>;
+    let used: i32;
     let i: i32;
-    let __local_8: i32;
-    used = self.used;
+    let __local_7: i32;
     capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_8 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
-        };
-        new_repr = builtin::array_new<ref "tuple/[i32, String]">(new_capacity);
-        old_repr = self.repr;
-        __for_0: block {
-            i = 0;
-            block {
-                l35: loop {
-                    if (i < used) == 0 {
-                        break __for_0;
-                    };
-                    builtin::array_set<ref "tuple/[i32, String]">(new_repr, i, builtin::array_get<ref "tuple/[i32, String]">(old_repr, i));
-                    i = i + 1;
-                    continue l35;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "tuple/[i32, String]">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l35: loop {
+                if (i < used) == 0 {
+                    break __for_0;
                 };
+                builtin::array_set<ref "tuple/[i32, String]">(new_repr, i, builtin::array_get<ref "tuple/[i32, String]">(old_repr, i));
+                i = i + 1;
+                continue l35;
             };
         };
-        self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref "tuple/[i32, String]">(self.repr, used, value);
-    self.used = used + 1;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Formatter::write_char_n(self, c, n) {

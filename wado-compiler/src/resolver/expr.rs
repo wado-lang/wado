@@ -3,7 +3,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, Expr, IfExpr, Item, Literal, MatchArm};
+use crate::ast::{self, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
 use crate::tir::{
@@ -1063,155 +1063,117 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
-        if if_expr.init.is_some() {
-            ctx.enter_scope();
-        }
-
-        if let Some(init) = &if_expr.init {
-            let _init_stmt = self.resolve_let(init, ctx);
-        }
-
-        // Handle pattern condition: `if let Some(x) = expr { ... } else { ... }`
-        if let ast::Condition::Pattern {
-            pattern,
-            expr,
-            span,
-        } = &if_expr.condition
-        {
-            let scrutinee = self.resolve_expr(expr, ctx, None);
-            let scrutinee_type = scrutinee.type_id;
-
-            ctx.enter_scope();
-            let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx, *span);
-            let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
-            ctx.exit_scope();
-
-            let else_block = if_expr
-                .else_block
-                .as_ref()
-                .map(|b| self.resolve_block(b, ctx, expected_type));
-
-            let type_id = if let Some(ty) = expected_type {
-                ty
-            } else {
-                let then_type = Self::block_result_type(&then_block);
-                let else_type = else_block
+        match &if_expr.condition {
+            Condition::LetChain { elements, .. } => {
+                // Resolve else_block in outer scope (chain bindings not visible there)
+                let else_block = if_expr
+                    .else_block
                     .as_ref()
-                    .map_or(TypeTable::UNIT, Self::block_result_type);
+                    .map(|b| self.resolve_block(b, ctx, expected_type));
 
-                if then_type == else_type {
-                    then_type
-                } else if then_type == TypeTable::NEVER {
-                    else_type
-                } else if else_type == TypeTable::NEVER {
-                    then_type
-                } else if else_block.is_none() {
-                    if then_type != TypeTable::UNIT {
-                        let type_name = self.type_table.borrow().type_name(then_type);
-                        let _ = self.logger.error(TypeError::TypeMismatch {
-                            expected: "()".to_string(),
-                            found: type_name,
-                            span: if_expr.then_block.span,
-                        });
-                    }
-                    TypeTable::UNIT
-                } else {
-                    let then_name = self.type_table.borrow().type_name(then_type);
-                    let else_name = self.type_table.borrow().type_name(else_type);
-                    let _ = self.logger.error(TypeError::TypeMismatch {
-                        expected: then_name,
-                        found: else_name,
-                        span: if_expr.else_block.as_ref().unwrap().span,
-                    });
-                    then_type
-                }
-            };
-
-            let if_pattern_stmt = TirStmt::new(
-                TirStmtKind::IfLet {
-                    scrutinee,
-                    pattern: tir_pattern,
-                    then_block,
-                    else_block,
-                },
-                if_expr.span,
-            );
-
-            if if_expr.init.is_some() {
+                // Enter scope for chain elements and then_block
+                ctx.enter_scope();
+                let stmts = self.resolve_let_chain_stmts(
+                    elements,
+                    &if_expr.then_block,
+                    else_block.as_ref(),
+                    ctx,
+                    expected_type,
+                    if_expr.span,
+                );
                 ctx.exit_scope();
+
+                let chain_block = TirBlock::new(stmts, if_expr.span);
+                let type_id = if let Some(ty) = expected_type {
+                    ty
+                } else {
+                    // Infer result type from the nested block structure
+                    let chain_type = Self::block_result_type(&chain_block);
+                    let else_type = else_block
+                        .as_ref()
+                        .map_or(TypeTable::UNIT, Self::block_result_type);
+                    if chain_type == else_type
+                        || chain_type == TypeTable::NEVER
+                        || else_type == TypeTable::NEVER
+                    {
+                        if chain_type == TypeTable::NEVER {
+                            else_type
+                        } else {
+                            chain_type
+                        }
+                    } else if if_expr.else_block.is_none() {
+                        TypeTable::UNIT
+                    } else {
+                        let chain_name = self.type_table.borrow().type_name(chain_type);
+                        let else_name = self.type_table.borrow().type_name(else_type);
+                        let _ = self.logger.error(TypeError::TypeMismatch {
+                            expected: chain_name,
+                            found: else_name,
+                            span: if_expr.else_block.as_ref().unwrap().span,
+                        });
+                        chain_type
+                    }
+                };
+
+                TirExpr::new(TirExprKind::Block(chain_block), type_id, if_expr.span)
             }
+            Condition::Expr(expr) => {
+                let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
+                let else_block = if_expr
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.resolve_block(b, ctx, expected_type));
 
-            return TirExpr::new(
-                TirExprKind::Block(TirBlock::new(vec![if_pattern_stmt], if_expr.span)),
-                type_id,
-                if_expr.span,
-            );
-        }
+                let type_id = if let Some(ty) = expected_type {
+                    ty
+                } else {
+                    let then_type = Self::block_result_type(&then_block);
+                    let else_type = else_block
+                        .as_ref()
+                        .map_or(TypeTable::UNIT, Self::block_result_type);
 
-        let condition = match &if_expr.condition {
-            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx, Some(TypeTable::BOOL)),
-            ast::Condition::Pattern { .. } => unreachable!("handled above"),
-        };
+                    // `never` is the bottom type: a branch returning `never` is compatible
+                    // with any type, so the result type comes from the non-never branch.
+                    if then_type == else_type {
+                        then_type
+                    } else if then_type == TypeTable::NEVER {
+                        else_type
+                    } else if else_type == TypeTable::NEVER {
+                        then_type
+                    } else if else_block.is_none() {
+                        if then_type != TypeTable::UNIT {
+                            let type_name = self.type_table.borrow().type_name(then_type);
+                            let _ = self.logger.error(TypeError::TypeMismatch {
+                                expected: "()".to_string(),
+                                found: type_name,
+                                span: if_expr.then_block.span,
+                            });
+                        }
+                        TypeTable::UNIT
+                    } else {
+                        let then_name = self.type_table.borrow().type_name(then_type);
+                        let else_name = self.type_table.borrow().type_name(else_type);
+                        let _ = self.logger.error(TypeError::TypeMismatch {
+                            expected: then_name,
+                            found: else_name,
+                            span: if_expr.else_block.as_ref().unwrap().span,
+                        });
+                        then_type
+                    }
+                };
 
-        let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
-        let else_block = if_expr
-            .else_block
-            .as_ref()
-            .map(|b| self.resolve_block(b, ctx, expected_type));
-
-        let type_id = if let Some(ty) = expected_type {
-            ty
-        } else {
-            let then_type = Self::block_result_type(&then_block);
-            let else_type = else_block
-                .as_ref()
-                .map_or(TypeTable::UNIT, Self::block_result_type);
-
-            // `never` is the bottom type: a branch returning `never` is compatible
-            // with any type, so the result type comes from the non-never branch.
-            if then_type == else_type {
-                then_type
-            } else if then_type == TypeTable::NEVER {
-                else_type
-            } else if else_type == TypeTable::NEVER {
-                then_type
-            } else if else_block.is_none() {
-                if then_type != TypeTable::UNIT {
-                    let type_name = self.type_table.borrow().type_name(then_type);
-                    let _ = self.logger.error(TypeError::TypeMismatch {
-                        expected: "()".to_string(),
-                        found: type_name,
-                        span: if_expr.then_block.span,
-                    });
-                }
-                TypeTable::UNIT
-            } else {
-                let then_name = self.type_table.borrow().type_name(then_type);
-                let else_name = self.type_table.borrow().type_name(else_type);
-                let _ = self.logger.error(TypeError::TypeMismatch {
-                    expected: then_name,
-                    found: else_name,
-                    span: if_expr.else_block.as_ref().unwrap().span,
-                });
-                then_type
+                TirExpr::new(
+                    TirExprKind::If {
+                        condition: Box::new(condition),
+                        then_branch: then_block,
+                        else_branch: else_block,
+                    },
+                    type_id,
+                    if_expr.span,
+                )
             }
-        };
-
-        let result = TirExpr::new(
-            TirExprKind::If {
-                condition: Box::new(condition),
-                then_branch: then_block,
-                else_branch: else_block,
-            },
-            type_id,
-            if_expr.span,
-        );
-
-        if if_expr.init.is_some() {
-            ctx.exit_scope();
         }
-
-        result
     }
 
     /// Resolve a match expression
@@ -1443,13 +1405,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
             ast::Expr::If(if_expr) => {
-                if let Some(init) = &if_expr.init
-                    && let Some(ref v) = init.value
-                {
-                    Self::collect_mutated_vars(v, result);
-                }
-                if let ast::Condition::Expr(cond) = &if_expr.condition {
-                    Self::collect_mutated_vars(cond, result);
+                match &if_expr.condition {
+                    ast::Condition::Expr(cond) => Self::collect_mutated_vars(cond, result),
+                    ast::Condition::LetChain { elements, .. } => {
+                        for elem in elements {
+                            match elem {
+                                ast::ConditionElement::Let { expr, .. } => {
+                                    Self::collect_mutated_vars(expr, result);
+                                }
+                                ast::ConditionElement::Expr(e) => {
+                                    Self::collect_mutated_vars(e, result);
+                                }
+                            }
+                        }
+                    }
                 }
                 for stmt in &if_expr.then_block.stmts {
                     Self::collect_mutated_vars_stmt(stmt, result);
@@ -1491,13 +1460,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
             ast::Stmt::If(is) => {
-                if let Some(init) = &is.init
-                    && let Some(ref v) = init.value
-                {
-                    Self::collect_mutated_vars(v, result);
-                }
-                if let ast::Condition::Expr(cond) = &is.condition {
-                    Self::collect_mutated_vars(cond, result);
+                match &is.condition {
+                    ast::Condition::Expr(cond) => Self::collect_mutated_vars(cond, result),
+                    ast::Condition::LetChain { elements, .. } => {
+                        for elem in elements {
+                            match elem {
+                                ast::ConditionElement::Let { expr, .. } => {
+                                    Self::collect_mutated_vars(expr, result);
+                                }
+                                ast::ConditionElement::Expr(e) => {
+                                    Self::collect_mutated_vars(e, result);
+                                }
+                            }
+                        }
+                    }
                 }
                 for stmt in &is.then_block.stmts {
                     Self::collect_mutated_vars_stmt(stmt, result);

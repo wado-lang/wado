@@ -853,7 +853,7 @@ impl<'a> PatternLowerer<'a> {
             TirStmtKind::IfLet {
                 mut scrutinee,
                 mut pattern,
-                then_block,
+                mut then_block,
                 else_block,
             } => {
                 // Lower expressions in scrutinee first
@@ -895,6 +895,11 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_if_pattern_struct(
                         scrutinee, &pattern, then_block, stmt.span, out, type_table,
                     );
+                } else if matches!(pattern, TirPattern::Binding { .. } | TirPattern::Wildcard) {
+                    // Irrefutable binding pattern (e.g. `if let x = 42`) — assign and run then block
+                    self.lower_let_pattern(&pattern, false, scrutinee, stmt.span, out, type_table);
+                    self.lower_block(&mut then_block, type_table);
+                    out.extend(then_block.stmts);
                 } else if can_lower {
                     // Lower Option, Variant, and Enum patterns to Let + If
                     self.lower_if_pattern_option(
