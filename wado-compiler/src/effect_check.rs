@@ -129,24 +129,16 @@ struct EffectChecker<'a, H: CompilerHost> {
     modules: &'a IndexMap<ModuleSource, TirModule>,
     logger: &'a Logger<'a, H>,
     /// Current function's effects (set when entering a function)
-<<<<<<< HEAD
-    current_effects: IndexSet<String>,
+    current_effects: IndexSet<EffectRef>,
     /// Current function's stores-declared parameter names
     current_stores: IndexSet<String>,
     /// Current function's reference parameter names (for detecting violations).
     /// Only contains parameters whose type is `&T` or `&mut T`.
     current_ref_params: IndexSet<String>,
-    /// Current module's type table (for checking parameter types)
-    current_type_table: Option<std::rc::Rc<std::cell::RefCell<crate::tir::TypeTable>>>,
-    /// What this checker is checking
-    mode: CheckMode,
-||||||| c7a6f41
-    current_effects: IndexSet<String>,
-=======
-    current_effects: IndexSet<EffectRef>,
     /// Type table (shared across modules)
     type_table: Option<Rc<RefCell<TypeTable>>>,
->>>>>>> origin/main
+    /// What this checker is checking
+    mode: CheckMode,
 }
 
 impl<'a, H: CompilerHost> EffectChecker<'a, H> {
@@ -156,22 +148,16 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             modules,
             logger,
             current_effects: IndexSet::default(),
-<<<<<<< HEAD
             current_stores: IndexSet::default(),
             current_ref_params: IndexSet::default(),
-            current_type_table: None,
-            mode: CheckMode::EffectsOnly,
-||||||| c7a6f41
-=======
             type_table,
->>>>>>> origin/main
+            mode: CheckMode::EffectsOnly,
         }
     }
 
     /// Check all modules
     fn check_all(&mut self) -> Result<(), Bail> {
-        for (_source, module) in self.modules {
-            self.current_type_table = Some(module.type_table.clone());
+        for module in self.modules.values() {
             self.check_module(module)?;
         }
         Ok(())
@@ -225,7 +211,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         // Track which parameters are reference types (only for stores checking)
         self.current_ref_params = IndexSet::default();
         if self.should_check_stores(func)
-            && let Some(tt_rc) = &self.current_type_table
+            && let Some(tt_rc) = &self.type_table
         {
             let tt = tt_rc.borrow();
             for param in &func.params {
@@ -464,16 +450,6 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         Ok(())
     }
 
-<<<<<<< HEAD
-    /// Check a function call for effect violations
-    fn check_call(&mut self, func_ref: &FunctionRef, span: Span) -> Result<(), Bail> {
-        if self.mode != CheckMode::EffectsOnly {
-            return Ok(());
-        }
-||||||| c7a6f41
-    /// Check a function call for effect violations
-    fn check_call(&mut self, func_ref: &FunctionRef, span: Span) -> Result<(), Bail> {
-=======
     /// Check a function call for effect violations, resolving effect parameters
     /// from function-typed arguments when needed.
     fn check_call_with_args(
@@ -482,7 +458,9 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         args: &[CallArg],
         span: Span,
     ) -> Result<(), Bail> {
->>>>>>> origin/main
+        if self.mode != CheckMode::EffectsOnly {
+            return Ok(());
+        }
         let callee_effects = self.get_function_effects(func_ref);
 
         // Separate effect params from concrete effects
@@ -507,7 +485,6 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         Ok(())
     }
 
-<<<<<<< HEAD
     /// Check if an expression traces back to a reference parameter not declared in stores.
     /// Returns the parameter name if it's a stores violation, None otherwise.
     fn find_unstored_ref_param(&self, expr: &TirExpr) -> Option<String> {
@@ -571,40 +548,6 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         Ok(())
     }
 
-    /// Get the effects required by a function
-    fn get_function_effects(&self, func_ref: &FunctionRef) -> Vec<String> {
-        // Look up in the appropriate module
-        if let Some(module) = self.modules.get(&func_ref.module_source) {
-            // Check functions
-            for func_rc in &module.functions {
-                let func = func_rc.borrow();
-                if func.name == func_ref.name {
-                    return func.effects.clone();
-                }
-            }
-            // Check impl methods
-            for impl_block in &module.impls {
-                for method in &impl_block.methods {
-                    if method.name == func_ref.name {
-                        return method.effects.clone();
-||||||| c7a6f41
-    /// Get the effects required by a function
-    fn get_function_effects(&self, func_ref: &FunctionRef) -> Vec<String> {
-        // Look up in the appropriate module
-        if let Some(module) = self.modules.get(&func_ref.module_source) {
-            // Check functions
-            for func_rc in &module.functions {
-                let func = func_rc.borrow();
-                if func.name == func_ref.name {
-                    return func.effects.clone();
-                }
-            }
-            // Check impl methods
-            for impl_block in &module.impls {
-                for method in &impl_block.methods {
-                    if method.name == func_ref.name {
-                        return method.effects.clone();
-=======
     /// Resolve effect parameters to concrete effects by examining function-typed arguments.
     ///
     /// For `fn wrapper<effect E>(f: fn() with E) with E`, when called with a closure
@@ -662,7 +605,6 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                                 }
                             }
                         }
->>>>>>> origin/main
                     }
                 }
             }

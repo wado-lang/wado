@@ -931,16 +931,10 @@ pub struct WirFunction {
     /// Generic instantiation origin.
     pub generic_origin: Option<WirGenericOrigin>,
     /// Effect requirements (for unparse display).
-<<<<<<< HEAD
-    pub effects: Vec<String>,
+    pub effects: Vec<crate::tir::EffectRef>,
     /// Parameter names declared in `stores[...]` — the function may store these references.
     /// Used by WIR optimizations for stores-aware alias analysis.
     pub stores: Vec<String>,
-||||||| c7a6f41
-    pub effects: Vec<String>,
-=======
-    pub effects: Vec<crate::tir::EffectRef>,
->>>>>>> origin/main
     /// Compiler feature bitflags (e.g., `COMP_FEATURE_ARRAY_APPEND`).
     /// Set via `#[comp_feature("array_append")]` attribute in Wado source.
     pub comp_features: u32,

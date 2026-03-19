@@ -291,22 +291,8 @@ impl<'a> Unparser<'a> {
             self.unparse_type(ret);
         }
 
-<<<<<<< HEAD
         // Effects and stores
         self.unparse_with_clause(&f.effects, &f.stores);
-||||||| c7a6f41
-        // Effects
-        if !f.effects.is_empty() {
-            self.output.push_str(" with ");
-            self.output.push_str(&f.effects.join(", "));
-        }
-=======
-        // Effects (AST level — still strings)
-        if !f.effects.is_empty() {
-            self.output.push_str(" with ");
-            self.output.push_str(&f.effects.join(", "));
-        }
->>>>>>> origin/main
 
         // Body
         if let Some(body) = &f.body {
@@ -3608,24 +3594,8 @@ impl<'a> TirUnparser<'a> {
                 .push_str(&self.type_table.type_name(f.return_type));
         }
 
-<<<<<<< HEAD
         // Effects and stores
         self.unparse_tir_with_clause(&f.effects, &f.stores);
-||||||| c7a6f41
-        // Effects
-        if !f.effects.is_empty() {
-            self.output.push_str(" with ");
-            self.output.push_str(&f.effects.join(", "));
-        }
-=======
-        // Effects
-        if !f.effects.is_empty() {
-            self.output.push_str(" with ");
-            let effects_str: Vec<&str> =
-                f.effects.iter().map(super::tir::EffectRef::name).collect();
-            self.output.push_str(&effects_str.join(", "));
-        }
->>>>>>> origin/main
 
         // Body
         if let Some(body) = &f.body {
@@ -3640,13 +3610,15 @@ impl<'a> TirUnparser<'a> {
         }
     }
 
-    fn unparse_tir_with_clause(&mut self, effects: &[String], stores: &[String]) {
+    fn unparse_tir_with_clause(&mut self, effects: &[super::tir::EffectRef], stores: &[String]) {
         if effects.is_empty() && stores.is_empty() {
             return;
         }
         self.output.push_str(" with ");
         if !effects.is_empty() {
-            self.output.push_str(&effects.join(", "));
+            let effects_str: Vec<&str> =
+                effects.iter().map(super::tir::EffectRef::name).collect();
+            self.output.push_str(&effects_str.join(", "));
             if !stores.is_empty() {
                 self.output.push_str(", ");
             }

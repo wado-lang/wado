@@ -389,15 +389,9 @@ pub enum ResolvedType {
     Function {
         params: Vec<TypeId>,
         return_type: TypeId,
-<<<<<<< HEAD
-        effects: Vec<String>,
+        effects: Vec<EffectRef>,
         /// Positional indices of parameters the function may store.
         stores: Vec<u32>,
-||||||| c7a6f41
-        effects: Vec<String>,
-=======
-        effects: Vec<EffectRef>,
->>>>>>> origin/main
     },
     Tuple(Vec<TypeId>),
     Reactive(TypeId),
@@ -785,14 +779,8 @@ impl TypeTable {
         &mut self,
         params: Vec<TypeId>,
         return_type: TypeId,
-<<<<<<< HEAD
-        effects: Vec<String>,
-        stores: Vec<u32>,
-||||||| c7a6f41
-        effects: Vec<String>,
-=======
         effects: Vec<EffectRef>,
->>>>>>> origin/main
+        stores: Vec<u32>,
     ) -> TypeId {
         self.intern(ResolvedType::Function {
             params,
@@ -2198,15 +2186,9 @@ pub struct TirFunction {
     pub method_info: Option<LocalMethodName>,
     pub params: Vec<TirParam>,
     pub return_type: TypeId,
-<<<<<<< HEAD
-    pub effects: Vec<String>,
+    pub effects: Vec<EffectRef>,
     /// Parameter names declared in `stores[...]` — the function may store these references.
     pub stores: Vec<String>,
-||||||| c7a6f41
-    pub effects: Vec<String>,
-=======
-    pub effects: Vec<EffectRef>,
->>>>>>> origin/main
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,

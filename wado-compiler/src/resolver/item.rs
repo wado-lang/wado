@@ -428,14 +428,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             method_info: None,        // Not a method
             params,
             return_type,
-<<<<<<< HEAD
-            effects: func.effects.clone(),
-            stores: func.stores.clone(),
-||||||| c7a6f41
-            effects: func.effects.clone(),
-=======
             effects,
->>>>>>> origin/main
+            stores: func.stores.clone(),
             body,
             span: func.span,
             local_count: ctx.next_local,
@@ -776,14 +770,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }),
             params,
             return_type,
-<<<<<<< HEAD
-            effects: func.effects.clone(),
-            stores: func.stores.clone(),
-||||||| c7a6f41
-            effects: func.effects.clone(),
-=======
             effects: self.resolve_effects(&func.effects),
->>>>>>> origin/main
+            stores: func.stores.clone(),
             body,
             span: func.span,
             local_count: ctx.next_local,
