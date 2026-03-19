@@ -6,11 +6,14 @@
 //! - Reference elimination via `ref_elim` module
 //! - Scalar Replacement of Aggregates (SROA) via `sroa` module
 //! - Copy propagation via `copy_prop` module
-//! - Constant optimizations (propagation, folding, global promotion, branch pruning) via `constants` module
+//! - Constant optimizations (propagation, folding, global promotion, branch pruning) via `const_*` modules
 //! - Loop-Invariant Code Motion (LICM) via `licm` module
 //! - Select lowering via `select_lowering` module
 
-mod constants;
+mod const_branch_prune;
+mod const_folding;
+mod const_global_promotion;
+mod const_propagation;
 mod copy_prop;
 pub mod dce;
 mod field_scalarize;
@@ -24,9 +27,10 @@ mod store_load_forward;
 mod tmpl_hoist;
 pub(crate) mod visitor;
 
-use constants::{
-    fold_constants, promote_constant_globals, propagate_constants, prune_constant_branches,
-};
+use const_branch_prune::prune_constant_branches;
+use const_folding::fold_constants;
+use const_global_promotion::promote_constant_globals;
+use const_propagation::propagate_constants;
 use copy_prop::propagate_copies;
 use dce::{
     analyze_project, remove_unreachable_functions, remove_unreachable_globals,

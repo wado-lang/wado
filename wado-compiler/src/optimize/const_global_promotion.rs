@@ -16,7 +16,7 @@ use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmtKind};
 
-use super::super::visitor::{TirVisitor, walk_block, walk_expr};
+use super::visitor::{TirVisitor, walk_block, walk_expr};
 
 type GlobalKey = (ModuleSource, String);
 

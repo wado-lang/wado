@@ -10,7 +10,7 @@
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 
-use super::super::visitor::{TirVisitor, visit_project_functions, walk_block, walk_expr};
+use super::visitor::{TirVisitor, visit_project_functions, walk_block, walk_expr};
 
 /// Prune constant branches and simplify trivial blocks in all functions.
 pub fn prune_constant_branches(project: &mut Project) -> bool {
