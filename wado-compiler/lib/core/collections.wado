@@ -173,7 +173,7 @@ impl TreeMap<K, V> {
     /// Inserts a key-value pair into the map.
     /// If the key already exists, updates the value (preserving insertion order).
     /// If the key was previously removed, re-inserts it at the end.
-    fn insert(&mut self, key: K, value: V) {
+    fn insert(&mut self, key: K, value: V) with stores[key, value] {
         // Check if key already exists (non-deleted)
         let existing_index = self.find_index(key);
         if existing_index >= 0 {
@@ -335,7 +335,7 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
         return TreeMap::<String, V>::new();
     }
 
-    fn insert_literal(&mut self, key: String, value: Self::Value) {
+    fn insert_literal(&mut self, key: String, value: Self::Value) with stores[value] {
         self.insert(key, value);
     }
 
@@ -397,7 +397,7 @@ impl TreeSet<T: Ord> {
     /// Inserts a value into the set.
     ///
     /// Returns true if the value was newly inserted, false if it was already present.
-    pub fn insert(&mut self, value: T) -> bool {
+    pub fn insert(&mut self, value: T) -> bool with stores[value] {
         let before = self.inner.len();
         self.inner.insert(value, ());
         return self.inner.len() > before;

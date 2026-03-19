@@ -1720,6 +1720,7 @@ fn make_adapter_function(
         params,
         return_type,
         effects: vec![],
+        stores: vec![],
         body: Some(body),
         span: synth_span(),
         local_count,

@@ -282,6 +282,7 @@ mod tests {
                 span: make_span(),
             })),
             effects: vec![],
+            stores: vec![],
             body: None,
             span: make_span(),
         };
@@ -315,6 +316,7 @@ mod tests {
                 span: make_span(),
             })),
             effects: vec![],
+            stores: vec![],
             body: None,
             span: make_span(),
         };
@@ -374,6 +376,7 @@ mod tests {
                 span: make_span(),
             })),
             effects: vec![],
+            stores: vec![],
             body: None,
             span: make_span(),
         };

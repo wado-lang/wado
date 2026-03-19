@@ -92,6 +92,7 @@ fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
         params: func.params.clone(),
         return_type: func.return_type.clone(),
         effects: func.effects.clone(),
+        stores: func.stores.clone(),
         body: func.body.as_ref().map(|b| desugar_block(b, ctx)),
         span: func.span,
     }

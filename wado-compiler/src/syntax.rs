@@ -70,7 +70,9 @@ impl SyntaxDefinition {
                     "type", "use", "from", "pub", "import", "export", "test",
                 ],
                 // Modifiers
-                modifier: vec!["as", "with", "mut", "async", "move", "unique", "in", "of"],
+                modifier: vec![
+                    "as", "with", "mut", "async", "move", "unique", "in", "of", "stores",
+                ],
                 // Other keywords
                 other: vec![
                     "assert", "effect", "handler", "reactive", "resource", "world",
@@ -158,6 +160,7 @@ mod tests {
             "matches", "for", "while", "loop", "break", "continue", "in", "of", "pub", "effect",
             "handler", "reactive", "move", "unique", "struct", "enum", "variant", "type", "impl",
             "trait", "resource", "world", "async", "import", "export", "assert", "global", "const",
+            "stores",
         ];
 
         // Contextual keywords: these are in SyntaxDefinition for highlighting

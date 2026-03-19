@@ -1118,6 +1118,7 @@ impl WasiRegistry {
                     params: resolved_params,
                     return_type: resolved_return,
                     effects: func_ty.effects.clone(),
+                    stores: func_ty.stores.clone(),
                 }))
             }
             // NamespacedGeneric types (like builtin::array<T>) are passed through

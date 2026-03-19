@@ -457,6 +457,7 @@ fn register_single_function(
                     .collect(),
             }),
         effects,
+        stores: tir_func.stores.clone(),
         comp_features: tir_func.comp_features,
         export_name: tir_func.export_name.clone(),
     };

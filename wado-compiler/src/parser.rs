@@ -11,10 +11,10 @@ use crate::ast::{
     IndexExpr, InnerAttribute, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
     MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
     Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
-    StructDecl, StructField, StructLiteralExpr, StructLiteralField, StructPatternField,
-    TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl,
-    WorldExport, WorldImport,
+    StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
+    StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport,
+    WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -853,12 +853,7 @@ impl Parser {
             None
         };
 
-        let effects = if self.check(&TokenKind::With) {
-            self.advance();
-            self.parse_effect_list()?
-        } else {
-            Vec::new()
-        };
+        let (effects, stores) = self.parse_with_clause()?;
 
         // Check for bodyless function declaration (compiler built-in)
         // e.g., `pub fn stream_new() -> i64;`
@@ -883,6 +878,7 @@ impl Parser {
             params,
             return_type,
             effects,
+            stores,
             body,
             span,
         })
@@ -972,7 +968,20 @@ impl Parser {
         })
     }
 
-    fn parse_effect_list(&mut self) -> ParseResult<Vec<String>> {
+    /// Parse `with Effect1, Effect2, stores[param1, param2]` clause.
+    /// Returns (effects, stores). The `stores` keyword can appear anywhere in the effect list.
+    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<String>)> {
+        if !self.check(&TokenKind::With) {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        self.advance();
+
+        // Check if the first item is `stores[...]`
+        if self.check(&TokenKind::Stores) {
+            let stores = self.parse_stores_list()?;
+            return Ok((Vec::new(), stores));
+        }
+
         let mut effects = vec![self.consume_ident()?];
 
         while self.check(&TokenKind::Comma) {
@@ -984,10 +993,90 @@ impl Parser {
                 break;
             }
             self.advance();
+            // Check if next item is `stores[...]`
+            if self.check(&TokenKind::Stores) {
+                let stores = self.parse_stores_list()?;
+                return Ok((effects, stores));
+            }
             effects.push(self.consume_ident()?);
         }
 
-        Ok(effects)
+        Ok((effects, Vec::new()))
+    }
+
+    /// Parse `stores[name1, name2]` — the `stores` keyword has already been peeked.
+    fn parse_stores_list(&mut self) -> ParseResult<Vec<String>> {
+        self.expect(&TokenKind::Stores)?;
+        self.expect(&TokenKind::LBracket)?;
+        let mut names = vec![self.consume_ident()?];
+        while self.check(&TokenKind::Comma) {
+            self.advance();
+            names.push(self.consume_ident()?);
+        }
+        self.expect(&TokenKind::RBracket)?;
+        Ok(names)
+    }
+
+    /// Parse `with` clause for function types: `with Effect1, stores[0, 1]`
+    /// In function type position, stores entries are positional indices.
+    fn parse_with_clause_for_fn_type(&mut self) -> ParseResult<(Vec<String>, Vec<StoresEntry>)> {
+        if !self.check(&TokenKind::With) {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        self.advance();
+
+        // Check if the first item is `stores[...]`
+        if self.check(&TokenKind::Stores) {
+            let stores = self.parse_stores_list_for_fn_type()?;
+            return Ok((Vec::new(), stores));
+        }
+
+        let mut effects = vec![self.consume_ident()?];
+
+        while self.check(&TokenKind::Comma) {
+            // Lookahead: if the token after comma is `ident:`, this is a parameter
+            // in the enclosing parameter list, not another effect. Stop here.
+            if matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+                && self.peek_nth(2).kind == TokenKind::Colon
+            {
+                break;
+            }
+            self.advance();
+            if self.check(&TokenKind::Stores) {
+                let stores = self.parse_stores_list_for_fn_type()?;
+                return Ok((effects, stores));
+            }
+            effects.push(self.consume_ident()?);
+        }
+
+        Ok((effects, Vec::new()))
+    }
+
+    /// Parse `stores[0, 1]` or `stores[name]` in function type position.
+    fn parse_stores_list_for_fn_type(&mut self) -> ParseResult<Vec<StoresEntry>> {
+        self.expect(&TokenKind::Stores)?;
+        self.expect(&TokenKind::LBracket)?;
+        let mut entries = vec![self.parse_stores_entry()?];
+        while self.check(&TokenKind::Comma) {
+            self.advance();
+            entries.push(self.parse_stores_entry()?);
+        }
+        self.expect(&TokenKind::RBracket)?;
+        Ok(entries)
+    }
+
+    /// Parse a single stores entry: either a number (positional) or identifier (named).
+    fn parse_stores_entry(&mut self) -> ParseResult<StoresEntry> {
+        if let TokenKind::NumberLit(num) = self.peek_kind() {
+            let n = num.parse::<u32>().map_err(|_| ParseError {
+                message: "stores index must be a non-negative integer".to_string(),
+                span: self.peek().span,
+            })?;
+            self.advance();
+            Ok(StoresEntry::Index(n))
+        } else {
+            Ok(StoresEntry::Name(self.consume_ident()?))
+        }
     }
 
     fn parse_block(&mut self) -> ParseResult<Block> {
@@ -2936,18 +3025,14 @@ impl Parser {
                 })
             };
 
-            // Parse effects (optional): with Effect1, Effect2
-            let effects = if self.check(&TokenKind::With) {
-                self.advance();
-                self.parse_effect_list()?
-            } else {
-                Vec::new()
-            };
+            // Parse effects and stores (optional): with Effect1, stores[0]
+            let (effects, stores) = self.parse_with_clause_for_fn_type()?;
 
             return Ok(Type::Function(Box::new(FunctionType {
                 params,
                 return_type,
                 effects,
+                stores,
             })));
         }
 
@@ -4129,6 +4214,73 @@ mod tests {
             assert_eq!(func.effects, vec!["Stdout"]);
         } else {
             panic!("expected function");
+        }
+    }
+
+    #[test]
+    fn test_function_with_stores() {
+        let module = parse("fn store(data: &Data) with stores[data] { }").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            assert!(func.effects.is_empty());
+            assert_eq!(func.stores, vec!["data"]);
+        } else {
+            panic!("expected function");
+        }
+    }
+
+    #[test]
+    fn test_function_with_effects_and_stores() {
+        let module = parse("fn store(data: &Data) with Stdout, stores[data] { }").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            assert_eq!(func.effects, vec!["Stdout"]);
+            assert_eq!(func.stores, vec!["data"]);
+        } else {
+            panic!("expected function");
+        }
+    }
+
+    #[test]
+    fn test_function_with_multiple_stores() {
+        let module = parse("fn store(a: &Data, b: &Data) with stores[a, b] { }").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            assert!(func.effects.is_empty());
+            assert_eq!(func.stores, vec!["a", "b"]);
+        } else {
+            panic!("expected function");
+        }
+    }
+
+    #[test]
+    fn test_fn_type_with_effect_in_param_list() {
+        // `fn(T) -> T with E` inside a parameter list must not consume the next parameter
+        let module =
+            parse("fn apply<T>(f: fn(T) -> T with Stdout, x: T) -> T with Stdout { return f(x); }")
+                .unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            assert_eq!(func.params.len(), 2);
+            assert_eq!(func.params[0].name, "f");
+            assert_eq!(func.params[1].name, "x");
+            if let Type::Function(ft) = &func.params[0].ty {
+                assert_eq!(ft.effects, vec!["Stdout"]);
+            } else {
+                panic!("expected function type for param f");
+            }
+        } else {
+            panic!("expected function");
+        }
+    }
+
+    #[test]
+    fn test_function_with_stores_self() {
+        let module = parse(
+            "impl Data { fn store_self(&self) -> Container with stores[self] { return Container { data: self }; } }",
+        )
+        .unwrap();
+        if let Item::Impl(impl_block) = &module.items[0] {
+            let method = &impl_block.methods[0];
+            assert_eq!(method.stores, vec!["self"]);
+        } else {
+            panic!("expected impl block");
         }
     }
 

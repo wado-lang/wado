@@ -127,10 +127,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Step 8: Create function type
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
-        let func_type =
-            self.type_table
-                .borrow_mut()
-                .make_function(param_types, return_type, Vec::new());
+        let func_type = self.type_table.borrow_mut().make_function(
+            param_types,
+            return_type,
+            Vec::new(),
+            Vec::new(),
+        );
 
         let closure_tir = TirExpr::new(
             TirExprKind::Closure {
@@ -219,10 +221,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Create function type
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
-        let func_type =
-            self.type_table
-                .borrow_mut()
-                .make_function(param_types, return_type, Vec::new());
+        let func_type = self.type_table.borrow_mut().make_function(
+            param_types,
+            return_type,
+            Vec::new(),
+            Vec::new(),
+        );
 
         TirExpr::new(
             TirExprKind::Closure {

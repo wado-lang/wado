@@ -4,53 +4,88 @@
 //! folds constant comparisons, and eliminates dead branches.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirInstr, WirModule, WirTypeDef, WirTypeId};
+use crate::wir::{WirFunction, WirInstr, WirModule, WirTypeDef, WirTypeId};
 
 use super::util::collect_local_gets_deep;
 
 pub(super) fn forward_struct_field_constants(module: &mut WirModule) {
     let types = &module.types;
-    for func in &mut module.functions {
-        let Some(body) = &mut func.body else {
+    for func_idx in 0..module.functions.len() {
+        let Some(body) = module.functions[func_idx].body.take() else {
             continue;
         };
         // Collect locals whose references escape. Field forwarding is unsafe
         // for these locals because their fields can be modified through aliases.
-        let aliased = collect_aliased_locals(body);
+        // Uses stores info: locals passed to functions without `stores` for that
+        // parameter are NOT marked as aliased.
+        let aliased = collect_aliased_locals(&body, &module.functions);
+        let mut body = body;
         let mut changed = true;
         while changed {
             let mut known = FieldKnowledge::new(types, &aliased);
-            changed = forward_fields_in_body(body, &mut known);
+            changed = forward_fields_in_body(&mut body, &mut known);
         }
+        module.functions[func_idx].body = Some(body);
     }
 }
 
 /// Collect locals whose references escape (address taken, embedded in structs,
-/// or passed to function calls). These are unsafe for field forwarding.
-fn collect_aliased_locals(body: &[WirInstr]) -> IndexSet<String> {
+/// or passed to function calls that declare `stores` for that parameter).
+/// Locals passed to functions without `stores` are NOT aliased — the callee
+/// cannot retain the reference beyond the call.
+fn collect_aliased_locals(body: &[WirInstr], functions: &[WirFunction]) -> IndexSet<String> {
     let mut aliased = IndexSet::default();
     for instr in body {
-        collect_aliased_in_instr(instr, &mut aliased);
+        collect_aliased_in_instr(instr, &mut aliased, functions, false);
     }
     aliased
 }
 
-fn collect_aliased_in_instr(instr: &WirInstr, aliased: &mut IndexSet<String>) {
+/// Recursively collect aliased locals.
+///
+/// `in_non_stores_arg`: when true, we are inside a Call argument whose callee
+/// does not declare `stores` for this parameter position. In this context,
+/// `RefAsNonNull(LocalGet)` and bare `LocalGet` do not create persistent aliases.
+fn collect_aliased_in_instr(
+    instr: &WirInstr,
+    aliased: &mut IndexSet<String>,
+    functions: &[WirFunction],
+    in_non_stores_arg: bool,
+) {
     match instr {
-        // Function calls: all LocalGet args could have their fields modified
-        WirInstr::Call { args, .. } | WirInstr::CallRef { args, .. } => {
+        // Direct function calls: check stores for each parameter.
+        WirInstr::Call { func_id, args } => {
+            let callee = functions.get(func_id.index() as usize);
+            for (i, arg) in args.iter().enumerate() {
+                let stores_param = callee
+                    .and_then(|f| f.param_names.get(i))
+                    .map(|name| f_stores_param(f_stores(callee), name))
+                    .unwrap_or(true);
+                if stores_param {
+                    // Callee may store this reference — mark all locals as aliased.
+                    collect_local_gets_deep(arg, aliased);
+                }
+                // Recurse into sub-expressions (nested calls get their own analysis).
+                collect_aliased_in_instr(arg, aliased, functions, !stores_param);
+            }
+            return; // Skip default for_each_child — args handled above.
+        }
+        // Indirect calls: conservative (unknown callee).
+        WirInstr::CallRef { args, .. } => {
             for arg in args {
                 collect_local_gets_deep(arg, aliased);
+                collect_aliased_in_instr(arg, aliased, functions, false);
             }
+            return;
         }
-        // RefAsNonNull of a LocalGet: address taken
+        // RefAsNonNull of a LocalGet: address taken — but suppress if inside
+        // a non-stores call argument (the reference doesn't persist).
         WirInstr::RefAsNonNull(inner) => {
-            if let WirInstr::LocalGet { name } = inner.as_ref() {
+            if !in_non_stores_arg && let WirInstr::LocalGet { name } = inner.as_ref() {
                 aliased.insert(name.clone());
             }
         }
         // LocalSet from another local: both are aliases of the same GC object.
-        // Modifications through either one affect the other.
         WirInstr::LocalSet { name, value } => {
             if let WirInstr::LocalGet { name: source } = value.as_ref() {
                 aliased.insert(name.clone());
@@ -59,10 +94,18 @@ fn collect_aliased_in_instr(instr: &WirInstr, aliased: &mut IndexSet<String>) {
         }
         _ => {}
     }
-    // Recurse into children
+    // Recurse into children, propagating the suppression context.
     instr.for_each_child(&mut |child| {
-        collect_aliased_in_instr(child, aliased);
+        collect_aliased_in_instr(child, aliased, functions, in_non_stores_arg);
     });
+}
+
+fn f_stores(callee: Option<&WirFunction>) -> &[String] {
+    callee.map(|f| f.stores.as_slice()).unwrap_or(&[])
+}
+
+fn f_stores_param(stores: &[String], param_name: &str) -> bool {
+    stores.iter().any(|s| s == param_name)
 }
 
 /// Known constant field values for locals.

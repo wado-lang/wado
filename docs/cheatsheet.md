@@ -857,7 +857,38 @@ let y = apply(|n: i32| {                     // E = Stdout
 
 ## Reference Storage
 
-> Not yet implemented. See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+
+Functions that store reference parameters must declare `stores[...]`:
+
+```wado
+struct Container {
+    data: &Data,
+}
+
+// Function that stores a reference parameter — must declare stores
+fn store_data(data: &Data) -> Container with stores[data] {
+    return Container { data };
+}
+
+// Function that uses but does NOT store a reference — no stores needed
+fn use_data(data: &Data) -> i32 {
+    return data.value;
+}
+
+// Combined with effects
+fn store_and_log(data: &Data) -> Container with Stdout, stores[data] {
+    println(`Storing: {data.value}`);
+    return Container { data };
+}
+```
+
+Rules:
+
+- `stores[param]` declares that the function may store the reference parameter
+- Only reference parameters (`&T` or `&mut T`) can appear in `stores[...]`
+- Without `stores[param]`, a function cannot return, store in struct fields, or assign to globals the reference parameter
+- In function type position, use positional indices: `fn(&Data) with stores[0]`
 
 ## Entrypoint
 
@@ -1048,7 +1079,6 @@ See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for design and rationale. In
 
 - Effect handlers
 - `reactive` values and `observe()`
-- `stores[...]` syntax for reference storage
 - postfix `?` operator (error propagation)
 - JSX
 - Generic function/method call type inference

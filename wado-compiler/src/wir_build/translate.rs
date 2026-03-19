@@ -217,6 +217,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 meta: crate::wir::WirMeta::default(),
                 generic_origin: None,
                 effects: Vec::new(),
+                stores: Vec::new(),
                 comp_features: 0,
                 export_name: None,
             };

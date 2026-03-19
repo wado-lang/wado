@@ -51,6 +51,7 @@ pub enum TokenKind {
     Global,
     Const,
     Matches,
+    Stores,
     // Note: "test" is handled as a contextual keyword in the parser, not as a TokenKind
 
     // Literals
@@ -181,6 +182,7 @@ impl TokenKind {
             Self::Global => Some("global"),
             Self::Const => Some("const"),
             Self::Matches => Some("matches"),
+            Self::Stores => Some("stores"),
             // Note: "test" is a contextual keyword, not listed here
             Self::True => Some("true"),
             Self::False => Some("false"),

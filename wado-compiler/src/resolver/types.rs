@@ -164,6 +164,9 @@ pub enum TypeError {
         self_type_name: String,
         span: Span,
     },
+
+    /// Invalid stores declaration
+    InvalidStores { message: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {
@@ -292,6 +295,9 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, trait_name, self_type_name
                 )
             }
+            TypeError::InvalidStores { message, span } => {
+                write!(f, "{}:{}: {}", span.line, span.column, message)
+            }
         }
     }
 }
@@ -403,6 +409,9 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 ),
                 *span,
             ),
+            TypeError::InvalidStores { message, span } => {
+                (Code::InvalidSyntax, message.clone(), *span)
+            }
         };
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,

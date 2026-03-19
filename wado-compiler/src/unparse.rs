@@ -291,11 +291,8 @@ impl<'a> Unparser<'a> {
             self.unparse_type(ret);
         }
 
-        // Effects (AST level — still strings)
-        if !f.effects.is_empty() {
-            self.output.push_str(" with ");
-            self.output.push_str(&f.effects.join(", "));
-        }
+        // Effects and stores
+        self.unparse_with_clause(&f.effects, &f.stores);
 
         // Body
         if let Some(body) = &f.body {
@@ -307,6 +304,24 @@ impl<'a> Unparser<'a> {
             self.output.push_str("}\n");
         } else {
             self.output.push_str(";\n");
+        }
+    }
+
+    fn unparse_with_clause(&mut self, effects: &[String], stores: &[String]) {
+        if effects.is_empty() && stores.is_empty() {
+            return;
+        }
+        self.output.push_str(" with ");
+        if !effects.is_empty() {
+            self.output.push_str(&effects.join(", "));
+            if !stores.is_empty() {
+                self.output.push_str(", ");
+            }
+        }
+        if !stores.is_empty() {
+            self.output.push_str("stores[");
+            self.output.push_str(&stores.join(", "));
+            self.output.push(']');
         }
     }
 
@@ -1156,9 +1171,24 @@ impl<'a> Unparser<'a> {
         self.output.push(')');
         self.output.push_str(" -> ");
         self.unparse_type(&f.return_type);
-        if !f.effects.is_empty() {
+        if !f.effects.is_empty() || !f.stores.is_empty() {
             self.output.push_str(" with ");
-            self.output.push_str(&f.effects.join(", "));
+            if !f.effects.is_empty() {
+                self.output.push_str(&f.effects.join(", "));
+                if !f.stores.is_empty() {
+                    self.output.push_str(", ");
+                }
+            }
+            if !f.stores.is_empty() {
+                self.output.push_str("stores[");
+                let entries: Vec<String> = f
+                    .stores
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect();
+                self.output.push_str(&entries.join(", "));
+                self.output.push(']');
+            }
         }
     }
 
@@ -3564,13 +3594,8 @@ impl<'a> TirUnparser<'a> {
                 .push_str(&self.type_table.type_name(f.return_type));
         }
 
-        // Effects
-        if !f.effects.is_empty() {
-            self.output.push_str(" with ");
-            let effects_str: Vec<&str> =
-                f.effects.iter().map(super::tir::EffectRef::name).collect();
-            self.output.push_str(&effects_str.join(", "));
-        }
+        // Effects and stores
+        self.unparse_tir_with_clause(&f.effects, &f.stores);
 
         // Body
         if let Some(body) = &f.body {
@@ -3582,6 +3607,25 @@ impl<'a> TirUnparser<'a> {
             self.output.push_str("}\n");
         } else {
             self.output.push_str(";\n");
+        }
+    }
+
+    fn unparse_tir_with_clause(&mut self, effects: &[super::tir::EffectRef], stores: &[String]) {
+        if effects.is_empty() && stores.is_empty() {
+            return;
+        }
+        self.output.push_str(" with ");
+        if !effects.is_empty() {
+            let effects_str: Vec<&str> = effects.iter().map(super::tir::EffectRef::name).collect();
+            self.output.push_str(&effects_str.join(", "));
+            if !stores.is_empty() {
+                self.output.push_str(", ");
+            }
+        }
+        if !stores.is_empty() {
+            self.output.push_str("stores[");
+            self.output.push_str(&stores.join(", "));
+            self.output.push(']');
         }
     }
 

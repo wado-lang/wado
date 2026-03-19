@@ -1,0 +1,36 @@
+// Optimization: when a function declares `stores` for a parameter,
+// the local IS aliased and field forwarding must NOT eliminate the check.
+// This is the inverse of stores_optimize_field_forward.wado.
+
+use { println } from "core:cli";
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+struct Holder {
+    pair: &Pair,
+}
+
+// This function STORES the reference — caller's local becomes aliased.
+fn hold_ref(p: &Pair) -> Holder with stores[p] {
+    return Holder { pair: p };
+}
+
+export fn run() with Stdout {
+    let p = Pair { a: 42, b: 99 };
+    // hold_ref stores &p, so p is aliased — field forwarding is unsafe.
+    let h = hold_ref(&p);
+    // The assert must remain because the optimizer cannot prove p.a is still 42.
+    assert p.a == 42;
+    println(`{h.pair.a}`);
+}
+
+__DATA__
+{
+    "stdout": "42\n",
+    "wir_expect:O2": [
+        "core:internal/panic"
+    ]
+}

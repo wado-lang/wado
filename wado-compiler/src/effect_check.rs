@@ -58,7 +58,7 @@ impl From<EffectError> for crate::compiler_host::Diagnostic {
     }
 }
 
-/// Check effects for all modules
+/// Check effects for all modules (runs before synthesis).
 ///
 /// Errors are emitted to the logger. Returns `Err(Bail)` if any errors found.
 pub fn check_effects<H: CompilerHost>(
@@ -66,9 +66,62 @@ pub fn check_effects<H: CompilerHost>(
     logger: &Logger<H>,
 ) -> Result<(), Bail> {
     let mut checker = EffectChecker::new(modules, logger);
-    // Ignore Bail from limit - just check if there were any errors
+    checker.mode = CheckMode::EffectsOnly;
     let _ = checker.check_all();
     logger.ok_or_bail(())
+}
+
+/// Check stores for all modules (runs after synthesis, before optimization).
+///
+/// Validates that functions storing reference parameters declare `stores[...]`.
+/// Runs after synthesis so synthesized functions are also checked.
+pub fn check_stores<H: CompilerHost>(
+    modules: &IndexMap<ModuleSource, TirModule>,
+    logger: &Logger<H>,
+) -> Result<(), Bail> {
+    let mut checker = EffectChecker::new(modules, logger);
+    checker.mode = CheckMode::StoresOnly;
+    let _ = checker.check_all();
+    logger.ok_or_bail(())
+}
+
+/// Error from stores checking
+#[derive(Debug, Clone)]
+pub struct StoresError {
+    /// Description of the violation
+    pub message: String,
+    /// Source location
+    pub span: Span,
+}
+
+impl std::fmt::Display for StoresError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}:{}: {}",
+            self.span.line, self.span.column, self.message
+        )
+    }
+}
+
+impl std::error::Error for StoresError {}
+
+impl From<StoresError> for crate::compiler_host::Diagnostic {
+    fn from(e: StoresError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        crate::compiler_host::Diagnostic {
+            severity: Severity::Error,
+            code: Code::TypeMismatch,
+            message: e.message.clone(),
+            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CheckMode {
+    EffectsOnly,
+    StoresOnly,
 }
 
 /// Effect checker that walks TIR and validates effect requirements
@@ -77,8 +130,15 @@ struct EffectChecker<'a, H: CompilerHost> {
     logger: &'a Logger<'a, H>,
     /// Current function's effects (set when entering a function)
     current_effects: IndexSet<EffectRef>,
+    /// Current function's stores-declared parameter names
+    current_stores: IndexSet<String>,
+    /// Current function's reference parameter names (for detecting violations).
+    /// Only contains parameters whose type is `&T` or `&mut T`.
+    current_ref_params: IndexSet<String>,
     /// Type table (shared across modules)
     type_table: Option<Rc<RefCell<TypeTable>>>,
+    /// What this checker is checking
+    mode: CheckMode,
 }
 
 impl<'a, H: CompilerHost> EffectChecker<'a, H> {
@@ -88,7 +148,10 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             modules,
             logger,
             current_effects: IndexSet::default(),
+            current_stores: IndexSet::default(),
+            current_ref_params: IndexSet::default(),
             type_table,
+            mode: CheckMode::EffectsOnly,
         }
     }
 
@@ -117,6 +180,23 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         Ok(())
     }
 
+    /// Whether stores checking applies to this function.
+    fn should_check_stores(&self, func: &TirFunction) -> bool {
+        if self.mode != CheckMode::StoresOnly {
+            return false;
+        }
+        // Skip CM adapter functions — they are wrappers generated for the component model boundary
+        // and handle data transfer via CM semantics (copy/own/borrow), not Wado references.
+        if func.is_cm_adapter {
+            return false;
+        }
+        // Skip functions with no parameters at all
+        if func.params.is_empty() {
+            return false;
+        }
+        true
+    }
+
     /// Check a single function
     fn check_function(&mut self, func: &TirFunction) -> Result<(), Bail> {
         // Skip test functions - they implicitly have all effects
@@ -126,6 +206,24 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
 
         // Set current context
         self.current_effects = func.effects.iter().cloned().collect();
+        self.current_stores = func.stores.iter().cloned().collect();
+
+        // Track which parameters are reference types (only for stores checking)
+        self.current_ref_params = IndexSet::default();
+        if self.should_check_stores(func)
+            && let Some(tt_rc) = &self.type_table
+        {
+            let tt = tt_rc.borrow();
+            for param in &func.params {
+                let resolved = tt.get(param.type_id);
+                if matches!(
+                    resolved,
+                    crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+                ) {
+                    self.current_ref_params.insert(param.name.clone());
+                }
+            }
+        }
 
         // Check the body if present
         if let Some(body) = &func.body {
@@ -151,6 +249,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             TirStmtKind::Expr(expr) => self.check_expr(expr)?,
             TirStmtKind::Return { value } => {
                 if let Some(e) = value {
+                    self.check_stores_violation_return(e)?;
                     self.check_expr(e)?;
                 }
             }
@@ -283,6 +382,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             }
             TirExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
+                    self.check_stores_violation_struct_field(&field.value, &field.name)?;
                     self.check_expr(&field.value)?;
                 }
             }
@@ -310,7 +410,8 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             TirExprKind::LabeledBlock { block, .. } => {
                 self.check_block(block)?;
             }
-            TirExprKind::GlobalVarSet { value, .. } => {
+            TirExprKind::GlobalVarSet { name, value, .. } => {
+                self.check_stores_violation_global(value, name)?;
                 self.check_expr(value)?;
             }
             TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
@@ -357,6 +458,9 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         args: &[CallArg],
         span: Span,
     ) -> Result<(), Bail> {
+        if self.mode != CheckMode::EffectsOnly {
+            return Ok(());
+        }
         let callee_effects = self.get_function_effects(func_ref);
 
         // Separate effect params from concrete effects
@@ -377,6 +481,69 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     span,
                 })?;
             }
+        }
+        Ok(())
+    }
+
+    /// Check if an expression traces back to a reference parameter not declared in stores.
+    /// Returns the parameter name if it's a stores violation, None otherwise.
+    fn find_unstored_ref_param(&self, expr: &TirExpr) -> Option<String> {
+        match &expr.kind {
+            TirExprKind::Local { name, .. } => {
+                // Check if this local is a reference parameter not in stores
+                if self.current_ref_params.contains(name) && !self.current_stores.contains(name) {
+                    Some(name.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Check stores violations: a function that stores a reference parameter must declare stores[param]
+    fn check_stores_violation_return(&mut self, value: &TirExpr) -> Result<(), Bail> {
+        if let Some(param_name) = self.find_unstored_ref_param(value) {
+            self.logger.error(StoresError {
+                message: format!(
+                    "returning reference parameter '{param_name}' requires `stores[{param_name}]` declaration"
+                ),
+                span: value.span,
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Check stores violation: storing a reference parameter in a struct field
+    fn check_stores_violation_struct_field(
+        &mut self,
+        value: &TirExpr,
+        _field_name: &str,
+    ) -> Result<(), Bail> {
+        if let Some(param_name) = self.find_unstored_ref_param(value) {
+            self.logger.error(StoresError {
+                message: format!(
+                    "storing reference parameter '{param_name}' in struct field requires `stores[{param_name}]` declaration"
+                ),
+                span: value.span,
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Check stores violation: assigning a reference parameter to a global
+    fn check_stores_violation_global(
+        &mut self,
+        value: &TirExpr,
+        global_name: &str,
+    ) -> Result<(), Bail> {
+        if let Some(param_name) = self.find_unstored_ref_param(value) {
+            self.logger.error(StoresError {
+                message: format!(
+                    "storing reference parameter '{param_name}' in global '{global_name}' requires `stores[{param_name}]` declaration"
+                ),
+                span: value.span,
+            })?;
         }
         Ok(())
     }

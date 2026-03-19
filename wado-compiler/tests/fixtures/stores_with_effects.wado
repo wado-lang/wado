@@ -1,0 +1,25 @@
+// Stores combined with effects: `with Stdout, stores[data]`
+
+use { println, Stdout } from "core:cli";
+
+struct Data {
+    value: i32,
+}
+
+struct Container {
+    data: &Data,
+}
+
+fn store_and_log(data: &Data) -> Container with Stdout, stores[data] {
+    println(`Storing data with value: {data.value}`);
+    return Container { data };
+}
+
+export fn run() with Stdout {
+    let d = Data { value: 99 };
+    let c = store_and_log(&d);
+    assert c.data.value == 99;
+}
+
+__DATA__
+{"stdout": "Storing data with value: 99\n"}
