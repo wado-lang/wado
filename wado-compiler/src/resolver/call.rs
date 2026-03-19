@@ -736,18 +736,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Look up the function in the WASI registry and clone the return type
         // to avoid borrow checker issues
         let func_key = format!("{effect}::{operation}");
-        let return_type = self
-            .wasi_registry
-            .get_function(&func_key)?
-            .return_type
-            .clone()?;
+        let func = self.wasi_registry.get_function(&func_key)?;
+        let return_type = func.return_type.clone()?;
+        let package = func.package.clone();
 
-        // Resolve the AST type to a TypeId
-        Some(self.resolve_wasi_type(&return_type))
+        // Resolve the AST type to a TypeId, scoped to the function's WASI package
+        Some(self.resolve_wasi_type_scoped(&return_type, Some(&package)))
     }
 
     /// Resolve a WASI AST type to a `TypeId`
     pub(super) fn resolve_wasi_type(&mut self, ty: &Type) -> TypeId {
+        self.resolve_wasi_type_scoped(ty, None)
+    }
+
+    /// Resolve a WASI AST type to a `TypeId`, with optional WASI package scope.
+    pub(super) fn resolve_wasi_type_scoped(&mut self, ty: &Type, wasi_package: Option<&str>) -> TypeId {
         match ty {
             Type::Named(named) => match named.name.as_str() {
                 "String" => self.get_string_struct_type(),
@@ -774,7 +777,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let aliased = self.wasi_registry.get_newtype(&named.name).cloned();
                     if let Some(aliased) = aliased {
                         // Create a newtype for this WASI newtype
-                        let base_type = self.resolve_wasi_type(&aliased);
+                        let base_type = self.resolve_wasi_type_scoped(&aliased, wasi_package);
                         let newtype_id = self.type_table.borrow_mut().make_newtype(
                             named.name.clone(),
                             ModuleSource::wasi("clocks"),
@@ -801,6 +804,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         self.type_table
                             .borrow_mut()
                             .make_resource(named.name.clone(), module_source)
+                    } else if let Some(pkg) = wasi_package {
+                        // Scoped lookup: use type table's package-aware search
+                        let tt = self.type_table.borrow();
+                        if let Some(tid) = tt.find_named_type_by_wasi_package(&named.name, pkg) {
+                            tid
+                        } else {
+                            drop(tt);
+                            // Fallback: enum → struct → i32
+                            if self.wasi_registry.is_enum(&named.name) {
+                                let module_source = self.all_enum_cases.iter()
+                                    .find_map(|(ms, map)| map.contains_key(&named.name).then(|| ms.clone()))
+                                    .unwrap_or_else(|| ModuleSource::wasi("cli"));
+                                self.type_table.borrow_mut().make_enum(named.name.clone(), module_source)
+                            } else if self.wasi_registry.is_struct(&named.name) {
+                                let module_source = self.all_struct_fields.iter()
+                                    .find_map(|(ms, map)| map.contains_key(&named.name).then(|| ms.clone()))
+                                    .unwrap_or_else(|| ModuleSource::wasi("clocks"));
+                                self.type_table.borrow_mut().make_struct(named.name.clone(), module_source)
+                            } else {
+                                TypeTable::I32
+                            }
+                        }
                     } else if self.wasi_registry.is_enum(&named.name) {
                         // WASI enum type - look up the module source from all_enum_cases
                         let module_source = self
@@ -841,24 +866,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
             },
             Type::Generic(generic) => match generic.name.as_str() {
                 "Array" if generic.args.len() == 1 => {
-                    let elem_type = self.resolve_wasi_type(&generic.args[0]);
+                    let elem_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
                     self.type_table.borrow_mut().make_array(elem_type)
                 }
                 "Option" if generic.args.len() == 1 => {
-                    let inner_type = self.resolve_wasi_type(&generic.args[0]);
+                    let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
                     self.type_table.borrow_mut().make_option(inner_type)
                 }
                 "Stream" if generic.args.len() == 1 => {
-                    let inner_type = self.resolve_wasi_type(&generic.args[0]);
+                    let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
                     self.type_table.borrow_mut().make_stream(inner_type)
                 }
                 "Future" if generic.args.len() == 1 => {
-                    let inner_type = self.resolve_wasi_type(&generic.args[0]);
+                    let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
                     self.type_table.borrow_mut().make_future(inner_type)
                 }
                 "Result" if generic.args.len() == 2 => {
-                    let ok_type = self.resolve_wasi_type(&generic.args[0]);
-                    let err_type = self.resolve_wasi_type(&generic.args[1]);
+                    let ok_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
+                    let err_type = self.resolve_wasi_type_scoped(&generic.args[1], wasi_package);
                     // Look up the module source where Result variant is defined
                     let module_source = self
                         .all_variant_cases
@@ -884,7 +909,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return TypeTable::UNIT;
                 }
                 let resolved: Vec<TypeId> =
-                    types.iter().map(|t| self.resolve_wasi_type(t)).collect();
+                    types.iter().map(|t| self.resolve_wasi_type_scoped(t, wasi_package)).collect();
                 self.type_table
                     .borrow_mut()
                     .intern(ResolvedType::Tuple(resolved))

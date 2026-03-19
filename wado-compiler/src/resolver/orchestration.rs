@@ -624,10 +624,32 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         for (local_name, import_src) in imported_type_sources {
             // Use original name to look up in the source module (handles `use { Foo as Bar }`)
             let lookup_name = import_original_names.get(local_name).unwrap_or(local_name);
-            if let Some(name_map) = per_module.get(import_src)
-                && let Some(value) = name_map.get(lookup_name)
-            {
-                result.insert(local_name.clone(), value.clone());
+            // Try exact module first, then sub-modules for umbrella imports
+            // (e.g., `use { ErrorCode } from "wasi:http"` should find ErrorCode
+            // in `wasi:http/types.wado` when `wasi:http` is an umbrella module).
+            let found = per_module
+                .get(import_src)
+                .and_then(|m| m.get(lookup_name))
+                .cloned()
+                .or_else(|| {
+                    if let ModuleSource::Wasi { interface } = import_src {
+                        let prefix = format!("{interface}/");
+                        for (src, name_map) in per_module {
+                            if let ModuleSource::Wasi {
+                                interface: sub_iface,
+                            } = src
+                                && sub_iface.starts_with(&prefix)
+                            {
+                                if let Some(value) = name_map.get(lookup_name) {
+                                    return Some(value.clone());
+                                }
+                            }
+                        }
+                    }
+                    None
+                });
+            if let Some(value) = found {
+                result.insert(local_name.clone(), value);
             }
         }
         // Third: override with current module's types (highest priority)
@@ -937,10 +959,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             type_table.make_struct(named.name.clone(), info.module_source.clone())
                         } else if let Some(info) = resource_types.get(&named.name) {
                             type_table.make_resource(named.name.clone(), info.module_source.clone())
-                        } else if let Some(info) = enum_cases.get(&named.name) {
-                            type_table.make_enum(named.name.clone(), info.module_source.clone())
                         } else if let Some(info) = variant_cases.get(&named.name) {
                             type_table.make_variant(named.name.clone(), info.module_source.clone())
+                        } else if let Some(info) = enum_cases.get(&named.name) {
+                            type_table.make_enum(named.name.clone(), info.module_source.clone())
                         } else if flags_cases.contains_key(&named.name) {
                             // Flags are newtypes over u32, should be handled by newtypes check above.
                             // This is a fallback in case the newtype wasn't registered yet.
@@ -1094,10 +1116,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             type_table.make_struct(named.name.clone(), info.module_source.clone())
                         } else if let Some(info) = resource_types.get(&named.name) {
                             type_table.make_resource(named.name.clone(), info.module_source.clone())
-                        } else if let Some(info) = enum_cases.get(&named.name) {
-                            type_table.make_enum(named.name.clone(), info.module_source.clone())
                         } else if let Some(info) = variant_cases.get(&named.name) {
                             type_table.make_variant(named.name.clone(), info.module_source.clone())
+                        } else if let Some(info) = enum_cases.get(&named.name) {
+                            type_table.make_enum(named.name.clone(), info.module_source.clone())
                         } else {
                             TypeTable::UNKNOWN
                         }
