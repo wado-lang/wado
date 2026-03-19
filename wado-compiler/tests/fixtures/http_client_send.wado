@@ -1,14 +1,11 @@
-use { Request, Response, ErrorCode, Fields, Trailers, Scheme } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    // Build a minimal outgoing request
+    // Build a minimal outgoing request (no scheme/authority/path — defaults)
     let headers = Fields::new();
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [out_req, _req_future] = Request::new(headers, null, trailers_future, null);
-    out_req.set_scheme(Option::<Scheme>::Some(Scheme::Http));
-    out_req.set_authority(Option::<String>::Some("mock-api"));
-    out_req.set_path_with_query(Option::<String>::Some("/hello"));
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
     // Send outgoing request via Client effect
@@ -25,7 +22,7 @@ __DATA__
         "body": "mocked response"
     },
     "outgoing_mocks": {
-        "http://mock-api/hello": {
+        "/": {
             "status": 200,
             "body": "mocked response"
         }

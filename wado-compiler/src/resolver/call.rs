@@ -745,10 +745,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Resolve a WASI AST type to a `TypeId`
-    pub(super) fn resolve_wasi_type(&mut self, ty: &Type) -> TypeId {
-        self.resolve_wasi_type_scoped(ty, None)
-    }
-
     /// Resolve a WASI AST type to a `TypeId`, with optional WASI package scope.
     pub(super) fn resolve_wasi_type_scoped(&mut self, ty: &Type, wasi_package: Option<&str>) -> TypeId {
         match ty {
