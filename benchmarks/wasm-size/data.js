@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773911796684,
+  "lastUpdate": 1773912078621,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4313,6 +4313,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b0333c19a250e7adf7ddf8f7b41bc3b4b89bc4f7"
         },
         "date": 1773911796468,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "098fd0d62641095d3a468efd92a56245cad3916b",
+          "message": "Merge pull request #609 from wado-lang/claude/improve-wir-optimize-WYcsO\n\nOptimize value_copy elimination for fresh struct constructions",
+          "timestamp": "2026-03-19T18:18:41+09:00",
+          "tree_id": "d3298ca98b2cd94c6f4d4e1d906df489f40a9a53",
+          "url": "https://github.com/wado-lang/wado/commit/098fd0d62641095d3a468efd92a56245cad3916b"
+        },
+        "date": 1773912078407,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
