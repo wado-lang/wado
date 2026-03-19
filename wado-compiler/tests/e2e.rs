@@ -20,10 +20,10 @@ use std::path::Path;
 use std::sync::OnceLock;
 use std::time::Duration;
 use wasmtime::Store;
-use wasmtime::component::{Component, Linker, ResourceTable};
-use wasmtime_wasi::{WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime::component::{Component, ResourceTable};
+use wasmtime_wasi::WasiCtxBuilder;
+use wasmtime_wasi_http::p3::Request;
 use wasmtime_wasi_http::p3::bindings::Service;
-use wasmtime_wasi_http::p3::{Request, WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -175,6 +175,12 @@ struct TestSpec {
     #[serde(default)]
     allocator: Option<String>,
 
+    /// Mock responses for outgoing HTTP requests (keyed by URL or path).
+    /// When present, any `wasi:http/client#send` from the guest will be
+    /// intercepted and matched against these entries.
+    #[serde(default)]
+    outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
+
     // --- WIR pattern expectations (per optimization level) ---
     /// Patterns that must appear in WIR output at -O0
     #[serde(rename = "wir_expect:O0", default)]
@@ -285,34 +291,6 @@ fn verify_result(result: &common::WasmRunResult, spec: &TestSpec, fixture_name: 
 // HTTP world infrastructure
 // ---------------------------------------------------------------------------
 
-struct TestHttpCtx;
-
-impl WasiHttpCtx for TestHttpCtx {}
-
-struct HttpTestState {
-    table: ResourceTable,
-    wasi: wasmtime_wasi::WasiCtx,
-    http: TestHttpCtx,
-}
-
-impl WasiView for HttpTestState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.wasi,
-            table: &mut self.table,
-        }
-    }
-}
-
-impl WasiHttpView for HttpTestState {
-    fn http(&mut self) -> WasiHttpCtxView<'_> {
-        WasiHttpCtxView {
-            ctx: &mut self.http,
-            table: &mut self.table,
-        }
-    }
-}
-
 /// Multi-threaded tokio runtime for HTTP tests (needs `run_concurrent` / `tokio::spawn`)
 static HTTP_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
@@ -334,26 +312,29 @@ struct HttpTestResult {
 }
 
 /// Run an HTTP request against a compiled Wasm component
-fn run_http_request(wasm: Vec<u8>, req_spec: &HttpRequestSpec) -> anyhow::Result<HttpTestResult> {
-    http_runtime().block_on(run_http_request_async(wasm, req_spec))
+fn run_http_request(
+    wasm: Vec<u8>,
+    req_spec: &HttpRequestSpec,
+    outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
+) -> anyhow::Result<HttpTestResult> {
+    http_runtime().block_on(run_http_request_async(wasm, req_spec, outgoing_mocks))
 }
 
 async fn run_http_request_async(
     wasm: Vec<u8>,
     req_spec: &HttpRequestSpec,
+    outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
 ) -> anyhow::Result<HttpTestResult> {
-    let engine = common::http_engine();
+    let engine = common::engine();
     let component = Component::new(engine, &wasm)
         .map_err(|e| anyhow::anyhow!("failed to create component: {e:?}"))?;
 
-    let mut linker: Linker<HttpTestState> = Linker::new(engine);
-    wasmtime_wasi::p3::add_to_linker(&mut linker)?;
-    wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    let linker = common::linker(engine)?;
 
-    let state = HttpTestState {
+    let state = common::WasiState {
+        ctx: WasiCtxBuilder::new().build(),
         table: ResourceTable::new(),
-        wasi: WasiCtxBuilder::new().build(),
-        http: TestHttpCtx,
+        http: common::TestHttpCtx { mocks: outgoing_mocks },
     };
     let mut store = Store::new(engine, state);
 
@@ -512,15 +493,19 @@ fn verify_http_result(result: &HttpTestResult, spec: &HttpServiceSpec, fixture_n
 
 /// Run all test exports from a Wasm component compiled with the `test` world.
 /// Each test function is called in its own Store. All tests must pass.
-fn run_test_world(wasm: &[u8], test_id: &str) -> anyhow::Result<common::WasmRunResult> {
+fn run_test_world(
+    wasm: &[u8],
+    test_id: &str,
+    outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
+) -> anyhow::Result<common::WasmRunResult> {
     use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
     let rt = common::runtime();
-    let engine = common::cli_engine();
+    let engine = common::engine();
 
     rt.block_on(async {
         let component = Component::new(engine, wasm)?;
-        let linker = common::cli_linker(engine)?;
+        let linker = common::linker(engine)?;
 
         // Find test exports
         let component_ty = component.component_type();
@@ -550,7 +535,8 @@ fn run_test_world(wasm: &[u8], test_id: &str) -> anyhow::Result<common::WasmRunR
             let stderr_pipe = MemoryOutputPipe::new(65536);
             let stderr_clone = stderr_pipe.clone();
 
-            let state = common::CliWasiState::new_with_pipes(stdout_pipe, stderr_pipe);
+            let mut state = common::WasiState::new_with_pipes(stdout_pipe, stderr_pipe);
+            state.http.mocks = outgoing_mocks.clone();
             let mut store = Store::new(engine, state);
 
             let instance = linker.instantiate_async(&mut store, &component).await?;
@@ -730,7 +716,7 @@ fn run_normal_test(
 
     // Dispatch to the appropriate runner based on world
     if let Some(http_spec) = &spec.http_service {
-        match run_http_request(compile_result.wasm, &http_spec.request) {
+        match run_http_request(compile_result.wasm, &http_spec.request, spec.outgoing_mocks.clone()) {
             Ok(result) => {
                 assert!(
                     !spec.trapped,
@@ -747,7 +733,7 @@ fn run_normal_test(
             }
         }
     } else if spec.test_world.is_some() {
-        let result = run_test_world(&compile_result.wasm, test_id).unwrap_or_else(|e| {
+        let result = run_test_world(&compile_result.wasm, test_id, spec.outgoing_mocks.clone()).unwrap_or_else(|e| {
             panic!("[{test_id}] test world error: {e:?}");
         });
         verify_result(&result, spec, test_id);
@@ -758,11 +744,15 @@ fn run_normal_test(
             .iter()
             .map(|[h, g]| (h.clone(), g.clone()))
             .collect();
-        let result =
-            common::run_wasm_with_options(compile_result.wasm, &dirs, spec.stdin.as_deref())
-                .unwrap_or_else(|e| {
-                    panic!("[{test_id}] runtime error: {e}");
-                });
+        let result = common::run_wasm_with_full_options(
+            compile_result.wasm,
+            &dirs,
+            spec.stdin.as_deref(),
+            spec.outgoing_mocks.clone(),
+        )
+        .unwrap_or_else(|e| {
+            panic!("[{test_id}] runtime error: {e}");
+        });
         verify_result(&result, spec, test_id);
     }
 

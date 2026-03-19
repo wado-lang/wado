@@ -62,9 +62,10 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
             .stdout(stdout_pipe)
             .stderr(stderr_pipe)
             .build();
-        let state = common::CliWasiState {
+        let state = common::WasiState {
             ctx,
             table: wasmtime::component::ResourceTable::new(),
+            http: common::TestHttpCtx::new(),
         };
         let mut store = Store::new(engine, state);
 
