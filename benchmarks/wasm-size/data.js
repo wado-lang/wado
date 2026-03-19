@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773931044144,
+  "lastUpdate": 1773944222457,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4469,6 +4469,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dad06beb853665aa0ae3a27b111f3cd9799d0d61"
         },
         "date": 1773931043922,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b8b7cc5cc3b38c86e39bb2c0be267a75c92414cf",
+          "message": "Merge pull request #613 from wado-lang/claude/check-wasi-modules-4DA90\n\nAdd HTTP client support and improve WASI type resolution",
+          "timestamp": "2026-03-20T03:14:25+09:00",
+          "tree_id": "8e98cb568688ff96e71096fb2fe8b04392318772",
+          "url": "https://github.com/wado-lang/wado/commit/b8b7cc5cc3b38c86e39bb2c0be267a75c92414cf"
+        },
+        "date": 1773944222279,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
