@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773918591006,
+  "lastUpdate": 1773924738863,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4391,6 +4391,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d673f3ad06f2a76486d2b95709d3f41b019f6ebf"
         },
         "date": 1773918590797,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c7a6f41bf7c062c317a4db0664b3c609a422cd1a",
+          "message": "Merge pull request #611 from wado-lang/claude/profile-compiler-performance-qsYcF\n\nRefactor optimization passes to use visitor pattern",
+          "timestamp": "2026-03-19T21:49:44+09:00",
+          "tree_id": "ec7e1382c80a9662753491c75c70e15a7e5f92c1",
+          "url": "https://github.com/wado-lang/wado/commit/c7a6f41bf7c062c317a4db0664b3c609a422cd1a"
+        },
+        "date": 1773924738642,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
