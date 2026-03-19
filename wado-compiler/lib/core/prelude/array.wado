@@ -62,7 +62,7 @@ impl Array<T> {
     }
 
     #[comp_feature("array_append")]
-    pub fn append(&mut self, value: T) {
+    pub fn append(&mut self, value: T) with stores[value] {
         let used = self.used;
         if builtin::unlikely(used >= builtin::array_len(self.repr)) {
             self.grow();
@@ -122,7 +122,7 @@ impl IndexValue<i32> for Array<T> {
 impl IndexAssign<i32> for Array<T> {
     type Input = T;
 
-    fn index_assign(&mut self, index: i32, value: Self::Input) {
+    fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
         if index >= self.used {
             panic("index out of bounds");
         }
@@ -378,7 +378,7 @@ impl SequenceLiteralBuilder for Array<T> {
         return Array::<T>::with_capacity(capacity);
     }
 
-    fn push_literal(&mut self, value: T) {
+    fn push_literal(&mut self, value: T) with stores[value] {
         self.append(value);
     }
 

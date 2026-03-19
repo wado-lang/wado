@@ -253,15 +253,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for store_name in stores {
             if let Some(param) = params.iter().find(|p| p.name == *store_name) {
                 let resolved = tt.get(param.type_id);
+                // Allow stores on: reference types (&T, &mut T) and type parameters (T may be &U)
                 if !matches!(
                     resolved,
-                    crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+                    crate::tir::ResolvedType::Ref(_)
+                        | crate::tir::ResolvedType::MutRef(_)
+                        | crate::tir::ResolvedType::TypeParam { .. }
                 ) {
                     let type_name = tt.type_name(param.type_id);
                     let _ = self.logger.error(TypeError::InvalidStores {
                         message: format!(
                             "stores[{store_name}]: parameter '{store_name}' has type '{type_name}', \
-                             but only reference parameters (&T or &mut T) can be stored"
+                             but only reference parameters (&T or &mut T) or type parameters can be stored"
                         ),
                         span,
                     });
