@@ -12,6 +12,7 @@ use wasmtime::{GuestProfiler, UpdateDeadline};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, OptLevel};
+use crate::manifest;
 use crate::runtime::{self, ProfileMode};
 use wado_compiler::LogLevel;
 
@@ -255,7 +256,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     }
 
     Ok(RunOptions {
-        input: args::require_input(input, &usage)?,
+        input: manifest::resolve_input(input, manifest::EntryPointKind::Command, &usage)?,
         opt_level,
         log_level,
         profile,
