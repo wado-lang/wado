@@ -4,6 +4,7 @@ use lexopt::Arg::{Long, Value};
 
 #[derive(Clone, Copy)]
 enum Cmd {
+    Init,
     Compile,
     Run,
     Serve,
@@ -16,6 +17,7 @@ enum Cmd {
 
 impl Cmd {
     const ALL: &[Self] = &[
+        Self::Init,
         Self::Compile,
         Self::Run,
         Self::Serve,
@@ -28,6 +30,7 @@ impl Cmd {
 
     const fn name(self) -> &'static str {
         match self {
+            Self::Init => "init",
             Self::Compile => "compile",
             Self::Run => "run",
             Self::Serve => "serve",
@@ -41,15 +44,16 @@ impl Cmd {
 
     const fn args(self) -> &'static str {
         match self {
-            Self::Compile | Self::Run | Self::Serve => "[options] <file.wado>",
+            Self::Compile | Self::Run | Self::Serve => "[options] [file.wado]",
             Self::Test => "[options] [files or dirs...]",
             Self::Format | Self::Doc | Self::Dump => "[options] <file.wado>...",
-            Self::Syntax => "[options]",
+            Self::Init | Self::Syntax => "[options]",
         }
     }
 
     const fn desc(self) -> &'static str {
         match self {
+            Self::Init => "Create a new wado.toml manifest",
             Self::Compile => "Compile a Wado source file",
             Self::Run => "Compile and run a Wado CLI program",
             Self::Serve => "Compile and serve a Wado HTTP service",
@@ -115,6 +119,11 @@ async fn main() {
             let cmd_str = cmd_val.to_string_lossy();
             if let Some(cmd) = Cmd::from_name(&cmd_str) {
                 match cmd {
+                    Cmd::Init => {
+                        let opts =
+                            wado_cli::init::parse_args(parser).unwrap_or_else(|e| e.exit());
+                        wado_cli::init::run(opts);
+                    }
                     Cmd::Compile => {
                         let opts =
                             wado_cli::compile::parse_args(parser).unwrap_or_else(|e| e.exit());
