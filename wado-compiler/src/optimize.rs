@@ -6,14 +6,11 @@
 //! - Reference elimination via `ref_elim` module
 //! - Scalar Replacement of Aggregates (SROA) via `sroa` module
 //! - Copy propagation via `copy_prop` module
-//! - Constant propagation via `const_prop` module
-//! - Constant folding via `const_fold` module
+//! - Constant optimizations (propagation, folding, global promotion, branch pruning) via `constants` module
 //! - Loop-Invariant Code Motion (LICM) via `licm` module
-//! - Post-optimization rewrites (select lowering) via `rewrite` module
+//! - Select lowering via `select_lowering` module
 
-mod const_fold;
-mod const_global_promotion;
-mod const_prop;
+mod constants;
 mod copy_prop;
 pub mod dce;
 mod field_scalarize;
@@ -21,17 +18,16 @@ mod inline;
 mod labeled_block_fusion;
 mod licm;
 mod ref_elim;
-mod rewrite;
+mod select_lowering;
 mod sroa;
 mod store_load_forward;
 mod tmpl_hoist;
+pub(crate) mod visitor;
 
-use const_fold::fold_constants;
-use const_global_promotion::promote_constant_globals;
-use const_prop::propagate_constants;
+use constants::{fold_constants, promote_constant_globals, propagate_constants, prune_constant_branches};
 use copy_prop::propagate_copies;
 use dce::{
-    analyze_project, prune_constant_branches, remove_unreachable_functions,
+    analyze_project, remove_unreachable_functions,
     remove_unreachable_globals, remove_unreachable_types,
 };
 use field_scalarize::scalarize_hot_fields;
@@ -160,10 +156,10 @@ pub fn optimize(
         }
     }
 
-    // Post-optimization rewrites: simplify labeled blocks and insert moves in a single pass.
-    profiler.span_start("tir/rewrite");
-    rewrite::rewrite(&mut project);
-    profiler.span_end("tir/rewrite");
+    // Post-optimization rewrites: select lowering for branchless Wasm
+    profiler.span_start("tir/select_lowering");
+    select_lowering::select_lowering(&mut project);
+    profiler.span_end("tir/select_lowering");
 
     project
 }
@@ -197,9 +193,7 @@ fn run_pass(
 /// - Reference elimination
 /// - Scalar Replacement of Aggregates (SROA)
 /// - Copy propagation
-/// - Constant propagation (global constants → literals)
-/// - Constant folding
-/// - Constant branch pruning (dead branch elimination)
+/// - Constant optimizations (propagation → folding → global promotion → branch pruning)
 /// - Loop-invariant code motion (LICM)
 ///
 /// The `config` parameter controls the number of iterations and inline threshold.
