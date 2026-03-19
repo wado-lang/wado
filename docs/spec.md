@@ -1445,7 +1445,8 @@ let hex = `{255:x}`;              // "ff"
 // Inspect (debug) format — works for any type
 let p = Point { x: 10, y: 20 };
 let debug = `{p:?}`;             // "Point { x: 10, y: 20 }"
-let fallback = `{p}`;            // same — falls back to inspect when no Display impl
+let pretty = `{p:#?}`;           // pretty-print: "Point {\n  x: 10,\n  y: 20,\n}"
+let fallback = `{p}`;            // same as :? — falls back to inspect when no Display impl
 
 // Escaped braces — literal { and } without interpolation
 let json = `\{"key": "{name}"\}`;  // {"key": "Alice"}
