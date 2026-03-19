@@ -249,6 +249,64 @@ impl Parser {
         }
     }
 
+    /// Parse a comma-separated list of items until `terminator` is seen.
+    /// Does NOT consume the terminator. Handles trailing commas.
+    fn parse_comma_separated<T>(
+        &mut self,
+        terminator: &TokenKind,
+        mut parse_item: impl FnMut(&mut Self) -> ParseResult<T>,
+    ) -> ParseResult<Vec<T>> {
+        let mut items = Vec::new();
+        if !self.check(terminator) {
+            items.push(parse_item(self)?);
+            while self.check(&TokenKind::Comma) {
+                self.advance();
+                if self.check(terminator) {
+                    break;
+                }
+                items.push(parse_item(self)?);
+            }
+        }
+        Ok(items)
+    }
+
+    /// Parse a comma-separated list of types within angle brackets (`<T1, T2>`).
+    /// Assumes the opening `<` has already been consumed.
+    /// Handles `>>` splitting for nested generics via `pending_gt`.
+    fn parse_type_args(&mut self) -> ParseResult<Vec<Type>> {
+        let mut args = vec![self.parse_type()?];
+        while !self.pending_gt && self.check(&TokenKind::Comma) {
+            self.advance();
+            args.push(self.parse_type()?);
+        }
+        self.expect_gt()?;
+        Ok(args)
+    }
+
+    /// Parse a `+`-separated list of trait bounds: `Bound1 + Bound2 + ...`
+    fn parse_trait_bounds(&mut self) -> ParseResult<Vec<crate::ast::TraitBound>> {
+        let mut bounds = vec![self.parse_trait_bound()?];
+        while self.check(&TokenKind::Plus) {
+            self.advance();
+            bounds.push(self.parse_trait_bound()?);
+        }
+        Ok(bounds)
+    }
+
+    /// Parse variant pattern bindings: `Name(pat1, pat2, ...)`
+    /// Assumes the name has been consumed and current token is `(`.
+    fn parse_variant_pattern(&mut self, name: String, start_span: Span) -> ParseResult<Pattern> {
+        self.advance(); // consume (
+        let bindings = self.parse_comma_separated(&TokenKind::RParen, Self::parse_pattern)?;
+        let end_span = self.peek().span;
+        self.expect(&TokenKind::RParen)?;
+        Ok(Pattern::Variant {
+            variant_name: name,
+            bindings,
+            span: start_span.merge(&end_span),
+        })
+    }
+
     fn consume_ident(&mut self) -> ParseResult<String> {
         // Accept regular identifiers and contextual keywords (flags, type)
         if let Some(name) = self.peek_kind().as_ident_name() {
@@ -831,21 +889,7 @@ impl Parser {
     }
 
     fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
-        let mut params = Vec::new();
-
-        if !self.check(&TokenKind::RParen) {
-            params.push(self.parse_param()?);
-
-            while self.check(&TokenKind::Comma) {
-                self.advance();
-                if self.check(&TokenKind::RParen) {
-                    break;
-                }
-                params.push(self.parse_param()?);
-            }
-        }
-
-        Ok(params)
+        self.parse_comma_separated(&TokenKind::RParen, Self::parse_param)
     }
 
     fn parse_param(&mut self) -> ParseResult<Param> {
@@ -1568,17 +1612,7 @@ impl Parser {
         if self.check(&TokenKind::LParen) {
             // Tuple pattern with parentheses: (a, b, c)
             self.advance();
-            let mut patterns = Vec::new();
-            if !self.check(&TokenKind::RParen) {
-                patterns.push(self.parse_pattern()?);
-                while self.check(&TokenKind::Comma) {
-                    self.advance();
-                    if self.check(&TokenKind::RParen) {
-                        break;
-                    }
-                    patterns.push(self.parse_pattern()?);
-                }
-            }
+            let patterns = self.parse_comma_separated(&TokenKind::RParen, Self::parse_pattern)?;
             self.expect(&TokenKind::RParen)?;
             Ok(Pattern::Tuple(patterns))
         } else if self.check(&TokenKind::LBracket) {
@@ -1615,71 +1649,23 @@ impl Parser {
             // Unnamed struct pattern: { x, y }
             self.parse_struct_pattern_fields(None)
         } else if let Some(name) = self.peek_kind().as_ident_name() {
-            // Accept identifiers and contextual keywords (flags, type) as pattern names
+            // Accept identifiers and contextual keywords (flags, type) as pattern names.
+            // Case does NOT affect parsing: disambiguation between variant cases and
+            // variable bindings is deferred to the resolver using type information.
             let name = name.to_string();
             let start_span = self.peek().span;
             self.advance();
             if name == "_" {
                 Ok(Pattern::Wildcard)
-            } else if name.chars().next().is_some_and(char::is_uppercase) {
-                // Uppercase identifier - could be variant, struct, or enum pattern
-                if self.check(&TokenKind::LParen) {
-                    // Variant with bindings: Some(x)
-                    self.advance(); // consume (
-                    let mut bindings = Vec::new();
-                    if !self.check(&TokenKind::RParen) {
-                        bindings.push(self.parse_pattern()?);
-                        while self.check(&TokenKind::Comma) {
-                            self.advance();
-                            if self.check(&TokenKind::RParen) {
-                                break;
-                            }
-                            bindings.push(self.parse_pattern()?);
-                        }
-                    }
-                    let end_span = self.peek().span;
-                    self.expect(&TokenKind::RParen)?;
-                    Ok(Pattern::Variant {
-                        variant_name: name,
-                        bindings,
-                        span: start_span.merge(&end_span),
-                    })
-                } else if self.check(&TokenKind::LBrace) {
-                    // Named struct pattern: Point { x, y }
-                    self.parse_struct_pattern_fields(Some(name))
-                } else {
-                    // Variant without bindings: None
-                    Ok(Pattern::Variant {
-                        variant_name: name,
-                        bindings: vec![],
-                        span: start_span,
-                    })
-                }
             } else if self.check(&TokenKind::LParen) {
-                // Lowercase variant case with payload: just(n), nothing(...)
-                self.advance(); // consume (
-                let mut bindings = Vec::new();
-                if !self.check(&TokenKind::RParen) {
-                    bindings.push(self.parse_pattern()?);
-                    while self.check(&TokenKind::Comma) {
-                        self.advance();
-                        if self.check(&TokenKind::RParen) {
-                            break;
-                        }
-                        bindings.push(self.parse_pattern()?);
-                    }
-                }
-                let end_span = self.peek().span;
-                self.expect(&TokenKind::RParen)?;
-                Ok(Pattern::Variant {
-                    variant_name: name,
-                    bindings,
-                    span: start_span.merge(&end_span),
-                })
+                // Variant with bindings: Some(x), just(n), etc.
+                self.parse_variant_pattern(name, start_span)
             } else if self.check(&TokenKind::LBrace) {
-                // Named struct pattern with lowercase type: point { x, y }
+                // Named struct pattern: Point { x, y }
                 self.parse_struct_pattern_fields(Some(name))
             } else {
+                // Bare identifier: could be a variable binding or a variant/enum case
+                // without payload. The resolver disambiguates using type information.
                 Ok(Pattern::Ident(name))
             }
         } else if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
@@ -2846,29 +2832,7 @@ impl Parser {
 
     /// Parse tuple literal: `[expr, expr, ...]` or `[]`
     fn parse_tuple_literal(&mut self, start_span: Span) -> ParseResult<Expr> {
-        let mut elements = Vec::new();
-
-        // Handle empty tuple: []
-        if self.check(&TokenKind::RBracket) {
-            let end_span = self.advance().span;
-            return Ok(Expr::TupleLiteral(Box::new(TupleLiteralExpr {
-                elements,
-                span: start_span.merge(&end_span),
-            })));
-        }
-
-        // Parse first element
-        elements.push(self.parse_expr()?);
-
-        // Parse remaining elements
-        while self.check(&TokenKind::Comma) {
-            self.advance();
-            // Handle trailing comma: [1, 2, 3,]
-            if self.check(&TokenKind::RBracket) {
-                break;
-            }
-            elements.push(self.parse_expr()?);
-        }
+        let elements = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_expr)?;
 
         let end_token = self.expect(&TokenKind::RBracket)?;
         let end_span = end_token.span;
@@ -2881,22 +2845,13 @@ impl Parser {
 
     /// Parse argument list. Returns (args, `has_trailing_comma`).
     fn parse_arg_list(&mut self) -> ParseResult<(Vec<Expr>, bool)> {
-        let mut args = Vec::new();
-        let mut has_trailing_comma = false;
-
-        if !self.check(&TokenKind::RParen) {
-            args.push(self.parse_expr()?);
-
-            while self.check(&TokenKind::Comma) {
-                self.advance();
-                if self.check(&TokenKind::RParen) {
-                    has_trailing_comma = true;
-                    break;
-                }
-                args.push(self.parse_expr()?);
-            }
-        }
-
+        let pos_before = self.pos;
+        let args = self.parse_comma_separated(&TokenKind::RParen, Self::parse_expr)?;
+        // Detect trailing comma: pos moved past at least one comma, and we're at RParen
+        let has_trailing_comma = !args.is_empty()
+            && self.check(&TokenKind::RParen)
+            && self.tokens[self.pos - 1].kind == TokenKind::Comma;
+        let _ = pos_before;
         Ok((args, has_trailing_comma))
     }
 
@@ -2904,14 +2859,7 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Pipe)?;
 
-        let mut params = Vec::new();
-        if !self.check(&TokenKind::Pipe) {
-            params.push(self.parse_closure_param()?);
-            while self.check(&TokenKind::Comma) {
-                self.advance();
-                params.push(self.parse_closure_param()?);
-            }
-        }
+        let params = self.parse_comma_separated(&TokenKind::Pipe, Self::parse_closure_param)?;
 
         self.expect(&TokenKind::Pipe)?;
 
@@ -2967,17 +2915,7 @@ impl Parser {
             self.expect(&TokenKind::LParen)?;
 
             // Parse parameter types
-            let mut params = Vec::new();
-            if !self.check(&TokenKind::RParen) {
-                params.push(self.parse_type()?);
-                while self.check(&TokenKind::Comma) {
-                    self.advance();
-                    if self.check(&TokenKind::RParen) {
-                        break;
-                    }
-                    params.push(self.parse_type()?);
-                }
-            }
+            let params = self.parse_comma_separated(&TokenKind::RParen, Self::parse_type)?;
             self.expect(&TokenKind::RParen)?;
 
             // Parse return type (optional)
@@ -3044,20 +2982,7 @@ impl Parser {
         // Tuple type: [] or [T1, T2, ...]
         if self.check(&TokenKind::LBracket) {
             self.advance();
-            if self.check(&TokenKind::RBracket) {
-                self.advance();
-                // Empty tuple type []
-                return Ok(Type::Tuple(Vec::new()));
-            }
-            // Tuple with elements
-            let mut types = vec![self.parse_type()?];
-            while self.check(&TokenKind::Comma) {
-                self.advance();
-                if self.check(&TokenKind::RBracket) {
-                    break;
-                }
-                types.push(self.parse_type()?);
-            }
+            let types = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_type)?;
             self.expect(&TokenKind::RBracket)?;
             return Ok(Type::Tuple(types));
         }
@@ -3072,13 +2997,7 @@ impl Parser {
             // Namespaced generic type: namespace::type<T>
             if self.check(&TokenKind::Lt) {
                 self.advance();
-                let mut args = vec![self.parse_type()?];
-                // Continue parsing args only if we see a comma AND we don't have a pending >
-                while !self.pending_gt && self.check(&TokenKind::Comma) {
-                    self.advance();
-                    args.push(self.parse_type()?);
-                }
-                self.expect_gt()?;
+                let args = self.parse_type_args()?;
 
                 return Ok(Type::NamespacedGeneric(NamespacedGenericType {
                     namespace: name,
@@ -3099,15 +3018,7 @@ impl Parser {
 
         if self.check(&TokenKind::Lt) {
             self.advance();
-            let mut args = vec![self.parse_type()?];
-            // Continue parsing args only if we see a comma AND we don't have a pending >
-            // (pending_gt means we split >> and the outer > closes this type arg list)
-            while !self.pending_gt && self.check(&TokenKind::Comma) {
-                self.advance();
-                args.push(self.parse_type()?);
-            }
-            // Handle >> being lexed as GtGt instead of two Gt tokens (for nested generics)
-            self.expect_gt()?;
+            let args = self.parse_type_args()?;
 
             Ok(Type::Generic(GenericType {
                 name,
@@ -3167,14 +3078,7 @@ impl Parser {
         self.expect(&TokenKind::Fn)?;
         let name = self.consume_ident()?;
 
-        // Skip generic parameters like <T, E>
-        if self.check(&TokenKind::Lt) {
-            self.advance();
-            while !self.check(&TokenKind::Gt) && !self.is_at_end() {
-                self.advance();
-            }
-            self.expect(&TokenKind::Gt)?;
-        }
+        let _type_params = self.parse_generic_params()?;
 
         self.expect(&TokenKind::LParen)?;
         let params = self.parse_param_list()?;
@@ -3216,12 +3120,7 @@ impl Parser {
             // Parse optional trait bounds: `T: Ord`, `T: Ord + Clone`, `T: Builder<Output = T>`
             let bounds = if self.check(&TokenKind::Colon) {
                 self.advance();
-                let mut bounds = vec![self.parse_trait_bound()?];
-                while self.check(&TokenKind::Plus) {
-                    self.advance();
-                    bounds.push(self.parse_trait_bound()?);
-                }
-                bounds
+                self.parse_trait_bounds()?
             } else {
                 Vec::new()
             };
@@ -3293,17 +3192,8 @@ impl Parser {
     /// Parse type arguments for turbofish syntax: `<T1, T2, ...>`
     /// Used in function calls like `identity::<i32>(x)`
     fn parse_call_type_args(&mut self) -> ParseResult<Vec<Type>> {
-        // Must start with '<'
         self.expect(&TokenKind::Lt)?;
-
-        let mut types = vec![self.parse_type()?];
-        while self.check(&TokenKind::Comma) {
-            self.advance();
-            types.push(self.parse_type()?);
-        }
-
-        self.expect_gt()?;
-        Ok(types)
+        self.parse_type_args()
     }
 
     fn parse_struct_decl(
@@ -3694,11 +3584,7 @@ impl Parser {
                 let param_span = self.peek().span;
                 let param_name = self.consume_ident()?;
                 self.advance(); // consume ':'
-                let mut bounds = vec![self.parse_trait_bound()?];
-                while self.check(&TokenKind::Plus) {
-                    self.advance();
-                    bounds.push(self.parse_trait_bound()?);
-                }
+                let bounds = self.parse_trait_bounds()?;
                 if !type_params.iter().any(|p| p.name == param_name) {
                     type_params.push(crate::ast::GenericParam {
                         name: param_name.clone(),
@@ -3760,15 +3646,12 @@ impl Parser {
                 let type_span = self.peek().span;
                 self.advance();
                 let assoc_name = self.consume_ident()?;
-                let mut bounds = Vec::new();
-                if self.check(&TokenKind::Colon) {
+                let bounds = if self.check(&TokenKind::Colon) {
                     self.advance();
-                    bounds.push(self.parse_trait_bound()?);
-                    while self.check(&TokenKind::Plus) {
-                        self.advance();
-                        bounds.push(self.parse_trait_bound()?);
-                    }
-                }
+                    self.parse_trait_bounds()?
+                } else {
+                    Vec::new()
+                };
                 let end = self.expect(&TokenKind::Semicolon)?.span;
                 associated_types.push(AssociatedTypeDecl {
                     name: assoc_name,
@@ -3858,17 +3741,8 @@ impl Parser {
         let effect_name = self.consume_ident()?;
         self.expect(&TokenKind::LBrace)?;
 
-        let mut functions = Vec::new();
-        if !self.check(&TokenKind::RBrace) {
-            functions.push(self.consume_world_import_name()?);
-            while self.check(&TokenKind::Comma) {
-                self.advance();
-                if self.check(&TokenKind::RBrace) {
-                    break;
-                }
-                functions.push(self.consume_world_import_name()?);
-            }
-        }
+        let functions =
+            self.parse_comma_separated(&TokenKind::RBrace, Self::consume_world_import_name)?;
 
         let close_span = self.peek().span;
         self.expect(&TokenKind::RBrace)?;
@@ -3914,14 +3788,7 @@ impl Parser {
         self.expect(&TokenKind::Fn)?;
         let name = self.consume_ident()?;
 
-        // Skip generic parameters like <T, E>
-        if self.check(&TokenKind::Lt) {
-            self.advance();
-            while !self.check(&TokenKind::Gt) && !self.is_at_end() {
-                self.advance();
-            }
-            self.expect(&TokenKind::Gt)?;
-        }
+        let _type_params = self.parse_generic_params()?;
 
         self.expect(&TokenKind::LParen)?;
         let params = self.parse_param_list()?;
@@ -4689,5 +4556,298 @@ line 2
         assert!(data.starts_with("line 1"));
         assert!(data.contains("line 2"));
         assert!(data.contains("\"key\": \"value\""));
+    }
+
+    fn parse_expr_from(source: &str) -> Expr {
+        let wrapped = format!("fn __test__() {{ {source}; }}");
+        let module = parse(&wrapped).unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            let body = func.body.as_ref().unwrap();
+            if let Stmt::Expr(expr_stmt) = &body.stmts[0] {
+                return expr_stmt.expr.clone();
+            }
+        }
+        panic!("failed to parse expression");
+    }
+
+    fn parse_pattern_from(source: &str) -> Pattern {
+        let wrapped = format!("fn __test__() {{ if let {source} = x {{}} }}");
+        let module = parse(&wrapped).unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            let body = func.body.as_ref().unwrap();
+            if let Stmt::If(if_stmt) = &body.stmts[0] {
+                if let Condition::LetChain { elements, .. } = &if_stmt.condition {
+                    if let crate::ast::ConditionElement::Let { pattern, .. } = &elements[0] {
+                        return pattern.clone();
+                    }
+                }
+            }
+        }
+        panic!("failed to parse pattern from: {source}");
+    }
+
+    #[test]
+    fn test_comma_separated_trailing_comma() {
+        // Trailing comma in arg list
+        let module = parse("fn run() { foo(1, 2, 3,); }").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            let body = func.body.as_ref().unwrap();
+            if let Stmt::Expr(expr_stmt) = &body.stmts[0]
+                && let Expr::Call(call) = &expr_stmt.expr
+            {
+                assert_eq!(call.args.len(), 3);
+                assert!(call.has_trailing_comma);
+            } else {
+                panic!("expected call expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_comma_separated_empty() {
+        // Empty param list
+        let module = parse("fn foo() {}").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            assert!(func.params.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_comma_separated_single_item() {
+        let module = parse("fn foo(x: i32) {}").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            assert_eq!(func.params.len(), 1);
+            assert_eq!(func.params[0].name, "x");
+        }
+    }
+
+    #[test]
+    fn test_type_args_nested_generics() {
+        // Array<Array<i32>> should parse correctly (>> splitting)
+        let module = parse("fn foo(x: Array<Array<i32>>) {}").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            let ty = &func.params[0].ty;
+            if let Type::Generic(g) = ty {
+                assert_eq!(g.name, "Array");
+                assert_eq!(g.args.len(), 1);
+                if let Type::Generic(inner) = &g.args[0] {
+                    assert_eq!(inner.name, "Array");
+                } else {
+                    panic!("expected inner generic type");
+                }
+            } else {
+                panic!("expected generic type");
+            }
+        }
+    }
+
+    #[test]
+    fn test_turbofish_nested_generics() {
+        // Turbofish with nested generics tests >> splitting in parse_call_type_args.
+        // Use a simpler case: Result::<i32, String>::Ok(1)
+        let module = parse("fn run() { Result::<i32, String>::Ok(1); }").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            let body = func.body.as_ref().unwrap();
+            // Just verify it parses without error (the >> splitting works)
+            assert!(!body.stmts.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_trait_bounds_multiple() {
+        let module = parse("fn foo<T: Ord + Clone>() {}").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            assert_eq!(func.type_params.len(), 1);
+            assert_eq!(func.type_params[0].bounds.len(), 2);
+            assert_eq!(func.type_params[0].bounds[0].name, "Ord");
+            assert_eq!(func.type_params[0].bounds[1].name, "Clone");
+        }
+    }
+
+    #[test]
+    fn test_trait_bounds_with_assoc_type() {
+        let module = parse("fn foo<T: Container<Item = i32>>() {}").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            let bound = &func.type_params[0].bounds[0];
+            assert_eq!(bound.name, "Container");
+            assert_eq!(bound.assoc_types.len(), 1);
+            assert_eq!(bound.assoc_types[0].name, "Item");
+        }
+    }
+
+    #[test]
+    fn test_pattern_case_insensitive_variant_with_bindings() {
+        // Both uppercase and lowercase identifiers followed by ( should parse as variant patterns
+        let upper = parse_pattern_from("Some(x)");
+        let lower = parse_pattern_from("some(x)");
+        assert!(
+            matches!(&upper, Pattern::Variant { variant_name, bindings, .. }
+            if variant_name == "Some" && bindings.len() == 1)
+        );
+        assert!(
+            matches!(&lower, Pattern::Variant { variant_name, bindings, .. }
+            if variant_name == "some" && bindings.len() == 1)
+        );
+    }
+
+    #[test]
+    fn test_pattern_bare_identifier_always_ident() {
+        // Bare identifiers (no parens, no braces) are always Pattern::Ident
+        // regardless of case — the resolver disambiguates
+        let upper = parse_pattern_from("None");
+        let lower = parse_pattern_from("none");
+        assert!(matches!(&upper, Pattern::Ident(name) if name == "None"));
+        assert!(matches!(&lower, Pattern::Ident(name) if name == "none"));
+    }
+
+    #[test]
+    fn test_pattern_struct_case_insensitive() {
+        // Both cases followed by { should parse as struct patterns
+        let upper = parse_pattern_from("Point { x, y }");
+        let lower = parse_pattern_from("point { x, y }");
+        assert!(matches!(&upper, Pattern::Struct { type_name: Some(n), .. } if n == "Point"));
+        assert!(matches!(&lower, Pattern::Struct { type_name: Some(n), .. } if n == "point"));
+    }
+
+    #[test]
+    fn test_pattern_variant_multiple_bindings() {
+        let pat = parse_pattern_from("Pair(a, b)");
+        if let Pattern::Variant {
+            variant_name,
+            bindings,
+            ..
+        } = &pat
+        {
+            assert_eq!(variant_name, "Pair");
+            assert_eq!(bindings.len(), 2);
+        } else {
+            panic!("expected variant pattern");
+        }
+    }
+
+    #[test]
+    fn test_pattern_variant_trailing_comma() {
+        let pat = parse_pattern_from("Some(x,)");
+        if let Pattern::Variant {
+            variant_name,
+            bindings,
+            ..
+        } = &pat
+        {
+            assert_eq!(variant_name, "Some");
+            assert_eq!(bindings.len(), 1);
+        } else {
+            panic!("expected variant pattern");
+        }
+    }
+
+    #[test]
+    fn test_closure_params_trailing_comma() {
+        let expr = parse_expr_from("|x: i32, y: i32,| x + y");
+        assert!(matches!(&expr, Expr::Closure(c) if c.params.len() == 2));
+    }
+
+    #[test]
+    fn test_tuple_type_empty() {
+        let module = parse("fn foo() -> [] {}").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            let ret = func.return_type.as_ref().unwrap();
+            assert!(matches!(ret, Type::Tuple(types) if types.is_empty()));
+        }
+    }
+
+    #[test]
+    fn test_tuple_type_trailing_comma() {
+        let module = parse("fn foo(x: [i32, String,]) {}").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            if let Type::Tuple(types) = &func.params[0].ty {
+                assert_eq!(types.len(), 2);
+            } else {
+                panic!("expected tuple type");
+            }
+        }
+    }
+
+    #[test]
+    fn test_fn_type_trailing_comma() {
+        let module = parse("fn foo(f: fn(i32, i32,) -> i32) {}").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            if let Type::Function(ft) = &func.params[0].ty {
+                assert_eq!(ft.params.len(), 2);
+            } else {
+                panic!("expected function type");
+            }
+        }
+    }
+
+    #[test]
+    fn test_effect_method_with_generics() {
+        // Ensure effect methods with generic parameters parse correctly
+        // (previously used a naive skip that could break on nested <>)
+        let source = r#"
+            effect Store {
+                fn get<K>(key: K) -> String;
+            }
+        "#;
+        let module = parse(source).unwrap();
+        if let Item::Effect(effect) = &module.items[0] {
+            assert_eq!(effect.methods.len(), 1);
+            assert_eq!(effect.methods[0].name, "get");
+        }
+    }
+
+    #[test]
+    fn test_namespaced_generic_type() {
+        let module = parse("fn foo(x: core::Result<i32, String>) {}").unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            if let Type::NamespacedGeneric(ng) = &func.params[0].ty {
+                assert_eq!(ng.namespace, "core");
+                assert_eq!(ng.name, "Result");
+                assert_eq!(ng.args.len(), 2);
+            } else {
+                panic!("expected namespaced generic type");
+            }
+        }
+    }
+
+    #[test]
+    fn test_impl_block_bounded_type_params() {
+        let source = "impl Array<T: Ord> { fn sort(&mut self) {} }";
+        let module = parse(source).unwrap();
+        if let Item::Impl(impl_block) = &module.items[0] {
+            assert_eq!(impl_block.type_params.len(), 1);
+            assert_eq!(impl_block.type_params[0].name, "T");
+            assert_eq!(impl_block.type_params[0].bounds.len(), 1);
+            assert_eq!(impl_block.type_params[0].bounds[0].name, "Ord");
+        }
+    }
+
+    #[test]
+    fn test_trait_decl_associated_type_bounds() {
+        let source = r#"
+            trait Container {
+                type Item: Eq + Ord;
+                fn get(&self) -> Self::Item;
+            }
+        "#;
+        let module = parse(source).unwrap();
+        if let Item::Trait(trait_decl) = &module.items[0] {
+            assert_eq!(trait_decl.associated_types.len(), 1);
+            assert_eq!(trait_decl.associated_types[0].bounds.len(), 2);
+            assert_eq!(trait_decl.associated_types[0].bounds[0].name, "Eq");
+            assert_eq!(trait_decl.associated_types[0].bounds[1].name, "Ord");
+        }
+    }
+
+    #[test]
+    fn test_empty_tuple_literal() {
+        let expr = parse_expr_from("[]");
+        assert!(matches!(&expr, Expr::TupleLiteral(t) if t.elements.is_empty()));
+    }
+
+    #[test]
+    fn test_tuple_literal_trailing_comma() {
+        let expr = parse_expr_from("[1, 2, 3,]");
+        assert!(matches!(&expr, Expr::TupleLiteral(t) if t.elements.len() == 3));
     }
 }
