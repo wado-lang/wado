@@ -661,7 +661,13 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         // Optimize
         let project = {
             let _span = logger.span("optimize");
-            optimize(project, opt_level, inline_threshold, opt_iterations, &logger)
+            optimize(
+                project,
+                opt_level,
+                inline_threshold,
+                opt_iterations,
+                &logger,
+            )
         };
         let project = wir_build::plan_project(project);
 

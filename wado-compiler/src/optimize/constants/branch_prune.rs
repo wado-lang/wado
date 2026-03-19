@@ -10,7 +10,7 @@
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 
-use super::super::visitor::{visit_project_functions, walk_block, walk_expr, TirVisitor};
+use super::super::visitor::{TirVisitor, visit_project_functions, walk_block, walk_expr};
 
 /// Prune constant branches and simplify trivial blocks in all functions.
 pub fn prune_constant_branches(project: &mut Project) -> bool {
@@ -68,8 +68,7 @@ fn prune_expr(expr: &mut TirExpr) -> bool {
         && block.stmts.len() == 1
         && let TirStmtKind::Expr(_) = &block.stmts[0].kind
     {
-        let TirExprKind::Block(block) = std::mem::replace(&mut expr.kind, TirExprKind::Unit)
-        else {
+        let TirExprKind::Block(block) = std::mem::replace(&mut expr.kind, TirExprKind::Unit) else {
             unreachable!();
         };
         let mut stmts = block.stmts;

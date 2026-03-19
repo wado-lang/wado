@@ -9,7 +9,7 @@ use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{TirExpr, TirExprKind};
 
-use super::super::visitor::{walk_expr, visit_project_functions, TirVisitor};
+use super::super::visitor::{TirVisitor, visit_project_functions, walk_expr};
 
 #[derive(Debug, Clone)]
 enum ConstValue {

@@ -24,11 +24,13 @@ mod store_load_forward;
 mod tmpl_hoist;
 pub(crate) mod visitor;
 
-use constants::{fold_constants, promote_constant_globals, propagate_constants, prune_constant_branches};
+use constants::{
+    fold_constants, promote_constant_globals, propagate_constants, prune_constant_branches,
+};
 use copy_prop::propagate_copies;
 use dce::{
-    analyze_project, remove_unreachable_functions,
-    remove_unreachable_globals, remove_unreachable_types,
+    analyze_project, remove_unreachable_functions, remove_unreachable_globals,
+    remove_unreachable_types,
 };
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
@@ -201,11 +203,7 @@ fn run_pass(
 ///
 /// Hot Field Scalarization (HFS) runs once after the loop converges; see
 /// `optimize` for the rationale.
-fn run_optimization_passes(
-    project: &mut Project,
-    config: &OptConfig,
-    profiler: &dyn SpanEmitter,
-) {
+fn run_optimization_passes(project: &mut Project, config: &OptConfig, profiler: &dyn SpanEmitter) {
     let threshold = config.inline_threshold;
     for i in 0..config.iterations {
         profiler.span_start(&format!("tir/iteration {}", i + 1));
@@ -222,21 +220,21 @@ fn run_optimization_passes(
         changed |= run_pass("tir/sroa", project, profiler, |p| {
             scalar_replace_aggregates(p)
         });
-        changed |= run_pass("tir/copy_prop", project, profiler, |p| propagate_copies(p));
+        changed |= run_pass("tir/copy_prop", project, profiler, propagate_copies);
         changed |= run_pass("tir/store_load_forward", project, profiler, |p| {
             forward_stores_to_loads(p)
         });
         changed |= run_pass("tir/const_prop", project, profiler, |p| {
             propagate_constants(p)
         });
-        changed |= run_pass("tir/const_fold", project, profiler, |p| fold_constants(p));
+        changed |= run_pass("tir/const_fold", project, profiler, fold_constants);
         changed |= run_pass("tir/const_global_promotion", project, profiler, |p| {
             promote_constant_globals(p)
         });
         changed |= run_pass("tir/branch_prune", project, profiler, |p| {
             prune_constant_branches(p)
         });
-        changed |= run_pass("tir/licm", project, profiler, |p| apply_licm(p));
+        changed |= run_pass("tir/licm", project, profiler, apply_licm);
         changed |= run_pass("tir/tmpl_hoist", project, profiler, |p| {
             hoist_template_buffers(p)
         });

@@ -12,7 +12,7 @@ use crate::tir::{
     TypeTable,
 };
 
-use super::visitor::{walk_expr, TirVisitor};
+use super::visitor::{TirVisitor, walk_expr};
 
 /// Run select lowering on all functions.
 pub fn select_lowering(project: &mut Project) {
@@ -32,26 +32,20 @@ struct SelectLoweringVisitor;
 impl TirVisitor for SelectLoweringVisitor {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         let mut changed = false;
-        match &mut expr.kind {
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                if let Some(select_call) = try_lower_to_select(
-                    condition,
-                    then_branch,
-                    else_branch,
-                    expr.type_id,
-                    expr.span,
-                ) {
-                    *expr = select_call;
-                    changed = true;
-                    changed |= self.visit_expr(expr);
-                    return changed;
-                }
+        if let TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } = &mut expr.kind
+        {
+            if let Some(select_call) =
+                try_lower_to_select(condition, then_branch, else_branch, expr.type_id, expr.span)
+            {
+                *expr = select_call;
+                changed = true;
+                changed |= self.visit_expr(expr);
+                return changed;
             }
-            _ => {}
         }
         changed |= walk_expr(self, expr);
         changed

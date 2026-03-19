@@ -62,7 +62,12 @@ use sroa_return::sroa_multi_value_returns;
 use string::simplify_short_string_appends;
 
 /// Run a single WIR optimization pass with profiling.
-fn wir_pass(name: &str, module: &mut WirModule, profiler: &dyn SpanEmitter, f: impl FnOnce(&mut WirModule)) {
+fn wir_pass(
+    name: &str,
+    module: &mut WirModule,
+    profiler: &dyn SpanEmitter,
+    f: impl FnOnce(&mut WirModule),
+) {
     profiler.span_start(name);
     f(module);
     profiler.span_end(name);

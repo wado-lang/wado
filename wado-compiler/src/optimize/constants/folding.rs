@@ -31,7 +31,7 @@ use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
 };
 
-use super::super::visitor::{walk_expr, TirVisitor};
+use super::super::visitor::{TirVisitor, walk_expr};
 
 enum FoldedExpr {
     Int { value: u64, prim: PrimitiveType },

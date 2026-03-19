@@ -16,7 +16,7 @@ use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmtKind};
 
-use super::super::visitor::{walk_block, walk_expr, TirVisitor};
+use super::super::visitor::{TirVisitor, walk_block, walk_expr};
 
 type GlobalKey = (ModuleSource, String);
 
@@ -99,7 +99,9 @@ impl TirVisitor for PromotionCollector<'_> {
         {
             let key = (module_source.clone(), name.clone());
             if self.promotable.contains_key(&key) && is_scalar_constant(&value.kind) {
-                self.promotions.entry(key).or_insert_with(|| value.kind.clone());
+                self.promotions
+                    .entry(key)
+                    .or_insert_with(|| value.kind.clone());
             }
         }
         walk_expr(self, expr)
