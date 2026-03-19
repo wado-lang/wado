@@ -50,7 +50,24 @@ fn test_init_fails_when_manifest_exists() {
         .args(["init", "--name", "my-app"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("already exists"));
+        .stderr(predicate::str::contains("already exists"))
+        .stderr(predicate::str::contains("--force"));
+}
+
+#[test]
+fn test_init_force_overwrites() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(tmp.path().join("wado.toml"), "[package]\nname = \"old\"\nversion = \"0.1.0\"\n")
+        .unwrap();
+
+    wado_in(tmp.path())
+        .args(["init", "--name", "new-app", "--force"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Created wado.toml"));
+
+    let content = fs::read_to_string(tmp.path().join("wado.toml")).unwrap();
+    assert!(content.contains("name = \"new-app\""));
 }
 
 #[test]

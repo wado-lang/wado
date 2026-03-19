@@ -10,17 +10,19 @@ use crate::args::{self, CliExit};
 pub struct InitOptions {
     pub name: String,
     pub namespace: Option<String>,
+    pub force: bool,
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Name,
     Namespace,
+    Force,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[Self::Name, Self::Namespace, Self::Help];
+    const ALL: &[Self] = &[Self::Name, Self::Namespace, Self::Force, Self::Help];
 
     const fn spec(self) -> args::OptSpec {
         match self {
@@ -35,6 +37,12 @@ impl Opt {
                 short: None,
                 value: Some("<ns>"),
                 desc: "Package namespace (optional, required for publishing)",
+            },
+            Self::Force => args::OptSpec {
+                long: Some("force"),
+                short: Some('f'),
+                value: None,
+                desc: "Overwrite existing wado.toml",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -61,12 +69,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<InitOptions, CliExit> {
     let usage = format_usage();
     let mut name: Option<String> = None;
     let mut namespace: Option<String> = None;
+    let mut force = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Name => name = Some(args::require_string(&mut parser)?),
                 Opt::Namespace => namespace = Some(args::require_string(&mut parser)?),
+                Opt::Force => force = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(_) = arg {
@@ -81,14 +91,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<InitOptions, CliExit> {
 
     let name = name.ok_or_else(|| CliExit::error_with_usage("--name is required", &usage))?;
 
-    Ok(InitOptions { name, namespace })
+    Ok(InitOptions { name, namespace, force })
 }
 
 pub fn run(opts: InitOptions) {
     let manifest_path = Path::new("wado.toml");
 
-    if manifest_path.exists() {
-        eprintln!("Error: wado.toml already exists in the current directory");
+    if manifest_path.exists() && !opts.force {
+        eprintln!("Error: wado.toml already exists in the current directory (use --force to overwrite)");
         std::process::exit(1);
     }
 
