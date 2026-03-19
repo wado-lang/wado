@@ -1556,6 +1556,11 @@ fn generate_wasi_imports(
     if project.has_http_handler_export {
         import_http_types_for_service(project, builder, ctx);
     }
+
+    // Import wasi:http/client if Client::send is used
+    if project.has_effect("Client") && ctx.has_type("http-handler-result") {
+        import_http_client(builder, ctx);
+    }
 }
 
 fn import_http_types_for_service(
@@ -1833,6 +1838,65 @@ fn import_http_types_for_service(
             Some(ComponentValType::Type(error_code_type_idx)),
         );
     }
+}
+
+fn import_http_client(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+) {
+    // Build the instance type for wasi:http/client
+    // It contains a single async function: send(request) -> result<response, error-code>
+    let request_type_idx = ctx.type_idx("http-request");
+    let handler_result_type_idx = ctx.type_idx("http-handler-result");
+
+    let instance_type_idx = ctx.register_type("http-client-instance-type");
+    {
+        let (_, enc) = builder.ty(Some("http-client-instance-type"));
+        let mut instance_type = InstanceType::new();
+
+        // Alias outer types into the instance
+        instance_type.alias(Alias::Outer {
+            kind: ComponentOuterAliasKind::Type,
+            count: 1,
+            index: request_type_idx,
+        });
+        instance_type.alias(Alias::Outer {
+            kind: ComponentOuterAliasKind::Type,
+            count: 1,
+            index: handler_result_type_idx,
+        });
+
+        // Define: send: func(request: own<request>) -> result<own<response>, error-code>
+        instance_type
+            .ty()
+            .function()
+            .params([("request", ComponentValType::Type(0))])
+            .result(Some(ComponentValType::Type(1)));
+        let send_func_type_idx = 2; // 0=request alias, 1=result alias, 2=func type
+
+        instance_type.export(
+            "send",
+            wasm_encoder::ComponentTypeRef::Func(send_func_type_idx),
+        );
+
+        enc.instance(&instance_type);
+    }
+
+    ctx.register_instance("http-client");
+    let http_version = "0.3.0-rc-2026-01-06";
+    let client_import_path = format!("wasi:http/client@{http_version}");
+    builder.import(
+        &client_import_path,
+        wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
+    );
+
+    // Alias the send function from the instance
+    ctx.register_comp_func("wasi:http/Client::send");
+    builder.alias_export(
+        ctx.instance_idx("http-client"),
+        "send",
+        ComponentExportKind::Func,
+    );
 }
 
 fn import_interface_with_resource(
