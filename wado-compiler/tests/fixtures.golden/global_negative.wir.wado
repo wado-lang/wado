@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -113,7 +113,7 @@ fn global_negative() with Stdout {
         String::append(__local_0, String { repr: array.new_data<u8>("POW10_MIN="), used: 10 });
         __local_1 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_3 = __local_0;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_3) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         };
         __local_5 = __local_1;
         i32::fmt_decimal(-348, __local_5);
@@ -135,7 +135,7 @@ fn global_negative_edge() with Stdout {
         String::append(__local_0, String { repr: array.new_data<u8>("NEGATIVE_ONE="), used: 13 });
         __local_1 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_5 = __local_0;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_5) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         };
         __local_7 = __local_1;
         i64::fmt_decimal(-1_i64, __local_7);
@@ -153,7 +153,7 @@ fn global_negative_edge() with Stdout {
         String::append_char(__local_2, 61);
         __local_3 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_11 = __local_2;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_11) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
         };
         __local_13 = __local_3;
         i64::fmt_decimal(-9223372036854775808_i64, __local_13);

@@ -29,7 +29,7 @@ use super::common::{
 
 /// Run trait synthesis on the entire project.
 ///
-/// For each module, generates Eq/Ord, Inspect, InspectAlt, Display, and DisplayAlt
+/// For each module, generates Eq/Ord, Inspect, `InspectAlt`, Display, and `DisplayAlt`
 /// implementations for types that don't already have user-provided implementations.
 pub fn synthesize_traits(project: Project) -> Project {
     let mut project = project;
@@ -1900,7 +1900,11 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
             Some("InspectAlt".to_string()),
             "inspect_alt".to_string(),
         );
-        let ii = LocalMethodName::new(name.clone(), Some("Inspect".to_string()), "inspect".to_string());
+        let ii = LocalMethodName::new(
+            name.clone(),
+            Some("Inspect".to_string()),
+            "inspect".to_string(),
+        );
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
             di,
             ii,
@@ -1954,44 +1958,41 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         }
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
-        match resolved {
-            ResolvedType::Tuple(elements) => {
-                generated.push(Rc::new(RefCell::new(generate_tuple_inspect_alt_fn(
-                    &type_arg_names,
-                    &elements,
-                    type_id,
-                    ref_type,
-                    fmt_type,
-                    string_type,
-                    &module_source,
-                    &mut tt,
-                    span,
-                ))));
-            }
-            _ => {
-                // Function types, opaque types: delegate to Inspect
-                let di = LocalMethodName::new(
-                    base_name.clone(),
-                    Some("InspectAlt".to_string()),
-                    "inspect_alt".to_string(),
-                )
-                .with_struct_type_args(&type_arg_names);
-                let ii = LocalMethodName::new(
-                    base_name,
-                    Some("Inspect".to_string()),
-                    "inspect".to_string(),
-                )
-                .with_struct_type_args(&type_arg_names);
-                generated.push(Rc::new(RefCell::new(generate_display_fallback(
-                    di,
-                    ii,
-                    ref_type,
-                    fmt_type,
-                    &module_source,
-                    vec![],
-                    span,
-                ))));
-            }
+        if let ResolvedType::Tuple(elements) = resolved {
+            generated.push(Rc::new(RefCell::new(generate_tuple_inspect_alt_fn(
+                &type_arg_names,
+                &elements,
+                type_id,
+                ref_type,
+                fmt_type,
+                string_type,
+                &module_source,
+                &mut tt,
+                span,
+            ))));
+        } else {
+            // Function types, opaque types: delegate to Inspect
+            let di = LocalMethodName::new(
+                base_name.clone(),
+                Some("InspectAlt".to_string()),
+                "inspect_alt".to_string(),
+            )
+            .with_struct_type_args(&type_arg_names);
+            let ii = LocalMethodName::new(
+                base_name,
+                Some("Inspect".to_string()),
+                "inspect".to_string(),
+            )
+            .with_struct_type_args(&type_arg_names);
+            generated.push(Rc::new(RefCell::new(generate_display_fallback(
+                di,
+                ii,
+                ref_type,
+                fmt_type,
+                &module_source,
+                vec![],
+                span,
+            ))));
         }
     }
 
@@ -2115,7 +2116,7 @@ fn generate_generic_struct_inspect_alt_fn(
     }
 }
 
-/// Build the body statements for struct InspectAlt (shared between generic and non-generic).
+/// Build the body statements for struct `InspectAlt` (shared between generic and non-generic).
 fn build_struct_inspect_alt_body(
     struct_name: &str,
     fields: &[(String, TypeId, u32)],
@@ -2147,10 +2148,20 @@ fn build_struct_inspect_alt_body(
         }
     } else {
         // f.begin_block("StructName {")
-        stmts.push(formatter_call("open_brace", fmt_local(), format!("{struct_name} {{"), string_type, span));
-        for (field_name, field_type, field_index) in fields.iter() {
+        stmts.push(formatter_call(
+            "open_brace",
+            fmt_local(),
+            format!("{struct_name} {{"),
+            string_type,
+            span,
+        ));
+        for (field_name, field_type, field_index) in fields {
             // f.write_newline_indent()
-            stmts.push(formatter_call_no_arg("write_newline_indent", fmt_local(), span));
+            stmts.push(formatter_call_no_arg(
+                "write_newline_indent",
+                fmt_local(),
+                span,
+            ));
             stmts.push(write_str_stmt(
                 format!("{field_name}: "),
                 fmt_local(),
@@ -2177,11 +2188,21 @@ fn build_struct_inspect_alt_body(
             stmts.push(write_str_stmt(",", fmt_local(), string_type, span));
         }
         if has_hidden {
-            stmts.push(formatter_call_no_arg("write_newline_indent", fmt_local(), span));
+            stmts.push(formatter_call_no_arg(
+                "write_newline_indent",
+                fmt_local(),
+                span,
+            ));
             stmts.push(write_str_stmt("..", fmt_local(), string_type, span));
         }
         // f.end_block("}")
-        stmts.push(formatter_call("close_brace", fmt_local(), "}", string_type, span));
+        stmts.push(formatter_call(
+            "close_brace",
+            fmt_local(),
+            "}",
+            string_type,
+            span,
+        ));
     }
 
     stmts
@@ -2287,7 +2308,7 @@ fn generate_generic_variant_inspect_alt_fn(
     }
 }
 
-/// Build the body for variant InspectAlt (shared between generic and non-generic).
+/// Build the body for variant `InspectAlt` (shared between generic and non-generic).
 fn build_variant_inspect_alt_body(
     variant_name: &str,
     cases: &[(String, u32, TypeId)],
@@ -2330,7 +2351,11 @@ fn build_variant_inspect_alt_body(
                 span,
             ));
             // f.write_newline_indent()
-            then_stmts.push(formatter_call_no_arg("write_newline_indent", fmt_local(), span));
+            then_stmts.push(formatter_call_no_arg(
+                "write_newline_indent",
+                fmt_local(),
+                span,
+            ));
             let payload = TirExpr::new(
                 TirExprKind::VariantPayload {
                     expr: Box::new(deref_self()),
@@ -2350,7 +2375,13 @@ fn build_variant_inspect_alt_body(
             ));
             then_stmts.push(write_str_stmt(",", fmt_local(), string_type, span));
             // f.close_brace(")")
-            then_stmts.push(formatter_call("close_brace", fmt_local(), ")", string_type, span));
+            then_stmts.push(formatter_call(
+                "close_brace",
+                fmt_local(),
+                ")",
+                string_type,
+                span,
+            ));
         }
 
         let cond = TirExpr::new(
@@ -2375,9 +2406,7 @@ fn build_variant_inspect_alt_body(
         chain = Some(if_expr);
     }
 
-    chain.map_or_else(Vec::new, |e| {
-        vec![TirStmt::new(TirStmtKind::Expr(e), span)]
-    })
+    chain.map_or_else(Vec::new, |e| vec![TirStmt::new(TirStmtKind::Expr(e), span)])
 }
 
 /// Generate `Tuple<...>^InspectAlt::inspect_alt` for a concrete tuple type (pretty-print).
@@ -2400,7 +2429,13 @@ fn generate_tuple_inspect_alt_fn(
     .with_struct_type_args(type_arg_names);
     let qualified_name = method_info.to_mangled_name();
 
-    let deref_self = || deref_expr(local_expr(0, "self", ref_tuple_type, span), tuple_type, span);
+    let deref_self = || {
+        deref_expr(
+            local_expr(0, "self", ref_tuple_type, span),
+            tuple_type,
+            span,
+        )
+    };
     let fmt = || local_expr(1, "f", fmt_type, span);
 
     let mut stmts = Vec::new();
@@ -2431,7 +2466,7 @@ fn generate_tuple_inspect_alt_fn(
 
 /// Build a `value.inspect_alt(f)` method call statement.
 ///
-/// Identical to `inspect_call` but for the InspectAlt trait.
+/// Identical to `inspect_call` but for the `InspectAlt` trait.
 fn inspect_alt_call(
     value: TirExpr,
     value_type: TypeId,
@@ -3004,7 +3039,13 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(enum_type);
         let (di, ii) = simple_pair(&name);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            di, ii, ref_type, fmt_type, &module_source, vec![], span,
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
         ))));
     }
 
@@ -3030,7 +3071,13 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(struct_type);
         let (di, ii) = simple_pair(&name);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            di, ii, ref_type, fmt_type, &module_source, vec![], span,
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
         ))));
     }
 
@@ -3061,7 +3108,13 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(struct_type);
         let (di, ii) = simple_pair(&name);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            di, ii, ref_type, fmt_type, &module_source, type_params, span,
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            type_params,
+            span,
         ))));
     }
 
@@ -3084,7 +3137,13 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(variant_type);
         let (di, ii) = simple_pair(&name);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            di, ii, ref_type, fmt_type, &module_source, vec![], span,
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
         ))));
     }
 
@@ -3112,7 +3171,13 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(variant_type);
         let (di, ii) = simple_pair(&name);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            di, ii, ref_type, fmt_type, &module_source, type_params, span,
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            type_params,
+            span,
         ))));
     }
 
@@ -3133,7 +3198,13 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(flags_type_id);
         let (di, ii) = simple_pair(&name);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            di, ii, ref_type, fmt_type, &module_source, vec![], span,
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
         ))));
     }
 
@@ -3152,7 +3223,13 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(nt.type_id);
         let (di, ii) = simple_pair(&nt.name);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            di, ii, ref_type, fmt_type, &module_source, vec![], span,
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
         ))));
     }
 
@@ -3178,7 +3255,13 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         )
         .with_struct_type_args(&type_arg_names);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            di, ii, ref_type, fmt_type, &module_source, vec![], span,
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
         ))));
     }
 

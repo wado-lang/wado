@@ -151,10 +151,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -527,7 +527,7 @@ fn handle(request) {
             String::append_char(__local_11, 58);
             __local_12 = __inline_Formatter__new_7: block -> ref Formatter {
                 __local_176 = __local_11;
-                break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_176) };
+                break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_176) };
             };
             __local_178 = __local_12;
             i32::fmt_decimal(17, __local_178);
@@ -537,7 +537,7 @@ condition: resp_headers.has(\"x-check\" as FieldName)
             String::append(__local_11, String { repr: array.new_data<u8>("resp_headers.has(\"x-check\" as FieldName): "), used: 42 });
             __local_12 = __inline_Formatter__new_10: block -> ref Formatter {
                 __local_181 = __local_11;
-                break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_181) };
+                break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_181) };
             };
             __local_183 = __local_12;
             Formatter::pad(__local_183, if __v0 -> ref String {

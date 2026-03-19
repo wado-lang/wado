@@ -30,10 +30,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -382,7 +382,7 @@ fn __test_0_unknown_fields_ignored() {
                 String::append_char(__local_6, 58);
                 __local_7 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_12 = __local_6;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                 };
                 __local_14 = __local_7;
                 i32::fmt_decimal(16, __local_14);
@@ -396,7 +396,7 @@ condition: p.x == 1.0
                 String::append_char(__local_6, 32);
                 __local_7 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_17 = __local_6;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_17) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
                 };
                 __local_19 = __local_7;
                 f64::inspect_into(__v0_2, __local_19);
@@ -420,7 +420,7 @@ condition: p.x == 1.0
                 String::append_char(__local_8, 58);
                 __local_9 = __inline_Formatter__new_8: block -> ref Formatter {
                     __local_21 = __local_8;
-                    break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
+                    break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_21) };
                 };
                 __local_23 = __local_9;
                 i32::fmt_decimal(17, __local_23);
@@ -434,7 +434,7 @@ condition: p.y == 2.0
                 String::append_char(__local_8, 32);
                 __local_9 = __inline_Formatter__new_11: block -> ref Formatter {
                     __local_26 = __local_8;
-                    break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_26) };
+                    break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_26) };
                 };
                 __local_28 = __local_9;
                 f64::inspect_into(__v0_4, __local_28);
@@ -493,7 +493,7 @@ fn __test_1_unknown_field_with_object_value() {
                 String::append_char(__local_6, 58);
                 __local_7 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_12 = __local_6;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                 };
                 __local_14 = __local_7;
                 i32::fmt_decimal(26, __local_14);
@@ -507,7 +507,7 @@ condition: p.x == 1.0
                 String::append_char(__local_6, 32);
                 __local_7 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_17 = __local_6;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_17) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
                 };
                 __local_19 = __local_7;
                 f64::inspect_into(__v0_2, __local_19);
@@ -531,7 +531,7 @@ condition: p.x == 1.0
                 String::append_char(__local_8, 58);
                 __local_9 = __inline_Formatter__new_8: block -> ref Formatter {
                     __local_21 = __local_8;
-                    break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
+                    break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_21) };
                 };
                 __local_23 = __local_9;
                 i32::fmt_decimal(27, __local_23);
@@ -545,7 +545,7 @@ condition: p.y == 2.0
                 String::append_char(__local_8, 32);
                 __local_9 = __inline_Formatter__new_11: block -> ref Formatter {
                     __local_26 = __local_8;
-                    break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_26) };
+                    break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_26) };
                 };
                 __local_28 = __local_9;
                 f64::inspect_into(__v0_4, __local_28);
@@ -604,7 +604,7 @@ fn __test_2_unknown_field_with_array_value() {
                 String::append_char(__local_6, 58);
                 __local_7 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_12 = __local_6;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                 };
                 __local_14 = __local_7;
                 i32::fmt_decimal(36, __local_14);
@@ -618,7 +618,7 @@ condition: p.x == 1.0
                 String::append_char(__local_6, 32);
                 __local_7 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_17 = __local_6;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_17) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
                 };
                 __local_19 = __local_7;
                 f64::inspect_into(__v0_2, __local_19);
@@ -642,7 +642,7 @@ condition: p.x == 1.0
                 String::append_char(__local_8, 58);
                 __local_9 = __inline_Formatter__new_8: block -> ref Formatter {
                     __local_21 = __local_8;
-                    break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
+                    break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_21) };
                 };
                 __local_23 = __local_9;
                 i32::fmt_decimal(37, __local_23);
@@ -656,7 +656,7 @@ condition: p.y == 2.0
                 String::append_char(__local_8, 32);
                 __local_9 = __inline_Formatter__new_11: block -> ref Formatter {
                     __local_26 = __local_8;
-                    break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_26) };
+                    break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_26) };
                 };
                 __local_28 = __local_9;
                 f64::inspect_into(__v0_4, __local_28);
@@ -2393,13 +2393,13 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {  // from core:json
                 String::append(__local_3, String { repr: array.new_data<u8>("expected '"), used: 10 });
                 __local_4 = __inline_Formatter__new_4: block -> ref Formatter {
                     __local_10 = __local_3;
-                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
                 };
                 char^Display::fmt(c & 255, __local_4);
                 String::append(__local_3, String { repr: array.new_data<u8>("', found '"), used: 10 });
                 __local_4 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_11 = __local_3;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_11) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
                 };
                 char^Display::fmt(b & 255, __local_4);
                 String::append_char(__local_3, 39);
@@ -2759,7 +2759,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                             String::append(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
                             __local_33 = __inline_Formatter__new_20: block -> ref Formatter {
                                 __local_71 = __local_32;
-                                break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_71) };
+                                break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_71) };
                             };
                             char^Display::fmt(esc & 255, __local_33);
                             String::append_char(__local_32, 39);
@@ -3716,7 +3716,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
             String::append(__local_12, String { repr: array.new_data<u8>("unexpected character '"), used: 22 });
             __local_13 = __inline_Formatter__new_19: block -> ref Formatter {
                 __local_46 = __local_12;
-                break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_46) };
+                break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_46) };
             };
             char^Display::fmt(b & 255, __local_13);
             String::append_char(__local_12, 39);

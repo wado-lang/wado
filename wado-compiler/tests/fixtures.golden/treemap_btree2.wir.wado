@@ -23,10 +23,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -347,7 +347,7 @@ fn run() with Stdout {
         String::append_char(__local_11, 32);
         __local_12 = __inline_Formatter__new_10: block -> ref Formatter {
             __local_49 = __local_11;
-            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_49) };
+            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_49) };
         };
         __local_51 = __local_12;
         i32::fmt_decimal(map.size, __local_51);
@@ -358,7 +358,7 @@ fn run() with Stdout {
         String::append(__local_13, String { repr: array.new_data<u8>("banana = "), used: 9 });
         __local_14 = __inline_Formatter__new_15: block -> ref Formatter {
             __local_56 = __local_13;
-            break __inline_Formatter__new_15: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_56) };
+            break __inline_Formatter__new_15: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_56) };
         };
         __local_58 = __local_14;
         i32::fmt_decimal(TreeMap<String,i32>^Index::index(map, String { repr: array.new_data<u8>("banana"), used: 6 }).value, __local_58);
@@ -375,7 +375,7 @@ fn run() with Stdout {
         String::append_char(__local_15, 32);
         __local_16 = __inline_Formatter__new_19: block -> ref Formatter {
             __local_62 = __local_15;
-            break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_62) };
+            break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_62) };
         };
         __local_64 = __local_16;
         i32::fmt_decimal(TreeMap<String,i32>^Index::index(map, String { repr: array.new_data<u8>("date"), used: 4 }).value, __local_64);
@@ -389,7 +389,7 @@ fn run() with Stdout {
         String::append(__local_17, String { repr: array.new_data<u8>("banana (updated) = "), used: 19 });
         __local_18 = __inline_Formatter__new_24: block -> ref Formatter {
             __local_71 = __local_17;
-            break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_71) };
+            break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_71) };
         };
         __local_73 = __local_18;
         i32::fmt_decimal(TreeMap<String,i32>^Index::index(map, String { repr: array.new_data<u8>("banana"), used: 6 }).value, __local_73);
@@ -417,7 +417,7 @@ fn run() with Stdout {
         String::append_char(__local_19, 32);
         __local_20 = __inline_Formatter__new_29: block -> ref Formatter {
             __local_81 = __local_19;
-            break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_81) };
+            break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_81) };
         };
         __local_83 = __local_20;
         i32::fmt_decimal(map.size, __local_83);
@@ -442,7 +442,7 @@ fn run() with Stdout {
                     String::append_char(__local_21, 32);
                     __local_22 = __inline_Formatter__new_35: block -> ref Formatter {
                         __local_89 = __local_21;
-                        break __inline_Formatter__new_35: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_89) };
+                        break __inline_Formatter__new_35: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_89) };
                     };
                     __local_91 = __local_22;
                     i32::fmt_decimal(value_5, __local_91);
@@ -475,7 +475,7 @@ fn run() with Stdout {
         String::append_char(__local_23, 32);
         __local_24 = __inline_Formatter__new_40: block -> ref Formatter {
             __local_98 = __local_23;
-            break __inline_Formatter__new_40: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_98) };
+            break __inline_Formatter__new_40: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_98) };
         };
         __local_100 = __local_24;
         i32::fmt_decimal(map.size, __local_100);
@@ -486,7 +486,7 @@ fn run() with Stdout {
         String::append(__local_25, String { repr: array.new_data<u8>("Deleted count: "), used: 15 });
         __local_26 = __inline_Formatter__new_45: block -> ref Formatter {
             __local_105 = __local_25;
-            break __inline_Formatter__new_45: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_105) };
+            break __inline_Formatter__new_45: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_105) };
         };
         __local_107 = __local_26;
         i32::fmt_decimal(map.deleted_count, __local_107);
@@ -511,7 +511,7 @@ fn run() with Stdout {
                     String::append_char(__local_27, 32);
                     __local_28 = __inline_Formatter__new_50: block -> ref Formatter {
                         __local_112 = __local_27;
-                        break __inline_Formatter__new_50: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_112) };
+                        break __inline_Formatter__new_50: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_112) };
                     };
                     __local_114 = __local_28;
                     i32::fmt_decimal(value_10, __local_114);
@@ -1483,7 +1483,7 @@ fn TreeMap<String,i32>^Index::index(self, key) {
         String::append(__local_3, String { repr: array.new_data<u8>("key not found: "), used: 15 });
         __local_4 = __inline_Formatter__new_2: block -> ref Formatter {
             __local_11 = __local_3;
-            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_11) };
+            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
         };
         String^Inspect::inspect(key, __local_4);
         break __tmpl: __local_3;

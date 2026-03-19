@@ -17,10 +17,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -140,7 +140,7 @@ fn maybe_read(r) {
             String::append_char(__local_2, 40);
             __local_3 = __inline_Formatter__new_1: block -> ref Formatter {
                 __local_6 = __local_2;
-                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_6) };
+                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             };
             __local_8 = __local_3;
             i32::fmt_decimal(v, __local_8);
@@ -179,14 +179,14 @@ fn ref_deref_assign_struct() with Stdout {
         __local_1 = String { repr: builtin::array_new<u8>(33), used: 0 };
         __local_2 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_6 = __local_1;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_6) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         };
         __local_8 = __local_2;
         i32::fmt_decimal(10, __local_8);
         String::append_char(__local_1, 44);
         __local_2 = __inline_Formatter__new_4: block -> ref Formatter {
             __local_11 = __local_1;
-            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_11) };
+            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
         };
         __local_13 = __local_2;
         i32::fmt_decimal(20, __local_13);
@@ -196,14 +196,14 @@ fn ref_deref_assign_struct() with Stdout {
         __local_3 = String { repr: builtin::array_new<u8>(33), used: 0 };
         __local_4 = __inline_Formatter__new_8: block -> ref Formatter {
             __local_17 = __local_3;
-            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_17) };
+            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
         };
         __local_19 = __local_4;
         i32::fmt_decimal(0, __local_19);
         String::append_char(__local_3, 44);
         __local_4 = __inline_Formatter__new_11: block -> ref Formatter {
             __local_22 = __local_3;
-            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_22) };
+            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_22) };
         };
         __local_24 = __local_4;
         i32::fmt_decimal(0, __local_24);
@@ -247,7 +247,7 @@ fn ref_deref_reassign() with Stdout {
         String::append(__local_5, String { repr: array.new_data<u8>("modified: "), used: 10 });
         __local_6 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_12 = __local_5;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
         };
         __local_14 = __local_6;
         i32::fmt_decimal(original.value, __local_14);
@@ -260,7 +260,7 @@ fn ref_deref_reassign() with Stdout {
         String::append(__local_7, String { repr: array.new_data<u8>("original: "), used: 10 });
         __local_8 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_18 = __local_7;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_18) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
         };
         __local_20 = __local_8;
         i32::fmt_decimal(original.value, __local_20);
@@ -276,7 +276,7 @@ fn ref_deref_reassign() with Stdout {
         String::append_char(__local_9, 32);
         __local_10 = __inline_Formatter__new_9: block -> ref Formatter {
             __local_24 = __local_9;
-            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_24) };
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_24) };
         };
         __local_26 = __local_10;
         i32::fmt_decimal(__sroa_val2_value, __local_26);

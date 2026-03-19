@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -177,7 +177,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_0, String { repr: array.new_data<u8>("i8::MAX = "), used: 10 });
         __local_1 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_33 = __local_0;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_33) };
         };
         __local_35 = __local_1;
         i32::fmt_decimal(127, __local_35);
@@ -188,7 +188,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_2, String { repr: array.new_data<u8>("i8::MIN = "), used: 10 });
         __local_3 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_39 = __local_2;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_39) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_39) };
         };
         __local_41 = __local_3;
         i32::fmt_decimal(-128, __local_41);
@@ -199,7 +199,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_4, String { repr: array.new_data<u8>("u8::MAX = "), used: 10 });
         __local_5 = __inline_Formatter__new_9: block -> ref Formatter {
             __local_45 = __local_4;
-            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_45) };
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_45) };
         };
         __local_47 = __local_5;
         i32::fmt_decimal(255, __local_47);
@@ -210,7 +210,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_6, String { repr: array.new_data<u8>("u8::MIN = "), used: 10 });
         __local_7 = __inline_Formatter__new_13: block -> ref Formatter {
             __local_51 = __local_6;
-            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_51) };
+            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_51) };
         };
         __local_53 = __local_7;
         i32::fmt_decimal(0, __local_53);
@@ -221,7 +221,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_8, String { repr: array.new_data<u8>("i16::MAX = "), used: 11 });
         __local_9 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_57 = __local_8;
-            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_57) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_57) };
         };
         __local_59 = __local_9;
         i32::fmt_decimal(32767, __local_59);
@@ -232,7 +232,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_10, String { repr: array.new_data<u8>("i16::MIN = "), used: 11 });
         __local_11 = __inline_Formatter__new_21: block -> ref Formatter {
             __local_63 = __local_10;
-            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_63) };
+            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_63) };
         };
         __local_65 = __local_11;
         i32::fmt_decimal(-32768, __local_65);
@@ -243,7 +243,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_12, String { repr: array.new_data<u8>("u16::MAX = "), used: 11 });
         __local_13 = __inline_Formatter__new_25: block -> ref Formatter {
             __local_69 = __local_12;
-            break __inline_Formatter__new_25: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_69) };
+            break __inline_Formatter__new_25: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_69) };
         };
         __local_71 = __local_13;
         i32::fmt_decimal(65535, __local_71);
@@ -254,7 +254,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_14, String { repr: array.new_data<u8>("u16::MIN = "), used: 11 });
         __local_15 = __inline_Formatter__new_29: block -> ref Formatter {
             __local_75 = __local_14;
-            break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_75) };
+            break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_75) };
         };
         __local_77 = __local_15;
         i32::fmt_decimal(0, __local_77);
@@ -265,7 +265,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_16, String { repr: array.new_data<u8>("i32::MAX = "), used: 11 });
         __local_17 = __inline_Formatter__new_33: block -> ref Formatter {
             __local_81 = __local_16;
-            break __inline_Formatter__new_33: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_81) };
+            break __inline_Formatter__new_33: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_81) };
         };
         __local_83 = __local_17;
         i32::fmt_decimal(2147483647, __local_83);
@@ -276,7 +276,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_18, String { repr: array.new_data<u8>("i32::MIN = "), used: 11 });
         __local_19 = __inline_Formatter__new_37: block -> ref Formatter {
             __local_87 = __local_18;
-            break __inline_Formatter__new_37: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_87) };
+            break __inline_Formatter__new_37: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_87) };
         };
         __local_89 = __local_19;
         i32::fmt_decimal(-2147483648, __local_89);
@@ -287,7 +287,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_20, String { repr: array.new_data<u8>("u32::MAX = "), used: 11 });
         __local_21 = __inline_Formatter__new_41: block -> ref Formatter {
             __local_93 = __local_20;
-            break __inline_Formatter__new_41: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_93) };
+            break __inline_Formatter__new_41: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_93) };
         };
         __local_95 = __local_21;
         u32::fmt_decimal(-1, __local_95);
@@ -298,7 +298,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_22, String { repr: array.new_data<u8>("u32::MIN = "), used: 11 });
         __local_23 = __inline_Formatter__new_45: block -> ref Formatter {
             __local_99 = __local_22;
-            break __inline_Formatter__new_45: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_99) };
+            break __inline_Formatter__new_45: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_99) };
         };
         __local_101 = __local_23;
         u32::fmt_decimal(0, __local_101);
@@ -309,7 +309,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_24, String { repr: array.new_data<u8>("i64::MAX = "), used: 11 });
         __local_25 = __inline_Formatter__new_49: block -> ref Formatter {
             __local_105 = __local_24;
-            break __inline_Formatter__new_49: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_105) };
+            break __inline_Formatter__new_49: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_105) };
         };
         __local_107 = __local_25;
         i64::fmt_decimal(9223372036854775807_i64, __local_107);
@@ -320,7 +320,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_26, String { repr: array.new_data<u8>("i64::MIN = "), used: 11 });
         __local_27 = __inline_Formatter__new_53: block -> ref Formatter {
             __local_111 = __local_26;
-            break __inline_Formatter__new_53: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_111) };
+            break __inline_Formatter__new_53: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_111) };
         };
         __local_113 = __local_27;
         i64::fmt_decimal(-9223372036854775808_i64, __local_113);
@@ -331,7 +331,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_28, String { repr: array.new_data<u8>("u64::MAX = "), used: 11 });
         __local_29 = __inline_Formatter__new_57: block -> ref Formatter {
             __local_117 = __local_28;
-            break __inline_Formatter__new_57: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_117) };
+            break __inline_Formatter__new_57: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_117) };
         };
         __local_119 = __local_29;
         u64::fmt_decimal(-1_i64, __local_119);
@@ -342,7 +342,7 @@ fn associated_const_integers() with Stdout {
         String::append(__local_30, String { repr: array.new_data<u8>("u64::MIN = "), used: 11 });
         __local_31 = __inline_Formatter__new_61: block -> ref Formatter {
             __local_123 = __local_30;
-            break __inline_Formatter__new_61: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_123) };
+            break __inline_Formatter__new_61: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_123) };
         };
         __local_125 = __local_31;
         u64::fmt_decimal(0_i64, __local_125);
@@ -376,7 +376,7 @@ fn associated_const_user_defined() with Stdout {
         String::append_char(__local_2, 32);
         __local_3 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_7 = __local_2;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_7) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         };
         __local_9 = __local_3;
         i32::fmt_decimal(255, __local_9);
@@ -384,7 +384,7 @@ fn associated_const_user_defined() with Stdout {
         String::append_char(__local_2, 32);
         __local_3 = __inline_Formatter__new_4: block -> ref Formatter {
             __local_12 = __local_2;
-            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
         };
         __local_14 = __local_3;
         i32::fmt_decimal(0, __local_14);
@@ -392,7 +392,7 @@ fn associated_const_user_defined() with Stdout {
         String::append_char(__local_2, 32);
         __local_3 = __inline_Formatter__new_7: block -> ref Formatter {
             __local_17 = __local_2;
-            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_17) };
+            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
         };
         __local_19 = __local_3;
         i32::fmt_decimal(0, __local_19);
@@ -409,7 +409,7 @@ fn associated_const_user_defined() with Stdout {
         String::append_char(__local_4, 32);
         __local_5 = __inline_Formatter__new_11: block -> ref Formatter {
             __local_23 = __local_4;
-            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_23) };
+            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_23) };
         };
         __local_25 = __local_5;
         i32::fmt_decimal(255, __local_25);
@@ -417,7 +417,7 @@ fn associated_const_user_defined() with Stdout {
         String::append_char(__local_4, 32);
         __local_5 = __inline_Formatter__new_14: block -> ref Formatter {
             __local_28 = __local_4;
-            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
+            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
         };
         __local_30 = __local_5;
         i32::fmt_decimal(255, __local_30);
@@ -425,7 +425,7 @@ fn associated_const_user_defined() with Stdout {
         String::append_char(__local_4, 32);
         __local_5 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_33 = __local_4;
-            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_33) };
         };
         __local_35 = __local_5;
         i32::fmt_decimal(255, __local_35);

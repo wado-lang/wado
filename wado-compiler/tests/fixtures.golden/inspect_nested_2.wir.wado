@@ -19,10 +19,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -197,7 +197,7 @@ fn inspect_nested_array_struct_test() with Stdout {
         __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_5 = __inline_Formatter__new_16: block -> ref Formatter {
             __local_28 = __local_4;
-            break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
+            break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
         };
         Matrix^Inspect::inspect(m, __local_5);
         break __tmpl: __local_4;
@@ -218,7 +218,7 @@ fn inspect_nested_array_tuple_test() with Stdout {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = __inline_Formatter__new_6: block -> ref Formatter {
             __local_12 = __local_2;
-            break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+            break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
         };
         Array<Tuple<i32,String>>^Inspect::inspect(arr, __local_3);
         break __tmpl: __local_2;
@@ -247,7 +247,7 @@ fn inspect_nested_test() with Stdout {
         __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_5 = __inline_Formatter__new_16: block -> ref Formatter {
             __local_28 = __local_4;
-            break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
+            break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
         };
         Array<Array<i32>>^Inspect::inspect(matrix, __local_5);
         break __tmpl: __local_4;
@@ -660,14 +660,14 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Array<i32>>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
             l29: loop {
                 if (i < _licm_used_12) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
@@ -692,14 +692,14 @@ fn Array<i32>^Inspect::inspect(self, f) {
     let _licm_used_16: i32;
     let _licm_repr_17: ref array<i32>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_16 = self.used;
         _licm_repr_17 = self.repr;
         block {
             l33: loop {
                 if (i < _licm_used_16) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
@@ -724,14 +724,14 @@ fn Array<Tuple<i32,String>>^Inspect::inspect(self, f) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Tuple<i32,String>>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
             l37: loop {
                 if (i < _licm_used_12) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };

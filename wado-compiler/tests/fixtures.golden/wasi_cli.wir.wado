@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -162,7 +162,7 @@ fn run() with Stdout, Stderr, Environment {
         String::append(__local_2, String { repr: array.new_data<u8>("test: Environment::get_arguments().len = "), used: 41 });
         __local_3 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_8 = __local_2;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
         };
         __local_10 = __local_3;
         i32::fmt_decimal(arguments.used, __local_10);
@@ -174,7 +174,7 @@ fn run() with Stdout, Stderr, Environment {
         String::append(__local_4, String { repr: array.new_data<u8>("test: Environment::get_environment().len = "), used: 43 });
         __local_5 = __inline_Formatter__new_8: block -> ref Formatter {
             __local_15 = __local_4;
-            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_15) };
+            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
         };
         __local_17 = __local_5;
         i32::fmt_decimal(env_vars.used, __local_17);

@@ -64,10 +64,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -726,7 +726,7 @@ fn __test_2_number_where_bool_expected() {
                 String::append_char(__local_4, 58);
                 __local_5 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_8 = __local_4;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
                 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(28, __local_10);
@@ -736,7 +736,7 @@ condition: e.message == \"expected bool\"
                 String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_13 = __local_4;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
                 };
                 String^Inspect::inspect(__v0, __local_5);
                 String::append_char(__local_4, 10);
@@ -785,7 +785,7 @@ fn __test_3_number_where_string_expected() {
                 String::append_char(__local_4, 58);
                 __local_5 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_8 = __local_4;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
                 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(37, __local_10);
@@ -795,7 +795,7 @@ condition: e.message == \"expected string\"
                 String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_13 = __local_4;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
                 };
                 String^Inspect::inspect(__v0, __local_5);
                 String::append_char(__local_4, 10);
@@ -934,7 +934,7 @@ fn __test_9_truncated_string() {
                 String::append_char(__local_4, 58);
                 __local_5 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_8 = __local_4;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
                 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(93, __local_10);
@@ -944,7 +944,7 @@ condition: e.message == \"unexpected end of input\"
                 String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_13 = __local_4;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
                 };
                 String^Inspect::inspect(__v0, __local_5);
                 String::append_char(__local_4, 10);
@@ -993,7 +993,7 @@ fn __test_10_trailing_garbage() {
                 String::append_char(__local_4, 58);
                 __local_5 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_8 = __local_4;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
                 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(102, __local_10);
@@ -1003,7 +1003,7 @@ condition: e.message == \"trailing data after value\"
                 String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_13 = __local_4;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
                 };
                 String^Inspect::inspect(__v0, __local_5);
                 String::append_char(__local_4, 10);
@@ -1052,7 +1052,7 @@ fn __test_11_multiple_values() {
                 String::append_char(__local_4, 58);
                 __local_5 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_8 = __local_4;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
                 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(111, __local_10);
@@ -1062,7 +1062,7 @@ condition: e.message == \"trailing data after value\"
                 String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_13 = __local_4;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
                 };
                 String^Inspect::inspect(__v0, __local_5);
                 String::append_char(__local_4, 10);
@@ -1129,7 +1129,7 @@ fn __test_13_u32_too_large() {
                 String::append_char(__local_4, 58);
                 __local_5 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_8 = __local_4;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
                 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(131, __local_10);
@@ -1139,7 +1139,7 @@ condition: e.message == \"value out of range for u32\"
                 String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_13 = __local_4;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
                 };
                 String^Inspect::inspect(__v0, __local_5);
                 String::append_char(__local_4, 10);
@@ -1188,7 +1188,7 @@ fn __test_14_f64_nan_serialize_error() {
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_9 = __local_5;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_9) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
                 };
                 __local_11 = __local_6;
                 i32::fmt_decimal(143, __local_11);
@@ -1198,7 +1198,7 @@ condition: e.message == \"NaN is not allowed in JSON\"
                 String::append(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_6 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_14 = __local_5;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
                 };
                 String^Inspect::inspect(__v0, __local_6);
                 String::append_char(__local_5, 10);
@@ -1247,7 +1247,7 @@ fn __test_15_f64_infinity_serialize_error() {
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_9 = __local_5;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_9) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
                 };
                 __local_11 = __local_6;
                 i32::fmt_decimal(153, __local_11);
@@ -1257,7 +1257,7 @@ condition: e.message == \"Infinity is not allowed in JSON\"
                 String::append(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_6 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_14 = __local_5;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
                 };
                 String^Inspect::inspect(__v0, __local_6);
                 String::append_char(__local_5, 10);
@@ -1306,7 +1306,7 @@ fn __test_16_f64_negative_infinity_serialize_error() {
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_9 = __local_5;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_9) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
                 };
                 __local_11 = __local_6;
                 i32::fmt_decimal(163, __local_11);
@@ -1316,7 +1316,7 @@ condition: e.message == \"Infinity is not allowed in JSON\"
                 String::append(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_6 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_14 = __local_5;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
                 };
                 String^Inspect::inspect(__v0, __local_6);
                 String::append_char(__local_5, 10);
@@ -1365,7 +1365,7 @@ fn __test_17_f32_nan_serialize_error() {
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_9 = __local_5;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_9) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
                 };
                 __local_11 = __local_6;
                 i32::fmt_decimal(173, __local_11);
@@ -1375,7 +1375,7 @@ condition: e.message == \"NaN is not allowed in JSON\"
                 String::append(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_6 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_14 = __local_5;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
                 };
                 String^Inspect::inspect(__v0, __local_6);
                 String::append_char(__local_5, 10);
@@ -1424,7 +1424,7 @@ fn __test_18_f32_infinity_serialize_error() {
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_9 = __local_5;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_9) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
                 };
                 __local_11 = __local_6;
                 i32::fmt_decimal(183, __local_11);
@@ -1434,7 +1434,7 @@ condition: e.message == \"Infinity is not allowed in JSON\"
                 String::append(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_6 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_14 = __local_5;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
                 };
                 String^Inspect::inspect(__v0, __local_6);
                 String::append_char(__local_5, 10);
@@ -1519,7 +1519,7 @@ fn __test_21_struct_missing_required_field() {
                 String::append_char(__local_4, 58);
                 __local_5 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_8 = __local_4;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
                 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(220, __local_10);
@@ -1529,7 +1529,7 @@ condition: e.message == \"required field missing\"
                 String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_13 = __local_4;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
                 };
                 String^Inspect::inspect(__v0, __local_5);
                 String::append_char(__local_4, 10);
@@ -1658,7 +1658,7 @@ fn __test_26_option_some_deserialize() {
                     String::append_char(__local_5, 58);
                     __local_6 = __inline_Formatter__new_2: block -> ref Formatter {
                         __local_10 = __local_5;
-                        break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+                        break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
                     };
                     __local_12 = __local_6;
                     i32::fmt_decimal(274, __local_12);
@@ -1670,7 +1670,7 @@ condition: n == 42
                     String::append_char(__local_5, 32);
                     __local_6 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_15 = __local_5;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_15) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
                     };
                     __local_17 = __local_6;
                     i32::fmt_decimal(n, __local_17);
@@ -1724,7 +1724,7 @@ fn __test_27_enum_unknown_variant() {
                 String::append_char(__local_4, 58);
                 __local_5 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_8 = __local_4;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
                 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(297, __local_10);
@@ -1734,7 +1734,7 @@ condition: e.message == \"unknown variant\"
                 String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_13 = __local_4;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
                 };
                 String^Inspect::inspect(__v0, __local_5);
                 String::append_char(__local_4, 10);
@@ -4354,7 +4354,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_f32"(self, v) {  // from core
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_7 = __local_2;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_7) };
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         };
         __local_9 = __local_3;
         f64::fmt_into(builtin::f64_promote_f32(v), __local_9);
@@ -4382,7 +4382,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_7 = __local_2;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_7) };
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         };
         __local_9 = __local_3;
         f64::fmt_into(v, __local_9);
@@ -4470,13 +4470,13 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {  // from core:json
                 String::append(__local_3, String { repr: array.new_data<u8>("expected '"), used: 10 });
                 __local_4 = __inline_Formatter__new_4: block -> ref Formatter {
                     __local_10 = __local_3;
-                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
                 };
                 char^Display::fmt(c & 255, __local_4);
                 String::append(__local_3, String { repr: array.new_data<u8>("', found '"), used: 10 });
                 __local_4 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_11 = __local_3;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_11) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
                 };
                 char^Display::fmt(b & 255, __local_4);
                 String::append_char(__local_3, 39);
@@ -4836,7 +4836,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                             String::append(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
                             __local_33 = __inline_Formatter__new_20: block -> ref Formatter {
                                 __local_71 = __local_32;
-                                break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_71) };
+                                break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_71) };
                             };
                             char^Display::fmt(esc & 255, __local_33);
                             String::append_char(__local_32, 39);
@@ -5999,7 +5999,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
             String::append(__local_12, String { repr: array.new_data<u8>("unexpected character '"), used: 22 });
             __local_13 = __inline_Formatter__new_19: block -> ref Formatter {
                 __local_46 = __local_12;
-                break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_46) };
+                break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_46) };
             };
             char^Display::fmt(b & 255, __local_13);
             String::append_char(__local_12, 39);

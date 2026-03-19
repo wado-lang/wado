@@ -107,29 +107,29 @@ trait InspectAlt {
 
 Each format trait has an alternate variant activated by the `#` flag. For Inspect, `InspectAlt` produces pretty-printed output. For numeric traits, Alt variants add prefixes (`0x`, `0b`, `0o`).
 
-| Base Trait | Alt Trait      | Syntax   | Effect                       |
-| ---------- | -------------- | -------- | ---------------------------- |
-| `Display`  | `DisplayAlt`   | `{:#}`   | Delegates to `InspectAlt`    |
-| `Inspect`  | `InspectAlt`   | `{:#?}`  | Pretty-print with indentation|
-| `Binary`   | `BinaryAlt`    | `{:#b}`  | Add `0b` prefix              |
-| `Octal`    | `OctalAlt`     | `{:#o}`  | Add `0o` prefix              |
-| `LowerHex` | `LowerHexAlt`  | `{:#x}`  | Add `0x` prefix              |
-| `UpperHex` | `UpperHexAlt`  | `{:#X}`  | Add `0X` prefix              |
+| Base Trait | Alt Trait     | Syntax  | Effect                        |
+| ---------- | ------------- | ------- | ----------------------------- |
+| `Display`  | `DisplayAlt`  | `{:#}`  | Delegates to `InspectAlt`     |
+| `Inspect`  | `InspectAlt`  | `{:#?}` | Pretty-print with indentation |
+| `Binary`   | `BinaryAlt`   | `{:#b}` | Add `0b` prefix               |
+| `Octal`    | `OctalAlt`    | `{:#o}` | Add `0o` prefix               |
+| `LowerHex` | `LowerHexAlt` | `{:#x}` | Add `0x` prefix               |
+| `UpperHex` | `UpperHexAlt` | `{:#X}` | Add `0X` prefix               |
 
 ### Format Resolution
 
-| Specifier | Resolution                            |
-| --------- | ------------------------------------- |
-| (none)    | `Display::fmt` or `Inspect::inspect`  |
-| `?`       | `Inspect::inspect`                    |
-| `#`       | `DisplayAlt::fmt_alt`                 |
-| `#?`      | `InspectAlt::inspect_alt`             |
-| `b`       | `Binary::fmt`                         |
-| `o`       | `Octal::fmt`                          |
-| `x`       | `LowerHex::fmt`                       |
-| `X`       | `UpperHex::fmt`                       |
-| `e`       | `LowerExp::fmt`                       |
-| `E`       | `UpperExp::fmt`                       |
+| Specifier | Resolution                           |
+| --------- | ------------------------------------ |
+| (none)    | `Display::fmt` or `Inspect::inspect` |
+| `?`       | `Inspect::inspect`                   |
+| `#`       | `DisplayAlt::fmt_alt`                |
+| `#?`      | `InspectAlt::inspect_alt`            |
+| `b`       | `Binary::fmt`                        |
+| `o`       | `Octal::fmt`                         |
+| `x`       | `LowerHex::fmt`                      |
+| `X`       | `UpperHex::fmt`                      |
+| `e`       | `LowerExp::fmt`                      |
+| `E`       | `UpperExp::fmt`                      |
 
 ### Primitive Implementations
 

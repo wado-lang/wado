@@ -117,6 +117,98 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
     self."Tuple<i64,i64>^Inspect::inspect"(f);
 }
@@ -155,6 +247,46 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 
@@ -981,6 +1113,98 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
     self."Tuple<i64,i64>^Inspect::inspect"(f);
 }
@@ -1019,6 +1243,46 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 
@@ -1374,6 +1638,98 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
     self."Tuple<i64,i64>^Inspect::inspect"(f);
 }
@@ -1412,6 +1768,46 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Array<u8>::internal_from_raw"(repr: builtin::array<u8>, used: i32) -> Array<u8> {
@@ -1506,6 +1902,98 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
     self."Tuple<i64,i64>^Inspect::inspect"(f);
 }
@@ -1544,6 +2032,46 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 
@@ -1626,6 +2154,98 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
     self."Tuple<i64,i64>^Inspect::inspect"(f);
 }
@@ -1664,6 +2284,46 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
@@ -2830,6 +3490,141 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "SpecialKind^InspectAlt::inspect_alt"(self: &SpecialKind, f: &mut Formatter) {
+    self."SpecialKind^Inspect::inspect"(f);
+}
+
+pub fn "UnpackResult^InspectAlt::inspect_alt"(self: &UnpackResult, f: &mut Formatter) {
+    f.Formatter::open_brace("UnpackResult {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("mantissa: ");
+    Box<u64> { value: self.mantissa }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("exponent: ");
+    Box<i32> { value: self.exponent }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("}");
+}
+
+pub fn "PmHiLo^InspectAlt::inspect_alt"(self: &PmHiLo, f: &mut Formatter) {
+    f.Formatter::open_brace("PmHiLo {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("hi: ");
+    Box<u64> { value: self.hi }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("lo: ");
+    Box<u64> { value: self.lo }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("}");
+}
+
+pub fn "FormatResult^InspectAlt::inspect_alt"(self: &FormatResult, f: &mut Formatter) {
+    f.Formatter::open_brace("FormatResult {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("digits: ");
+    Box<u64> { value: self.digits }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("exponent: ");
+    Box<i32> { value: self.exponent }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("}");
+}
+
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "SpecialKind^Display::fmt"(self: &SpecialKind, f: &mut Formatter) {
     self."SpecialKind^Inspect::inspect"(f);
 }
@@ -2884,6 +3679,62 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "SpecialKind^DisplayAlt::fmt_alt"(self: &SpecialKind, f: &mut Formatter) {
+    self."SpecialKind^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "UnpackResult^DisplayAlt::fmt_alt"(self: &UnpackResult, f: &mut Formatter) {
+    self."UnpackResult^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "PmHiLo^DisplayAlt::fmt_alt"(self: &PmHiLo, f: &mut Formatter) {
+    self."PmHiLo^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "FormatResult^DisplayAlt::fmt_alt"(self: &FormatResult, f: &mut Formatter) {
+    self."FormatResult^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 fn "Array<u64>^SequenceLiteralBuilder::build"(self: &Array<u64>) -> Array<u64> {
@@ -3138,7 +3989,7 @@ fn u128::fmt_decimal(self: &u128, f: &mut Formatter) {
     }
 }
 
-fn u128::fmt_base(self: &u128, f: &mut Formatter, base: i32, upper: bool) {
+fn u128::fmt_base(self: &u128, f: &mut Formatter, base: i32, upper: bool, prefix: String) {
     let bits_per_digit: i32 = if (base == 2) {
         1;
     } else {
@@ -3149,23 +4000,6 @@ fn u128::fmt_base(self: &u128, f: &mut Formatter, base: i32, upper: bool) {
         };
     };
     let mask: u64 = (base - 1) as u64;
-    let prefix: String = if f.alternate {
-        if (base == 2) {
-            "0b";
-        } else {
-            if (base == 8) {
-                "0o";
-            } else {
-                if upper {
-                    "0X";
-                } else {
-                    "0x";
-                }
-            }
-        }
-    } else {
-        "";
-    };
     let is_zero: bool = ((self.low == 0) && (self.high == 0));
     let digit_count: i32 = if is_zero {
         1;
@@ -3243,20 +4077,40 @@ pub fn "u128^Inspect::inspect"(self: &u128, f: &mut Formatter) {
     self.u128::fmt_into(f);
 }
 
+pub fn "u128^InspectAlt::inspect_alt"(self: &u128, f: &mut Formatter) {
+    self."u128^Inspect::inspect"(f);
+}
+
 pub fn "u128^Binary::fmt"(self: &u128, f: &mut Formatter) {
-    self.u128::fmt_base(f, 2, false);
+    self.u128::fmt_base(f, 2, false, "");
 }
 
 pub fn "u128^Octal::fmt"(self: &u128, f: &mut Formatter) {
-    self.u128::fmt_base(f, 8, false);
+    self.u128::fmt_base(f, 8, false, "");
 }
 
 pub fn "u128^LowerHex::fmt"(self: &u128, f: &mut Formatter) {
-    self.u128::fmt_base(f, 16, false);
+    self.u128::fmt_base(f, 16, false, "");
 }
 
 pub fn "u128^UpperHex::fmt"(self: &u128, f: &mut Formatter) {
-    self.u128::fmt_base(f, 16, true);
+    self.u128::fmt_base(f, 16, true, "");
+}
+
+pub fn "u128^BinaryAlt::fmt_alt"(self: &u128, f: &mut Formatter) {
+    self.u128::fmt_base(f, 2, false, "0b");
+}
+
+pub fn "u128^OctalAlt::fmt_alt"(self: &u128, f: &mut Formatter) {
+    self.u128::fmt_base(f, 8, false, "0o");
+}
+
+pub fn "u128^LowerHexAlt::fmt_alt"(self: &u128, f: &mut Formatter) {
+    self.u128::fmt_base(f, 16, false, "0x");
+}
+
+pub fn "u128^UpperHexAlt::fmt_alt"(self: &u128, f: &mut Formatter) {
+    self.u128::fmt_base(f, 16, true, "0X");
 }
 
 pub fn "u128^Eq::eq"(self: &u128, other: &u128) -> bool {
@@ -3528,7 +4382,7 @@ fn i128::fmt_decimal(self: &i128, f: &mut Formatter) {
     }
 }
 
-fn i128::fmt_base(self: &i128, f: &mut Formatter, base: i32, upper: bool) {
+fn i128::fmt_base(self: &i128, f: &mut Formatter, base: i32, upper: bool, prefix: String) {
     let is_neg: bool = self.i128::is_negative();
     let abs_val: u128 = self.i128::abs_u128();
     let bits_per_digit: i32 = if (base == 2) {
@@ -3541,23 +4395,6 @@ fn i128::fmt_base(self: &i128, f: &mut Formatter, base: i32, upper: bool) {
         };
     };
     let mask: u64 = (base - 1) as u64;
-    let prefix: String = if f.alternate {
-        if (base == 2) {
-            "0b";
-        } else {
-            if (base == 8) {
-                "0o";
-            } else {
-                if upper {
-                    "0X";
-                } else {
-                    "0x";
-                }
-            }
-        }
-    } else {
-        "";
-    };
     let is_zero: bool = abs_val."u128^Eq::eq"(&"core::prelude/int128.wado::u128::from_u64"(0));
     let digit_count: i32 = if is_zero {
         1;
@@ -3634,20 +4471,40 @@ pub fn "i128^Inspect::inspect"(self: &i128, f: &mut Formatter) {
     self.i128::fmt_into(f);
 }
 
+pub fn "i128^InspectAlt::inspect_alt"(self: &i128, f: &mut Formatter) {
+    self."i128^Inspect::inspect"(f);
+}
+
 pub fn "i128^Binary::fmt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 2, false);
+    self.i128::fmt_base(f, 2, false, "");
 }
 
 pub fn "i128^Octal::fmt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 8, false);
+    self.i128::fmt_base(f, 8, false, "");
 }
 
 pub fn "i128^LowerHex::fmt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 16, false);
+    self.i128::fmt_base(f, 16, false, "");
 }
 
 pub fn "i128^UpperHex::fmt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 16, true);
+    self.i128::fmt_base(f, 16, true, "");
+}
+
+pub fn "i128^BinaryAlt::fmt_alt"(self: &i128, f: &mut Formatter) {
+    self.i128::fmt_base(f, 2, false, "0b");
+}
+
+pub fn "i128^OctalAlt::fmt_alt"(self: &i128, f: &mut Formatter) {
+    self.i128::fmt_base(f, 8, false, "0o");
+}
+
+pub fn "i128^LowerHexAlt::fmt_alt"(self: &i128, f: &mut Formatter) {
+    self.i128::fmt_base(f, 16, false, "0x");
+}
+
+pub fn "i128^UpperHexAlt::fmt_alt"(self: &i128, f: &mut Formatter) {
+    self.i128::fmt_base(f, 16, true, "0X");
 }
 
 pub fn "i128^Eq::eq"(self: &i128, other: &i128) -> bool {
@@ -3922,6 +4779,98 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
     self."Tuple<i64,i64>^Inspect::inspect"(f);
 }
@@ -3960,6 +4909,54 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "u128^DisplayAlt::fmt_alt"(self: &u128, f: &mut Formatter) {
+    self."u128^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "i128^DisplayAlt::fmt_alt"(self: &i128, f: &mut Formatter) {
+    self."i128^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 
@@ -4418,25 +5415,8 @@ fn i64::fmt_decimal(self: Box<i64>, f: &mut Formatter) {
     }
 }
 
-fn i64::fmt_base(self: Box<i64>, is_negative: bool, f: &mut Formatter, base: i32, upper: bool) {
+fn i64::fmt_base(self: Box<i64>, is_negative: bool, f: &mut Formatter, base: i32, upper: bool, prefix: String) {
     let abs_val: i64 = self.value;
-    let prefix: String = if f.alternate {
-        if (base == 2) {
-            "0b";
-        } else {
-            if (base == 8) {
-                "0o";
-            } else {
-                if upper {
-                    "0X";
-                } else {
-                    "0x";
-                }
-            }
-        }
-    } else {
-        "";
-    };
     let digit_count: i32 = "core::prelude/primitive.wado::count_digits_base"(abs_val, base);
     let offset: i32 = f.Formatter::prepare_int_write(is_negative, prefix, digit_count);
     "core::prelude/primitive.wado::write_base_digits"(f.buf.String::internal_raw_bytes(), offset, abs_val, digit_count, base, upper);
@@ -4521,7 +5501,7 @@ fn u64::fmt_decimal(self: Box<u64>, f: &mut Formatter) {
     }
 }
 
-fn u64::fmt_base(self: Box<u64>, f: &mut Formatter, base: i32, upper: bool) {
+fn u64::fmt_base(self: Box<u64>, f: &mut Formatter, base: i32, upper: bool, prefix: String) {
     let val_i64: i64 = self.value as i64;
     let bits_per_digit: i32 = if (base == 2) {
         1;
@@ -4533,23 +5513,6 @@ fn u64::fmt_base(self: Box<u64>, f: &mut Formatter, base: i32, upper: bool) {
         };
     };
     let mask: i32 = (base - 1);
-    let prefix: String = if f.alternate {
-        if (base == 2) {
-            "0b";
-        } else {
-            if (base == 8) {
-                "0o";
-            } else {
-                if upper {
-                    "0X";
-                } else {
-                    "0x";
-                }
-            }
-        }
-    } else {
-        "";
-    };
     let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64_base"(val_i64, bits_per_digit);
     let offset: i32 = f.Formatter::prepare_int_write(false, prefix, digit_count);
     "core::prelude/primitive.wado::write_u64_base_digits"(f.buf.String::internal_raw_bytes(), offset, val_i64, digit_count, bits_per_digit, mask, upper);
@@ -5311,6 +6274,54 @@ pub fn "f64^Inspect::inspect"(self: Box<f64>, f: &mut Formatter) {
     self.f64::inspect_into(f);
 }
 
+pub fn "bool^InspectAlt::inspect_alt"(self: Box<bool>, f: &mut Formatter) {
+    self."bool^Inspect::inspect"(f);
+}
+
+pub fn "char^InspectAlt::inspect_alt"(self: Box<char>, f: &mut Formatter) {
+    self."char^Inspect::inspect"(f);
+}
+
+pub fn "i8^InspectAlt::inspect_alt"(self: Box<i8>, f: &mut Formatter) {
+    self."i8^Inspect::inspect"(f);
+}
+
+pub fn "u8^InspectAlt::inspect_alt"(self: Box<u8>, f: &mut Formatter) {
+    self."u8^Inspect::inspect"(f);
+}
+
+pub fn "i16^InspectAlt::inspect_alt"(self: Box<i16>, f: &mut Formatter) {
+    self."i16^Inspect::inspect"(f);
+}
+
+pub fn "u16^InspectAlt::inspect_alt"(self: Box<u16>, f: &mut Formatter) {
+    self."u16^Inspect::inspect"(f);
+}
+
+pub fn "i32^InspectAlt::inspect_alt"(self: Box<i32>, f: &mut Formatter) {
+    self."i32^Inspect::inspect"(f);
+}
+
+pub fn "u32^InspectAlt::inspect_alt"(self: Box<u32>, f: &mut Formatter) {
+    self."u32^Inspect::inspect"(f);
+}
+
+pub fn "i64^InspectAlt::inspect_alt"(self: Box<i64>, f: &mut Formatter) {
+    self."i64^Inspect::inspect"(f);
+}
+
+pub fn "u64^InspectAlt::inspect_alt"(self: Box<u64>, f: &mut Formatter) {
+    self."u64^Inspect::inspect"(f);
+}
+
+pub fn "f32^InspectAlt::inspect_alt"(self: Box<f32>, f: &mut Formatter) {
+    self."f32^Inspect::inspect"(f);
+}
+
+pub fn "f64^InspectAlt::inspect_alt"(self: Box<f64>, f: &mut Formatter) {
+    self."f64^Inspect::inspect"(f);
+}
+
 pub fn "f32^LowerExp::fmt"(self: Box<f32>, f: &mut Formatter) {
     self.f32::fmt_exp(f.precision, 0, f);
 }
@@ -5335,11 +6346,11 @@ pub fn "i8^Binary::fmt"(self: Box<i8>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
 }
 
 pub fn "u8^Binary::fmt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 2, false);
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 2, false, "");
 }
 
 pub fn "i16^Binary::fmt"(self: Box<i16>, f: &mut Formatter) {
@@ -5350,11 +6361,11 @@ pub fn "i16^Binary::fmt"(self: Box<i16>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
 }
 
 pub fn "u16^Binary::fmt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 2, false);
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 2, false, "");
 }
 
 pub fn "i32^Binary::fmt"(self: Box<i32>, f: &mut Formatter) {
@@ -5365,7 +6376,7 @@ pub fn "i32^Binary::fmt"(self: Box<i32>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
 }
 
 pub fn "u32^Binary::fmt"(self: Box<u32>, f: &mut Formatter) {
@@ -5375,7 +6386,7 @@ pub fn "u32^Binary::fmt"(self: Box<u32>, f: &mut Formatter) {
     } else {
         val_i32 as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 2, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 2, false, "");
 }
 
 pub fn "i64^Binary::fmt"(self: Box<i64>, f: &mut Formatter) {
@@ -5383,14 +6394,14 @@ pub fn "i64^Binary::fmt"(self: Box<i64>, f: &mut Formatter) {
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
         let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 2, false);
+        Box<i64> { value: half }.i64::fmt_base(true, f, 2, false, "");
     } else {
         let abs_val: i64 = if is_neg {
             (0 - v);
         } else {
             v;
         };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false);
+        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
     }
 }
 
@@ -5402,11 +6413,11 @@ pub fn "i8^Octal::fmt"(self: Box<i8>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
 }
 
 pub fn "u8^Octal::fmt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 8, false);
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 8, false, "");
 }
 
 pub fn "i16^Octal::fmt"(self: Box<i16>, f: &mut Formatter) {
@@ -5417,11 +6428,11 @@ pub fn "i16^Octal::fmt"(self: Box<i16>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
 }
 
 pub fn "u16^Octal::fmt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 8, false);
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 8, false, "");
 }
 
 pub fn "i32^Octal::fmt"(self: Box<i32>, f: &mut Formatter) {
@@ -5432,7 +6443,7 @@ pub fn "i32^Octal::fmt"(self: Box<i32>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
 }
 
 pub fn "u32^Octal::fmt"(self: Box<u32>, f: &mut Formatter) {
@@ -5442,7 +6453,7 @@ pub fn "u32^Octal::fmt"(self: Box<u32>, f: &mut Formatter) {
     } else {
         val_i32 as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 8, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 8, false, "");
 }
 
 pub fn "i64^Octal::fmt"(self: Box<i64>, f: &mut Formatter) {
@@ -5450,14 +6461,14 @@ pub fn "i64^Octal::fmt"(self: Box<i64>, f: &mut Formatter) {
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
         let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 8, false);
+        Box<i64> { value: half }.i64::fmt_base(true, f, 8, false, "");
     } else {
         let abs_val: i64 = if is_neg {
             (0 - v);
         } else {
             v;
         };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false);
+        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
     }
 }
 
@@ -5469,11 +6480,11 @@ pub fn "i8^LowerHex::fmt"(self: Box<i8>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
 }
 
 pub fn "u8^LowerHex::fmt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, false);
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, false, "");
 }
 
 pub fn "i16^LowerHex::fmt"(self: Box<i16>, f: &mut Formatter) {
@@ -5484,11 +6495,11 @@ pub fn "i16^LowerHex::fmt"(self: Box<i16>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
 }
 
 pub fn "u16^LowerHex::fmt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, false);
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, false, "");
 }
 
 pub fn "i32^LowerHex::fmt"(self: Box<i32>, f: &mut Formatter) {
@@ -5499,7 +6510,7 @@ pub fn "i32^LowerHex::fmt"(self: Box<i32>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
 }
 
 pub fn "u32^LowerHex::fmt"(self: Box<u32>, f: &mut Formatter) {
@@ -5509,7 +6520,7 @@ pub fn "u32^LowerHex::fmt"(self: Box<u32>, f: &mut Formatter) {
     } else {
         val_i32 as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, false);
+    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, false, "");
 }
 
 pub fn "i64^LowerHex::fmt"(self: Box<i64>, f: &mut Formatter) {
@@ -5517,14 +6528,14 @@ pub fn "i64^LowerHex::fmt"(self: Box<i64>, f: &mut Formatter) {
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
         let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 16, false);
+        Box<i64> { value: half }.i64::fmt_base(true, f, 16, false, "");
     } else {
         let abs_val: i64 = if is_neg {
             (0 - v);
         } else {
             v;
         };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false);
+        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
     }
 }
 
@@ -5536,11 +6547,11 @@ pub fn "i8^UpperHex::fmt"(self: Box<i8>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
 }
 
 pub fn "u8^UpperHex::fmt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, true);
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, true, "");
 }
 
 pub fn "i16^UpperHex::fmt"(self: Box<i16>, f: &mut Formatter) {
@@ -5551,11 +6562,11 @@ pub fn "i16^UpperHex::fmt"(self: Box<i16>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
 }
 
 pub fn "u16^UpperHex::fmt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, true);
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, true, "");
 }
 
 pub fn "i32^UpperHex::fmt"(self: Box<i32>, f: &mut Formatter) {
@@ -5566,7 +6577,7 @@ pub fn "i32^UpperHex::fmt"(self: Box<i32>, f: &mut Formatter) {
     } else {
         v as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true);
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
 }
 
 pub fn "u32^UpperHex::fmt"(self: Box<u32>, f: &mut Formatter) {
@@ -5576,7 +6587,7 @@ pub fn "u32^UpperHex::fmt"(self: Box<u32>, f: &mut Formatter) {
     } else {
         val_i32 as i64;
     };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, true);
+    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, true, "");
 }
 
 pub fn "i64^UpperHex::fmt"(self: Box<i64>, f: &mut Formatter) {
@@ -5584,31 +6595,315 @@ pub fn "i64^UpperHex::fmt"(self: Box<i64>, f: &mut Formatter) {
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
         let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 16, true);
+        Box<i64> { value: half }.i64::fmt_base(true, f, 16, true, "");
     } else {
         let abs_val: i64 = if is_neg {
             (0 - v);
         } else {
             v;
         };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true);
+        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
     }
 }
 
 pub fn "u64^Binary::fmt"(self: Box<u64>, f: &mut Formatter) {
-    self.u64::fmt_base(f, 2, false);
+    self.u64::fmt_base(f, 2, false, "");
 }
 
 pub fn "u64^Octal::fmt"(self: Box<u64>, f: &mut Formatter) {
-    self.u64::fmt_base(f, 8, false);
+    self.u64::fmt_base(f, 8, false, "");
 }
 
 pub fn "u64^LowerHex::fmt"(self: Box<u64>, f: &mut Formatter) {
-    self.u64::fmt_base(f, 16, false);
+    self.u64::fmt_base(f, 16, false, "");
 }
 
 pub fn "u64^UpperHex::fmt"(self: Box<u64>, f: &mut Formatter) {
-    self.u64::fmt_base(f, 16, true);
+    self.u64::fmt_base(f, 16, true, "");
+}
+
+pub fn "i8^BinaryAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
+    let v: i32 = self.value as i32;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
+}
+
+pub fn "u8^BinaryAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 2, false, "0b");
+}
+
+pub fn "i16^BinaryAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
+    let v: i32 = self.value as i32;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
+}
+
+pub fn "u16^BinaryAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 2, false, "0b");
+}
+
+pub fn "i32^BinaryAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
+    let v: i32 = self.value;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
+}
+
+pub fn "u32^BinaryAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
+    let val_i32: i32 = self.value as i32;
+    let abs_val: i64 = if (val_i32 < 0) {
+        (val_i32 as i64 + 4294967296);
+    } else {
+        val_i32 as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 2, false, "0b");
+}
+
+pub fn "i64^BinaryAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
+    let v: i64 = self.value;
+    let is_neg: bool = (v < 0);
+    if (v == -9223372036854775808) {
+        let half: i64 = 4611686018427387904;
+        Box<i64> { value: half }.i64::fmt_base(true, f, 2, false, "0b");
+    } else {
+        let abs_val: i64 = if is_neg {
+            (0 - v);
+        } else {
+            v;
+        };
+        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
+    }
+}
+
+pub fn "u64^BinaryAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
+    self.u64::fmt_base(f, 2, false, "0b");
+}
+
+pub fn "i8^OctalAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
+    let v: i32 = self.value as i32;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
+}
+
+pub fn "u8^OctalAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 8, false, "0o");
+}
+
+pub fn "i16^OctalAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
+    let v: i32 = self.value as i32;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
+}
+
+pub fn "u16^OctalAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 8, false, "0o");
+}
+
+pub fn "i32^OctalAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
+    let v: i32 = self.value;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
+}
+
+pub fn "u32^OctalAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
+    let val_i32: i32 = self.value as i32;
+    let abs_val: i64 = if (val_i32 < 0) {
+        (val_i32 as i64 + 4294967296);
+    } else {
+        val_i32 as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 8, false, "0o");
+}
+
+pub fn "i64^OctalAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
+    let v: i64 = self.value;
+    let is_neg: bool = (v < 0);
+    if (v == -9223372036854775808) {
+        let half: i64 = 4611686018427387904;
+        Box<i64> { value: half }.i64::fmt_base(true, f, 8, false, "0o");
+    } else {
+        let abs_val: i64 = if is_neg {
+            (0 - v);
+        } else {
+            v;
+        };
+        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
+    }
+}
+
+pub fn "u64^OctalAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
+    self.u64::fmt_base(f, 8, false, "0o");
+}
+
+pub fn "i8^LowerHexAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
+    let v: i32 = self.value as i32;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
+}
+
+pub fn "u8^LowerHexAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, false, "0x");
+}
+
+pub fn "i16^LowerHexAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
+    let v: i32 = self.value as i32;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
+}
+
+pub fn "u16^LowerHexAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, false, "0x");
+}
+
+pub fn "i32^LowerHexAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
+    let v: i32 = self.value;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
+}
+
+pub fn "u32^LowerHexAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
+    let val_i32: i32 = self.value as i32;
+    let abs_val: i64 = if (val_i32 < 0) {
+        (val_i32 as i64 + 4294967296);
+    } else {
+        val_i32 as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, false, "0x");
+}
+
+pub fn "i64^LowerHexAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
+    let v: i64 = self.value;
+    let is_neg: bool = (v < 0);
+    if (v == -9223372036854775808) {
+        let half: i64 = 4611686018427387904;
+        Box<i64> { value: half }.i64::fmt_base(true, f, 16, false, "0x");
+    } else {
+        let abs_val: i64 = if is_neg {
+            (0 - v);
+        } else {
+            v;
+        };
+        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
+    }
+}
+
+pub fn "u64^LowerHexAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
+    self.u64::fmt_base(f, 16, false, "0x");
+}
+
+pub fn "i8^UpperHexAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
+    let v: i32 = self.value as i32;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
+}
+
+pub fn "u8^UpperHexAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, true, "0X");
+}
+
+pub fn "i16^UpperHexAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
+    let v: i32 = self.value as i32;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
+}
+
+pub fn "u16^UpperHexAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
+    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, true, "0X");
+}
+
+pub fn "i32^UpperHexAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
+    let v: i32 = self.value;
+    let is_neg: bool = (v < 0);
+    let abs_val: i64 = if is_neg {
+        (0 - v as i64);
+    } else {
+        v as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
+}
+
+pub fn "u32^UpperHexAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
+    let val_i32: i32 = self.value as i32;
+    let abs_val: i64 = if (val_i32 < 0) {
+        (val_i32 as i64 + 4294967296);
+    } else {
+        val_i32 as i64;
+    };
+    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, true, "0X");
+}
+
+pub fn "i64^UpperHexAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
+    let v: i64 = self.value;
+    let is_neg: bool = (v < 0);
+    if (v == -9223372036854775808) {
+        let half: i64 = 4611686018427387904;
+        Box<i64> { value: half }.i64::fmt_base(true, f, 16, true, "0X");
+    } else {
+        let abs_val: i64 = if is_neg {
+            (0 - v);
+        } else {
+            v;
+        };
+        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
+    }
+}
+
+pub fn "u64^UpperHexAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
+    self.u64::fmt_base(f, 16, true, "0X");
 }
 
 pub fn "i8^Ord::cmp"(self: Box<i8>, other: Box<i8>) -> Ordering {
@@ -6174,6 +7469,98 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
     self."Tuple<i64,i64>^Inspect::inspect"(f);
 }
@@ -6212,6 +7599,46 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 fn "core/builtin/select<u64>"(cond: bool, if_true: u64, if_false: u64) -> u64;
@@ -6904,6 +8331,132 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "StrUtf8ByteIter^InspectAlt::inspect_alt"(self: &StrUtf8ByteIter, f: &mut Formatter) {
+    f.Formatter::open_brace("StrUtf8ByteIter {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("repr: ");
+    self.repr."builtin::array<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("used: ");
+    Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("index: ");
+    Box<i32> { value: self.index }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("}");
+}
+
+pub fn "StrCharIter^InspectAlt::inspect_alt"(self: &StrCharIter, f: &mut Formatter) {
+    f.Formatter::open_brace("StrCharIter {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("repr: ");
+    self.repr."builtin::array<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("used: ");
+    Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("byte_index: ");
+    Box<i32> { value: self.byte_index }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("}");
+}
+
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "StrUtf8ByteIter^Display::fmt"(self: &StrUtf8ByteIter, f: &mut Formatter) {
     self."StrUtf8ByteIter^Inspect::inspect"(f);
 }
@@ -6950,6 +8503,54 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "StrUtf8ByteIter^DisplayAlt::fmt_alt"(self: &StrUtf8ByteIter, f: &mut Formatter) {
+    self."StrUtf8ByteIter^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StrCharIter^DisplayAlt::fmt_alt"(self: &StrCharIter, f: &mut Formatter) {
+    self."StrCharIter^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Array<char>::append"(self: &mut Array<char>, value: char) {
@@ -7139,6 +8740,115 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "WaitEvent^InspectAlt::inspect_alt"(self: &WaitEvent, f: &mut Formatter) {
+    f.Formatter::open_brace("WaitEvent {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("code: ");
+    Box<i32> { value: self.code }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("handle: ");
+    self.handle."Waitable^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("payload: ");
+    Box<u32> { value: self.payload }."u32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("}");
+}
+
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "WaitEvent^Display::fmt"(self: &WaitEvent, f: &mut Formatter) {
     self."WaitEvent^Inspect::inspect"(f);
 }
@@ -7181,6 +8891,50 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "WaitEvent^DisplayAlt::fmt_alt"(self: &WaitEvent, f: &mut Formatter) {
+    self."WaitEvent^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 
@@ -7995,6 +9749,98 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
     self."Tuple<i64,i64>^Inspect::inspect"(f);
 }
@@ -8033,6 +9879,46 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 export fn __cm_export__run() {
@@ -8170,6 +10056,111 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "Ordering^InspectAlt::inspect_alt"(self: &Ordering, f: &mut Formatter) {
+    self."Ordering^Inspect::inspect"(f);
+}
+
+pub fn "ConvertError^InspectAlt::inspect_alt"(self: &ConvertError, f: &mut Formatter) {
+    f.Formatter::open_brace("ConvertError {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("message: ");
+    self.message."String^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("}");
+}
+
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "Ordering^Display::fmt"(self: &Ordering, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
 }
@@ -8218,16 +10209,64 @@ pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
 }
 
+pub fn "Ordering^DisplayAlt::fmt_alt"(self: &Ordering, f: &mut Formatter) {
+    self."Ordering^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "ConvertError^DisplayAlt::fmt_alt"(self: &ConvertError, f: &mut Formatter) {
+    self."ConvertError^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
+}
+
 
 // --- Module: core:prelude/format.wado ---
 pub struct Formatter {
     pub fill: char,
     pub align: Alignment,
     pub sign_plus: bool,
-    pub alternate: bool,
     pub zero_pad: bool,
     pub width: i32,
     pub precision: i32,
+    pub indent: i32,
     pub buf: &mut String,
 }
 
@@ -8238,7 +10277,7 @@ pub enum Alignment {
 }
 
 pub fn Formatter::new(buf: &mut String) -> Formatter {
-    return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+    return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -1, indent: 0, buf: buf };
 }
 
 pub fn Formatter::write_str(self: &mut Formatter, s: String) {
@@ -8465,6 +10504,37 @@ pub fn Formatter::prepare_int_write(self: &mut Formatter, is_negative: bool, pre
     }
 }
 
+pub fn Formatter::write_indent(self: &mut Formatter) {
+    __for_4: {
+        let mut i: i32 = 0;
+        loop {
+            if !(i < self.indent) {
+                break __for_4;
+            }
+            __for_4_body: {
+                self.Formatter::write_str("  ");
+            }
+            i = (i + 1);
+        }
+    }
+}
+
+pub fn Formatter::write_newline_indent(self: &mut Formatter) {
+    self.Formatter::write_char('\n');
+    self.Formatter::write_indent();
+}
+
+pub fn Formatter::open_brace(self: &mut Formatter, open: String) {
+    self.Formatter::write_str(open);
+    self.indent = (self.indent + 1);
+}
+
+pub fn Formatter::close_brace(self: &mut Formatter, close: String) {
+    self.indent = (self.indent - 1);
+    self.Formatter::write_newline_indent();
+    self.Formatter::write_str(close);
+}
+
 pub fn "String^Display::fmt"(self: &String, f: &mut Formatter) {
     f.Formatter::pad(*self);
 }
@@ -8509,6 +10579,10 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
         }
     }
     f.Formatter::write_char('"');
+}
+
+pub fn "String^InspectAlt::inspect_alt"(self: &String, f: &mut Formatter) {
+    self."String^Inspect::inspect"(f);
 }
 
 pub fn "Alignment^Eq::eq"(self: &Alignment, other: &Alignment) -> bool {
@@ -8611,6 +10685,102 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
+pub fn "Alignment^InspectAlt::inspect_alt"(self: &Alignment, f: &mut Formatter) {
+    self."Alignment^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i64,i64>^InspectAlt::inspect_alt"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.0 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i64> { value: *self.1 }."i64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<T>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."Stream<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^InspectAlt::inspect_alt"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<u64> { value: *self.0 }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<i32> { value: *self.1 }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.0 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    Box<bool> { value: *self.1 }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.2."SpecialKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<u128,u128>^InspectAlt::inspect_alt"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."u128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
+pub fn "Tuple<i128,i128>^InspectAlt::inspect_alt"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::open_brace("[");
+    f.Formatter::write_newline_indent();
+    *self.0."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::write_newline_indent();
+    *self.1."i128^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("]");
+}
+
 pub fn "Alignment^Display::fmt"(self: &Alignment, f: &mut Formatter) {
     self."Alignment^Inspect::inspect"(f);
 }
@@ -8653,6 +10823,50 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Alignment^DisplayAlt::fmt_alt"(self: &Alignment, f: &mut Formatter) {
+    self."Alignment^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i64,i64>^DisplayAlt::fmt_alt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^DisplayAlt::fmt_alt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^DisplayAlt::fmt_alt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u64,i32>^DisplayAlt::fmt_alt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^DisplayAlt::fmt_alt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<u128,u128>^DisplayAlt::fmt_alt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
 fn "StrCharIter^IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {

@@ -19,10 +19,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -275,7 +275,7 @@ fn inspect_nested() with Stdout {
         __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_6 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_14 = __local_5;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
         };
         Line^Inspect::inspect(line, __local_6);
         break __tmpl: __local_5;
@@ -288,7 +288,7 @@ fn inspect_nested() with Stdout {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_8 = __inline_Formatter__new_8: block -> ref Formatter {
             __local_23 = __local_7;
-            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_23) };
+            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_23) };
         };
         Array<Point>^Inspect::inspect(points, __local_8);
         break __tmpl: __local_7;
@@ -298,7 +298,7 @@ fn inspect_nested() with Stdout {
         __local_9 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_10 = __inline_Formatter__new_10: block -> ref Formatter {
             __local_25 = __local_9;
-            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_25) };
+            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_25) };
         };
         Option<Point>^Inspect::inspect(opt_p, __local_10);
         break __tmpl: __local_9;
@@ -308,7 +308,7 @@ fn inspect_nested() with Stdout {
         __local_11 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_12 = __inline_Formatter__new_12: block -> ref Formatter {
             __local_27 = __local_11;
-            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_27) };
+            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_27) };
         };
         Option<Point>^Inspect::inspect(none_p, __local_12);
         break __tmpl: __local_11;
@@ -350,7 +350,7 @@ fn inspect_nested_array3_test() with Stdout {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_8 = __inline_Formatter__new_30: block -> ref Formatter {
             __local_50 = __local_7;
-            break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_50) };
+            break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_50) };
         };
         Array<Array<Array<i32>>>^Inspect::inspect(deep, __local_8);
         break __tmpl: __local_7;
@@ -377,7 +377,7 @@ fn inspect_nested_array_option_test() with Stdout {
         __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_6 = __inline_Formatter__new_7: block -> ref Formatter {
             __local_17 = __local_5;
-            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_17) };
+            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
         };
         Array<Option<i32>>^Inspect::inspect(arr, __local_6);
         break __tmpl: __local_5;
@@ -406,7 +406,7 @@ fn inspect_nested_array_string_test() with Stdout {
         __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_5 = __inline_Formatter__new_15: block -> ref Formatter {
             __local_26 = __local_4;
-            break __inline_Formatter__new_15: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_26) };
+            break __inline_Formatter__new_15: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_26) };
         };
         Array<Array<String>>^Inspect::inspect(arr, __local_5);
         break __tmpl: __local_4;
@@ -441,7 +441,7 @@ fn inspect_nested_array_struct2_test() with Stdout {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_8 = __inline_Formatter__new_16: block -> ref Formatter {
             __local_31 = __local_7;
-            break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_31) };
+            break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_31) };
         };
         Matrix^Inspect::inspect(m, __local_8);
         break __tmpl: __local_7;
@@ -923,14 +923,14 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Array<i32>>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
             l33: loop {
                 if (i < _licm_used_12) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
@@ -955,14 +955,14 @@ fn Array<i32>^Inspect::inspect(self, f) {
     let _licm_used_16: i32;
     let _licm_repr_17: ref array<i32>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_16 = self.used;
         _licm_repr_17 = self.repr;
         block {
             l37: loop {
                 if (i < _licm_used_16) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
@@ -987,14 +987,14 @@ fn Array<Array<String>>^Inspect::inspect(self, f) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Array<String>>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
             l41: loop {
                 if (i < _licm_used_12) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
@@ -1019,14 +1019,14 @@ fn Array<String>^Inspect::inspect(self, f) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<String>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
             l45: loop {
                 if (i < _licm_used_12) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
@@ -1093,14 +1093,14 @@ fn Array<Option<i32>>^Inspect::inspect(self, f) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Option<i32>>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
             l53: loop {
                 if (i < _licm_used_12) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
@@ -1183,14 +1183,14 @@ fn Array<Array<Array<i32>>>^Inspect::inspect(self, f) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Array<Array<i32>>>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
             l63: loop {
                 if (i < _licm_used_12) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
@@ -1357,14 +1357,14 @@ fn Array<Point>^Inspect::inspect(self, f) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Point>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
             l81: loop {
                 if (i < _licm_used_12) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };

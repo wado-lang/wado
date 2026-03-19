@@ -50,17 +50,17 @@ Where `spec` follows Rust's format specification mini-language.
 
 ### Supported Format Types
 
-| Specifier | Trait         | Description           | Example              |
-| --------- | ------------- | --------------------- | -------------------- |
-| (none)    | Display       | Default display       | `{x}` → `"42"`       |
-| `?`       | Inspect       | Debug representation  | `{x:?}` → `"42"`     |
-| `#?`      | InspectAlt    | Pretty-print debug    | `{x:#?}` (indented)   |
-| `b`       | Binary        | Binary integers       | `{x:b}` → `"101010"` |
-| `o`       | Octal         | Octal integers        | `{x:o}` → `"52"`     |
-| `x`       | LowerHex      | Lowercase hex         | `{x:x}` → `"2a"`     |
-| `X`       | UpperHex      | Uppercase hex         | `{x:X}` → `"2A"`     |
-| `e`       | LowerExp      | Lowercase exponential | `{x:e}` → `"4.2e1"`  |
-| `E`       | UpperExp      | Uppercase exponential | `{x:E}` → `"4.2E1"`  |
+| Specifier | Trait      | Description           | Example              |
+| --------- | ---------- | --------------------- | -------------------- |
+| (none)    | Display    | Default display       | `{x}` → `"42"`       |
+| `?`       | Inspect    | Debug representation  | `{x:?}` → `"42"`     |
+| `#?`      | InspectAlt | Pretty-print debug    | `{x:#?}` (indented)  |
+| `b`       | Binary     | Binary integers       | `{x:b}` → `"101010"` |
+| `o`       | Octal      | Octal integers        | `{x:o}` → `"52"`     |
+| `x`       | LowerHex   | Lowercase hex         | `{x:x}` → `"2a"`     |
+| `X`       | UpperHex   | Uppercase hex         | `{x:X}` → `"2A"`     |
+| `e`       | LowerExp   | Lowercase exponential | `{x:e}` → `"4.2e1"`  |
+| `E`       | UpperExp   | Uppercase exponential | `{x:E}` → `"4.2E1"`  |
 
 **Notes**:
 

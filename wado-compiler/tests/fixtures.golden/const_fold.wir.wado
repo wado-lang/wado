@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -161,7 +161,7 @@ fn const_fold_int_basic() with Stdout {
         String::append_char(__local_7, 61);
         __local_8 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_22 = __local_7;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_22) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_22) };
         };
         __local_24 = __local_8;
         i32::fmt_decimal(42, __local_24);
@@ -173,7 +173,7 @@ fn const_fold_int_basic() with Stdout {
         String::append_char(__local_9, 61);
         __local_10 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_28 = __local_9;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
         };
         __local_30 = __local_10;
         i32::fmt_decimal(123, __local_30);
@@ -185,7 +185,7 @@ fn const_fold_int_basic() with Stdout {
         String::append_char(__local_11, 61);
         __local_12 = __inline_Formatter__new_9: block -> ref Formatter {
             __local_34 = __local_11;
-            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_34) };
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_34) };
         };
         __local_36 = __local_12;
         i32::fmt_decimal(42, __local_36);
@@ -197,7 +197,7 @@ fn const_fold_int_basic() with Stdout {
         String::append_char(__local_13, 61);
         __local_14 = __inline_Formatter__new_13: block -> ref Formatter {
             __local_40 = __local_13;
-            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_40) };
+            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_40) };
         };
         __local_42 = __local_14;
         i32::fmt_decimal(42, __local_42);
@@ -209,7 +209,7 @@ fn const_fold_int_basic() with Stdout {
         String::append_char(__local_15, 61);
         __local_16 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_46 = __local_15;
-            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_46) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_46) };
         };
         __local_48 = __local_16;
         i32::fmt_decimal(1, __local_48);
@@ -221,7 +221,7 @@ fn const_fold_int_basic() with Stdout {
         String::append_char(__local_17, 61);
         __local_18 = __inline_Formatter__new_21: block -> ref Formatter {
             __local_52 = __local_17;
-            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_52) };
+            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_52) };
         };
         __local_54 = __local_18;
         i32::fmt_decimal(9, __local_54);
@@ -233,7 +233,7 @@ fn const_fold_int_basic() with Stdout {
         String::append_char(__local_19, 61);
         __local_20 = __inline_Formatter__new_25: block -> ref Formatter {
             __local_58 = __local_19;
-            break __inline_Formatter__new_25: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_58) };
+            break __inline_Formatter__new_25: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_58) };
         };
         __local_60 = __local_20;
         i32::fmt_decimal(25, __local_60);
@@ -272,7 +272,7 @@ fn const_fold_int_types() with Stdout {
         String::append_char(__local_6, 61);
         __local_7 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_19 = __local_6;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_19) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_19) };
         };
         __local_21 = __local_7;
         i64::fmt_decimal(1000000000000_i64, __local_21);
@@ -284,7 +284,7 @@ fn const_fold_int_types() with Stdout {
         String::append_char(__local_8, 61);
         __local_9 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_25 = __local_8;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_25) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_25) };
         };
         __local_27 = __local_9;
         u32::fmt_decimal(300, __local_27);
@@ -296,7 +296,7 @@ fn const_fold_int_types() with Stdout {
         String::append_char(__local_10, 61);
         __local_11 = __inline_Formatter__new_9: block -> ref Formatter {
             __local_31 = __local_10;
-            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_31) };
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_31) };
         };
         __local_33 = __local_11;
         i32::fmt_decimal(33, __local_33);
@@ -308,7 +308,7 @@ fn const_fold_int_types() with Stdout {
         String::append_char(__local_12, 61);
         __local_13 = __inline_Formatter__new_13: block -> ref Formatter {
             __local_37 = __local_12;
-            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_37) };
+            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_37) };
         };
         __local_39 = __local_13;
         i32::fmt_decimal(0, __local_39);
@@ -320,7 +320,7 @@ fn const_fold_int_types() with Stdout {
         String::append_char(__local_14, 61);
         __local_15 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_43 = __local_14;
-            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_43) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_43) };
         };
         __local_45 = __local_15;
         i32::fmt_decimal(0, __local_45);
@@ -332,7 +332,7 @@ fn const_fold_int_types() with Stdout {
         String::append_char(__local_16, 61);
         __local_17 = __inline_Formatter__new_21: block -> ref Formatter {
             __local_49 = __local_16;
-            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_49) };
+            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_49) };
         };
         __local_51 = __local_17;
         i32::fmt_decimal(2, __local_51);

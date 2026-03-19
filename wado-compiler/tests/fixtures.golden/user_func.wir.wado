@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -174,7 +174,7 @@ fn user_func_return_f32() with Stdout {
         String::append(__local_3, String { repr: array.new_data<u8>("result = "), used: 9 });
         __local_4 = __inline_Formatter__new_2: block -> ref Formatter {
             __local_8 = __local_3;
-            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
         };
         __local_10 = __local_4;
         f32::fmt_into(result, __local_10);
@@ -192,7 +192,7 @@ fn user_func_return_f64() with Stdout {
         String::append(__local_1, String { repr: array.new_data<u8>("result = "), used: 9 });
         __local_2 = __inline_Formatter__new_2: block -> ref Formatter {
             __local_6 = __local_1;
-            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_6) };
+            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         };
         __local_8 = __local_2;
         f64::fmt_into(7.5, __local_8);

@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -163,7 +163,7 @@ fn run() with Stdout {
         __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_6 = __inline_Formatter__new_18: block -> ref Formatter {
             __local_30 = __local_5;
-            break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_30) };
+            break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_30) };
         };
         Matrix^Inspect::inspect(m, __local_6);
         break __tmpl: __local_5;
@@ -499,14 +499,14 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Array<i32>>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
             l25: loop {
                 if (i < _licm_used_12) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
@@ -531,14 +531,14 @@ fn Array<i32>^Inspect::inspect(self, f) {
     let _licm_used_16: i32;
     let _licm_repr_17: ref array<i32>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_16 = self.used;
         _licm_repr_17 = self.repr;
         block {
             l29: loop {
                 if (i < _licm_used_16) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };

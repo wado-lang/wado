@@ -23,10 +23,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -216,7 +216,7 @@ fn run() with Stdout {
         String::append(__local_12, String { repr: array.new_data<u8>("large_u128 = "), used: 13 });
         __local_13 = __inline_Formatter__new_4: block -> ref Formatter {
             __local_40 = __local_12;
-            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_40) };
+            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_40) };
         };
         __local_41 = large_u128;
         __local_42 = __local_13;
@@ -229,7 +229,7 @@ fn run() with Stdout {
         String::append(__local_14, String { repr: array.new_data<u8>("max_u128 = "), used: 11 });
         __local_15 = __inline_Formatter__new_9: block -> ref Formatter {
             __local_48 = __local_14;
-            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_48) };
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_48) };
         };
         __local_49 = max_u128;
         __local_50 = __local_15;
@@ -242,7 +242,7 @@ fn run() with Stdout {
         String::append(__local_16, String { repr: array.new_data<u8>("large_i128 = "), used: 13 });
         __local_17 = __inline_Formatter__new_14: block -> ref Formatter {
             __local_56 = __local_16;
-            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_56) };
+            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_56) };
         };
         __local_57 = large_i128;
         __local_58 = __local_17;
@@ -255,7 +255,7 @@ fn run() with Stdout {
         String::append(__local_18, String { repr: array.new_data<u8>("max_i128 = "), used: 11 });
         __local_19 = __inline_Formatter__new_19: block -> ref Formatter {
             __local_64 = __local_18;
-            break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_64) };
+            break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_64) };
         };
         __local_65 = max_i128;
         __local_66 = __local_19;
@@ -268,7 +268,7 @@ fn run() with Stdout {
         String::append(__local_20, String { repr: array.new_data<u8>("min_i128 = "), used: 11 });
         __local_21 = __inline_Formatter__new_24: block -> ref Formatter {
             __local_72 = __local_20;
-            break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_72) };
+            break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_72) };
         };
         __local_73 = min_i128;
         __local_74 = __local_21;
@@ -281,7 +281,7 @@ fn run() with Stdout {
         String::append(__local_22, String { repr: array.new_data<u8>("cast_u128 = "), used: 12 });
         __local_23 = __inline_Formatter__new_29: block -> ref Formatter {
             __local_80 = __local_22;
-            break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_80) };
+            break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_80) };
         };
         __local_81 = cast_u128;
         __local_82 = __local_23;
@@ -294,7 +294,7 @@ fn run() with Stdout {
         String::append(__local_24, String { repr: array.new_data<u8>("cast_i128 = "), used: 12 });
         __local_25 = __inline_Formatter__new_34: block -> ref Formatter {
             __local_88 = __local_24;
-            break __inline_Formatter__new_34: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_88) };
+            break __inline_Formatter__new_34: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_88) };
         };
         __local_89 = cast_i128;
         __local_90 = __local_25;
@@ -307,7 +307,7 @@ fn run() with Stdout {
         String::append(__local_26, String { repr: array.new_data<u8>("with_underscores = "), used: 19 });
         __local_27 = __inline_Formatter__new_39: block -> ref Formatter {
             __local_96 = __local_26;
-            break __inline_Formatter__new_39: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_96) };
+            break __inline_Formatter__new_39: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_96) };
         };
         __local_97 = with_underscores;
         __local_98 = __local_27;
@@ -320,7 +320,7 @@ fn run() with Stdout {
         String::append(__local_28, String { repr: array.new_data<u8>("hex_large = "), used: 12 });
         __local_29 = __inline_Formatter__new_44: block -> ref Formatter {
             __local_104 = __local_28;
-            break __inline_Formatter__new_44: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_104) };
+            break __inline_Formatter__new_44: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_104) };
         };
         __local_105 = hex_large;
         __local_106 = __local_29;
@@ -333,7 +333,7 @@ fn run() with Stdout {
         String::append(__local_30, String { repr: array.new_data<u8>("hex_max = "), used: 10 });
         __local_31 = __inline_Formatter__new_49: block -> ref Formatter {
             __local_112 = __local_30;
-            break __inline_Formatter__new_49: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_112) };
+            break __inline_Formatter__new_49: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_112) };
         };
         __local_113 = hex_max;
         __local_114 = __local_31;
@@ -346,7 +346,7 @@ fn run() with Stdout {
         String::append(__local_32, String { repr: array.new_data<u8>("bin_large = "), used: 12 });
         __local_33 = __inline_Formatter__new_54: block -> ref Formatter {
             __local_120 = __local_32;
-            break __inline_Formatter__new_54: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_120) };
+            break __inline_Formatter__new_54: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_120) };
         };
         __local_121 = bin_large;
         __local_122 = __local_33;
@@ -359,7 +359,7 @@ fn run() with Stdout {
         String::append(__local_34, String { repr: array.new_data<u8>("hex_cast = "), used: 11 });
         __local_35 = __inline_Formatter__new_59: block -> ref Formatter {
             __local_128 = __local_34;
-            break __inline_Formatter__new_59: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_128) };
+            break __inline_Formatter__new_59: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_128) };
         };
         __local_129 = hex_cast;
         __local_130 = __local_35;

@@ -485,9 +485,7 @@ fn build_template_block(
                 let is_inspect = format_spec
                     .as_ref()
                     .is_some_and(|fs| fs.type_char == Some('?'));
-                let is_alternate = format_spec
-                    .as_ref()
-                    .is_some_and(|fs| fs.alternate);
+                let is_alternate = format_spec.as_ref().is_some_and(|fs| fs.alternate);
 
                 let (trait_name, method_name) = match &format_spec {
                     Some(fs) => match (fs.type_char, fs.alternate) {

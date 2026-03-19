@@ -315,8 +315,8 @@ The core `synthesize_inspect` phase and the full pipeline integration are implem
 | Closure (`#` alternate)    | Done   | TIR unparsed source                                                      |
 | Display fallback           | Done   | `{expr}` falls back to inspect when no `Display` impl exists             |
 | Nested structs/arrays      | Done   | Recursive inspect for composite fields                                   |
-| `TreeMap<K, V>`            | Done   | Custom `Inspect`/`InspectAlt`: `{key: value, ...}` format               |
-| `TreeSet<T>`               | Done   | Custom `Inspect`/`InspectAlt`: `{elem, ...}` format                     |
+| `TreeMap<K, V>`            | Done   | Custom `Inspect`/`InspectAlt`: `{key: value, ...}` format                |
+| `TreeSet<T>`               | Done   | Custom `Inspect`/`InspectAlt`: `{elem, ...}` format                      |
 | `Value` (json\_value)      | Done   | Custom `Inspect`/`InspectAlt`: JSON-like format                          |
 | Pretty-print (`:#?`)       | Done   | `InspectAlt` trait with `Formatter` indent tracking                      |
 | `Array<Array<T>>`          | TODO   | Nested array codegen bug (tracked as TODO test)                          |
