@@ -360,7 +360,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         let callee_effects = self.get_function_effects(func_ref);
 
         // Separate effect params from concrete effects
-        let has_params = callee_effects.iter().any(|e| e.is_param());
+        let has_params = callee_effects.iter().any(super::tir::EffectRef::is_param);
 
         // Resolve effect params to concrete effects from function-typed arguments
         let resolved_effects = if has_params {
@@ -401,8 +401,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             .collect();
 
         // Map each effect param name to its resolved concrete effects
-        let mut effect_param_concrete: IndexMap<String, IndexSet<EffectRef>> =
-            IndexMap::default();
+        let mut effect_param_concrete: IndexMap<String, IndexSet<EffectRef>> = IndexMap::default();
         for name in &effect_param_names {
             effect_param_concrete.insert(name.clone(), IndexSet::default());
         }
@@ -431,11 +430,11 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     } = tt.get(arg.expr.type_id).clone()
                     {
                         for formal_effect in &formal_effects {
-                            if let EffectRef::Param { name } = formal_effect {
-                                if let Some(concrete_set) = effect_param_concrete.get_mut(name) {
-                                    for actual in &actual_effects {
-                                        concrete_set.insert(actual.clone());
-                                    }
+                            if let EffectRef::Param { name } = formal_effect
+                                && let Some(concrete_set) = effect_param_concrete.get_mut(name)
+                            {
+                                for actual in &actual_effects {
+                                    concrete_set.insert(actual.clone());
                                 }
                             }
                         }

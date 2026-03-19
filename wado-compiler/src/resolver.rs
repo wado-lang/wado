@@ -257,7 +257,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// For `use { Stdout::{write_via_stream} } from "wasi:cli"`, maps "Stdout" → resolved("wasi:cli").
     /// For `use { Stdout } from "core:cli"`, maps "Stdout" → resolved("core:cli").
     /// For local effect declarations, maps name → current module source.
-    fn build_effect_sources(module: &Module, module_source: &ModuleSource) -> IndexMap<String, ModuleSource> {
+    fn build_effect_sources(
+        module: &Module,
+        module_source: &ModuleSource,
+    ) -> IndexMap<String, ModuleSource> {
         let mut sources = IndexMap::default();
         for item in &module.items {
             match item {
@@ -288,7 +291,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         sources
     }
 
-    /// Resolve AST effect names (strings) to TIR EffectRefs with module source information.
+    /// Resolve AST effect names (strings) to TIR `EffectRefs` with module source information.
     pub(crate) fn resolve_effects(&self, effects: &[String]) -> Vec<tir::EffectRef> {
         effects
             .iter()

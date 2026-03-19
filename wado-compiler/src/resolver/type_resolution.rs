@@ -65,11 +65,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let return_type = self.resolve_type(&func_ty.return_type);
                 // Resolve effect names in function type position
                 let effects = self.resolve_effects(&func_ty.effects);
-                self.type_table.borrow_mut().make_function(
-                    params,
-                    return_type,
-                    effects,
-                )
+                self.type_table
+                    .borrow_mut()
+                    .make_function(params, return_type, effects)
             }
             Type::Tuple(elements) => {
                 let elem_types: Vec<TypeId> =

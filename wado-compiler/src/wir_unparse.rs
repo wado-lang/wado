@@ -567,7 +567,11 @@ impl<'a> WirUnparser<'a> {
 
         if !func.effects.is_empty() {
             self.write(" with ");
-            let effects_str: Vec<&str> = func.effects.iter().map(|e| e.name()).collect();
+            let effects_str: Vec<&str> = func
+                .effects
+                .iter()
+                .map(super::tir::EffectRef::name)
+                .collect();
             self.write(&effects_str.join(", "));
         }
 
