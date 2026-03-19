@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773956516234,
+  "lastUpdate": 1773964350907,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4547,6 +4547,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/46d51eaf80eba7e0bcc48b0d98465979d80814f2"
         },
         "date": 1773956516153,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1b18f647ae59956e0d631a9ae62d88dbd679c67a",
+          "message": "Merge pull request #615 from wado-lang/claude/implement-stores-syntax-6e9u2\n\nImplement `stores` declarations for reference parameter tracking",
+          "timestamp": "2026-03-20T08:50:00+09:00",
+          "tree_id": "56303d7c9452f547fa083ad2d8ffabb5365a8b97",
+          "url": "https://github.com/wado-lang/wado/commit/1b18f647ae59956e0d631a9ae62d88dbd679c67a"
+        },
+        "date": 1773964350671,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
