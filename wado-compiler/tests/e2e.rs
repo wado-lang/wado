@@ -334,7 +334,9 @@ async fn run_http_request_async(
     let state = common::WasiState {
         ctx: WasiCtxBuilder::new().build(),
         table: ResourceTable::new(),
-        http: common::TestHttpCtx { mocks: outgoing_mocks },
+        http: common::TestHttpCtx {
+            mocks: outgoing_mocks,
+        },
     };
     let mut store = Store::new(engine, state);
 
@@ -716,7 +718,11 @@ fn run_normal_test(
 
     // Dispatch to the appropriate runner based on world
     if let Some(http_spec) = &spec.http_service {
-        match run_http_request(compile_result.wasm, &http_spec.request, spec.outgoing_mocks.clone()) {
+        match run_http_request(
+            compile_result.wasm,
+            &http_spec.request,
+            spec.outgoing_mocks.clone(),
+        ) {
             Ok(result) => {
                 assert!(
                     !spec.trapped,
@@ -733,9 +739,10 @@ fn run_normal_test(
             }
         }
     } else if spec.test_world.is_some() {
-        let result = run_test_world(&compile_result.wasm, test_id, spec.outgoing_mocks.clone()).unwrap_or_else(|e| {
-            panic!("[{test_id}] test world error: {e:?}");
-        });
+        let result = run_test_world(&compile_result.wasm, test_id, spec.outgoing_mocks.clone())
+            .unwrap_or_else(|e| {
+                panic!("[{test_id}] test world error: {e:?}");
+            });
         verify_result(&result, spec, test_id);
     } else {
         // Default: wasi:cli/command

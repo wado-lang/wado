@@ -1777,8 +1777,14 @@ fn import_http_types_for_service(
     );
 
     // Alias constructor/static functions needed for lowering
-    let fields_cm = project.wasi_registry.get_resource_cm_name("Fields").unwrap();
-    let response_cm = project.wasi_registry.get_resource_cm_name("Response").unwrap();
+    let fields_cm = project
+        .wasi_registry
+        .get_resource_cm_name("Fields")
+        .unwrap();
+    let response_cm = project
+        .wasi_registry
+        .get_resource_cm_name("Response")
+        .unwrap();
     let constructor_fields = format!("[constructor]{fields_cm}");
     let static_response_new = format!("[static]{response_cm}.new");
 
@@ -2436,8 +2442,14 @@ fn append_http_handler_export(
 
     let handle_func_idx = ctx.comp_func_idx("handle");
 
-    let request_cm = project.wasi_registry.get_resource_cm_name("Request").unwrap();
-    let response_cm = project.wasi_registry.get_resource_cm_name("Response").unwrap();
+    let request_cm = project
+        .wasi_registry
+        .get_resource_cm_name("Request")
+        .unwrap();
+    let response_cm = project
+        .wasi_registry
+        .get_resource_cm_name("Response")
+        .unwrap();
     let error_code_cm = project
         .wasi_registry
         .get_variant_cm_name("ErrorCode")
@@ -2452,7 +2464,11 @@ fn append_http_handler_export(
     instances.export_items([
         (request_cm, ComponentExportKind::Type, request_type_idx),
         (response_cm, ComponentExportKind::Type, response_type_idx),
-        (error_code_cm, ComponentExportKind::Type, error_code_type_idx),
+        (
+            error_code_cm,
+            ComponentExportKind::Type,
+            error_code_type_idx,
+        ),
         ("handle", ComponentExportKind::Func, handle_func_idx),
     ]);
 

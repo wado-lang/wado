@@ -139,9 +139,11 @@ impl WasiFunctionInfo {
     fn named_type_payload_requires_memory(ty: &Type, registry: &WasiRegistry) -> bool {
         if let Type::Named(named) = ty {
             if let Some(cases) = registry.get_variant_cases(&named.name) {
-                return cases
-                    .iter()
-                    .any(|case| case.payload.as_ref().is_some_and(Self::type_requires_memory));
+                return cases.iter().any(|case| {
+                    case.payload
+                        .as_ref()
+                        .is_some_and(Self::type_requires_memory)
+                });
             }
             // WASI struct (record) types always need memory since they have multiple
             // fields and exceed MAX_FLAT_RESULTS (1) in canon lower.

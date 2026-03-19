@@ -276,7 +276,11 @@ impl WasiHttpCtx for TestHttpCtx {
             >,
         >,
         _options: Option<wasmtime_wasi_http::p3::RequestOptions>,
-        _fut: Box<dyn Future<Output = Result<(), wasmtime_wasi_http::p3::bindings::http::types::ErrorCode>> + Send>,
+        _fut: Box<
+            dyn Future<
+                    Output = Result<(), wasmtime_wasi_http::p3::bindings::http::types::ErrorCode>,
+                > + Send,
+        >,
     ) -> Box<
         dyn Future<
                 Output = Result<
@@ -287,9 +291,18 @@ impl WasiHttpCtx for TestHttpCtx {
                                 wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
                             >,
                         >,
-                        Box<dyn Future<Output = Result<(), wasmtime_wasi_http::p3::bindings::http::types::ErrorCode>> + Send>,
+                        Box<
+                            dyn Future<
+                                    Output = Result<
+                                        (),
+                                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+                                    >,
+                                > + Send,
+                        >,
                     ),
-                    wasmtime_wasi::TrappableError<wasmtime_wasi_http::p3::bindings::http::types::ErrorCode>,
+                    wasmtime_wasi::TrappableError<
+                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+                    >,
                 >,
             > + Send,
     > {
@@ -303,7 +316,11 @@ impl WasiHttpCtx for TestHttpCtx {
             .mocks
             .get(&uri)
             .or_else(|| {
-                let path = request.uri().path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
+                let path = request
+                    .uri()
+                    .path_and_query()
+                    .map(|pq| pq.as_str())
+                    .unwrap_or("/");
                 self.mocks.get(path)
             })
             .cloned();
@@ -314,9 +331,10 @@ impl WasiHttpCtx for TestHttpCtx {
                 for [name, value] in &mock_resp.headers {
                     builder = builder.header(name.as_str(), value.as_str());
                 }
-                let body = http_body_util::Full::new(bytes::Bytes::from(mock_resp.body.into_bytes()))
-                    .map_err(|_: std::convert::Infallible| -> ErrorCode { unreachable!() })
-                    .boxed_unsync();
+                let body =
+                    http_body_util::Full::new(bytes::Bytes::from(mock_resp.body.into_bytes()))
+                        .map_err(|_: std::convert::Infallible| -> ErrorCode { unreachable!() })
+                        .boxed_unsync();
                 let resp = builder.body(body).unwrap();
                 Box::new(async {
                     Ok((
@@ -325,15 +343,11 @@ impl WasiHttpCtx for TestHttpCtx {
                     ))
                 })
             }
-            None => {
-                Box::new(async move {
-                    Err(wasmtime_wasi::TrappableError::trap(
-                        wasmtime::Error::msg(format!(
-                            "no mock configured for outgoing HTTP request to {uri}"
-                        ))
-                    ))
-                })
-            }
+            None => Box::new(async move {
+                Err(wasmtime_wasi::TrappableError::trap(wasmtime::Error::msg(
+                    format!("no mock configured for outgoing HTTP request to {uri}"),
+                )))
+            }),
         }
     }
 }
@@ -619,7 +633,9 @@ pub fn run_wasm_with_full_options(
         let state = WasiState {
             ctx,
             table: ResourceTable::new(),
-            http: TestHttpCtx { mocks: outgoing_mocks },
+            http: TestHttpCtx {
+                mocks: outgoing_mocks,
+            },
         };
         let mut store = Store::new(engine, state);
 

@@ -746,7 +746,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Resolve a WASI AST type to a `TypeId`
     /// Resolve a WASI AST type to a `TypeId`, with optional WASI package scope.
-    pub(super) fn resolve_wasi_type_scoped(&mut self, ty: &Type, wasi_package: Option<&str>) -> TypeId {
+    pub(super) fn resolve_wasi_type_scoped(
+        &mut self,
+        ty: &Type,
+        wasi_package: Option<&str>,
+    ) -> TypeId {
         match ty {
             Type::Named(named) => match named.name.as_str() {
                 "String" => self.get_string_struct_type(),
@@ -809,15 +813,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             drop(tt);
                             // Fallback: enum → struct → i32
                             if self.wasi_registry.is_enum(&named.name) {
-                                let module_source = self.all_enum_cases.iter()
-                                    .find_map(|(ms, map)| map.contains_key(&named.name).then(|| ms.clone()))
+                                let module_source = self
+                                    .all_enum_cases
+                                    .iter()
+                                    .find_map(|(ms, map)| {
+                                        map.contains_key(&named.name).then(|| ms.clone())
+                                    })
                                     .unwrap_or_else(|| ModuleSource::wasi("cli"));
-                                self.type_table.borrow_mut().make_enum(named.name.clone(), module_source)
+                                self.type_table
+                                    .borrow_mut()
+                                    .make_enum(named.name.clone(), module_source)
                             } else if self.wasi_registry.is_struct(&named.name) {
-                                let module_source = self.all_struct_fields.iter()
-                                    .find_map(|(ms, map)| map.contains_key(&named.name).then(|| ms.clone()))
+                                let module_source = self
+                                    .all_struct_fields
+                                    .iter()
+                                    .find_map(|(ms, map)| {
+                                        map.contains_key(&named.name).then(|| ms.clone())
+                                    })
                                     .unwrap_or_else(|| ModuleSource::wasi("clocks"));
-                                self.type_table.borrow_mut().make_struct(named.name.clone(), module_source)
+                                self.type_table
+                                    .borrow_mut()
+                                    .make_struct(named.name.clone(), module_source)
                             } else {
                                 TypeTable::I32
                             }
@@ -904,8 +920,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if types.is_empty() {
                     return TypeTable::UNIT;
                 }
-                let resolved: Vec<TypeId> =
-                    types.iter().map(|t| self.resolve_wasi_type_scoped(t, wasi_package)).collect();
+                let resolved: Vec<TypeId> = types
+                    .iter()
+                    .map(|t| self.resolve_wasi_type_scoped(t, wasi_package))
+                    .collect();
                 self.type_table
                     .borrow_mut()
                     .intern(ResolvedType::Tuple(resolved))

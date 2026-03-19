@@ -639,10 +639,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 interface: sub_iface,
                             } = src
                                 && sub_iface.starts_with(&prefix)
+                                && let Some(value) = name_map.get(lookup_name)
                             {
-                                if let Some(value) = name_map.get(lookup_name) {
-                                    return Some(value.clone());
-                                }
+                                return Some(value.clone());
                             }
                         }
                     }

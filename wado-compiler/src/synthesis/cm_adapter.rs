@@ -94,7 +94,9 @@ pub fn wasi_type_to_type_id_scoped(
             // When a WASI package hint is available, try scoped lookup first to avoid
             // name collisions (e.g. wasi:cli/ErrorCode vs wasi:http/ErrorCode).
             _ => wasi_package
-                .and_then(|pkg| type_table.find_named_type_by_wasi_package(named.name.as_str(), pkg))
+                .and_then(|pkg| {
+                    type_table.find_named_type_by_wasi_package(named.name.as_str(), pkg)
+                })
                 .or_else(|| type_table.find_resource_type_by_name(named.name.as_str()))
                 .or_else(|| type_table.find_variant_type_by_name(named.name.as_str()))
                 .or_else(|| type_table.find_enum_type_by_name(named.name.as_str()))
@@ -127,8 +129,10 @@ pub fn wasi_type_to_type_id_scoped(
                 type_table.make_option(inner_type)
             }
             "Result" if g.args.len() == 2 => {
-                let ok_type = wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
-                let err_type = wasi_type_to_type_id_scoped(&g.args[1], type_table, registry, wasi_package);
+                let ok_type =
+                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
+                let err_type =
+                    wasi_type_to_type_id_scoped(&g.args[1], type_table, registry, wasi_package);
                 type_table.make_result(ok_type, err_type)
             }
             // Stream/Future/Own/Borrow are handle types represented as i32
