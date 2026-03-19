@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -166,7 +166,7 @@ fn value_semantics_array() with Stdout {
         String::append_char(__local_3, 61);
         __local_4 = __inline_Formatter__new_8: block -> ref Formatter {
             __local_20 = __local_3;
-            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_20) };
+            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
         };
         __local_22 = __local_4;
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_10: block -> i32 {
@@ -187,7 +187,7 @@ fn value_semantics_array() with Stdout {
         String::append_char(__local_5, 61);
         __local_6 = __inline_Formatter__new_13: block -> ref Formatter {
             __local_28 = __local_5;
-            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
+            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
         };
         __local_30 = __local_6;
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_15: block -> i32 {
@@ -244,7 +244,7 @@ fn value_semantics_struct() with Stdout {
         String::append_char(__local_2, 61);
         __local_3 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_7 = __local_2;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_7) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         };
         __local_9 = __local_3;
         i32::fmt_decimal(a.x, __local_9);
@@ -258,7 +258,7 @@ fn value_semantics_struct() with Stdout {
         String::append_char(__local_4, 61);
         __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_13 = __local_4;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
         };
         __local_15 = __local_5;
         i32::fmt_decimal(b.x, __local_15);
@@ -288,7 +288,7 @@ fn value_semantics_tuple() with Stdout {
         String::append_char(__local_2, 61);
         __local_3 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_7 = __local_2;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_7) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         };
         __local_9 = __local_3;
         i32::fmt_decimal(a.0, __local_9);
@@ -302,7 +302,7 @@ fn value_semantics_tuple() with Stdout {
         String::append_char(__local_4, 61);
         __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_13 = __local_4;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
         };
         __local_15 = __local_5;
         i32::fmt_decimal(b.0, __local_15);

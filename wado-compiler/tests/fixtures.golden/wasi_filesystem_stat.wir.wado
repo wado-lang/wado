@@ -18,10 +18,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -235,7 +235,7 @@ fn run() with Stdout, Stderr, Preopens {
                 String::append(__local_9, String { repr: array.new_data<u8>("stat_at: unexpected size: "), used: 26 });
                 __local_10 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_19 = __local_9;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_19) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_19) };
                 };
                 __local_21 = __local_10;
                 u64::fmt_decimal(size_u64, __local_21);

@@ -240,10 +240,10 @@ pub struct Formatter {
     fill: char,
     align: Alignment,
     sign_plus: bool,
-    alternate: bool,
     zero_pad: bool,
     width: i32,
     precision: i32,
+    indent: i32,
     buf: &mut String,
 }
 
@@ -257,6 +257,10 @@ impl Formatter {
     pub fn apply_padding(&mut self, start_pos: i32);
     pub fn write_from_memory(&mut self, ptr: i32, len: i32);
     pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32;
+    pub fn write_indent(&mut self);
+    pub fn write_newline_indent(&mut self);
+    pub fn open_brace(&mut self, open: String);
+    pub fn close_brace(&mut self, close: String);
 }
 ```
 
@@ -289,6 +293,10 @@ impl Inspect for u128 {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for u128 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Binary for u128 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -303,6 +311,22 @@ impl LowerHex for u128 {
 
 impl UpperHex for u128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl BinaryAlt for u128 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl OctalAlt for u128 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl LowerHexAlt for u128 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl UpperHexAlt for u128 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
 impl Eq for u128 {
@@ -409,6 +433,10 @@ impl Inspect for i128 {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for i128 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Binary for i128 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -423,6 +451,22 @@ impl LowerHex for i128 {
 
 impl UpperHex for i128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl BinaryAlt for i128 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl OctalAlt for i128 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl LowerHexAlt for i128 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl UpperHexAlt for i128 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
 impl Eq for i128 {
@@ -731,6 +775,10 @@ impl Inspect for bool {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for bool {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Ord for bool {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -762,6 +810,10 @@ impl Inspect for char {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for char {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Ord for char {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -788,6 +840,10 @@ impl Inspect for i8 {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for i8 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Binary for i8 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -802,6 +858,22 @@ impl LowerHex for i8 {
 
 impl UpperHex for i8 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl BinaryAlt for i8 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl OctalAlt for i8 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl LowerHexAlt for i8 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl UpperHexAlt for i8 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
 impl Ord for i8 {
@@ -842,6 +914,10 @@ impl Inspect for u8 {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for u8 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Binary for u8 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -856,6 +932,22 @@ impl LowerHex for u8 {
 
 impl UpperHex for u8 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl BinaryAlt for u8 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl OctalAlt for u8 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl LowerHexAlt for u8 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl UpperHexAlt for u8 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
 impl Ord for u8 {
@@ -892,6 +984,10 @@ impl Inspect for i16 {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for i16 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Binary for i16 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -906,6 +1002,22 @@ impl LowerHex for i16 {
 
 impl UpperHex for i16 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl BinaryAlt for i16 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl OctalAlt for i16 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl LowerHexAlt for i16 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl UpperHexAlt for i16 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
 impl Ord for i16 {
@@ -950,6 +1062,10 @@ impl Inspect for u16 {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for u16 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Binary for u16 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -964,6 +1080,22 @@ impl LowerHex for u16 {
 
 impl UpperHex for u16 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl BinaryAlt for u16 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl OctalAlt for u16 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl LowerHexAlt for u16 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl UpperHexAlt for u16 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
 impl Ord for u16 {
@@ -1003,6 +1135,10 @@ impl Inspect for i32 {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for i32 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Binary for i32 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -1017,6 +1153,22 @@ impl LowerHex for i32 {
 
 impl UpperHex for i32 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl BinaryAlt for i32 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl OctalAlt for i32 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl LowerHexAlt for i32 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl UpperHexAlt for i32 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
 impl Ord for i32 {
@@ -1069,6 +1221,10 @@ impl Inspect for u32 {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for u32 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Binary for u32 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -1083,6 +1239,22 @@ impl LowerHex for u32 {
 
 impl UpperHex for u32 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl BinaryAlt for u32 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl OctalAlt for u32 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl LowerHexAlt for u32 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl UpperHexAlt for u32 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
 impl Ord for u32 {
@@ -1134,6 +1306,10 @@ impl Inspect for i64 {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for i64 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Binary for i64 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -1148,6 +1324,22 @@ impl LowerHex for i64 {
 
 impl UpperHex for i64 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl BinaryAlt for i64 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl OctalAlt for i64 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl LowerHexAlt for i64 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl UpperHexAlt for i64 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
 impl Ord for i64 {
@@ -1208,6 +1400,10 @@ impl Inspect for u64 {
     pub fn inspect(&self, f: &mut Formatter);
 }
 
+impl InspectAlt for u64 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Binary for u64 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -1222,6 +1418,22 @@ impl LowerHex for u64 {
 
 impl UpperHex for u64 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl BinaryAlt for u64 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl OctalAlt for u64 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl LowerHexAlt for u64 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl UpperHexAlt for u64 {
+    pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
 impl Ord for u64 {
@@ -1316,6 +1528,10 @@ impl Display for f32 {
 
 impl Inspect for f32 {
     pub fn inspect(&self, f: &mut Formatter);
+}
+
+impl InspectAlt for f32 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
 }
 
 impl LowerExp for f32 {
@@ -1414,6 +1630,10 @@ impl Display for f64 {
 
 impl Inspect for f64 {
     pub fn inspect(&self, f: &mut Formatter);
+}
+
+impl InspectAlt for f64 {
+    pub fn inspect_alt(&self, f: &mut Formatter);
 }
 
 impl LowerExp for f64 {
@@ -1543,6 +1763,14 @@ impl Deserialize for TreeMap<String, V> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError>;
 }
 
+impl Inspect for TreeMap<K, V> {
+    pub fn inspect(&self, f: &mut Formatter);
+}
+
+impl InspectAlt for TreeMap<K, V> {
+    pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
 impl Default for TreeMap<K, V> {
     pub fn default() -> TreeMap<K, V>;
 }
@@ -1572,6 +1800,14 @@ impl SequenceLiteralBuilder for TreeSet<T> {
     fn new_literal(capacity: i32) -> TreeSet<T>;
     fn push_literal(&mut self, value: T);
     fn build(&self) -> TreeSet<T>;
+}
+
+impl Inspect for TreeSet<T> {
+    pub fn inspect(&self, f: &mut Formatter);
+}
+
+impl InspectAlt for TreeSet<T> {
+    pub fn inspect_alt(&self, f: &mut Formatter);
 }
 
 impl Default for TreeSet<T> {

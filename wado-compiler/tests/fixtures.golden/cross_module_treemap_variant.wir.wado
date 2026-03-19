@@ -121,13 +121,13 @@ type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
 
 type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
 
+type "functype/./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>") -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
+
 type "functype/./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entries" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>") -> ref Array<Tuple<String,Value>>;
 
 type "functype/./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::append" = fn(ref Array<Tuple<String,Value>>, ref "tuple/[String, Value]");
 
 type "functype/./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::grow" = fn(ref Array<Tuple<String,Value>>);
-
-type "functype/./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>") -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
 
 type "functype/String::grow" = fn(ref String, i32);
 
@@ -430,6 +430,16 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     return;
 }
 
+fn "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next"(self) {  // from ./sub/cross_module_treemap_variant_helper.wado
+    let item: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
+    if self.index >= self.used {
+        return ref.null none;
+    };
+    item = builtin::array_get<ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>">(self.repr, self.index);
+    self.index = self.index + 1;
+    return ref.as_non_null(item);
+}
+
 fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entries"(self) {  // from ./sub/cross_module_treemap_variant_helper.wado
     let __local_1: ref Array<Tuple<String,Value>>;
     let result: ref Array<Tuple<String,Value>>;
@@ -445,8 +455,8 @@ fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entrie
         __local_9 = self.entries;
         break __inline_Array_TreeMapEntry_String_Value___IntoIterator__into_iter_3: "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b14: block {
-        l15: loop {
+    b15: block {
+        l16: loop {
             __pattern_temp_0 = "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next"(__iter_3);
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = value_copy "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>"(ref.as_non_null(__pattern_temp_0));
@@ -454,9 +464,9 @@ fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entrie
                     "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::append"(result, "tuple/[String, Value]" { 0: ref.as_non_null(entry.key), 1: ref.as_non_null(entry.value) });
                 };
             } else {
-                break b14;
+                break b15;
             };
-            continue l15;
+            continue l16;
         };
     };
     return result;
@@ -491,27 +501,17 @@ fn "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::g
     __for_0: block {
         i = 0;
         block {
-            l20: loop {
+            l21: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref "tuple/[String, Value]">(new_repr, i, builtin::array_get<ref "tuple/[String, Value]">(old_repr, i));
                 i = i + 1;
-                continue l20;
+                continue l21;
             };
         };
     };
     self.repr = ref.as_non_null(new_repr);
-}
-
-fn "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next"(self) {  // from ./sub/cross_module_treemap_variant_helper.wado
-    let item: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
-    if self.index >= self.used {
-        return ref.null none;
-    };
-    item = builtin::array_get<ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>">(self.repr, self.index);
-    self.index = self.index + 1;
-    return ref.as_non_null(item);
 }
 
 fn String::grow(self, min_capacity) {

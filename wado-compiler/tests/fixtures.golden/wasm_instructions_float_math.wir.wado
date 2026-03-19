@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -315,7 +315,7 @@ fn run() with Stdout {
         String::append(__local_30, String { repr: array.new_data<u8>("f64_abs(-3.5) = "), used: 16 });
         __local_31 = __inline_Formatter__new_2: block -> ref Formatter {
             __local_89 = __local_30;
-            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_89) };
+            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_89) };
         };
         __local_91 = __local_31;
         f64::fmt_into(abs_neg, __local_91);
@@ -326,7 +326,7 @@ fn run() with Stdout {
         String::append(__local_32, String { repr: array.new_data<u8>("f64_abs(3.5) = "), used: 15 });
         __local_33 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_93 = __local_32;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_93) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_93) };
         };
         __local_95 = __local_33;
         f64::fmt_into(abs_pos, __local_95);
@@ -338,7 +338,7 @@ fn run() with Stdout {
         String::append(__local_34, String { repr: array.new_data<u8>("f32_abs(-2.5) = "), used: 16 });
         __local_35 = __inline_Formatter__new_8: block -> ref Formatter {
             __local_97 = __local_34;
-            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_97) };
+            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_97) };
         };
         __local_99 = __local_35;
         f32::fmt_into(abs_neg32, __local_99);
@@ -352,7 +352,7 @@ fn run() with Stdout {
         String::append(__local_36, String { repr: array.new_data<u8>("f64_ceil(2.3) = "), used: 16 });
         __local_37 = __inline_Formatter__new_11: block -> ref Formatter {
             __local_101 = __local_36;
-            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_101) };
+            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_101) };
         };
         __local_103 = __local_37;
         f64::fmt_into(ceil1, __local_103);
@@ -363,7 +363,7 @@ fn run() with Stdout {
         String::append(__local_38, String { repr: array.new_data<u8>("f64_ceil(-2.3) = "), used: 17 });
         __local_39 = __inline_Formatter__new_14: block -> ref Formatter {
             __local_105 = __local_38;
-            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_105) };
+            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_105) };
         };
         __local_107 = __local_39;
         f64::fmt_into(ceil2, __local_107);
@@ -374,7 +374,7 @@ fn run() with Stdout {
         String::append(__local_40, String { repr: array.new_data<u8>("f64_ceil(2.0) = "), used: 16 });
         __local_41 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_109 = __local_40;
-            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_109) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_109) };
         };
         __local_111 = __local_41;
         f64::fmt_into(ceil3, __local_111);
@@ -388,7 +388,7 @@ fn run() with Stdout {
         String::append(__local_42, String { repr: array.new_data<u8>("f64_floor(2.7) = "), used: 17 });
         __local_43 = __inline_Formatter__new_20: block -> ref Formatter {
             __local_113 = __local_42;
-            break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_113) };
+            break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_113) };
         };
         __local_115 = __local_43;
         f64::fmt_into(floor1, __local_115);
@@ -399,7 +399,7 @@ fn run() with Stdout {
         String::append(__local_44, String { repr: array.new_data<u8>("f64_floor(-2.7) = "), used: 18 });
         __local_45 = __inline_Formatter__new_23: block -> ref Formatter {
             __local_117 = __local_44;
-            break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_117) };
+            break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_117) };
         };
         __local_119 = __local_45;
         f64::fmt_into(floor2, __local_119);
@@ -410,7 +410,7 @@ fn run() with Stdout {
         String::append(__local_46, String { repr: array.new_data<u8>("f64_floor(2.0) = "), used: 17 });
         __local_47 = __inline_Formatter__new_26: block -> ref Formatter {
             __local_121 = __local_46;
-            break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_121) };
+            break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_121) };
         };
         __local_123 = __local_47;
         f64::fmt_into(floor3, __local_123);
@@ -423,7 +423,7 @@ fn run() with Stdout {
         String::append(__local_48, String { repr: array.new_data<u8>("f64_trunc(2.9) = "), used: 17 });
         __local_49 = __inline_Formatter__new_29: block -> ref Formatter {
             __local_125 = __local_48;
-            break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_125) };
+            break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_125) };
         };
         __local_127 = __local_49;
         f64::fmt_into(trunc1, __local_127);
@@ -434,7 +434,7 @@ fn run() with Stdout {
         String::append(__local_50, String { repr: array.new_data<u8>("f64_trunc(-2.9) = "), used: 18 });
         __local_51 = __inline_Formatter__new_32: block -> ref Formatter {
             __local_129 = __local_50;
-            break __inline_Formatter__new_32: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_129) };
+            break __inline_Formatter__new_32: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_129) };
         };
         __local_131 = __local_51;
         f64::fmt_into(trunc2, __local_131);
@@ -449,7 +449,7 @@ fn run() with Stdout {
         String::append(__local_52, String { repr: array.new_data<u8>("f64_nearest(2.5) = "), used: 19 });
         __local_53 = __inline_Formatter__new_35: block -> ref Formatter {
             __local_133 = __local_52;
-            break __inline_Formatter__new_35: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_133) };
+            break __inline_Formatter__new_35: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_133) };
         };
         __local_135 = __local_53;
         f64::fmt_into(near1, __local_135);
@@ -460,7 +460,7 @@ fn run() with Stdout {
         String::append(__local_54, String { repr: array.new_data<u8>("f64_nearest(3.5) = "), used: 19 });
         __local_55 = __inline_Formatter__new_38: block -> ref Formatter {
             __local_137 = __local_54;
-            break __inline_Formatter__new_38: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_137) };
+            break __inline_Formatter__new_38: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_137) };
         };
         __local_139 = __local_55;
         f64::fmt_into(near2, __local_139);
@@ -471,7 +471,7 @@ fn run() with Stdout {
         String::append(__local_56, String { repr: array.new_data<u8>("f64_nearest(2.3) = "), used: 19 });
         __local_57 = __inline_Formatter__new_41: block -> ref Formatter {
             __local_141 = __local_56;
-            break __inline_Formatter__new_41: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_141) };
+            break __inline_Formatter__new_41: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_141) };
         };
         __local_143 = __local_57;
         f64::fmt_into(near3, __local_143);
@@ -482,7 +482,7 @@ fn run() with Stdout {
         String::append(__local_58, String { repr: array.new_data<u8>("f64_nearest(2.7) = "), used: 19 });
         __local_59 = __inline_Formatter__new_44: block -> ref Formatter {
             __local_145 = __local_58;
-            break __inline_Formatter__new_44: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_145) };
+            break __inline_Formatter__new_44: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_145) };
         };
         __local_147 = __local_59;
         f64::fmt_into(near4, __local_147);
@@ -496,7 +496,7 @@ fn run() with Stdout {
         String::append(__local_60, String { repr: array.new_data<u8>("f64_sqrt(4.0) = "), used: 16 });
         __local_61 = __inline_Formatter__new_47: block -> ref Formatter {
             __local_149 = __local_60;
-            break __inline_Formatter__new_47: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_149) };
+            break __inline_Formatter__new_47: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_149) };
         };
         __local_151 = __local_61;
         f64::fmt_into(sqrt1, __local_151);
@@ -507,7 +507,7 @@ fn run() with Stdout {
         String::append(__local_62, String { repr: array.new_data<u8>("f64_sqrt(9.0) = "), used: 16 });
         __local_63 = __inline_Formatter__new_50: block -> ref Formatter {
             __local_153 = __local_62;
-            break __inline_Formatter__new_50: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_153) };
+            break __inline_Formatter__new_50: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_153) };
         };
         __local_155 = __local_63;
         f64::fmt_into(sqrt2, __local_155);
@@ -529,7 +529,7 @@ fn run() with Stdout {
         String::append(__local_64, String { repr: array.new_data<u8>("f64_min(3.0, 5.0) = "), used: 20 });
         __local_65 = __inline_Formatter__new_53: block -> ref Formatter {
             __local_157 = __local_64;
-            break __inline_Formatter__new_53: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_157) };
+            break __inline_Formatter__new_53: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_157) };
         };
         __local_159 = __local_65;
         f64::fmt_into(min1, __local_159);
@@ -540,7 +540,7 @@ fn run() with Stdout {
         String::append(__local_66, String { repr: array.new_data<u8>("f64_min(-1.0, 1.0) = "), used: 21 });
         __local_67 = __inline_Formatter__new_56: block -> ref Formatter {
             __local_161 = __local_66;
-            break __inline_Formatter__new_56: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_161) };
+            break __inline_Formatter__new_56: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_161) };
         };
         __local_163 = __local_67;
         f64::fmt_into(min2, __local_163);
@@ -551,7 +551,7 @@ fn run() with Stdout {
         String::append(__local_68, String { repr: array.new_data<u8>("f64_max(3.0, 5.0) = "), used: 20 });
         __local_69 = __inline_Formatter__new_59: block -> ref Formatter {
             __local_165 = __local_68;
-            break __inline_Formatter__new_59: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_165) };
+            break __inline_Formatter__new_59: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_165) };
         };
         __local_167 = __local_69;
         f64::fmt_into(max1, __local_167);
@@ -562,7 +562,7 @@ fn run() with Stdout {
         String::append(__local_70, String { repr: array.new_data<u8>("f64_max(-1.0, 1.0) = "), used: 21 });
         __local_71 = __inline_Formatter__new_62: block -> ref Formatter {
             __local_169 = __local_70;
-            break __inline_Formatter__new_62: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_169) };
+            break __inline_Formatter__new_62: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_169) };
         };
         __local_171 = __local_71;
         f64::fmt_into(max2, __local_171);
@@ -576,7 +576,7 @@ fn run() with Stdout {
         String::append(__local_72, String { repr: array.new_data<u8>("f64_copysign(3.0, -1.0) = "), used: 26 });
         __local_73 = __inline_Formatter__new_65: block -> ref Formatter {
             __local_173 = __local_72;
-            break __inline_Formatter__new_65: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_173) };
+            break __inline_Formatter__new_65: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_173) };
         };
         __local_175 = __local_73;
         f64::fmt_into(copy1, __local_175);
@@ -587,7 +587,7 @@ fn run() with Stdout {
         String::append(__local_74, String { repr: array.new_data<u8>("f64_copysign(-3.0, 1.0) = "), used: 26 });
         __local_75 = __inline_Formatter__new_68: block -> ref Formatter {
             __local_177 = __local_74;
-            break __inline_Formatter__new_68: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_177) };
+            break __inline_Formatter__new_68: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_177) };
         };
         __local_179 = __local_75;
         f64::fmt_into(copy2, __local_179);
@@ -598,7 +598,7 @@ fn run() with Stdout {
         String::append(__local_76, String { repr: array.new_data<u8>("f64_copysign(5.0, 5.0) = "), used: 25 });
         __local_77 = __inline_Formatter__new_71: block -> ref Formatter {
             __local_181 = __local_76;
-            break __inline_Formatter__new_71: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_181) };
+            break __inline_Formatter__new_71: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_181) };
         };
         __local_183 = __local_77;
         f64::fmt_into(copy3, __local_183);
@@ -614,7 +614,7 @@ fn run() with Stdout {
         String::append(__local_78, String { repr: array.new_data<u8>("f32_ceil(2.3) = "), used: 16 });
         __local_79 = __inline_Formatter__new_74: block -> ref Formatter {
             __local_185 = __local_78;
-            break __inline_Formatter__new_74: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_185) };
+            break __inline_Formatter__new_74: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_185) };
         };
         __local_187 = __local_79;
         f32::fmt_into(f32_ceil, __local_187);
@@ -625,7 +625,7 @@ fn run() with Stdout {
         String::append(__local_80, String { repr: array.new_data<u8>("f32_floor(2.7) = "), used: 17 });
         __local_81 = __inline_Formatter__new_77: block -> ref Formatter {
             __local_189 = __local_80;
-            break __inline_Formatter__new_77: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_189) };
+            break __inline_Formatter__new_77: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_189) };
         };
         __local_191 = __local_81;
         f32::fmt_into(f32_floor, __local_191);
@@ -636,7 +636,7 @@ fn run() with Stdout {
         String::append(__local_82, String { repr: array.new_data<u8>("f32_sqrt(4.0) = "), used: 16 });
         __local_83 = __inline_Formatter__new_80: block -> ref Formatter {
             __local_193 = __local_82;
-            break __inline_Formatter__new_80: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_193) };
+            break __inline_Formatter__new_80: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_193) };
         };
         __local_195 = __local_83;
         f32::fmt_into(f32_sqrt, __local_195);
@@ -647,7 +647,7 @@ fn run() with Stdout {
         String::append(__local_84, String { repr: array.new_data<u8>("f32_min(3.0, 5.0) = "), used: 20 });
         __local_85 = __inline_Formatter__new_83: block -> ref Formatter {
             __local_197 = __local_84;
-            break __inline_Formatter__new_83: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_197) };
+            break __inline_Formatter__new_83: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_197) };
         };
         __local_199 = __local_85;
         f32::fmt_into(f32_min, __local_199);
@@ -658,7 +658,7 @@ fn run() with Stdout {
         String::append(__local_86, String { repr: array.new_data<u8>("f32_max(3.0, 5.0) = "), used: 20 });
         __local_87 = __inline_Formatter__new_86: block -> ref Formatter {
             __local_201 = __local_86;
-            break __inline_Formatter__new_86: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_201) };
+            break __inline_Formatter__new_86: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_201) };
         };
         __local_203 = __local_87;
         f32::fmt_into(f32_max, __local_203);

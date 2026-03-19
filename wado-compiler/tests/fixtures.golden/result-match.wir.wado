@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -148,7 +148,7 @@ fn run() with Stdout {
         String::append(__local_6, String { repr: array.new_data<u8>("match Ok: "), used: 10 });
         __local_7 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_12 = __local_6;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
         };
         __local_14 = __local_7;
         i32::fmt_decimal(x, __local_14);
@@ -173,7 +173,7 @@ fn run() with Stdout {
         String::append(__local_8, String { repr: array.new_data<u8>("match Err: "), used: 11 });
         __local_9 = __inline_Formatter__new_7: block -> ref Formatter {
             __local_18 = __local_8;
-            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_18) };
+            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
         };
         __local_20 = __local_9;
         i32::fmt_decimal(y, __local_20);

@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -497,7 +497,7 @@ fn array_specialized_bool() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     Formatter::pad(__local_14, if x -> ref String {
@@ -542,7 +542,7 @@ fn array_specialized_char() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     char^Display::fmt(x, __local_5);
                     break __tmpl: __local_4;
@@ -583,7 +583,7 @@ fn array_specialized_f32() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     f32::fmt_into(x, __local_14);
@@ -625,7 +625,7 @@ fn array_specialized_f64() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     f64::fmt_into(x, __local_14);
@@ -667,7 +667,7 @@ fn array_specialized_i16() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     i32::fmt_decimal(x, __local_14);
@@ -709,7 +709,7 @@ fn array_specialized_i32() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     i32::fmt_decimal(x, __local_14);
@@ -751,7 +751,7 @@ fn array_specialized_i64() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     i64::fmt_decimal(x, __local_14);
@@ -793,7 +793,7 @@ fn array_specialized_i8() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     i32::fmt_decimal(x, __local_14);
@@ -864,7 +864,7 @@ fn array_specialized_tuple() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(50), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     Formatter::pad(__local_14, if x.0 -> ref String {
@@ -875,7 +875,7 @@ fn array_specialized_tuple() with Stdout {
                     String::append_char(__local_4, 32);
                     __local_5 = __inline_Formatter__new_8: block -> ref Formatter {
                         __local_17 = __local_4;
-                        break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_17) };
+                        break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
                     };
                     __local_19 = __local_5;
                     i32::fmt_decimal(x.1, __local_19);
@@ -919,7 +919,7 @@ fn array_specialized_u16() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     i32::fmt_decimal(x, __local_14);
@@ -961,7 +961,7 @@ fn array_specialized_u32() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     u32::fmt_decimal(x, __local_14);
@@ -1003,7 +1003,7 @@ fn array_specialized_u64() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     u64::fmt_decimal(x, __local_14);
@@ -1045,7 +1045,7 @@ fn array_specialized_u8() with Stdout {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
                         __local_12 = __local_4;
-                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
                     i32::fmt_decimal(x, __local_14);

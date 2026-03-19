@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -115,7 +115,7 @@ fn run() with Stdout {
     buf = String { repr: builtin::array_new<u8>(64), used: 0 };
     f = __inline_Formatter__new_3: block -> ref Formatter {
         __local_6 = buf;
-        break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_6) };
+        break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
     };
     Point^Display::fmt(p, f);
     "core:cli/println"(buf);
@@ -123,7 +123,7 @@ fn run() with Stdout {
     buf = String { repr: builtin::array_new<u8>(64), used: 0 };
     f = __inline_Formatter__new_5: block -> ref Formatter {
         __local_8 = buf;
-        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+        break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
     };
     Point^Display::fmt(o, f);
     "core:cli/println"(buf);
@@ -413,7 +413,7 @@ fn Point^Display::fmt(self, f) {
         __local_7 = String { repr: builtin::array_new<u8>(12), used: 0 };
         __local_8 = __inline_Formatter__new_4: block -> ref Formatter {
             __local_10 = __local_7;
-            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
         };
         __local_12 = __local_8;
         i32::fmt_decimal(self.x, __local_12);
@@ -426,7 +426,7 @@ fn Point^Display::fmt(self, f) {
         __local_18 = String { repr: builtin::array_new<u8>(12), used: 0 };
         __local_19 = __inline_Formatter__new_10: block -> ref Formatter {
             __local_21 = __local_18;
-            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
+            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_21) };
         };
         __local_23 = __local_19;
         i32::fmt_decimal(self.y, __local_23);

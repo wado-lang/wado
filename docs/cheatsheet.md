@@ -197,10 +197,18 @@ let hex = `{255:x}`;                     // "ff"
 let hex_alt = `{255:#x}`;               // "0xff" (alternate flag adds 0x prefix)
 
 // Inspect — debug output for any type (see docs/wep-2026-02-21-inspect-debug-output.md)
-// Inspect preserves .0 for floats to distinguish from integers
 println(`{point:?}`);                    // "Point { x: 10, y: 20 }"
-println(`{5.0:?}`);                      // "5.0" (inspect keeps .0)
+println(`{point:#?}`);                   // pretty-print with indentation (see below)
 println(`{point}`);                      // falls back to inspect when no Display impl
+
+// Pretty-print (:#?) — multi-line indented output for composite types
+let arr: Array<i32> = [1, 2, 3];
+println(`{arr:#?}`);
+// [
+//   1,
+//   2,
+//   3,
+// ]
 
 // String methods
 let n = s.len();                         // byte length

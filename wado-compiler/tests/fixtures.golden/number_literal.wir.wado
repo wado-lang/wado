@@ -18,10 +18,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -220,7 +220,7 @@ fn number_literal_coercion() with Stdout {
         String::append_char(__local_11, 61);
         __local_12 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_20 = __local_11;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_20) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
         };
         __local_22 = __local_12;
         f64::fmt_into(1, __local_22);
@@ -230,7 +230,7 @@ fn number_literal_coercion() with Stdout {
         String::append_char(__local_11, 61);
         __local_12 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_23 = __local_11;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_23) };
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_23) };
         };
         __local_25 = __local_12;
         f64::fmt_into(42, __local_25);
@@ -240,7 +240,7 @@ fn number_literal_coercion() with Stdout {
         String::append_char(__local_11, 61);
         __local_12 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_26 = __local_11;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_26) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_26) };
         };
         __local_28 = __local_12;
         f32::fmt_into(100_f32, __local_28);
@@ -252,7 +252,7 @@ fn number_literal_coercion() with Stdout {
         String::append_char(__local_13, 61);
         __local_14 = __inline_Formatter__new_8: block -> ref Formatter {
             __local_30 = __local_13;
-            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_30) };
+            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_30) };
         };
         __local_32 = __local_14;
         i32::fmt_decimal(100, __local_32);
@@ -262,7 +262,7 @@ fn number_literal_coercion() with Stdout {
         String::append_char(__local_13, 61);
         __local_14 = __inline_Formatter__new_11: block -> ref Formatter {
             __local_35 = __local_13;
-            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_35) };
+            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_35) };
         };
         __local_37 = __local_14;
         i64::fmt_decimal(10000000000_i64, __local_37);
@@ -272,7 +272,7 @@ fn number_literal_coercion() with Stdout {
         String::append_char(__local_13, 61);
         __local_14 = __inline_Formatter__new_14: block -> ref Formatter {
             __local_40 = __local_13;
-            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_40) };
+            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_40) };
         };
         __local_42 = __local_14;
         i32::fmt_decimal(5000, __local_42);
@@ -284,7 +284,7 @@ fn number_literal_coercion() with Stdout {
         String::append_char(__local_15, 61);
         __local_16 = __inline_Formatter__new_18: block -> ref Formatter {
             __local_46 = __local_15;
-            break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_46) };
+            break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_46) };
         };
         __local_48 = __local_16;
         f64::fmt_into(100, __local_48);
@@ -294,7 +294,7 @@ fn number_literal_coercion() with Stdout {
         String::append_char(__local_15, 61);
         __local_16 = __inline_Formatter__new_20: block -> ref Formatter {
             __local_49 = __local_15;
-            break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_49) };
+            break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_49) };
         };
         __local_51 = __local_16;
         f64::fmt_into(602200000000000000000000, __local_51);
@@ -306,7 +306,7 @@ fn number_literal_coercion() with Stdout {
         String::append_char(__local_17, 61);
         __local_18 = __inline_Formatter__new_23: block -> ref Formatter {
             __local_53 = __local_17;
-            break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_53) };
+            break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_53) };
         };
         __local_55 = __local_18;
         f64::fmt_into(255, __local_55);
@@ -316,7 +316,7 @@ fn number_literal_coercion() with Stdout {
         String::append_char(__local_17, 61);
         __local_18 = __inline_Formatter__new_25: block -> ref Formatter {
             __local_56 = __local_17;
-            break __inline_Formatter__new_25: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_56) };
+            break __inline_Formatter__new_25: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_56) };
         };
         __local_58 = __local_18;
         f64::fmt_into(10, __local_58);
@@ -326,7 +326,7 @@ fn number_literal_coercion() with Stdout {
         String::append_char(__local_17, 61);
         __local_18 = __inline_Formatter__new_27: block -> ref Formatter {
             __local_59 = __local_17;
-            break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_59) };
+            break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_59) };
         };
         __local_61 = __local_18;
         f64::fmt_into(63, __local_61);
@@ -371,7 +371,7 @@ fn number_literal_coercion_builtin() with Stdout {
             String::append_char(__local_6, 58);
             __local_7 = __inline_Formatter__new_3: block -> ref Formatter {
                 __local_13 = __local_6;
-                break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+                break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
             };
             __local_15 = __local_7;
             i32::fmt_decimal(37, __local_15);
@@ -404,7 +404,7 @@ condition: v.extract_lane(0) as f64 > 1.0
             String::append_char(__local_8, 58);
             __local_9 = __inline_Formatter__new_9: block -> ref Formatter {
                 __local_21 = __local_8;
-                break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
+                break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_21) };
             };
             __local_23 = __local_9;
             i32::fmt_decimal(41, __local_23);

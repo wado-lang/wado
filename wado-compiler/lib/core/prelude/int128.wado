@@ -204,7 +204,7 @@ impl u128 {
         }
     }
 
-    fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool) {
+    fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool, prefix: String) {
         let bits_per_digit = if base == 2 {
             1;
         } else if base == 8 {
@@ -213,20 +213,6 @@ impl u128 {
             4;
         };
         let mask: u64 = (base - 1) as u64;
-
-        let prefix = if f.alternate {
-            if base == 2 {
-                "0b";
-            } else if base == 8 {
-                "0o";
-            } else if upper {
-                "0X";
-            } else {
-                "0x";
-            }
-        } else {
-            "";
-        };
 
         // Count digits
         let is_zero = self.low == 0 && self.high == 0;
@@ -305,27 +291,52 @@ impl Inspect for u128 {
     }
 }
 
+impl InspectAlt for u128 {
+    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+}
+
 impl Binary for u128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 2, false);
+        self.fmt_base(f, 2, false, "");
     }
 }
 
 impl Octal for u128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 8, false);
+        self.fmt_base(f, 8, false, "");
     }
 }
 
 impl LowerHex for u128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, false);
+        self.fmt_base(f, 16, false, "");
     }
 }
 
 impl UpperHex for u128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, true);
+        self.fmt_base(f, 16, true, "");
+    }
+}
+
+impl BinaryAlt for u128 {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        self.fmt_base(f, 2, false, "0b");
+    }
+}
+impl OctalAlt for u128 {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        self.fmt_base(f, 8, false, "0o");
+    }
+}
+impl LowerHexAlt for u128 {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        self.fmt_base(f, 16, false, "0x");
+    }
+}
+impl UpperHexAlt for u128 {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        self.fmt_base(f, 16, true, "0X");
     }
 }
 
@@ -759,7 +770,7 @@ impl i128 {
         }
     }
 
-    fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool) {
+    fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool, prefix: String) {
         let is_neg = self.is_negative();
         let abs_val = self.abs_u128();
         let bits_per_digit = if base == 2 {
@@ -770,20 +781,6 @@ impl i128 {
             4;
         };
         let mask: u64 = (base - 1) as u64;
-
-        let prefix = if f.alternate {
-            if base == 2 {
-                "0b";
-            } else if base == 8 {
-                "0o";
-            } else if upper {
-                "0X";
-            } else {
-                "0x";
-            }
-        } else {
-            "";
-        };
 
         let is_zero = abs_val == 0;
         let digit_count = if is_zero {
@@ -857,27 +854,52 @@ impl Inspect for i128 {
     }
 }
 
+impl InspectAlt for i128 {
+    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+}
+
 impl Binary for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 2, false);
+        self.fmt_base(f, 2, false, "");
     }
 }
 
 impl Octal for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 8, false);
+        self.fmt_base(f, 8, false, "");
     }
 }
 
 impl LowerHex for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, false);
+        self.fmt_base(f, 16, false, "");
     }
 }
 
 impl UpperHex for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, true);
+        self.fmt_base(f, 16, true, "");
+    }
+}
+
+impl BinaryAlt for i128 {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        self.fmt_base(f, 2, false, "0b");
+    }
+}
+impl OctalAlt for i128 {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        self.fmt_base(f, 8, false, "0o");
+    }
+}
+impl LowerHexAlt for i128 {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        self.fmt_base(f, 16, false, "0x");
+    }
+}
+impl UpperHexAlt for i128 {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        self.fmt_base(f, 16, true, "0X");
     }
 }
 

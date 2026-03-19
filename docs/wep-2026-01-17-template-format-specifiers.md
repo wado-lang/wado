@@ -50,16 +50,17 @@ Where `spec` follows Rust's format specification mini-language.
 
 ### Supported Format Types
 
-| Specifier | Trait         | Description           | Example              |
-| --------- | ------------- | --------------------- | -------------------- |
-| (none)    | Display       | Default display       | `{x}` → `"42"`       |
-| `?`       | Debug/Inspect | Debug representation  | `{x:?}` → `"42"`     |
-| `b`       | Binary        | Binary integers       | `{x:b}` → `"101010"` |
-| `o`       | Octal         | Octal integers        | `{x:o}` → `"52"`     |
-| `x`       | LowerHex      | Lowercase hex         | `{x:x}` → `"2a"`     |
-| `X`       | UpperHex      | Uppercase hex         | `{x:X}` → `"2A"`     |
-| `e`       | LowerExp      | Lowercase exponential | `{x:e}` → `"4.2e1"`  |
-| `E`       | UpperExp      | Uppercase exponential | `{x:E}` → `"4.2E1"`  |
+| Specifier | Trait      | Description           | Example              |
+| --------- | ---------- | --------------------- | -------------------- |
+| (none)    | Display    | Default display       | `{x}` → `"42"`       |
+| `?`       | Inspect    | Debug representation  | `{x:?}` → `"42"`     |
+| `#?`      | InspectAlt | Pretty-print debug    | `{x:#?}` (indented)  |
+| `b`       | Binary     | Binary integers       | `{x:b}` → `"101010"` |
+| `o`       | Octal      | Octal integers        | `{x:o}` → `"52"`     |
+| `x`       | LowerHex   | Lowercase hex         | `{x:x}` → `"2a"`     |
+| `X`       | UpperHex   | Uppercase hex         | `{x:X}` → `"2A"`     |
+| `e`       | LowerExp   | Lowercase exponential | `{x:e}` → `"4.2e1"`  |
+| `E`       | UpperExp   | Uppercase exponential | `{x:E}` → `"4.2E1"`  |
 
 **Notes**:
 
@@ -196,7 +197,7 @@ Resolution order for `{expr:spec}`:
 2. **Predictable output**: No surprise switches to exponential notation
 3. **Explicit intent**: Developers explicitly choose the format they want
 4. **Type safety**: Format specifiers that don't apply to a type cause compile errors
-5. **Future-proof**: Can add more Rust-compatible specifiers (e.g., `{:#?}` for pretty-print) later
+5. **Extensible**: Supports `{:#?}` for pretty-print and other Rust-compatible specifiers
 6. **Language coherence**: Excluding `:p` aligns with Wado's lack of pointer types
 
 ### Negative
@@ -208,12 +209,15 @@ Resolution order for `{expr:spec}`:
 3. **Implementation complexity**: Requires implementing all Rust format traits
    - **Mitigation**: Can implement incrementally, starting with most common specifiers
 
+### Implemented Extensions
+
+1. **Pretty-print**: `{:#?}` for indented multi-line debug output via `InspectAlt` trait
+
 ### Future Extensions
 
 Following Rust's ecosystem, we can add:
 
-1. **Pretty-print**: `{:#?}` for indented multi-line debug output
-2. **Dynamic width and precision**: Allow runtime values using nested `{}` syntax
+1. **Dynamic width and precision**: Allow runtime values using nested `{}` syntax
    - Syntax: `{value:{width}.{precision}}` (Python-style)
    - Rationale: Python's nested `{}` approach is more consistent with Wado's "arbitrary expressions" philosophy than Rust's `$` syntax, which requires argument lists. Variables in the current scope can be referenced directly.
    - Example: `let w = 8; let p = 2; println(\`{pi:{w}.{p}}\`);`→`" 3.14"`

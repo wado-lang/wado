@@ -232,6 +232,45 @@ pub trait UpperExp {
     /// Formats the value in uppercase exponential notation and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
 }
+
+/// Trait for alternate (pretty-print) inspect formatting.
+/// Used with the `{x:#?}` format specifier.
+/// Produces multi-line indented output for composite types.
+/// Primitive types delegate to `Inspect::inspect`.
+pub trait InspectAlt {
+    fn inspect_alt(&self, f: &mut Formatter);
+}
+
+/// Trait for alternate display formatting.
+/// Used with the `{x:#}` format specifier.
+/// If not explicitly implemented, auto-generated to delegate to `InspectAlt::inspect_alt`.
+pub trait DisplayAlt {
+    fn fmt_alt(&self, f: &mut Formatter);
+}
+
+/// Trait for alternate binary formatting (with `0b` prefix).
+/// Used with the `{x:#b}` format specifier.
+pub trait BinaryAlt {
+    fn fmt_alt(&self, f: &mut Formatter);
+}
+
+/// Trait for alternate octal formatting (with `0o` prefix).
+/// Used with the `{x:#o}` format specifier.
+pub trait OctalAlt {
+    fn fmt_alt(&self, f: &mut Formatter);
+}
+
+/// Trait for alternate lowercase hex formatting (with `0x` prefix).
+/// Used with the `{x:#x}` format specifier.
+pub trait LowerHexAlt {
+    fn fmt_alt(&self, f: &mut Formatter);
+}
+
+/// Trait for alternate uppercase hex formatting (with `0X` prefix).
+/// Used with the `{x:#X}` format specifier.
+pub trait UpperHexAlt {
+    fn fmt_alt(&self, f: &mut Formatter);
+}
 /// Trait for callable types (closures and function references).
 /// This trait enables closure monomorphization - functions with `fn(A) -> R` parameters
 /// are desugared to generic functions with `Fn<[A], R>` bounds.

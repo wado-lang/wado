@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -264,7 +264,7 @@ fn nested_array_3deep_iterate_test() with Stdout {
         __local_14 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_15 = __inline_Formatter__new_30: block -> ref Formatter {
             __local_64 = __local_14;
-            break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_64) };
+            break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_64) };
         };
         __local_66 = __local_15;
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_34: block -> i32 {
@@ -294,7 +294,7 @@ fn nested_array_3deep_iterate_test() with Stdout {
         __local_16 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_17 = __inline_Formatter__new_37: block -> ref Formatter {
             __local_76 = __local_16;
-            break __inline_Formatter__new_37: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_76) };
+            break __inline_Formatter__new_37: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_76) };
         };
         __local_78 = __local_17;
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_41: block -> i32 {
@@ -364,7 +364,7 @@ fn nested_array_3deep_iterate_test() with Stdout {
         __local_18 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_19 = __inline_Formatter__new_47: block -> ref Formatter {
             __local_91 = __local_18;
-            break __inline_Formatter__new_47: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_91) };
+            break __inline_Formatter__new_47: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_91) };
         };
         __local_93 = __local_19;
         i32::fmt_decimal(total, __local_93);
@@ -414,7 +414,7 @@ fn nested_array_iterate_test() with Stdout {
         __local_10 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_11 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_40 = __local_10;
-            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_40) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_40) };
         };
         __local_42 = __local_11;
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_19: block -> i32 {
@@ -445,7 +445,7 @@ fn nested_array_iterate_test() with Stdout {
                                 __local_12 = String { repr: builtin::array_new<u8>(17), used: 0 };
                                 __local_13 = __inline_Formatter__new_24: block -> ref Formatter {
                                     __local_50 = __local_12;
-                                    break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_50) };
+                                    break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_50) };
                                 };
                                 __local_52 = __local_13;
                                 i32::fmt_decimal(val, __local_52);
@@ -506,7 +506,7 @@ fn nested_array_method_test() with Stdout {
         __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_6 = __inline_Formatter__new_18: block -> ref Formatter {
             __local_35 = __local_5;
-            break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_35) };
+            break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_35) };
         };
         __local_37 = __local_6;
         i32::fmt_decimal(row0.used, __local_37);
@@ -516,7 +516,7 @@ fn nested_array_method_test() with Stdout {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_8 = __inline_Formatter__new_23: block -> ref Formatter {
             __local_42 = __local_7;
-            break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_42) };
+            break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_42) };
         };
         __local_44 = __local_8;
         i32::fmt_decimal(__inline_Array_i32___len_26: block -> i32 {
@@ -570,7 +570,7 @@ fn nested_array_mutate_test() with Stdout {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_8 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_35 = __local_7;
-            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_35) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_35) };
         };
         Array<i32>^Inspect::inspect(row, __local_8);
         break __tmpl: __local_7;
@@ -588,7 +588,7 @@ fn nested_array_mutate_test() with Stdout {
         __local_9 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_10 = __inline_Formatter__new_26: block -> ref Formatter {
             __local_49 = __local_9;
-            break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_49) };
+            break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_49) };
         };
         Array<Array<i32>>^Inspect::inspect(matrix, __local_10);
         break __tmpl: __local_9;
@@ -645,7 +645,7 @@ fn nested_array_option_access_test() with Stdout {
             String::append_char(__local_10, 32);
             __local_11 = __inline_Formatter__new_8: block -> ref Formatter {
                 __local_29 = __local_10;
-                break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_29) };
+                break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_29) };
             };
             __local_31 = __local_11;
             i32::fmt_decimal(x, __local_31);
@@ -681,7 +681,7 @@ fn nested_array_option_access_test() with Stdout {
                         String::append_char(__local_12, 40);
                         __local_13 = __inline_Formatter__new_14: block -> ref Formatter {
                             __local_38 = __local_12;
-                            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_38) };
+                            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_38) };
                         };
                         __local_40 = __local_13;
                         i32::fmt_decimal(__local_8, __local_40);
@@ -1086,14 +1086,14 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Array<i32>>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
             l66: loop {
                 if (i < _licm_used_12) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
@@ -1118,14 +1118,14 @@ fn Array<i32>^Inspect::inspect(self, f) {
     let _licm_used_16: i32;
     let _licm_repr_17: ref array<i32>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_16 = self.used;
         _licm_repr_17 = self.repr;
         block {
             l70: loop {
                 if (i < _licm_used_16) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };

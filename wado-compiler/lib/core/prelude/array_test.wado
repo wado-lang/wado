@@ -248,6 +248,52 @@ test "sort two elements" {
     assert two[1] == 2;
 }
 
+struct ArrayTestPoint {
+    x: i32,
+    y: i32,
+}
+
+test "inspect empty array" {
+    let arr: Array<i32> = [];
+    assert `{arr:?}` == "[]";
+}
+
+test "inspect array" {
+    let arr: Array<i32> = [1, 2, 3];
+    assert `{arr:?}` == "[1, 2, 3]";
+}
+
+test "pretty-print empty array" {
+    let arr: Array<i32> = [];
+    assert `{arr:#?}` == "[]";
+}
+
+test "pretty-print array" {
+    let arr: Array<i32> = [1, 2, 3];
+    assert `{arr:#?}` == "[
+  1,
+  2,
+  3,
+]";
+}
+
+test "pretty-print nested structs" {
+    let points: Array<ArrayTestPoint> = [
+        ArrayTestPoint { x: 1, y: 2 },
+        ArrayTestPoint { x: 3, y: 4 },
+    ] as Array<ArrayTestPoint>;
+    assert `{points:#?}` == "[
+  ArrayTestPoint {
+    x: 1,
+    y: 2,
+  },
+  ArrayTestPoint {
+    x: 3,
+    y: 4,
+  },
+]";
+}
+
 test "sort stability" {
     // Sort by absolute value; -1 and 1 should keep relative order
     let mut g: Array<i32> = [3, -1, -3, 2, -2, 1];

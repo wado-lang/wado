@@ -17,10 +17,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -140,19 +140,25 @@ fn run() with Stdout {
     let __local_49: ref String;
     let __local_51: ref String;
     let __local_53: ref String;
-    let __local_56: ref String;
+    let __local_55: ref String;
+    let __local_57: ref String;
     let __local_59: ref String;
-    let __local_62: ref String;
+    let __local_61: ref String;
+    let __local_63: ref String;
     let __local_65: ref String;
-    let __local_68: ref String;
-    let __local_70: ref String;
-    let __local_72: ref String;
+    let __local_67: ref String;
+    let __local_69: ref String;
+    let __local_71: ref String;
+    let __local_73: ref String;
     let __local_75: ref String;
+    let __local_77: ref String;
+    let __local_79: ref String;
+    let __local_81: ref String;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_8 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_9 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_35 = __local_8;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_35) };
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_35) };
         };
         __local_37 = String { repr: array.new_data<u8>("|i32| -> i32"), used: 12 };
         String::append(__local_9.buf, __local_37);
@@ -162,7 +168,7 @@ fn run() with Stdout {
         __local_10 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_11 = __inline_Formatter__new_6: block -> ref Formatter {
             __local_39 = __local_10;
-            break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_39) };
+            break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_39) };
         };
         __local_41 = String { repr: array.new_data<u8>("|i32, i32| -> i32"), used: 17 };
         String::append(__local_11.buf, __local_41);
@@ -172,7 +178,7 @@ fn run() with Stdout {
         __local_12 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_13 = __inline_Formatter__new_9: block -> ref Formatter {
             __local_43 = __local_12;
-            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_43) };
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_43) };
         };
         __local_45 = String { repr: array.new_data<u8>("|i32| -> i32"), used: 12 };
         String::append(__local_13.buf, __local_45);
@@ -182,7 +188,7 @@ fn run() with Stdout {
         __local_15 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_16 = __inline_Formatter__new_12: block -> ref Formatter {
             __local_47 = __local_15;
-            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_47) };
+            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_47) };
         };
         __local_49 = String { repr: array.new_data<u8>("|String| -> String"), used: 18 };
         String::append(__local_16.buf, __local_49);
@@ -192,7 +198,7 @@ fn run() with Stdout {
         __local_17 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_18 = __inline_Formatter__new_15: block -> ref Formatter {
             __local_51 = __local_17;
-            break __inline_Formatter__new_15: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_51) };
+            break __inline_Formatter__new_15: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_51) };
         };
         __local_53 = String { repr: array.new_data<u8>("|| -> i32"), used: 9 };
         String::append(__local_18.buf, __local_53);
@@ -200,54 +206,72 @@ fn run() with Stdout {
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_19 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_19) };
-        __local_56 = String { repr: array.new_data<u8>("|x: i32| x + 1"), used: 14 };
-        String::append(__local_20.buf, __local_56);
+        __local_20 = __inline_Formatter__new_18: block -> ref Formatter {
+            __local_55 = __local_19;
+            break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_55) };
+        };
+        __local_57 = String { repr: array.new_data<u8>("|x: i32| x + 1"), used: 14 };
+        String::append(__local_20.buf, __local_57);
         break __tmpl: __local_19;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_21 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
-        __local_59 = String { repr: array.new_data<u8>("|a: i32, b: i32| a + b"), used: 22 };
-        String::append(__local_22.buf, __local_59);
+        __local_22 = __inline_Formatter__new_21: block -> ref Formatter {
+            __local_59 = __local_21;
+            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_59) };
+        };
+        __local_61 = String { repr: array.new_data<u8>("|a: i32, b: i32| a + b"), used: 22 };
+        String::append(__local_22.buf, __local_61);
         break __tmpl: __local_21;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_23 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_24 = Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_23) };
-        __local_62 = String { repr: array.new_data<u8>("|x: i32| { let doubled = x * 2; return doubled; }"), used: 49 };
-        String::append(__local_24.buf, __local_62);
+        __local_24 = __inline_Formatter__new_24: block -> ref Formatter {
+            __local_63 = __local_23;
+            break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_63) };
+        };
+        __local_65 = String { repr: array.new_data<u8>("|x: i32| { let doubled = x * 2; return doubled; }"), used: 49 };
+        String::append(__local_24.buf, __local_65);
         break __tmpl: __local_23;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_25 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_26 = Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_25) };
-        __local_65 = String { repr: array.new_data<u8>("|name: String| `Hello, {name}!`"), used: 31 };
-        String::append(__local_26.buf, __local_65);
+        __local_26 = __inline_Formatter__new_27: block -> ref Formatter {
+            __local_67 = __local_25;
+            break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_67) };
+        };
+        __local_69 = String { repr: array.new_data<u8>("|name: String| `Hello, {name}!`"), used: 31 };
+        String::append(__local_26.buf, __local_69);
         break __tmpl: __local_25;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_27 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_28 = Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_27) };
-        __local_68 = String { repr: array.new_data<u8>("|| 42"), used: 5 };
-        String::append(__local_28.buf, __local_68);
+        __local_28 = __inline_Formatter__new_30: block -> ref Formatter {
+            __local_71 = __local_27;
+            break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_71) };
+        };
+        __local_73 = String { repr: array.new_data<u8>("|| 42"), used: 5 };
+        String::append(__local_28.buf, __local_73);
         break __tmpl: __local_27;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_29 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_30 = __inline_Formatter__new_28: block -> ref Formatter {
-            __local_70 = __local_29;
-            break __inline_Formatter__new_28: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_70) };
+        __local_30 = __inline_Formatter__new_33: block -> ref Formatter {
+            __local_75 = __local_29;
+            break __inline_Formatter__new_33: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_75) };
         };
-        __local_72 = String { repr: array.new_data<u8>("|| -> ()"), used: 8 };
-        String::append(__local_30.buf, __local_72);
+        __local_77 = String { repr: array.new_data<u8>("|| -> ()"), used: 8 };
+        String::append(__local_30.buf, __local_77);
         break __tmpl: __local_29;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_31 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_32 = Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_31) };
-        __local_75 = String { repr: array.new_data<u8>("|| -> ()"), used: 8 };
-        String::append(__local_32.buf, __local_75);
+        __local_32 = __inline_Formatter__new_36: block -> ref Formatter {
+            __local_79 = __local_31;
+            break __inline_Formatter__new_36: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_79) };
+        };
+        __local_81 = String { repr: array.new_data<u8>("|| -> ()"), used: 8 };
+        String::append(__local_32.buf, __local_81);
         break __tmpl: __local_31;
     });
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });

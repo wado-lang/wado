@@ -19,10 +19,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -169,7 +169,7 @@ fn inspect_option() with Stdout {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_7 = __local_2;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_7) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         };
         Option<i32>^Inspect::inspect(ref.as_non_null(some_val), __local_3);
         break __tmpl: __local_2;
@@ -179,7 +179,7 @@ fn inspect_option() with Stdout {
         __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_5 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_9 = __local_4;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_9) };
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
         };
         Option<i32>^Inspect::inspect(ref.as_non_null(none_val), __local_5);
         break __tmpl: __local_4;
@@ -204,7 +204,7 @@ fn inspect_option_deeply_nested() with Stdout {
         __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_10 = __local_3;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
         };
         Option<Option<Option<i32>>>^Inspect::inspect(ref.as_non_null(deep), __local_4);
         break __tmpl: __local_3;
@@ -214,7 +214,7 @@ fn inspect_option_deeply_nested() with Stdout {
         __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_12 = __local_5;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
         };
         Option<Option<Option<i32>>>^Inspect::inspect(ref.as_non_null(mid_null), __local_6);
         break __tmpl: __local_5;
@@ -224,7 +224,7 @@ fn inspect_option_deeply_nested() with Stdout {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_8 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_14 = __local_7;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
         };
         Option<Option<Option<i32>>>^Inspect::inspect(ref.as_non_null(outer_null), __local_8);
         break __tmpl: __local_7;
@@ -249,7 +249,7 @@ fn inspect_option_nested() with Stdout {
         __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_10 = __local_3;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
         };
         Option<Option<i32>>^Inspect::inspect(some_some, __local_4);
         break __tmpl: __local_3;
@@ -259,7 +259,7 @@ fn inspect_option_nested() with Stdout {
         __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_12 = __local_5;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
         };
         Option<Option<i32>>^Inspect::inspect(some_none, __local_6);
         break __tmpl: __local_5;
@@ -269,7 +269,7 @@ fn inspect_option_nested() with Stdout {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_8 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_14 = __local_7;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
         };
         Option<Option<i32>>^Inspect::inspect(none, __local_8);
         break __tmpl: __local_7;
@@ -294,7 +294,7 @@ fn inspect_option_of_string() with Stdout {
         __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_10 = __local_3;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
         };
         Option<Option<String>>^Inspect::inspect(ref.as_non_null(some_some), __local_4);
         break __tmpl: __local_3;
@@ -304,7 +304,7 @@ fn inspect_option_of_string() with Stdout {
         __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_12 = __local_5;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
         };
         Option<Option<String>>^Inspect::inspect(ref.as_non_null(some_none), __local_6);
         break __tmpl: __local_5;
@@ -314,7 +314,7 @@ fn inspect_option_of_string() with Stdout {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_8 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_14 = __local_7;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
         };
         Option<Option<String>>^Inspect::inspect(ref.as_non_null(none), __local_8);
         break __tmpl: __local_7;

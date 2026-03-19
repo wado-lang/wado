@@ -19,10 +19,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -249,7 +249,7 @@ fn run() with Stdout {
             String::append_char(__local_10, 58);
             __local_11 = __inline_Formatter__new_10: block -> ref Formatter {
                 __local_33 = __local_10;
-                break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
+                break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_33) };
             };
             __local_35 = __local_11;
             i32::fmt_decimal(12, __local_35);
@@ -259,7 +259,7 @@ condition: colors.len() == 3
             String::append(__local_10, String { repr: array.new_data<u8>("colors.len(): "), used: 14 });
             __local_11 = __inline_Formatter__new_13: block -> ref Formatter {
                 __local_38 = __local_10;
-                break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_38) };
+                break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_38) };
             };
             __local_40 = __local_11;
             i32::fmt_decimal(__v0_2, __local_40);
@@ -285,7 +285,7 @@ condition: colors.len() == 3
             String::append_char(__local_12, 58);
             __local_13 = __inline_Formatter__new_17: block -> ref Formatter {
                 __local_44 = __local_12;
-                break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_44) };
+                break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_44) };
             };
             __local_46 = __local_13;
             i32::fmt_decimal(14, __local_46);
@@ -295,7 +295,7 @@ condition: colors[\"red\"] == \"#FF0000\"
             String::append(__local_12, String { repr: array.new_data<u8>("colors[\"red\"]: "), used: 15 });
             __local_13 = __inline_Formatter__new_20: block -> ref Formatter {
                 __local_49 = __local_12;
-                break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_49) };
+                break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_49) };
             };
             String^Inspect::inspect(__v0_4, __local_13);
             String::append_char(__local_12, 10);
@@ -320,7 +320,7 @@ condition: colors[\"red\"] == \"#FF0000\"
             String::append_char(__local_14, 58);
             __local_15 = __inline_Formatter__new_22: block -> ref Formatter {
                 __local_51 = __local_14;
-                break __inline_Formatter__new_22: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_51) };
+                break __inline_Formatter__new_22: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_51) };
             };
             __local_53 = __local_15;
             i32::fmt_decimal(15, __local_53);
@@ -330,7 +330,7 @@ condition: colors[\"green\"] == \"#00FF00\"
             String::append(__local_14, String { repr: array.new_data<u8>("colors[\"green\"]: "), used: 17 });
             __local_15 = __inline_Formatter__new_25: block -> ref Formatter {
                 __local_56 = __local_14;
-                break __inline_Formatter__new_25: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_56) };
+                break __inline_Formatter__new_25: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_56) };
             };
             String^Inspect::inspect(__v0_6, __local_15);
             String::append_char(__local_14, 10);
@@ -355,7 +355,7 @@ condition: colors[\"green\"] == \"#00FF00\"
             String::append_char(__local_16, 58);
             __local_17 = __inline_Formatter__new_27: block -> ref Formatter {
                 __local_58 = __local_16;
-                break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_58) };
+                break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_58) };
             };
             __local_60 = __local_17;
             i32::fmt_decimal(16, __local_60);
@@ -365,7 +365,7 @@ condition: colors[\"blue\"] == \"#0000FF\"
             String::append(__local_16, String { repr: array.new_data<u8>("colors[\"blue\"]: "), used: 16 });
             __local_17 = __inline_Formatter__new_30: block -> ref Formatter {
                 __local_63 = __local_16;
-                break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_63) };
+                break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_63) };
             };
             String^Inspect::inspect(__v0_8, __local_17);
             String::append_char(__local_16, 10);
@@ -821,7 +821,7 @@ fn TreeMap<String,String>^IndexValue::index_value(self, key) {
             String::append(__local_3, String { repr: array.new_data<u8>("key not found: "), used: 15 });
             __local_4 = __inline_Formatter__new_1: block -> ref Formatter {
                 __local_6 = __local_3;
-                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_6) };
+                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             };
             String^Inspect::inspect(key, __local_4);
             break __tmpl: __local_3;

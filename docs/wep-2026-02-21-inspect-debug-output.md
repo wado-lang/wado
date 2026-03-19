@@ -21,7 +21,7 @@ The feature is called **inspect** throughout:
 
 - `builtin::inspect(expr, &mut f)` — the compiler marker in the resolver
 - `{expr:?}` — template string syntax (inspect specifier)
-- `{expr:#?}` — alternate (pretty-print) inspect (future extension)
+- `{expr:#?}` — alternate (pretty-print) inspect with indented multi-line output
 
 ### Output Format by Type
 
@@ -41,6 +41,9 @@ Inspect output follows Wado literal syntax where possible:
 | Struct (`#[hidden]` field) | Field omitted, `..` appended           | `Foo { visible: 1, .. }`      |
 | Tuple                      | `[elem, ...]`                          | `[1, "a", true]`              |
 | `Array<T>`                 | `[elem, ...]`                          | `[1, 2, 3]`                   |
+| `TreeMap<K, V>`            | `{key: value, ...}`                    | `{"a": 1, "b": 2}`            |
+| `TreeSet<T>`               | `{elem, ...}`                          | `{10, 20, 30}`                |
+| `Value` (json\_value)      | JSON-like representation               | `{"key": "val"}`              |
 | `Option::Some(v)`          | `Some(inspect(v))`                     | `Some(42)`                    |
 | `Option::None` / `null`    | `null`                                 | `null`                        |
 | Enum                       | `TypeName::CaseName`                   | `Color::Red`                  |
@@ -262,9 +265,23 @@ Both paths produce compile-time constants — no runtime overhead.
 
 ### Future Extensions
 
-1. **Pretty-print (`{:#?}`)**: Indented multi-line output with depth tracking via `Formatter` state
-2. **Depth limit**: Prevent infinite recursion on deeply nested or recursive types
-3. **Custom inspect**: Allow types to override inspect behavior via a trait (opt-in, not required)
+1. **Depth limit**: Prevent infinite recursion on deeply nested or recursive types
+
+### Implemented Extensions
+
+1. **Pretty-print (`{:#?}`)**: Indented multi-line output via `InspectAlt` trait and `Formatter` indent tracking. Uses `open_brace`/`close_brace`/`write_newline_indent` on the `Formatter`. Example:
+
+```wado
+let arr: Array<i32> = [1, 2, 3];
+println(`{arr:#?}`);
+// [
+//   1,
+//   2,
+//   3,
+// ]
+```
+
+2. **Custom inspect**: Types can override inspect behavior by implementing `Inspect` and/or `InspectAlt` traits. `TreeMap`, `TreeSet`, and `Value` (json\_value) provide custom implementations for cleaner output.
 
 ## Implementation Status
 
@@ -298,6 +315,10 @@ The core `synthesize_inspect` phase and the full pipeline integration are implem
 | Closure (`#` alternate)    | Done   | TIR unparsed source                                                      |
 | Display fallback           | Done   | `{expr}` falls back to inspect when no `Display` impl exists             |
 | Nested structs/arrays      | Done   | Recursive inspect for composite fields                                   |
+| `TreeMap<K, V>`            | Done   | Custom `Inspect`/`InspectAlt`: `{key: value, ...}` format                |
+| `TreeSet<T>`               | Done   | Custom `Inspect`/`InspectAlt`: `{elem, ...}` format                      |
+| `Value` (json\_value)      | Done   | Custom `Inspect`/`InspectAlt`: JSON-like format                          |
+| Pretty-print (`:#?`)       | Done   | `InspectAlt` trait with `Formatter` indent tracking                      |
 | `Array<Array<T>>`          | TODO   | Nested array codegen bug (tracked as TODO test)                          |
 
 ### Additional Fixes

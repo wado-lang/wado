@@ -7,7 +7,7 @@
 // See WEP: Format Traits (wep-2026-02-01-format-traits.md)
 
 
-use { Display, Inspect } from "core:prelude/traits.wado";
+use { Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
 /// Text alignment for padding.
 pub enum Alignment {
     /// Left-aligned: `{x:<5}` -> "42   "
@@ -32,14 +32,14 @@ pub struct Formatter {
     pub align: Alignment,
     /// Whether to always show `+` sign for positive numbers
     pub sign_plus: bool,
-    /// Whether to use alternate form (`#` flag: 0x, 0b, 0o prefixes)
-    pub alternate: bool,
     /// Whether to use zero-padding (`0` flag)
     pub zero_pad: bool,
     /// Minimum field width (-1 = no minimum)
     pub width: i32,
     /// Precision for floats (decimal places) or strings (max width) (-1 = default)
     pub precision: i32,
+    /// Current indentation level for pretty-printing (used by InspectAlt)
+    pub indent: i32,
     /// Reference to the output buffer
     pub buf: &mut String,
 }
@@ -51,10 +51,10 @@ impl Formatter {
             fill: ' ',
             align: Alignment::Right,
             sign_plus: false,
-            alternate: false,
             zero_pad: false,
             width: -1,
             precision: -1,
+            indent: 0,
             buf,
         };
     }
@@ -249,6 +249,32 @@ impl Formatter {
             return self.buf.internal_reserve_uninit(digit_count);
         }
     }
+
+    /// Write indentation (2 spaces per level) for pretty-printing.
+    pub fn write_indent(&mut self) {
+        for let mut i = 0; i < self.indent; i += 1 {
+            self.write_str("  ");
+        }
+    }
+
+    /// Write a newline followed by indentation for pretty-printing.
+    pub fn write_newline_indent(&mut self) {
+        self.write_char('\n');
+        self.write_indent();
+    }
+
+    /// Open a pretty-printed brace: write opening delimiter, increase indent.
+    pub fn open_brace(&mut self, open: String) {
+        self.write_str(open);
+        self.indent += 1;
+    }
+
+    /// Close a pretty-printed brace: decrease indent, write newline+indent, write closing delimiter.
+    pub fn close_brace(&mut self, close: String) {
+        self.indent -= 1;
+        self.write_newline_indent();
+        self.write_str(close);
+    }
 }
 // Defined here (not in string.wado) to avoid string.wado depending on format.wado,
 // which would cause codegen struct registration order issues.
@@ -318,5 +344,49 @@ impl<T: Inspect> Inspect for &mut T {
         f.write_str("&mut ");
         let inner: &mut T = *self;
         (*inner).inspect(f);
+    }
+}
+
+impl InspectAlt for String {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
+}
+
+impl<T: InspectAlt> InspectAlt for Array<T> {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        if self.is_empty() {
+            f.write_str("[]");
+            return;
+        }
+        f.open_brace("[");
+        for let mut i = 0; i < self.len(); i += 1 {
+            f.write_newline_indent();
+            self[i].inspect_alt(f);
+            f.write_char(',');
+        }
+        f.close_brace("]");
+    }
+}
+
+impl<T: InspectAlt> DisplayAlt for Array<T> {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        self.inspect_alt(f);
+    }
+}
+
+impl<T: InspectAlt> InspectAlt for &T {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        f.write_str("&");
+        let inner: &T = *self;
+        (*inner).inspect_alt(f);
+    }
+}
+
+impl<T: InspectAlt> InspectAlt for &mut T {
+    pub fn inspect_alt(&mut self, f: &mut Formatter) {
+        f.write_str("&mut ");
+        let inner: &mut T = *self;
+        (*inner).inspect_alt(f);
     }
 }

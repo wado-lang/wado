@@ -45,10 +45,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -299,7 +299,7 @@ fn __test_0_enum_serialize_red() {
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
-                    break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+                    break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
                 };
                 __local_12 = __local_6;
                 i32::fmt_decimal(17, __local_12);
@@ -311,7 +311,7 @@ condition: s == `\"Red\"`
                 String::append_char(__local_5, 32);
                 __local_6 = __inline_Formatter__new_6: block -> ref Formatter {
                     __local_15 = __local_5;
-                    break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_15) };
+                    break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
                 };
                 String^Inspect::inspect(__v0, __local_6);
                 String::append_char(__local_5, 10);
@@ -366,7 +366,7 @@ fn __test_1_enum_roundtrip_green() {
                 String::append_char(__local_10, 58);
                 __local_11 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_18 = __local_10;
-                    break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_18) };
+                    break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
                 };
                 __local_20 = __local_11;
                 i32::fmt_decimal(27, __local_20);
@@ -381,7 +381,7 @@ condition: json == `\"Green\"`
                 String::append_char(__local_10, 32);
                 __local_11 = __inline_Formatter__new_6: block -> ref Formatter {
                     __local_23 = __local_10;
-                    break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_23) };
+                    break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_23) };
                 };
                 String^Inspect::inspect(__v0_3, __local_11);
                 String::append_char(__local_10, 10);
@@ -408,7 +408,7 @@ condition: json == `\"Green\"`
                     String::append_char(__local_12, 58);
                     __local_13 = __inline_Formatter__new_8: block -> ref Formatter {
                         __local_25 = __local_12;
-                        break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_25) };
+                        break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_25) };
                     };
                     __local_27 = __local_13;
                     i32::fmt_decimal(30, __local_27);
@@ -425,14 +425,14 @@ condition: parsed == Color::Green
                     String::append_char(__local_12, 32);
                     __local_13 = __inline_Formatter__new_11: block -> ref Formatter {
                         __local_30 = __local_12;
-                        break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_30) };
+                        break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_30) };
                     };
                     Color^Inspect::inspect(__v0_7, __local_13);
                     String::append_char(__local_12, 10);
                     String::append(__local_12, String { repr: array.new_data<u8>("Color::Green: "), used: 14 });
                     __local_13 = __inline_Formatter__new_12: block -> ref Formatter {
                         __local_31 = __local_12;
-                        break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_31) };
+                        break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_31) };
                     };
                     Color^Inspect::inspect(__v1, __local_13);
                     String::append_char(__local_12, 10);
@@ -493,7 +493,7 @@ fn __test_2_enum_deserialize_unknown_variant() {
                 String::append_char(__local_7, 58);
                 __local_8 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_12 = __local_7;
-                    break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+                    break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                 };
                 __local_14 = __local_8;
                 i32::fmt_decimal(42, __local_14);
@@ -503,14 +503,14 @@ condition: e.message == \"unknown variant\" || e.message == \"UnknownVariant\"
                 String::append(__local_7, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_8 = __inline_Formatter__new_6: block -> ref Formatter {
                     __local_17 = __local_7;
-                    break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_17) };
+                    break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
                 };
                 String^Inspect::inspect(__v0, __local_8);
                 String::append_char(__local_7, 10);
                 String::append(__local_7, String { repr: array.new_data<u8>("e.message == \"unknown variant\": "), used: 32 });
                 __local_8 = __inline_Formatter__new_7: block -> ref Formatter {
                     __local_18 = __local_7;
-                    break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_18) };
+                    break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
                 };
                 __local_20 = __local_8;
                 Formatter::pad(__local_20, if __v1 -> ref String {
@@ -522,14 +522,14 @@ condition: e.message == \"unknown variant\" || e.message == \"UnknownVariant\"
                 String::append(__local_7, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_8 = __inline_Formatter__new_10: block -> ref Formatter {
                     __local_23 = __local_7;
-                    break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_23) };
+                    break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_23) };
                 };
                 String^Inspect::inspect(__v2, __local_8);
                 String::append_char(__local_7, 10);
                 String::append(__local_7, String { repr: array.new_data<u8>("e.message == \"UnknownVariant\": "), used: 31 });
                 __local_8 = __inline_Formatter__new_11: block -> ref Formatter {
                     __local_24 = __local_7;
-                    break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_24) };
+                    break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_24) };
                 };
                 __local_26 = __local_8;
                 Formatter::pad(__local_26, if __v3 -> ref String {
@@ -1276,13 +1276,13 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {  // from core:json
                 String::append(__local_3, String { repr: array.new_data<u8>("expected '"), used: 10 });
                 __local_4 = __inline_Formatter__new_4: block -> ref Formatter {
                     __local_10 = __local_3;
-                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
                 };
                 char^Display::fmt(c & 255, __local_4);
                 String::append(__local_3, String { repr: array.new_data<u8>("', found '"), used: 10 });
                 __local_4 = __inline_Formatter__new_5: block -> ref Formatter {
                     __local_11 = __local_3;
-                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_11) };
+                    break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
                 };
                 char^Display::fmt(b & 255, __local_4);
                 String::append_char(__local_3, 39);
@@ -1573,7 +1573,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                             String::append(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
                             __local_33 = __inline_Formatter__new_20: block -> ref Formatter {
                                 __local_71 = __local_32;
-                                break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_71) };
+                                break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_71) };
                             };
                             char^Display::fmt(esc & 255, __local_33);
                             String::append_char(__local_32, 39);

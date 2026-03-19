@@ -442,6 +442,48 @@ test "i32 key insertion order" {
     assert keys[2] == 20;
 }
 
+test "inspect empty map" {
+    let map = TreeMap::<String, i32>::new();
+    assert `{map:?}` == "{}";
+}
+
+test "inspect string keys" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    assert `{map:?}` == "{\"a\": 1, \"b\": 2}";
+}
+
+test "inspect i32 keys" {
+    let mut map = TreeMap::<i32, String>::new();
+    map[1] = "one";
+    map[2] = "two";
+    assert `{map:?}` == "{1: \"one\", 2: \"two\"}";
+}
+
+test "pretty-print empty map" {
+    let map = TreeMap::<String, i32>::new();
+    assert `{map:#?}` == "{}";
+}
+
+test "pretty-print string keys" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    assert `{map:#?}` == "{
+  \"a\": 1,
+  \"b\": 2,
+}";
+}
+
+test "pretty-print single entry" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["key"] = 42;
+    assert `{map:#?}` == "{
+  \"key\": 42,
+}";
+}
+
 test "i32 key remove" {
     let mut map = TreeMap::<i32, String>::new();
     map[1] = "a";

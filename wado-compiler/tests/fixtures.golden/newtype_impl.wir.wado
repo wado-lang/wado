@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -178,7 +178,7 @@ fn run() with Stdout {
         String::append(__local_4, String { repr: array.new_data<u8>("radians to degrees: "), used: 20 });
         __local_5 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_10 = __local_4;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
         };
         __local_12 = __local_5;
         f64::inspect_into(d, __local_12);
@@ -192,7 +192,7 @@ fn run() with Stdout {
         String::append(__local_6, String { repr: array.new_data<u8>("degrees to radians: "), used: 20 });
         __local_7 = __inline_Formatter__new_10: block -> ref Formatter {
             __local_21 = __local_6;
-            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
+            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_21) };
         };
         __local_23 = __local_7;
         f64::inspect_into(r2, __local_23);

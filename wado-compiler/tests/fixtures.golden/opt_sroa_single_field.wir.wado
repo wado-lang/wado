@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -415,7 +415,7 @@ fn run() with Stdout {
             String::append_char(__local_46, 58);
             __local_47 = __inline_Formatter__new_2: block -> ref Formatter {
                 __local_83 = __local_46;
-                break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_83) };
+                break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_83) };
             };
             __local_85 = __local_47;
             i32::fmt_decimal(139, __local_85);
@@ -425,7 +425,7 @@ condition: w.get() == 42
             String::append(__local_46, String { repr: array.new_data<u8>("w.get(): "), used: 9 });
             __local_47 = __inline_Formatter__new_5: block -> ref Formatter {
                 __local_88 = __local_46;
-                break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_88) };
+                break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_88) };
             };
             __local_90 = __local_47;
             i32::fmt_decimal(__v0_1, __local_90);
@@ -451,7 +451,7 @@ condition: w.get() == 42
             String::append_char(__local_48, 58);
             __local_49 = __inline_Formatter__new_9: block -> ref Formatter {
                 __local_94 = __local_48;
-                break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_94) };
+                break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_94) };
             };
             __local_96 = __local_49;
             i32::fmt_decimal(140, __local_96);
@@ -461,7 +461,7 @@ condition: w.doubled() == 84
             String::append(__local_48, String { repr: array.new_data<u8>("w.doubled(): "), used: 13 });
             __local_49 = __inline_Formatter__new_12: block -> ref Formatter {
                 __local_99 = __local_48;
-                break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_99) };
+                break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_99) };
             };
             __local_101 = __local_49;
             i32::fmt_decimal(__v0_3, __local_101);
@@ -487,7 +487,7 @@ condition: w.doubled() == 84
             String::append_char(__local_50, 58);
             __local_51 = __inline_Formatter__new_16: block -> ref Formatter {
                 __local_105 = __local_50;
-                break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_105) };
+                break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_105) };
             };
             __local_107 = __local_51;
             i32::fmt_decimal(144, __local_107);
@@ -497,7 +497,7 @@ condition: a.as_cents() == 1950
             String::append(__local_50, String { repr: array.new_data<u8>("a.as_cents(): "), used: 14 });
             __local_51 = __inline_Formatter__new_19: block -> ref Formatter {
                 __local_110 = __local_50;
-                break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_110) };
+                break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_110) };
             };
             __local_112 = __local_51;
             i32::fmt_decimal(__v0_6, __local_112);
@@ -523,7 +523,7 @@ condition: a.as_cents() == 1950
             String::append_char(__local_52, 58);
             __local_53 = __inline_Formatter__new_23: block -> ref Formatter {
                 __local_116 = __local_52;
-                break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_116) };
+                break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_116) };
             };
             __local_118 = __local_53;
             i32::fmt_decimal(148, __local_118);
@@ -533,7 +533,7 @@ condition: l.len() == 5
             String::append(__local_52, String { repr: array.new_data<u8>("l.len(): "), used: 9 });
             __local_53 = __inline_Formatter__new_26: block -> ref Formatter {
                 __local_121 = __local_52;
-                break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_121) };
+                break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_121) };
             };
             __local_123 = __local_53;
             i32::fmt_decimal(__v0_9, __local_123);
@@ -559,7 +559,7 @@ condition: l.len() == 5
             String::append_char(__local_54, 58);
             __local_55 = __inline_Formatter__new_30: block -> ref Formatter {
                 __local_127 = __local_54;
-                break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_127) };
+                break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_127) };
             };
             __local_129 = __local_55;
             i32::fmt_decimal(152, __local_129);
@@ -569,7 +569,7 @@ condition: f.is_set() == true
             String::append(__local_54, String { repr: array.new_data<u8>("f.is_set(): "), used: 12 });
             __local_55 = __inline_Formatter__new_33: block -> ref Formatter {
                 __local_132 = __local_54;
-                break __inline_Formatter__new_33: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_132) };
+                break __inline_Formatter__new_33: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_132) };
             };
             __local_134 = __local_55;
             Formatter::pad(__local_134, if __v0_12 -> ref String {
@@ -599,7 +599,7 @@ condition: f.is_set() == true
             String::append_char(__local_56, 58);
             __local_57 = __inline_Formatter__new_37: block -> ref Formatter {
                 __local_138 = __local_56;
-                break __inline_Formatter__new_37: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_138) };
+                break __inline_Formatter__new_37: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_138) };
             };
             __local_140 = __local_57;
             i32::fmt_decimal(154, __local_140);
@@ -609,7 +609,7 @@ condition: f2.is_set() == false
             String::append(__local_56, String { repr: array.new_data<u8>("f2.is_set(): "), used: 13 });
             __local_57 = __inline_Formatter__new_40: block -> ref Formatter {
                 __local_143 = __local_56;
-                break __inline_Formatter__new_40: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_143) };
+                break __inline_Formatter__new_40: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_143) };
             };
             __local_145 = __local_57;
             Formatter::pad(__local_145, if __v0_15 -> ref String {
@@ -639,7 +639,7 @@ condition: f2.is_set() == false
             String::append_char(__local_58, 58);
             __local_59 = __inline_Formatter__new_44: block -> ref Formatter {
                 __local_149 = __local_58;
-                break __inline_Formatter__new_44: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_149) };
+                break __inline_Formatter__new_44: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_149) };
             };
             __local_151 = __local_59;
             i32::fmt_decimal(157, __local_151);
@@ -649,7 +649,7 @@ condition: double_wrapper(&w) == 84
             String::append(__local_58, String { repr: array.new_data<u8>("double_wrapper(&w): "), used: 20 });
             __local_59 = __inline_Formatter__new_47: block -> ref Formatter {
                 __local_154 = __local_58;
-                break __inline_Formatter__new_47: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_154) };
+                break __inline_Formatter__new_47: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_154) };
             };
             __local_156 = __local_59;
             i32::fmt_decimal(__v0_17, __local_156);
@@ -675,7 +675,7 @@ condition: double_wrapper(&w) == 84
             String::append_char(__local_60, 58);
             __local_61 = __inline_Formatter__new_51: block -> ref Formatter {
                 __local_160 = __local_60;
-                break __inline_Formatter__new_51: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_160) };
+                break __inline_Formatter__new_51: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_160) };
             };
             __local_162 = __local_61;
             i32::fmt_decimal(158, __local_162);
@@ -685,7 +685,7 @@ condition: triple_wrapper(&w) == 126
             String::append(__local_60, String { repr: array.new_data<u8>("triple_wrapper(&w): "), used: 20 });
             __local_61 = __inline_Formatter__new_54: block -> ref Formatter {
                 __local_165 = __local_60;
-                break __inline_Formatter__new_54: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_165) };
+                break __inline_Formatter__new_54: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_165) };
             };
             __local_167 = __local_61;
             i32::fmt_decimal(__v0_19, __local_167);
@@ -711,7 +711,7 @@ condition: triple_wrapper(&w) == 126
             String::append_char(__local_62, 58);
             __local_63 = __inline_Formatter__new_58: block -> ref Formatter {
                 __local_171 = __local_62;
-                break __inline_Formatter__new_58: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_171) };
+                break __inline_Formatter__new_58: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_171) };
             };
             __local_173 = __local_63;
             i32::fmt_decimal(159, __local_173);
@@ -721,7 +721,7 @@ condition: process_wrapper(&w) == 210
             String::append(__local_62, String { repr: array.new_data<u8>("process_wrapper(&w): "), used: 21 });
             __local_63 = __inline_Formatter__new_61: block -> ref Formatter {
                 __local_176 = __local_62;
-                break __inline_Formatter__new_61: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_176) };
+                break __inline_Formatter__new_61: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_176) };
             };
             __local_178 = __local_63;
             i32::fmt_decimal(__v0_21, __local_178);
@@ -747,7 +747,7 @@ condition: process_wrapper(&w) == 210
             String::append_char(__local_64, 58);
             __local_65 = __inline_Formatter__new_65: block -> ref Formatter {
                 __local_182 = __local_64;
-                break __inline_Formatter__new_65: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_182) };
+                break __inline_Formatter__new_65: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_182) };
             };
             __local_184 = __local_65;
             i32::fmt_decimal(162, __local_184);
@@ -757,7 +757,7 @@ condition: conditional_wrapper(true) == 10
             String::append(__local_64, String { repr: array.new_data<u8>("conditional_wrapper(true): "), used: 27 });
             __local_65 = __inline_Formatter__new_68: block -> ref Formatter {
                 __local_187 = __local_64;
-                break __inline_Formatter__new_68: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_187) };
+                break __inline_Formatter__new_68: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_187) };
             };
             __local_189 = __local_65;
             i32::fmt_decimal(__v0_23, __local_189);
@@ -783,7 +783,7 @@ condition: conditional_wrapper(true) == 10
             String::append_char(__local_66, 58);
             __local_67 = __inline_Formatter__new_72: block -> ref Formatter {
                 __local_193 = __local_66;
-                break __inline_Formatter__new_72: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_193) };
+                break __inline_Formatter__new_72: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_193) };
             };
             __local_195 = __local_67;
             i32::fmt_decimal(163, __local_195);
@@ -793,7 +793,7 @@ condition: conditional_wrapper(false) == 20
             String::append(__local_66, String { repr: array.new_data<u8>("conditional_wrapper(false): "), used: 28 });
             __local_67 = __inline_Formatter__new_75: block -> ref Formatter {
                 __local_198 = __local_66;
-                break __inline_Formatter__new_75: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_198) };
+                break __inline_Formatter__new_75: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_198) };
             };
             __local_200 = __local_67;
             i32::fmt_decimal(__v0_25, __local_200);
@@ -819,7 +819,7 @@ condition: conditional_wrapper(false) == 20
             String::append_char(__local_68, 58);
             __local_69 = __inline_Formatter__new_79: block -> ref Formatter {
                 __local_204 = __local_68;
-                break __inline_Formatter__new_79: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_204) };
+                break __inline_Formatter__new_79: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_204) };
             };
             __local_206 = __local_69;
             i32::fmt_decimal(169, __local_206);
@@ -833,7 +833,7 @@ condition: sum == 30.8
             String::append_char(__local_68, 32);
             __local_69 = __inline_Formatter__new_82: block -> ref Formatter {
                 __local_209 = __local_68;
-                break __inline_Formatter__new_82: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_209) };
+                break __inline_Formatter__new_82: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_209) };
             };
             __local_211 = __local_69;
             f64::inspect_into(sum, __local_211);
@@ -859,7 +859,7 @@ condition: sum == 30.8
             String::append_char(__local_70, 58);
             __local_71 = __inline_Formatter__new_85: block -> ref Formatter {
                 __local_213 = __local_70;
-                break __inline_Formatter__new_85: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_213) };
+                break __inline_Formatter__new_85: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_213) };
             };
             __local_215 = __local_71;
             i32::fmt_decimal(172, __local_215);
@@ -869,7 +869,7 @@ condition: sum_wrappers() == 100
             String::append(__local_70, String { repr: array.new_data<u8>("sum_wrappers(): "), used: 16 });
             __local_71 = __inline_Formatter__new_88: block -> ref Formatter {
                 __local_218 = __local_70;
-                break __inline_Formatter__new_88: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_218) };
+                break __inline_Formatter__new_88: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_218) };
             };
             __local_220 = __local_71;
             i32::fmt_decimal(__v0_32, __local_220);
@@ -895,7 +895,7 @@ condition: sum_wrappers() == 100
             String::append_char(__local_72, 58);
             __local_73 = __inline_Formatter__new_92: block -> ref Formatter {
                 __local_224 = __local_72;
-                break __inline_Formatter__new_92: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_224) };
+                break __inline_Formatter__new_92: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_224) };
             };
             __local_226 = __local_73;
             i32::fmt_decimal(175, __local_226);
@@ -905,7 +905,7 @@ condition: mixed_single_fields() == 42
             String::append(__local_72, String { repr: array.new_data<u8>("mixed_single_fields(): "), used: 23 });
             __local_73 = __inline_Formatter__new_95: block -> ref Formatter {
                 __local_229 = __local_72;
-                break __inline_Formatter__new_95: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_229) };
+                break __inline_Formatter__new_95: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_229) };
             };
             __local_231 = __local_73;
             i32::fmt_decimal(__v0_34, __local_231);
@@ -918,7 +918,7 @@ condition: mixed_single_fields() == 42
         __local_74 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_75 = __inline_Formatter__new_99: block -> ref Formatter {
             __local_235 = __local_74;
-            break __inline_Formatter__new_99: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_235) };
+            break __inline_Formatter__new_99: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_235) };
         };
         __local_237 = __local_75;
         i32::fmt_decimal(99, __local_237);
@@ -939,7 +939,7 @@ condition: mixed_single_fields() == 42
             String::append_char(__local_76, 58);
             __local_77 = __inline_Formatter__new_103: block -> ref Formatter {
                 __local_241 = __local_76;
-                break __inline_Formatter__new_103: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_241) };
+                break __inline_Formatter__new_103: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_241) };
             };
             __local_243 = __local_77;
             i32::fmt_decimal(179, __local_243);
@@ -969,7 +969,7 @@ condition: `{w2.inner}` == \"99\"
             String::append_char(__local_78, 58);
             __local_79 = __inline_Formatter__new_107: block -> ref Formatter {
                 __local_247 = __local_78;
-                break __inline_Formatter__new_107: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_247) };
+                break __inline_Formatter__new_107: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_247) };
             };
             __local_249 = __local_79;
             i32::fmt_decimal(184, __local_249);
@@ -979,7 +979,7 @@ condition: w3.inner == 77
             String::append(__local_78, String { repr: array.new_data<u8>("w3.inner: "), used: 10 });
             __local_79 = __inline_Formatter__new_110: block -> ref Formatter {
                 __local_252 = __local_78;
-                break __inline_Formatter__new_110: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_252) };
+                break __inline_Formatter__new_110: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_252) };
             };
             __local_254 = __local_79;
             i32::fmt_decimal(__v0_39, __local_254);

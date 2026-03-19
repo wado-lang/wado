@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -129,7 +129,7 @@ fn integer_u64_basic() with Stdout {
         String::append_char(__local_7, 32);
         __local_8 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_18 = __local_7;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_18) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
         };
         __local_20 = __local_8;
         u64::fmt_decimal(1300000000000_i64, __local_20);
@@ -145,7 +145,7 @@ fn integer_u64_basic() with Stdout {
         String::append_char(__local_9, 32);
         __local_10 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_24 = __local_9;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_24) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_24) };
         };
         __local_26 = __local_10;
         u64::fmt_decimal(700000000000_i64, __local_26);
@@ -161,7 +161,7 @@ fn integer_u64_basic() with Stdout {
         String::append_char(__local_11, 32);
         __local_12 = __inline_Formatter__new_9: block -> ref Formatter {
             __local_30 = __local_11;
-            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_30) };
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_30) };
         };
         __local_32 = __local_12;
         u64::fmt_decimal(1000000000000_i64, __local_32);
@@ -177,7 +177,7 @@ fn integer_u64_basic() with Stdout {
         String::append_char(__local_13, 32);
         __local_14 = __inline_Formatter__new_13: block -> ref Formatter {
             __local_36 = __local_13;
-            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_36) };
+            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_36) };
         };
         __local_38 = __local_14;
         u64::fmt_decimal(3_i64, __local_38);
@@ -192,7 +192,7 @@ fn integer_u64_basic() with Stdout {
         String::append_char(__local_15, 32);
         __local_16 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_42 = __local_15;
-            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_42) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_42) };
         };
         __local_44 = __local_16;
         u64::fmt_decimal(100000000000_i64, __local_44);
@@ -240,7 +240,7 @@ fn integer_u64_edge() with Stdout {
         String::append_char(__local_5, 32);
         __local_6 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_16 = __local_5;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_16) };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
         };
         __local_18 = __local_6;
         u64::fmt_decimal(-1_i64, __local_18);
@@ -255,7 +255,7 @@ fn integer_u64_edge() with Stdout {
         String::append_char(__local_7, 32);
         __local_8 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_22 = __local_7;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_22) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_22) };
         };
         __local_24 = __local_8;
         u64::fmt_decimal(0_i64, __local_24);
@@ -272,7 +272,7 @@ fn integer_u64_edge() with Stdout {
         String::append_char(__local_9, 32);
         __local_10 = __inline_Formatter__new_9: block -> ref Formatter {
             __local_28 = __local_9;
-            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
         };
         __local_30 = __local_10;
         u64::fmt_decimal(-8446744073709551616_i64, __local_30);
@@ -283,7 +283,7 @@ fn integer_u64_edge() with Stdout {
         String::append(__local_11, String { repr: array.new_data<u8>("10000000000000000000 / 2: "), used: 26 });
         __local_12 = __inline_Formatter__new_13: block -> ref Formatter {
             __local_34 = __local_11;
-            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_34) };
+            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_34) };
         };
         __local_36 = __local_12;
         u64::fmt_decimal(5000000000000000000_i64, __local_36);
@@ -294,7 +294,7 @@ fn integer_u64_edge() with Stdout {
         String::append(__local_13, String { repr: array.new_data<u8>("10000000000000000000 % 7: "), used: 26 });
         __local_14 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_40 = __local_13;
-            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_40) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_40) };
         };
         __local_42 = __local_14;
         u64::fmt_decimal(3_i64, __local_42);

@@ -302,6 +302,43 @@ test "large set insert and lookup" {
     assert !s.contains(100);
 }
 
+test "inspect empty set" {
+    let s = TreeSet::<i32>::new();
+    assert `{s:?}` == "{}";
+}
+
+test "inspect i32 set" {
+    let mut s = TreeSet::<i32>::new();
+    s.insert(10);
+    s.insert(20);
+    s.insert(30);
+    assert `{s:?}` == "{10, 20, 30}";
+}
+
+test "inspect string set" {
+    let mut s = TreeSet::<String>::new();
+    s.insert("a");
+    s.insert("b");
+    assert `{s:?}` == "{\"a\", \"b\"}";
+}
+
+test "pretty-print empty set" {
+    let s = TreeSet::<i32>::new();
+    assert `{s:#?}` == "{}";
+}
+
+test "pretty-print i32 set" {
+    let mut s = TreeSet::<i32>::new();
+    s.insert(10);
+    s.insert(20);
+    s.insert(30);
+    assert `{s:#?}` == "{
+  10,
+  20,
+  30,
+}";
+}
+
 test "compaction after many removals" {
     let mut s = TreeSet::<i32>::new();
     let mut i = 0;

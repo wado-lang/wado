@@ -25,10 +25,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -261,7 +261,7 @@ fn run() with Stdout {
             String::append_char(__local_22, 58);
             __local_23 = __inline_Formatter__new_7: block -> ref Formatter {
                 __local_48 = __local_22;
-                break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_48) };
+                break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_48) };
             };
             __local_50 = __local_23;
             i32::fmt_decimal(8, __local_50);
@@ -271,7 +271,7 @@ condition: encode(&empty) == \"\"
             String::append(__local_22, String { repr: array.new_data<u8>("encode(&empty): "), used: 16 });
             __local_23 = __inline_Formatter__new_10: block -> ref Formatter {
                 __local_53 = __local_22;
-                break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_53) };
+                break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_53) };
             };
             String^Inspect::inspect(__v0_2, __local_23);
             String::append_char(__local_22, 10);
@@ -301,7 +301,7 @@ condition: encode(&empty) == \"\"
             String::append_char(__local_24, 58);
             __local_25 = __inline_Formatter__new_14: block -> ref Formatter {
                 __local_57 = __local_24;
-                break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_57) };
+                break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_57) };
             };
             __local_59 = __local_25;
             i32::fmt_decimal(10, __local_59);
@@ -311,7 +311,7 @@ condition: encode(&\"f\".bytes().collect()) == \"Zg==\"
             String::append(__local_24, String { repr: array.new_data<u8>("encode(&\"f\".bytes().collect()): "), used: 32 });
             __local_25 = __inline_Formatter__new_17: block -> ref Formatter {
                 __local_62 = __local_24;
-                break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_62) };
+                break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_62) };
             };
             String^Inspect::inspect(__v0_4, __local_25);
             String::append_char(__local_24, 10);
@@ -341,7 +341,7 @@ condition: encode(&\"f\".bytes().collect()) == \"Zg==\"
             String::append_char(__local_26, 58);
             __local_27 = __inline_Formatter__new_21: block -> ref Formatter {
                 __local_66 = __local_26;
-                break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_66) };
+                break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_66) };
             };
             __local_68 = __local_27;
             i32::fmt_decimal(11, __local_68);
@@ -351,7 +351,7 @@ condition: encode(&\"fo\".bytes().collect()) == \"Zm8=\"
             String::append(__local_26, String { repr: array.new_data<u8>("encode(&\"fo\".bytes().collect()): "), used: 33 });
             __local_27 = __inline_Formatter__new_24: block -> ref Formatter {
                 __local_71 = __local_26;
-                break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_71) };
+                break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_71) };
             };
             String^Inspect::inspect(__v0_6, __local_27);
             String::append_char(__local_26, 10);
@@ -381,7 +381,7 @@ condition: encode(&\"fo\".bytes().collect()) == \"Zm8=\"
             String::append_char(__local_28, 58);
             __local_29 = __inline_Formatter__new_28: block -> ref Formatter {
                 __local_75 = __local_28;
-                break __inline_Formatter__new_28: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_75) };
+                break __inline_Formatter__new_28: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_75) };
             };
             __local_77 = __local_29;
             i32::fmt_decimal(12, __local_77);
@@ -391,7 +391,7 @@ condition: encode(&\"foo\".bytes().collect()) == \"Zm9v\"
             String::append(__local_28, String { repr: array.new_data<u8>("encode(&\"foo\".bytes().collect()): "), used: 34 });
             __local_29 = __inline_Formatter__new_31: block -> ref Formatter {
                 __local_80 = __local_28;
-                break __inline_Formatter__new_31: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_80) };
+                break __inline_Formatter__new_31: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_80) };
             };
             String^Inspect::inspect(__v0_8, __local_29);
             String::append_char(__local_28, 10);
@@ -421,7 +421,7 @@ condition: encode(&\"foo\".bytes().collect()) == \"Zm9v\"
             String::append_char(__local_30, 58);
             __local_31 = __inline_Formatter__new_35: block -> ref Formatter {
                 __local_84 = __local_30;
-                break __inline_Formatter__new_35: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_84) };
+                break __inline_Formatter__new_35: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_84) };
             };
             __local_86 = __local_31;
             i32::fmt_decimal(13, __local_86);
@@ -431,7 +431,7 @@ condition: encode(&\"foob\".bytes().collect()) == \"Zm9vYg==\"
             String::append(__local_30, String { repr: array.new_data<u8>("encode(&\"foob\".bytes().collect()): "), used: 35 });
             __local_31 = __inline_Formatter__new_38: block -> ref Formatter {
                 __local_89 = __local_30;
-                break __inline_Formatter__new_38: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_89) };
+                break __inline_Formatter__new_38: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_89) };
             };
             String^Inspect::inspect(__v0_10, __local_31);
             String::append_char(__local_30, 10);
@@ -461,7 +461,7 @@ condition: encode(&\"foob\".bytes().collect()) == \"Zm9vYg==\"
             String::append_char(__local_32, 58);
             __local_33 = __inline_Formatter__new_42: block -> ref Formatter {
                 __local_93 = __local_32;
-                break __inline_Formatter__new_42: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_93) };
+                break __inline_Formatter__new_42: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_93) };
             };
             __local_95 = __local_33;
             i32::fmt_decimal(14, __local_95);
@@ -471,7 +471,7 @@ condition: encode(&\"fooba\".bytes().collect()) == \"Zm9vYmE=\"
             String::append(__local_32, String { repr: array.new_data<u8>("encode(&\"fooba\".bytes().collect()): "), used: 36 });
             __local_33 = __inline_Formatter__new_45: block -> ref Formatter {
                 __local_98 = __local_32;
-                break __inline_Formatter__new_45: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_98) };
+                break __inline_Formatter__new_45: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_98) };
             };
             String^Inspect::inspect(__v0_12, __local_33);
             String::append_char(__local_32, 10);
@@ -501,7 +501,7 @@ condition: encode(&\"fooba\".bytes().collect()) == \"Zm9vYmE=\"
             String::append_char(__local_34, 58);
             __local_35 = __inline_Formatter__new_49: block -> ref Formatter {
                 __local_102 = __local_34;
-                break __inline_Formatter__new_49: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_102) };
+                break __inline_Formatter__new_49: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_102) };
             };
             __local_104 = __local_35;
             i32::fmt_decimal(15, __local_104);
@@ -511,7 +511,7 @@ condition: encode(&\"foobar\".bytes().collect()) == \"Zm9vYmFy\"
             String::append(__local_34, String { repr: array.new_data<u8>("encode(&\"foobar\".bytes().collect()): "), used: 37 });
             __local_35 = __inline_Formatter__new_52: block -> ref Formatter {
                 __local_107 = __local_34;
-                break __inline_Formatter__new_52: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_107) };
+                break __inline_Formatter__new_52: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_107) };
             };
             String^Inspect::inspect(__v0_14, __local_35);
             String::append_char(__local_34, 10);
@@ -541,7 +541,7 @@ condition: encode(&\"foobar\".bytes().collect()) == \"Zm9vYmFy\"
             String::append_char(__local_36, 58);
             __local_37 = __inline_Formatter__new_56: block -> ref Formatter {
                 __local_111 = __local_36;
-                break __inline_Formatter__new_56: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_111) };
+                break __inline_Formatter__new_56: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_111) };
             };
             __local_113 = __local_37;
             i32::fmt_decimal(18, __local_113);
@@ -551,7 +551,7 @@ condition: encode_url(&\"Hello\".bytes().collect()) == \"SGVsbG8\"
             String::append(__local_36, String { repr: array.new_data<u8>("encode_url(&\"Hello\".bytes().collect()): "), used: 40 });
             __local_37 = __inline_Formatter__new_59: block -> ref Formatter {
                 __local_116 = __local_36;
-                break __inline_Formatter__new_59: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_116) };
+                break __inline_Formatter__new_59: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_116) };
             };
             String^Inspect::inspect(__v0_16, __local_37);
             String::append_char(__local_36, 10);
@@ -578,7 +578,7 @@ condition: encode_url(&\"Hello\".bytes().collect()) == \"SGVsbG8\"
             String::append_char(__local_38, 58);
             __local_39 = __inline_Formatter__new_62: block -> ref Formatter {
                 __local_119 = __local_38;
-                break __inline_Formatter__new_62: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_119) };
+                break __inline_Formatter__new_62: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_119) };
             };
             __local_121 = __local_39;
             i32::fmt_decimal(21, __local_121);
@@ -588,7 +588,7 @@ condition: encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding) == \"S
             String::append(__local_38, String { repr: array.new_data<u8>("encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding): "), used: 62 });
             __local_39 = __inline_Formatter__new_65: block -> ref Formatter {
                 __local_124 = __local_38;
-                break __inline_Formatter__new_65: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_124) };
+                break __inline_Formatter__new_65: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_124) };
             };
             String^Inspect::inspect(__v0_18, __local_39);
             String::append_char(__local_38, 10);
@@ -615,7 +615,7 @@ condition: encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding) == \"S
             String::append_char(__local_40, 58);
             __local_41 = __inline_Formatter__new_68: block -> ref Formatter {
                 __local_127 = __local_40;
-                break __inline_Formatter__new_68: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_127) };
+                break __inline_Formatter__new_68: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_127) };
             };
             __local_129 = __local_41;
             i32::fmt_decimal(24, __local_129);
@@ -625,7 +625,7 @@ condition: encode_with(&\"Hello\".bytes().collect(), Encoding::none()) == \"SGVs
             String::append(__local_40, String { repr: array.new_data<u8>("encode_with(&\"Hello\".bytes().collect(), Encoding::none()): "), used: 59 });
             __local_41 = __inline_Formatter__new_71: block -> ref Formatter {
                 __local_132 = __local_40;
-                break __inline_Formatter__new_71: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_132) };
+                break __inline_Formatter__new_71: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_132) };
             };
             String^Inspect::inspect(__v0_20, __local_41);
             String::append_char(__local_40, 10);

@@ -159,16 +159,17 @@ This ensures template strings always produce output without requiring explicit t
 
 1. **Code size**: Compiler must generate inspect code for all types
    - **Mitigation**: Tree-shaking can remove unused inspect code
-2. **No format customization for inspect**: Unlike Rust's `{:#?}` for pretty-print
-   - **Mitigation**: Can add `:?p` (pretty) specifier later if needed
-3. **Implicit fallback may hide missing Display**: Developer might not notice they forgot to implement Display
+2. **Implicit fallback may hide missing Display**: Developer might not notice they forgot to implement Display
    - **Mitigation**: Linter warning for public API types without Display
+
+### Implemented Extensions
+
+1. **Pretty-print specifier**: `{x:#?}` for indented multi-line output via `InspectAlt` trait
 
 ### Future Extensions
 
-1. **Pretty-print specifier**: `{x:?p}` or `{x:#?}` for indented multi-line output
-2. **Depth limit**: `{x:?3}` to limit nesting depth
-3. **Width limit**: Integration with format specifiers like `{x:?.80}` for truncation
+1. **Depth limit**: `{x:?3}` to limit nesting depth
+2. **Width limit**: Integration with format specifiers like `{x:?.80}` for truncation
 
 ## References
 

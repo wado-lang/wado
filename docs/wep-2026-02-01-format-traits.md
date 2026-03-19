@@ -91,14 +91,39 @@ trait UpperExp {
 
 ### Debug Formatting
 
-The `:?` specifier uses the compiler intrinsic `builtin::inspect()` and does not use a trait.
+The `:?` specifier resolves to the `Inspect` trait. The `:#?` specifier resolves to the `InspectAlt` trait for pretty-printed (indented multi-line) output. The compiler auto-synthesizes `Inspect` and `InspectAlt` for all user types; types can provide custom implementations to override.
+
+```wado
+trait Inspect {
+    fn inspect(&self, f: &mut Formatter);
+}
+
+trait InspectAlt {
+    fn inspect_alt(&self, f: &mut Formatter);
+}
+```
+
+### Alternate (Alt) Trait Variants
+
+Each format trait has an alternate variant activated by the `#` flag. For Inspect, `InspectAlt` produces pretty-printed output. For numeric traits, Alt variants add prefixes (`0x`, `0b`, `0o`).
+
+| Base Trait | Alt Trait     | Syntax  | Effect                        |
+| ---------- | ------------- | ------- | ----------------------------- |
+| `Display`  | `DisplayAlt`  | `{:#}`  | Delegates to `InspectAlt`     |
+| `Inspect`  | `InspectAlt`  | `{:#?}` | Pretty-print with indentation |
+| `Binary`   | `BinaryAlt`   | `{:#b}` | Add `0b` prefix               |
+| `Octal`    | `OctalAlt`    | `{:#o}` | Add `0o` prefix               |
+| `LowerHex` | `LowerHexAlt` | `{:#x}` | Add `0x` prefix               |
+| `UpperHex` | `UpperHexAlt` | `{:#X}` | Add `0X` prefix               |
 
 ### Format Resolution
 
 | Specifier | Resolution                           |
 | --------- | ------------------------------------ |
-| (none)    | `Display::fmt` or `builtin::inspect` |
-| `?`       | `builtin::inspect` (always)          |
+| (none)    | `Display::fmt` or `Inspect::inspect` |
+| `?`       | `Inspect::inspect`                   |
+| `#`       | `DisplayAlt::fmt_alt`                |
+| `#?`      | `InspectAlt::inspect_alt`            |
 | `b`       | `Binary::fmt`                        |
 | `o`       | `Octal::fmt`                         |
 | `x`       | `LowerHex::fmt`                      |
@@ -138,10 +163,13 @@ Zero padding (`{x:08}`) inserts zeros after sign/prefix but before digits:
 1. **Infrastructure complexity**: Requires `Formatter` and `Alignment` types
 2. **Implementation effort**: All primitive formatting needs trait implementations
 
+### Implemented Extensions
+
+1. **`{:#?}`**: Pretty-print debug with indentation via `InspectAlt` trait
+
 ### Future Extensions
 
-1. **`{:#?}`**: Pretty-print debug with indentation
-2. **Dynamic width/precision**: `{value:{width}.{precision}}`
+1. **Dynamic width/precision**: `{value:{width}.{precision}}`
 
 ## References
 

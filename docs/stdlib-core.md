@@ -518,10 +518,6 @@ Text alignment mode
 
 Whether to always show `+` sign for positive numbers
 
-##### `alternate: bool`
-
-Whether to use alternate form (`#` flag: 0x, 0b, 0o prefixes)
-
 ##### `zero_pad: bool`
 
 Whether to use zero-padding (`0` flag)
@@ -533,6 +529,10 @@ Minimum field width (-1 = no minimum)
 ##### `precision: i32`
 
 Precision for floats (decimal places) or strings (max width) (-1 = default)
+
+##### `indent: i32`
+
+Current indentation level for pretty-printing (used by InspectAlt)
 
 ##### `buf: &mut String`
 
@@ -587,6 +587,22 @@ Writes sign, prefix, and any padding/fill, then reserves `digit_count`
 uninitialised bytes and returns their byte-offset inside `buf`.
 The caller **must** fill exactly `digit_count` bytes (backwards) via
 `buf.internal_raw_bytes()` at the returned offset.
+
+##### `pub fn write_indent(&mut self)`
+
+Write indentation (2 spaces per level) for pretty-printing.
+
+##### `pub fn write_newline_indent(&mut self)`
+
+Write a newline followed by indentation for pretty-printing.
+
+##### `pub fn open_brace(&mut self, open: String)`
+
+Open a pretty-printed brace: write opening delimiter, increase indent.
+
+##### `pub fn close_brace(&mut self, close: String)`
+
+Close a pretty-printed brace: decrease indent, write newline+indent, write closing delimiter.
 
 #### `pub struct u128`
 
@@ -659,6 +675,10 @@ Convert u128 to String (for template string interpolation)
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for u128`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Binary for u128`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -674,6 +694,22 @@ Convert u128 to String (for template string interpolation)
 ##### `impl UpperHex for u128`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl BinaryAlt for u128`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl OctalAlt for u128`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl LowerHexAlt for u128`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl UpperHexAlt for u128`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ##### `impl Eq for u128`
 
@@ -829,6 +865,10 @@ Convert i128 to String (for template string interpolation)
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for i128`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Binary for i128`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -844,6 +884,22 @@ Convert i128 to String (for template string interpolation)
 ##### `impl UpperHex for i128`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl BinaryAlt for i128`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl OctalAlt for i128`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl LowerHexAlt for i128`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl UpperHexAlt for i128`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ##### `impl Eq for i128`
 
@@ -1289,6 +1345,10 @@ _Fields are private._
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for bool`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Ord for bool`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
@@ -1343,6 +1403,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for char`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Ord for char`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
@@ -1371,6 +1435,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for i8`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Binary for i8`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1386,6 +1454,22 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl UpperHex for i8`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl BinaryAlt for i8`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl OctalAlt for i8`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl LowerHexAlt for i8`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl UpperHexAlt for i8`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ##### `impl Ord for i8`
 
@@ -1427,6 +1511,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for u8`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Binary for u8`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1442,6 +1530,22 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl UpperHex for u8`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl BinaryAlt for u8`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl OctalAlt for u8`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl LowerHexAlt for u8`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl UpperHexAlt for u8`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ##### `impl Ord for u8`
 
@@ -1479,6 +1583,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for i16`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Binary for i16`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1494,6 +1602,22 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl UpperHex for i16`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl BinaryAlt for i16`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl OctalAlt for i16`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl LowerHexAlt for i16`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl UpperHexAlt for i16`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ##### `impl Ord for i16`
 
@@ -1539,6 +1663,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for u16`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Binary for u16`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1554,6 +1682,22 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl UpperHex for u16`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl BinaryAlt for u16`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl OctalAlt for u16`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl LowerHexAlt for u16`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl UpperHexAlt for u16`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ##### `impl Ord for u16`
 
@@ -1603,6 +1747,10 @@ Counts the number of set bits (population count).
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for i32`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Binary for i32`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1618,6 +1766,22 @@ Counts the number of set bits (population count).
 ##### `impl UpperHex for i32`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl BinaryAlt for i32`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl OctalAlt for i32`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl LowerHexAlt for i32`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl UpperHexAlt for i32`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ##### `impl Ord for i32`
 
@@ -1671,6 +1835,10 @@ Counts the number of set bits (population count).
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for u32`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Binary for u32`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1686,6 +1854,22 @@ Counts the number of set bits (population count).
 ##### `impl UpperHex for u32`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl BinaryAlt for u32`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl OctalAlt for u32`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl LowerHexAlt for u32`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl UpperHexAlt for u32`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ##### `impl Ord for u32`
 
@@ -1747,6 +1931,10 @@ Counts the number of set bits (population count).
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for i64`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Binary for i64`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1762,6 +1950,22 @@ Counts the number of set bits (population count).
 ##### `impl UpperHex for i64`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl BinaryAlt for i64`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl OctalAlt for i64`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl LowerHexAlt for i64`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl UpperHexAlt for i64`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ##### `impl Ord for i64`
 
@@ -1823,6 +2027,10 @@ Counts the number of set bits (population count).
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for u64`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Binary for u64`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1838,6 +2046,22 @@ Counts the number of set bits (population count).
 ##### `impl UpperHex for u64`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl BinaryAlt for u64`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl OctalAlt for u64`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl LowerHexAlt for u64`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl UpperHexAlt for u64`
+
+###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ##### `impl Ord for u64`
 
@@ -2052,6 +2276,10 @@ Creates an f32 from its bit representation.
 ##### `impl Inspect for f32`
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
+
+##### `impl InspectAlt for f32`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 ##### `impl LowerExp for f32`
 
@@ -2271,6 +2499,10 @@ Creates an f64 from its bit representation.
 
 ###### `pub fn inspect(&self, f: &mut Formatter)`
 
+##### `impl InspectAlt for f64`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl LowerExp for f64`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -2476,6 +2708,14 @@ Removes all key-value pairs from the map.
 
 ###### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError>`
 
+##### `impl Inspect for TreeMap<K, V>`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
+
+##### `impl InspectAlt for TreeMap<K, V>`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
 ##### `impl Default for TreeMap<K, V>`
 
 ###### `pub fn default() -> TreeMap<K, V>`
@@ -2541,6 +2781,14 @@ Returns an iterator over the elements in insertion order.
 ###### `fn push_literal(&mut self, value: T)`
 
 ###### `fn build(&self) -> TreeSet<T>`
+
+##### `impl Inspect for TreeSet<T>`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
+
+##### `impl InspectAlt for TreeSet<T>`
+
+###### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
 ##### `impl Default for TreeSet<T>`
 

@@ -29,14 +29,16 @@ use super::common::{
 
 /// Run trait synthesis on the entire project.
 ///
-/// For each module, generates Eq/Ord, Inspect, and Display fallback implementations
-/// for types that don't already have user-provided implementations.
+/// For each module, generates Eq/Ord, Inspect, `InspectAlt`, Display, and `DisplayAlt`
+/// implementations for types that don't already have user-provided implementations.
 pub fn synthesize_traits(project: Project) -> Project {
     let mut project = project;
     for module in project.tir_modules.values_mut() {
         generate_enum_trait_impls(module);
         generate_inspect_impls(module);
+        generate_inspect_alt_impls(module);
         generate_display_fallback_impls(module);
+        generate_display_alt_fallback_impls(module);
     }
     project
 }
@@ -1650,6 +1652,951 @@ fn local_expr(index: u32, name: &str, type_id: TypeId, span: Span) -> TirExpr {
     )
 }
 
+// ─── InspectAlt synthesis ───
+
+/// Generate auto-derived `InspectAlt` trait implementations for all types in a module.
+///
+/// For composite types (structs, variants, arrays, tuples), generates pretty-printed
+/// multi-line output using Formatter's `begin_block`/`end_block`/`write_field_sep` helpers.
+/// For simple types (enums, flags, newtypes, primitives, functions), delegates to Inspect.
+fn generate_inspect_alt_impls(module: &mut TirModule) {
+    let module_source = module.module_source.clone();
+    let existing = collect_existing_trait_methods(module);
+    let all_fn_names: IndexSet<String> = module
+        .functions
+        .iter()
+        .filter_map(|f| f.try_borrow().ok().map(|func| func.name.clone()))
+        .collect();
+    let mut generated = Vec::new();
+
+    let mut tt = module.type_table.borrow_mut();
+    let formatter_type = tt.make_struct("Formatter".to_string(), ModuleSource::format());
+    let fmt_type = tt.make_mut_ref(formatter_type);
+    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let span = synth_span();
+
+    // Helper: check if InspectAlt should be generated.
+    // Returns true if no InspectAlt exists AND an Inspect impl exists.
+    let has_inspect = |inspect_key: &str| -> bool {
+        existing.contains(inspect_key) || all_fn_names.contains(inspect_key)
+    };
+
+    // Enums — delegate to Inspect (no multiline needed for enum names)
+    for name in module
+        .enums
+        .iter()
+        .map(|e| e.name.clone())
+        .collect::<Vec<_>>()
+    {
+        let alt_key = MethodName::format_local(&name, Some("InspectAlt"), "inspect_alt");
+        let inspect_key = MethodName::format_local(&name, Some("Inspect"), "inspect");
+        if existing.contains(&alt_key) || !has_inspect(&inspect_key) {
+            continue;
+        }
+        let enum_type = tt.make_enum(name.clone(), module_source.clone());
+        let ref_type = tt.make_ref(enum_type);
+        let di = LocalMethodName::new(
+            name.clone(),
+            Some("InspectAlt".to_string()),
+            "inspect_alt".to_string(),
+        );
+        let ii = LocalMethodName::new(name, Some("Inspect".to_string()), "inspect".to_string());
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
+        ))));
+    }
+
+    // Non-generic structs — pretty-print with begin_block/end_block
+    let struct_infos: Vec<_> = module
+        .structs
+        .iter()
+        .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
+        .map(|s| {
+            let fields: Vec<_> = s
+                .fields
+                .iter()
+                .filter(|f| !f.is_hidden)
+                .map(|f| (f.name.clone(), f.type_id, f.index))
+                .collect();
+            let has_hidden = s.fields.iter().any(|f| f.is_hidden);
+            (s.name.clone(), fields, has_hidden, s.span)
+        })
+        .collect();
+
+    for (name, fields, has_hidden, sspan) in &struct_infos {
+        if name == "String" || name == "Formatter" {
+            continue;
+        }
+        let alt_key = MethodName::format_local(name, Some("InspectAlt"), "inspect_alt");
+        if existing.contains(&alt_key) {
+            continue;
+        }
+        let struct_type = tt.make_struct(name.clone(), module_source.clone());
+        let ref_type = tt.make_ref(struct_type);
+        generated.push(Rc::new(RefCell::new(generate_struct_inspect_alt_fn(
+            name,
+            fields,
+            *has_hidden,
+            ref_type,
+            fmt_type,
+            string_type,
+            &module_source,
+            &mut tt,
+            *sspan,
+        ))));
+    }
+
+    // Generic structs — pretty-print with impl_type_params
+    let generic_struct_infos: Vec<_> = module
+        .structs
+        .iter()
+        .filter(|s| !s.type_params.is_empty() && s.monomorph_info.is_none())
+        .map(|s| {
+            let fields: Vec<_> = s
+                .fields
+                .iter()
+                .filter(|f| !f.is_hidden)
+                .map(|f| (f.name.clone(), f.type_id, f.index))
+                .collect();
+            let has_hidden = s.fields.iter().any(|f| f.is_hidden);
+            (
+                s.name.clone(),
+                s.type_params.clone(),
+                fields,
+                has_hidden,
+                s.span,
+            )
+        })
+        .collect();
+
+    for (name, type_params, fields, has_hidden, sspan) in &generic_struct_infos {
+        let alt_key = MethodName::format_local(name, Some("InspectAlt"), "inspect_alt");
+        if existing.contains(&alt_key) {
+            continue;
+        }
+        let type_param_ids: Vec<TypeId> = type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        let struct_type =
+            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let ref_type = tt.make_ref(struct_type);
+        generated.push(Rc::new(RefCell::new(
+            generate_generic_struct_inspect_alt_fn(
+                name,
+                type_params,
+                fields,
+                *has_hidden,
+                ref_type,
+                fmt_type,
+                string_type,
+                &module_source,
+                &mut tt,
+                *sspan,
+            ),
+        )));
+    }
+
+    // Non-generic variants — pretty-print
+    let variant_infos: Vec<_> = module
+        .variants
+        .iter()
+        .filter(|v| v.type_params.is_empty())
+        .map(|v| {
+            let cases: Vec<_> = v
+                .cases
+                .iter()
+                .map(|c| (c.name.clone(), c.index, c.payload))
+                .collect();
+            (v.name.clone(), cases, v.span)
+        })
+        .collect();
+
+    for (name, cases, vspan) in &variant_infos {
+        let alt_key = MethodName::format_local(name, Some("InspectAlt"), "inspect_alt");
+        if existing.contains(&alt_key) {
+            continue;
+        }
+        let variant_type = tt.make_variant(name.clone(), module_source.clone());
+        let ref_type = tt.make_ref(variant_type);
+        generated.push(Rc::new(RefCell::new(generate_variant_inspect_alt_fn(
+            name,
+            cases,
+            variant_type,
+            ref_type,
+            fmt_type,
+            string_type,
+            &module_source,
+            &mut tt,
+            *vspan,
+        ))));
+    }
+
+    // Generic variants — pretty-print
+    let generic_variant_infos: Vec<_> = module
+        .variants
+        .iter()
+        .filter(|v| !v.type_params.is_empty())
+        .map(|v| {
+            let cases: Vec<_> = v
+                .cases
+                .iter()
+                .map(|c| (c.name.clone(), c.index, c.payload))
+                .collect();
+            (v.name.clone(), v.type_params.clone(), cases, v.span)
+        })
+        .collect();
+
+    for (name, type_params, cases, vspan) in &generic_variant_infos {
+        let alt_key = MethodName::format_local(name, Some("InspectAlt"), "inspect_alt");
+        if existing.contains(&alt_key) {
+            continue;
+        }
+        let type_param_ids: Vec<TypeId> = type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        let variant_type =
+            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let ref_type = tt.make_ref(variant_type);
+        generated.push(Rc::new(RefCell::new(
+            generate_generic_variant_inspect_alt_fn(
+                name,
+                type_params,
+                cases,
+                variant_type,
+                ref_type,
+                fmt_type,
+                string_type,
+                &module_source,
+                &mut tt,
+                *vspan,
+            ),
+        )));
+    }
+
+    // Flags — delegate to Inspect (bit flags don't need pretty print)
+    let flags_infos: Vec<_> = module
+        .flags
+        .iter()
+        .map(|f| (f.name.clone(), f.type_id))
+        .collect();
+
+    for (name, flags_type_id) in &flags_infos {
+        let alt_key = MethodName::format_local(name, Some("InspectAlt"), "inspect_alt");
+        let inspect_key = MethodName::format_local(name, Some("Inspect"), "inspect");
+        if existing.contains(&alt_key) || !has_inspect(&inspect_key) {
+            continue;
+        }
+        let ref_type = tt.make_ref(*flags_type_id);
+        let di = LocalMethodName::new(
+            name.clone(),
+            Some("InspectAlt".to_string()),
+            "inspect_alt".to_string(),
+        );
+        let ii = LocalMethodName::new(
+            name.clone(),
+            Some("Inspect".to_string()),
+            "inspect".to_string(),
+        );
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
+        ))));
+    }
+
+    // Newtypes — delegate to Inspect
+    for nt in &module.newtypes {
+        if module.flags.iter().any(|f| f.type_id == nt.type_id) {
+            continue;
+        }
+        let alt_key = MethodName::format_local(&nt.name, Some("InspectAlt"), "inspect_alt");
+        let inspect_key = MethodName::format_local(&nt.name, Some("Inspect"), "inspect");
+        if existing.contains(&alt_key) || !has_inspect(&inspect_key) {
+            continue;
+        }
+        let ref_type = tt.make_ref(nt.type_id);
+        let di = LocalMethodName::new(
+            nt.name.clone(),
+            Some("InspectAlt".to_string()),
+            "inspect_alt".to_string(),
+        );
+        let ii = LocalMethodName::new(
+            nt.name.clone(),
+            Some("Inspect".to_string()),
+            "inspect".to_string(),
+        );
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
+        ))));
+    }
+
+    // Parameterized types (tuples, function types)
+    for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
+        let mangled = format_parameterized_name(&base_name, &type_arg_names);
+        let alt_key = format!("{mangled}^InspectAlt::inspect_alt");
+        let inspect_key = format!("{mangled}^Inspect::inspect");
+        if existing.contains(&alt_key) || !has_inspect(&inspect_key) {
+            continue;
+        }
+        let ref_type = tt.make_ref(type_id);
+        let resolved = tt.get(type_id).clone();
+        if let ResolvedType::Tuple(elements) = resolved {
+            generated.push(Rc::new(RefCell::new(generate_tuple_inspect_alt_fn(
+                &type_arg_names,
+                &elements,
+                type_id,
+                ref_type,
+                fmt_type,
+                string_type,
+                &module_source,
+                &mut tt,
+                span,
+            ))));
+        } else {
+            // Function types, opaque types: delegate to Inspect
+            let di = LocalMethodName::new(
+                base_name.clone(),
+                Some("InspectAlt".to_string()),
+                "inspect_alt".to_string(),
+            )
+            .with_struct_type_args(&type_arg_names);
+            let ii = LocalMethodName::new(
+                base_name,
+                Some("Inspect".to_string()),
+                "inspect".to_string(),
+            )
+            .with_struct_type_args(&type_arg_names);
+            generated.push(Rc::new(RefCell::new(generate_display_fallback(
+                di,
+                ii,
+                ref_type,
+                fmt_type,
+                &module_source,
+                vec![],
+                span,
+            ))));
+        }
+    }
+
+    drop(tt);
+    module.functions.extend(generated);
+}
+
+/// Generate `StructName^InspectAlt::inspect_alt` for non-generic structs (pretty-print).
+///
+/// Body uses Formatter helpers for clean synthesis:
+/// ```text
+/// f.begin_block("StructName {\n");
+/// f.write_indent(); f.write_str("field1: "); self.field1.inspect_alt(f); f.write_str(",\n");
+/// f.write_indent(); f.write_str("field2: "); self.field2.inspect_alt(f); f.write_str(",\n");
+/// f.end_block("}");
+/// ```
+fn generate_struct_inspect_alt_fn(
+    struct_name: &str,
+    fields: &[(String, TypeId, u32)],
+    has_hidden: bool,
+    ref_struct_type: TypeId,
+    fmt_type: TypeId,
+    string_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        struct_name.to_string(),
+        Some("InspectAlt".to_string()),
+        "inspect_alt".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let self_ref = || local_expr(0, "self", ref_struct_type, span);
+    let fmt_local = || local_expr(1, "f", fmt_type, span);
+
+    let stmts = build_struct_inspect_alt_body(
+        struct_name,
+        fields,
+        has_hidden,
+        self_ref,
+        fmt_local,
+        string_type,
+        module_source,
+        tt,
+        span,
+    );
+
+    let body = TirBlock::new(stmts, span);
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        inspect_params(ref_struct_type, fmt_type, span),
+        TypeTable::UNIT,
+        body,
+        vec![ref_struct_type, fmt_type],
+    )
+}
+
+/// Generate `StructName^InspectAlt::inspect_alt` for generic structs (pretty-print).
+fn generate_generic_struct_inspect_alt_fn(
+    struct_name: &str,
+    type_params: &[TirTypeParam],
+    fields: &[(String, TypeId, u32)],
+    has_hidden: bool,
+    ref_struct_type: TypeId,
+    fmt_type: TypeId,
+    string_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        struct_name.to_string(),
+        Some("InspectAlt".to_string()),
+        "inspect_alt".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let self_ref = || local_expr(0, "self", ref_struct_type, span);
+    let fmt_local = || local_expr(1, "f", fmt_type, span);
+
+    let stmts = build_struct_inspect_alt_body(
+        struct_name,
+        fields,
+        has_hidden,
+        self_ref,
+        fmt_local,
+        string_type,
+        module_source,
+        tt,
+        span,
+    );
+
+    let body = TirBlock::new(stmts, span);
+    let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
+
+    TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params,
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params: inspect_params(ref_struct_type, fmt_type, span),
+        return_type: TypeTable::UNIT,
+        effects: Vec::new(),
+        body: Some(body),
+        span,
+        local_count: 2,
+        local_types: vec![ref_struct_type, fmt_type],
+        address_taken_locals: IndexSet::default(),
+        is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+        export_name: None,
+        allocator_tag: None,
+    }
+}
+
+/// Build the body statements for struct `InspectAlt` (shared between generic and non-generic).
+fn build_struct_inspect_alt_body(
+    struct_name: &str,
+    fields: &[(String, TypeId, u32)],
+    has_hidden: bool,
+    self_ref: impl Fn() -> TirExpr,
+    fmt_local: impl Fn() -> TirExpr,
+    string_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> Vec<TirStmt> {
+    let mut stmts = Vec::new();
+
+    if fields.is_empty() {
+        if has_hidden {
+            stmts.push(write_str_stmt(
+                format!("{struct_name} {{ .. }}"),
+                fmt_local(),
+                string_type,
+                span,
+            ));
+        } else {
+            stmts.push(write_str_stmt(
+                format!("{struct_name} {{}}"),
+                fmt_local(),
+                string_type,
+                span,
+            ));
+        }
+    } else {
+        // f.begin_block("StructName {")
+        stmts.push(formatter_call(
+            "open_brace",
+            fmt_local(),
+            format!("{struct_name} {{"),
+            string_type,
+            span,
+        ));
+        for (field_name, field_type, field_index) in fields {
+            // f.write_newline_indent()
+            stmts.push(formatter_call_no_arg(
+                "write_newline_indent",
+                fmt_local(),
+                span,
+            ));
+            stmts.push(write_str_stmt(
+                format!("{field_name}: "),
+                fmt_local(),
+                string_type,
+                span,
+            ));
+            let field_access = TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(self_ref()),
+                    field_index: *field_index,
+                    field_name: field_name.clone(),
+                },
+                *field_type,
+                span,
+            );
+            stmts.push(inspect_alt_call(
+                field_access,
+                *field_type,
+                fmt_local(),
+                module_source,
+                tt,
+                span,
+            ));
+            stmts.push(write_str_stmt(",", fmt_local(), string_type, span));
+        }
+        if has_hidden {
+            stmts.push(formatter_call_no_arg(
+                "write_newline_indent",
+                fmt_local(),
+                span,
+            ));
+            stmts.push(write_str_stmt("..", fmt_local(), string_type, span));
+        }
+        // f.end_block("}")
+        stmts.push(formatter_call(
+            "close_brace",
+            fmt_local(),
+            "}",
+            string_type,
+            span,
+        ));
+    }
+
+    stmts
+}
+
+/// Generate `VariantName^InspectAlt::inspect_alt` for non-generic variants (pretty-print).
+fn generate_variant_inspect_alt_fn(
+    variant_name: &str,
+    cases: &[(String, u32, TypeId)],
+    variant_type: TypeId,
+    ref_variant_type: TypeId,
+    fmt_type: TypeId,
+    string_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        variant_name.to_string(),
+        Some("InspectAlt".to_string()),
+        "inspect_alt".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let stmts = build_variant_inspect_alt_body(
+        variant_name,
+        cases,
+        variant_type,
+        ref_variant_type,
+        fmt_type,
+        string_type,
+        module_source,
+        tt,
+        span,
+    );
+
+    let body = TirBlock::new(stmts, span);
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        inspect_params(ref_variant_type, fmt_type, span),
+        TypeTable::UNIT,
+        body,
+        vec![ref_variant_type, fmt_type],
+    )
+}
+
+/// Generate `VariantName^InspectAlt::inspect_alt` for generic variants (pretty-print).
+fn generate_generic_variant_inspect_alt_fn(
+    variant_name: &str,
+    type_params: &[TirTypeParam],
+    cases: &[(String, u32, TypeId)],
+    variant_type: TypeId,
+    ref_variant_type: TypeId,
+    fmt_type: TypeId,
+    string_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        variant_name.to_string(),
+        Some("InspectAlt".to_string()),
+        "inspect_alt".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let stmts = build_variant_inspect_alt_body(
+        variant_name,
+        cases,
+        variant_type,
+        ref_variant_type,
+        fmt_type,
+        string_type,
+        module_source,
+        tt,
+        span,
+    );
+
+    let body = TirBlock::new(stmts, span);
+    TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params: type_params.to_vec(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params: inspect_params(ref_variant_type, fmt_type, span),
+        return_type: TypeTable::UNIT,
+        effects: Vec::new(),
+        body: Some(body),
+        span,
+        local_count: 2,
+        local_types: vec![ref_variant_type, fmt_type],
+        address_taken_locals: IndexSet::default(),
+        is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+        export_name: None,
+        allocator_tag: None,
+    }
+}
+
+/// Build the body for variant `InspectAlt` (shared between generic and non-generic).
+fn build_variant_inspect_alt_body(
+    variant_name: &str,
+    cases: &[(String, u32, TypeId)],
+    variant_type: TypeId,
+    ref_variant_type: TypeId,
+    fmt_type: TypeId,
+    string_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> Vec<TirStmt> {
+    let deref_self = || {
+        deref_expr(
+            local_expr(0, "self", ref_variant_type, span),
+            variant_type,
+            span,
+        )
+    };
+    let fmt_local = || local_expr(1, "f", fmt_type, span);
+
+    let mut chain: Option<TirExpr> = None;
+    for (case_name, case_index, payload_type) in cases.iter().rev() {
+        let is_unit = *payload_type == TypeTable::UNIT;
+        let mut then_stmts = Vec::new();
+
+        if is_unit {
+            then_stmts.push(write_str_stmt(
+                format!("{variant_name}::{case_name}"),
+                fmt_local(),
+                string_type,
+                span,
+            ));
+        } else {
+            // f.open_brace("VariantName::CaseName(")
+            then_stmts.push(formatter_call(
+                "open_brace",
+                fmt_local(),
+                format!("{variant_name}::{case_name}("),
+                string_type,
+                span,
+            ));
+            // f.write_newline_indent()
+            then_stmts.push(formatter_call_no_arg(
+                "write_newline_indent",
+                fmt_local(),
+                span,
+            ));
+            let payload = TirExpr::new(
+                TirExprKind::VariantPayload {
+                    expr: Box::new(deref_self()),
+                    case_index: *case_index,
+                    payload_type: *payload_type,
+                },
+                *payload_type,
+                span,
+            );
+            then_stmts.push(inspect_alt_call(
+                payload,
+                *payload_type,
+                fmt_local(),
+                module_source,
+                tt,
+                span,
+            ));
+            then_stmts.push(write_str_stmt(",", fmt_local(), string_type, span));
+            // f.close_brace(")")
+            then_stmts.push(formatter_call(
+                "close_brace",
+                fmt_local(),
+                ")",
+                string_type,
+                span,
+            ));
+        }
+
+        let cond = TirExpr::new(
+            TirExprKind::VariantTest {
+                expr: Box::new(deref_self()),
+                case_index: *case_index,
+                case_name: case_name.clone(),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+        let if_expr = TirExpr::new(
+            TirExprKind::If {
+                condition: Box::new(cond),
+                then_branch: TirBlock::new(then_stmts, span),
+                else_branch: chain
+                    .map(|e| TirBlock::new(vec![TirStmt::new(TirStmtKind::Expr(e), span)], span)),
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        chain = Some(if_expr);
+    }
+
+    chain.map_or_else(Vec::new, |e| vec![TirStmt::new(TirStmtKind::Expr(e), span)])
+}
+
+/// Generate `Tuple<...>^InspectAlt::inspect_alt` for a concrete tuple type (pretty-print).
+fn generate_tuple_inspect_alt_fn(
+    type_arg_names: &[String],
+    elements: &[TypeId],
+    tuple_type: TypeId,
+    ref_tuple_type: TypeId,
+    fmt_type: TypeId,
+    string_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        "Tuple".to_string(),
+        Some("InspectAlt".to_string()),
+        "inspect_alt".to_string(),
+    )
+    .with_struct_type_args(type_arg_names);
+    let qualified_name = method_info.to_mangled_name();
+
+    let deref_self = || {
+        deref_expr(
+            local_expr(0, "self", ref_tuple_type, span),
+            tuple_type,
+            span,
+        )
+    };
+    let fmt = || local_expr(1, "f", fmt_type, span);
+
+    let mut stmts = Vec::new();
+    stmts.push(formatter_call("open_brace", fmt(), "[", string_type, span));
+    for (i, elem_type) in elements.iter().enumerate() {
+        stmts.push(formatter_call_no_arg("write_newline_indent", fmt(), span));
+        stmts.push(inspect_alt_call(
+            field_access(deref_self(), i as u32, i.to_string(), *elem_type, span),
+            *elem_type,
+            fmt(),
+            module_source,
+            tt,
+            span,
+        ));
+        stmts.push(write_str_stmt(",", fmt(), string_type, span));
+    }
+    stmts.push(formatter_call("close_brace", fmt(), "]", string_type, span));
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        inspect_params(ref_tuple_type, fmt_type, span),
+        TypeTable::UNIT,
+        TirBlock::new(stmts, span),
+        vec![ref_tuple_type, fmt_type],
+    )
+}
+
+/// Build a `value.inspect_alt(f)` method call statement.
+///
+/// Identical to `inspect_call` but for the `InspectAlt` trait.
+fn inspect_alt_call(
+    value: TirExpr,
+    value_type: TypeId,
+    fmt: TirExpr,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirStmt {
+    let ref_type = tt.make_ref(value_type);
+    let receiver = ref_expr(value, ref_type, span);
+
+    let resolved = tt.get(value_type).clone();
+    let (base_name, is_type_param, type_arg_names) =
+        decompose_type_for_method_name(&resolved, value_type, tt);
+
+    let mut info = LocalMethodName::new(
+        base_name,
+        Some("InspectAlt".to_string()),
+        "inspect_alt".to_string(),
+    );
+    if !type_arg_names.is_empty() {
+        info = info.with_struct_type_args(&type_arg_names);
+    }
+    info.is_type_param_receiver = is_type_param;
+
+    let impl_module = if is_type_param {
+        module_source.clone()
+    } else {
+        inspect_impl_module(value_type, tt, module_source)
+    };
+
+    let monomorph_info = match &resolved {
+        ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
+            let base_info = LocalMethodName::new(
+                info.base_struct_name.clone(),
+                Some("InspectAlt".to_string()),
+                "inspect_alt".to_string(),
+            );
+            Some(MonomorphInfo {
+                generic_name: base_info.to_mangled_name(),
+                type_args: vec![*inner_id],
+                is_blanket: true,
+            })
+        }
+        _ => None,
+    };
+
+    if let Some(monomorph) = monomorph_info {
+        let fn_name = info.to_mangled_name();
+        let call = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(receiver),
+                func: FunctionRef {
+                    module_source: impl_module,
+                    name: fn_name,
+                    monomorph_info: Some(monomorph),
+                    method_info: Some(info),
+                    is_cm_adapter: false,
+                },
+                type_args: vec![],
+                args: vec![CallArg::new(fmt, false)],
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        TirStmt::new(TirStmtKind::Expr(call), span)
+    } else {
+        trait_method_call(receiver, info, impl_module, vec![fmt], span)
+    }
+}
+
+/// Build a `f.method_name(text)` call statement on the Formatter.
+fn formatter_call(
+    method_name: &str,
+    fmt: TirExpr,
+    text: impl Into<String>,
+    string_type: TypeId,
+    span: Span,
+) -> TirStmt {
+    let call = TirExpr::new(
+        TirExprKind::MethodCall {
+            receiver: Box::new(fmt),
+            func: FunctionRef {
+                module_source: ModuleSource::format(),
+                name: format!("Formatter::{method_name}"),
+                monomorph_info: None,
+                method_info: Some(LocalMethodName::new(
+                    "Formatter".to_string(),
+                    None,
+                    method_name.to_string(),
+                )),
+                is_cm_adapter: false,
+            },
+            type_args: vec![],
+            args: vec![CallArg::new(
+                TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span),
+                false,
+            )],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    TirStmt::new(TirStmtKind::Expr(call), span)
+}
+
+/// Build a `f.method_name()` call statement on the Formatter (no arguments).
+fn formatter_call_no_arg(method_name: &str, fmt: TirExpr, span: Span) -> TirStmt {
+    let call = TirExpr::new(
+        TirExprKind::MethodCall {
+            receiver: Box::new(fmt),
+            func: FunctionRef {
+                module_source: ModuleSource::format(),
+                name: format!("Formatter::{method_name}"),
+                monomorph_info: None,
+                method_info: Some(LocalMethodName::new(
+                    "Formatter".to_string(),
+                    None,
+                    method_name.to_string(),
+                )),
+                is_cm_adapter: false,
+            },
+            type_args: vec![],
+            args: vec![],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    TirStmt::new(TirStmtKind::Expr(call), span)
+}
+
 // ─── Display fallback synthesis ───
 
 /// Generate `Display::fmt` fallback implementations for types without a user-provided Display impl.
@@ -2030,6 +2977,296 @@ fn generate_display_fallback(
         export_name: None,
         allocator_tag: None,
     }
+}
+
+// ─── DisplayAlt fallback synthesis ───
+
+/// Generate `DisplayAlt::fmt_alt` fallback implementations that delegate to `InspectAlt::inspect_alt`.
+///
+/// Mirrors `generate_display_fallback_impls` but for the Alt trait pair.
+fn generate_display_alt_fallback_impls(module: &mut TirModule) {
+    let module_source = module.module_source.clone();
+    let existing = collect_existing_trait_methods(module);
+    let all_fn_names: IndexSet<String> = module
+        .functions
+        .iter()
+        .filter_map(|f| f.try_borrow().ok().map(|func| func.name.clone()))
+        .collect();
+    let mut generated = Vec::new();
+
+    let span = synth_span();
+    let mut tt = module.type_table.borrow_mut();
+    let formatter_type = tt.make_struct("Formatter".to_string(), ModuleSource::format());
+    let fmt_type = tt.make_mut_ref(formatter_type);
+
+    let should_generate = |display_alt_key: &str, inspect_alt_key: &str| -> bool {
+        if existing.contains(display_alt_key) {
+            return false;
+        }
+        existing.contains(inspect_alt_key) || all_fn_names.contains(inspect_alt_key)
+    };
+
+    let simple_pair = |name: &str| -> (LocalMethodName, LocalMethodName) {
+        (
+            LocalMethodName::new(
+                name.to_string(),
+                Some("DisplayAlt".to_string()),
+                "fmt_alt".to_string(),
+            ),
+            LocalMethodName::new(
+                name.to_string(),
+                Some("InspectAlt".to_string()),
+                "inspect_alt".to_string(),
+            ),
+        )
+    };
+
+    // Enums
+    for name in module
+        .enums
+        .iter()
+        .map(|e| e.name.clone())
+        .collect::<Vec<_>>()
+    {
+        let (da_key, ia_key) = (
+            MethodName::format_local(&name, Some("DisplayAlt"), "fmt_alt"),
+            MethodName::format_local(&name, Some("InspectAlt"), "inspect_alt"),
+        );
+        if !should_generate(&da_key, &ia_key) {
+            continue;
+        }
+        let enum_type = tt.make_enum(name.clone(), module_source.clone());
+        let ref_type = tt.make_ref(enum_type);
+        let (di, ii) = simple_pair(&name);
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
+        ))));
+    }
+
+    // Non-generic structs
+    for name in module
+        .structs
+        .iter()
+        .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
+        .map(|s| s.name.clone())
+        .collect::<Vec<_>>()
+    {
+        if name == "String" || name == "Formatter" {
+            continue;
+        }
+        let (da_key, ia_key) = (
+            MethodName::format_local(&name, Some("DisplayAlt"), "fmt_alt"),
+            MethodName::format_local(&name, Some("InspectAlt"), "inspect_alt"),
+        );
+        if !should_generate(&da_key, &ia_key) {
+            continue;
+        }
+        let struct_type = tt.make_struct(name.clone(), module_source.clone());
+        let ref_type = tt.make_ref(struct_type);
+        let (di, ii) = simple_pair(&name);
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
+        ))));
+    }
+
+    // Generic structs
+    for (name, type_params) in module
+        .structs
+        .iter()
+        .filter(|s| !s.type_params.is_empty() && s.monomorph_info.is_none())
+        .map(|s| (s.name.clone(), s.type_params.clone()))
+        .collect::<Vec<_>>()
+    {
+        if name == "Array" {
+            continue;
+        }
+        let (da_key, ia_key) = (
+            MethodName::format_local(&name, Some("DisplayAlt"), "fmt_alt"),
+            MethodName::format_local(&name, Some("InspectAlt"), "inspect_alt"),
+        );
+        if !should_generate(&da_key, &ia_key) {
+            continue;
+        }
+        let type_param_ids: Vec<TypeId> = type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        let struct_type =
+            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let ref_type = tt.make_ref(struct_type);
+        let (di, ii) = simple_pair(&name);
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            type_params,
+            span,
+        ))));
+    }
+
+    // Non-generic variants
+    for name in module
+        .variants
+        .iter()
+        .filter(|v| v.type_params.is_empty())
+        .map(|v| v.name.clone())
+        .collect::<Vec<_>>()
+    {
+        let (da_key, ia_key) = (
+            MethodName::format_local(&name, Some("DisplayAlt"), "fmt_alt"),
+            MethodName::format_local(&name, Some("InspectAlt"), "inspect_alt"),
+        );
+        if !should_generate(&da_key, &ia_key) {
+            continue;
+        }
+        let variant_type = tt.make_variant(name.clone(), module_source.clone());
+        let ref_type = tt.make_ref(variant_type);
+        let (di, ii) = simple_pair(&name);
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
+        ))));
+    }
+
+    // Generic variants
+    for (name, type_params) in module
+        .variants
+        .iter()
+        .filter(|v| !v.type_params.is_empty())
+        .map(|v| (v.name.clone(), v.type_params.clone()))
+        .collect::<Vec<_>>()
+    {
+        let (da_key, ia_key) = (
+            MethodName::format_local(&name, Some("DisplayAlt"), "fmt_alt"),
+            MethodName::format_local(&name, Some("InspectAlt"), "inspect_alt"),
+        );
+        if !should_generate(&da_key, &ia_key) {
+            continue;
+        }
+        let type_param_ids: Vec<TypeId> = type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        let variant_type =
+            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let ref_type = tt.make_ref(variant_type);
+        let (di, ii) = simple_pair(&name);
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            type_params,
+            span,
+        ))));
+    }
+
+    // Flags
+    for (name, flags_type_id) in module
+        .flags
+        .iter()
+        .map(|f| (f.name.clone(), f.type_id))
+        .collect::<Vec<_>>()
+    {
+        let (da_key, ia_key) = (
+            MethodName::format_local(&name, Some("DisplayAlt"), "fmt_alt"),
+            MethodName::format_local(&name, Some("InspectAlt"), "inspect_alt"),
+        );
+        if !should_generate(&da_key, &ia_key) {
+            continue;
+        }
+        let ref_type = tt.make_ref(flags_type_id);
+        let (di, ii) = simple_pair(&name);
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
+        ))));
+    }
+
+    // Newtypes
+    for nt in &module.newtypes {
+        if module.flags.iter().any(|f| f.type_id == nt.type_id) {
+            continue;
+        }
+        let (da_key, ia_key) = (
+            MethodName::format_local(&nt.name, Some("DisplayAlt"), "fmt_alt"),
+            MethodName::format_local(&nt.name, Some("InspectAlt"), "inspect_alt"),
+        );
+        if !should_generate(&da_key, &ia_key) {
+            continue;
+        }
+        let ref_type = tt.make_ref(nt.type_id);
+        let (di, ii) = simple_pair(&nt.name);
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
+        ))));
+    }
+
+    // Parameterized types
+    for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
+        let mangled = format_parameterized_name(&base_name, &type_arg_names);
+        let da_key = format!("{mangled}^DisplayAlt::fmt_alt");
+        let ia_key = format!("{mangled}^InspectAlt::inspect_alt");
+        if !should_generate(&da_key, &ia_key) {
+            continue;
+        }
+        let ref_type = tt.make_ref(type_id);
+        let di = LocalMethodName::new(
+            base_name.clone(),
+            Some("DisplayAlt".to_string()),
+            "fmt_alt".to_string(),
+        )
+        .with_struct_type_args(&type_arg_names);
+        let ii = LocalMethodName::new(
+            base_name,
+            Some("InspectAlt".to_string()),
+            "inspect_alt".to_string(),
+        )
+        .with_struct_type_args(&type_arg_names);
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            vec![],
+            span,
+        ))));
+    }
+
+    drop(tt);
+    module.functions.extend(generated);
 }
 
 /// Build a `value.inspect(f)` method call statement.

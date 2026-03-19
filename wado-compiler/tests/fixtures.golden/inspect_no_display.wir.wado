@@ -13,10 +13,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -267,7 +267,7 @@ fn run() with Stdout {
         __local_10 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_11 = __inline_Formatter__new_2: block -> ref Formatter {
             __local_29 = __local_10;
-            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_29) };
+            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_29) };
         };
         Point^Inspect::inspect(p, __local_11);
         break __tmpl: __local_10;
@@ -277,7 +277,7 @@ fn run() with Stdout {
         __local_12 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_13 = __inline_Formatter__new_4: block -> ref Formatter {
             __local_31 = __local_12;
-            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_31) };
+            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_31) };
         };
         Color^Inspect::inspect(c, __local_13);
         break __tmpl: __local_12;
@@ -287,7 +287,7 @@ fn run() with Stdout {
         __local_14 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_15 = __inline_Formatter__new_6: block -> ref Formatter {
             __local_33 = __local_14;
-            break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
+            break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_33) };
         };
         Shape^Inspect::inspect(ref.as_non_null(s), __local_15);
         break __tmpl: __local_14;
@@ -296,7 +296,7 @@ fn run() with Stdout {
         __local_16 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_17 = __inline_Formatter__new_8: block -> ref Formatter {
             __local_35 = __local_16;
-            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_35) };
+            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_35) };
         };
         Mode^Inspect::inspect(3, __local_17);
         break __tmpl: __local_16;
@@ -306,7 +306,7 @@ fn run() with Stdout {
         __local_18 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_19 = __inline_Formatter__new_10: block -> ref Formatter {
             __local_37 = __local_18;
-            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_37) };
+            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_37) };
         };
         Option<i32>^Inspect::inspect(ref.as_non_null(opt), __local_19);
         break __tmpl: __local_18;
@@ -316,7 +316,7 @@ fn run() with Stdout {
         __local_20 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_21 = __inline_Formatter__new_12: block -> ref Formatter {
             __local_39 = __local_20;
-            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_39) };
+            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_39) };
         };
         Option<i32>^Inspect::inspect(ref.as_non_null(none), __local_21);
         break __tmpl: __local_20;
@@ -326,7 +326,7 @@ fn run() with Stdout {
         __local_22 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_23 = __inline_Formatter__new_14: block -> ref Formatter {
             __local_41 = __local_22;
-            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_41) };
+            break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_41) };
         };
         Option<Point>^Inspect::inspect(opt_p, __local_23);
         break __tmpl: __local_22;
@@ -339,7 +339,7 @@ fn run() with Stdout {
         __local_24 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_25 = __inline_Formatter__new_21: block -> ref Formatter {
             __local_50 = __local_24;
-            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_50) };
+            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_50) };
         };
         Array<Point>^Inspect::inspect(arr, __local_25);
         break __tmpl: __local_24;
@@ -348,7 +348,7 @@ fn run() with Stdout {
         __local_26 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_27 = __inline_Formatter__new_23: block -> ref Formatter {
             __local_52 = __local_26;
-            break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_52) };
+            break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_52) };
         };
         __local_54 = String { repr: array.new_data<u8>("|i32| -> i32"), used: 12 };
         String::append(__local_27.buf, __local_54);
@@ -1873,14 +1873,14 @@ fn Array<Point>^Inspect::inspect(self, f) {
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Point>;
     String::append_char(f.buf, 91);
-    __for_4: block {
+    __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
             l172: loop {
                 if (i < _licm_used_12) == 0 {
-                    break __for_4;
+                    break __for_5;
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };

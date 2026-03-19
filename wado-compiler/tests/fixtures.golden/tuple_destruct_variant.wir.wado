@@ -17,10 +17,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -196,7 +196,7 @@ fn describe(a, b) {
                     String::append_char(__local_8, 32);
                     __local_9 = __inline_Formatter__new_1: block -> ref Formatter {
                         __local_22 = __local_8;
-                        break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_22) };
+                        break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_22) };
                     };
                     __local_24 = __local_9;
                     Formatter::pad(__local_24, if __local_2 -> ref String {
@@ -207,7 +207,7 @@ fn describe(a, b) {
                     String::append_char(__local_8, 32);
                     __local_9 = __inline_Formatter__new_4: block -> ref Formatter {
                         __local_27 = __local_8;
-                        break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_27) };
+                        break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_27) };
                     };
                     __local_29 = __local_9;
                     Formatter::pad(__local_29, if __local_3 -> ref String {
@@ -239,7 +239,7 @@ fn describe(a, b) {
                         String::append_char(__local_10, 32);
                         __local_11 = __inline_Formatter__new_8: block -> ref Formatter {
                             __local_33 = __local_10;
-                            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
+                            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_33) };
                         };
                         __local_34 = "core:internal/Box<i32>" { value: __local_4 };
                         __local_35 = __local_11;
@@ -247,7 +247,7 @@ fn describe(a, b) {
                         String::append_char(__local_10, 32);
                         __local_11 = __inline_Formatter__new_11: block -> ref Formatter {
                             __local_38 = __local_10;
-                            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_38) };
+                            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_38) };
                         };
                         __local_39 = "core:internal/Box<i32>" { value: __local_5 };
                         __local_40 = __local_11;
@@ -340,7 +340,7 @@ fn describe(a, b) {
                     String::append_char(__local_10, 32);
                     __local_11 = __inline_Formatter__new_8: block -> ref Formatter {
                         __local_33 = __local_10;
-                        break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
+                        break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_33) };
                     };
                     __local_34 = "core:internal/Box<i32>" { value: __local_4 };
                     __local_35 = __local_11;
@@ -348,7 +348,7 @@ fn describe(a, b) {
                     String::append_char(__local_10, 32);
                     __local_11 = __inline_Formatter__new_11: block -> ref Formatter {
                         __local_38 = __local_10;
-                        break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_38) };
+                        break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_38) };
                     };
                     __local_39 = "core:internal/Box<i32>" { value: __local_5 };
                     __local_40 = __local_11;
@@ -442,7 +442,7 @@ fn describe(a, b) {
                 String::append_char(__local_8, 32);
                 __local_9 = __inline_Formatter__new_1: block -> ref Formatter {
                     __local_22 = __local_8;
-                    break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_22) };
+                    break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_22) };
                 };
                 __local_24 = __local_9;
                 Formatter::pad(__local_24, if __local_2 -> ref String {
@@ -453,7 +453,7 @@ fn describe(a, b) {
                 String::append_char(__local_8, 32);
                 __local_9 = __inline_Formatter__new_4: block -> ref Formatter {
                     __local_27 = __local_8;
-                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_27) };
+                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_27) };
                 };
                 __local_29 = __local_9;
                 Formatter::pad(__local_29, if __local_3 -> ref String {
@@ -485,7 +485,7 @@ fn describe(a, b) {
                     String::append_char(__local_10, 32);
                     __local_11 = __inline_Formatter__new_8: block -> ref Formatter {
                         __local_33 = __local_10;
-                        break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
+                        break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_33) };
                     };
                     __local_34 = "core:internal/Box<i32>" { value: __local_4 };
                     __local_35 = __local_11;
@@ -493,7 +493,7 @@ fn describe(a, b) {
                     String::append_char(__local_10, 32);
                     __local_11 = __inline_Formatter__new_11: block -> ref Formatter {
                         __local_38 = __local_10;
-                        break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_38) };
+                        break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_38) };
                     };
                     __local_39 = "core:internal/Box<i32>" { value: __local_5 };
                     __local_40 = __local_11;
@@ -586,7 +586,7 @@ fn describe(a, b) {
                 String::append_char(__local_10, 32);
                 __local_11 = __inline_Formatter__new_8: block -> ref Formatter {
                     __local_33 = __local_10;
-                    break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
+                    break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_33) };
                 };
                 __local_34 = "core:internal/Box<i32>" { value: __local_4 };
                 __local_35 = __local_11;
@@ -594,7 +594,7 @@ fn describe(a, b) {
                 String::append_char(__local_10, 32);
                 __local_11 = __inline_Formatter__new_11: block -> ref Formatter {
                     __local_38 = __local_10;
-                    break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_38) };
+                    break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_38) };
                 };
                 __local_39 = "core:internal/Box<i32>" { value: __local_5 };
                 __local_40 = __local_11;

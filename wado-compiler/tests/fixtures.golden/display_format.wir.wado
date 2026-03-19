@@ -23,10 +23,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -139,7 +139,7 @@ fn fmt_with(value, sign_plus, zero_pad, width, align) {
     let f_10: ref Formatter;
     buf = String { repr: builtin::array_new<u8>(64), used: 0 };
     fill = select char(zero_pad, 48, 32);
-    f_7 = Formatter { fill: fill, align: align, sign_plus: sign_plus, alternate: 0, zero_pad: zero_pad, width: width, precision: -1, buf: ref.as_non_null(buf) };
+    f_7 = Formatter { fill: fill, align: align, sign_plus: sign_plus, zero_pad: zero_pad, width: width, precision: -1, indent: 0, buf: ref.as_non_null(buf) };
     f_10 = f_7;
     i32::fmt_decimal(value, f_10);
     return buf;
@@ -150,7 +150,7 @@ fn fmt_int(value, fill, align, sign_plus, zero_pad, width) {
     let f_7: ref Formatter;
     let f_10: ref Formatter;
     buf = String { repr: builtin::array_new<u8>(64), used: 0 };
-    f_7 = Formatter { fill: fill, align: align, sign_plus: sign_plus, alternate: 0, zero_pad: zero_pad, width: width, precision: -1, buf: ref.as_non_null(buf) };
+    f_7 = Formatter { fill: fill, align: align, sign_plus: sign_plus, zero_pad: zero_pad, width: width, precision: -1, indent: 0, buf: ref.as_non_null(buf) };
     f_10 = f_7;
     i32::fmt_decimal(value, f_10);
     return buf;
@@ -218,7 +218,7 @@ fn display_format_base() with Stdout {
             String::append_char(__local_14, 58);
             __local_15 = __inline_Formatter__new_1: block -> ref Formatter {
                 __local_27 = __local_14;
-                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_27) };
+                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_27) };
             };
             __local_29 = __local_15;
             i32::fmt_decimal(48, __local_29);
@@ -228,7 +228,7 @@ condition: fmt_with(&x, true, false, -1, Alignment::Right) == \"+42\"
             String::append(__local_14, String { repr: array.new_data<u8>("fmt_with(&x, true, false, -1, Alignment::Right): "), used: 49 });
             __local_15 = __inline_Formatter__new_4: block -> ref Formatter {
                 __local_32 = __local_14;
-                break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_32) };
+                break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_32) };
             };
             String^Inspect::inspect(__v0_2, __local_15);
             String::append_char(__local_14, 10);
@@ -251,7 +251,7 @@ condition: fmt_with(&x, true, false, -1, Alignment::Right) == \"+42\"
             String::append_char(__local_16, 58);
             __local_17 = __inline_Formatter__new_6: block -> ref Formatter {
                 __local_34 = __local_16;
-                break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_34) };
+                break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_34) };
             };
             __local_36 = __local_17;
             i32::fmt_decimal(51, __local_36);
@@ -261,7 +261,7 @@ condition: fmt_with(&neg, true, false, -1, Alignment::Right) == \"-42\"
             String::append(__local_16, String { repr: array.new_data<u8>("fmt_with(&neg, true, false, -1, Alignment::Right): "), used: 51 });
             __local_17 = __inline_Formatter__new_9: block -> ref Formatter {
                 __local_39 = __local_16;
-                break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_39) };
+                break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_39) };
             };
             String^Inspect::inspect(__v0_4, __local_17);
             String::append_char(__local_16, 10);
@@ -284,7 +284,7 @@ condition: fmt_with(&neg, true, false, -1, Alignment::Right) == \"-42\"
             String::append_char(__local_18, 58);
             __local_19 = __inline_Formatter__new_11: block -> ref Formatter {
                 __local_41 = __local_18;
-                break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_41) };
+                break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_41) };
             };
             __local_43 = __local_19;
             i32::fmt_decimal(54, __local_43);
@@ -294,7 +294,7 @@ condition: fmt_with(&x, true, true, 8, Alignment::Right) == \"+0000042\"
             String::append(__local_18, String { repr: array.new_data<u8>("fmt_with(&x, true, true, 8, Alignment::Right): "), used: 47 });
             __local_19 = __inline_Formatter__new_14: block -> ref Formatter {
                 __local_46 = __local_18;
-                break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_46) };
+                break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_46) };
             };
             String^Inspect::inspect(__v0_6, __local_19);
             String::append_char(__local_18, 10);
@@ -317,7 +317,7 @@ condition: fmt_with(&x, true, true, 8, Alignment::Right) == \"+0000042\"
             String::append_char(__local_20, 58);
             __local_21 = __inline_Formatter__new_16: block -> ref Formatter {
                 __local_48 = __local_20;
-                break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_48) };
+                break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_48) };
             };
             __local_50 = __local_21;
             i32::fmt_decimal(57, __local_50);
@@ -327,7 +327,7 @@ condition: fmt_with(&neg, false, true, 8, Alignment::Right) == \"-0000042\"
             String::append(__local_20, String { repr: array.new_data<u8>("fmt_with(&neg, false, true, 8, Alignment::Right): "), used: 50 });
             __local_21 = __inline_Formatter__new_19: block -> ref Formatter {
                 __local_53 = __local_20;
-                break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_53) };
+                break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_53) };
             };
             String^Inspect::inspect(__v0_8, __local_21);
             String::append_char(__local_20, 10);
@@ -350,7 +350,7 @@ condition: fmt_with(&neg, false, true, 8, Alignment::Right) == \"-0000042\"
             String::append_char(__local_22, 58);
             __local_23 = __inline_Formatter__new_21: block -> ref Formatter {
                 __local_55 = __local_22;
-                break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_55) };
+                break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_55) };
             };
             __local_57 = __local_23;
             i32::fmt_decimal(60, __local_57);
@@ -360,7 +360,7 @@ condition: fmt_with(&x, true, false, 10, Alignment::Right) == \"       +42\"
             String::append(__local_22, String { repr: array.new_data<u8>("fmt_with(&x, true, false, 10, Alignment::Right): "), used: 49 });
             __local_23 = __inline_Formatter__new_24: block -> ref Formatter {
                 __local_60 = __local_22;
-                break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_60) };
+                break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_60) };
             };
             String^Inspect::inspect(__v0_10, __local_23);
             String::append_char(__local_22, 10);
@@ -383,7 +383,7 @@ condition: fmt_with(&x, true, false, 10, Alignment::Right) == \"       +42\"
             String::append_char(__local_24, 58);
             __local_25 = __inline_Formatter__new_26: block -> ref Formatter {
                 __local_62 = __local_24;
-                break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_62) };
+                break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_62) };
             };
             __local_64 = __local_25;
             i32::fmt_decimal(63, __local_64);
@@ -393,7 +393,7 @@ condition: fmt_with(&neg, false, false, 10, Alignment::Left) == \"-42       \"
             String::append(__local_24, String { repr: array.new_data<u8>("fmt_with(&neg, false, false, 10, Alignment::Left): "), used: 51 });
             __local_25 = __inline_Formatter__new_29: block -> ref Formatter {
                 __local_67 = __local_24;
-                break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_67) };
+                break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_67) };
             };
             String^Inspect::inspect(__v0_12, __local_25);
             String::append_char(__local_24, 10);
@@ -488,7 +488,7 @@ fn display_format_padding() with Stdout {
             String::append_char(__local_23, 58);
             __local_24 = __inline_Formatter__new_1: block -> ref Formatter {
                 __local_42 = __local_23;
-                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_42) };
+                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_42) };
             };
             __local_44 = __local_24;
             i32::fmt_decimal(75, __local_44);
@@ -498,7 +498,7 @@ condition: fmt_int(&x, ' ', Alignment::Right, false, false, 10) == \"        42\
             String::append(__local_23, String { repr: array.new_data<u8>("fmt_int(&x, ' ', Alignment::Right, false, false, 10): "), used: 54 });
             __local_24 = __inline_Formatter__new_4: block -> ref Formatter {
                 __local_47 = __local_23;
-                break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_47) };
+                break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_47) };
             };
             String^Inspect::inspect(__v0_3, __local_24);
             String::append_char(__local_23, 10);
@@ -521,7 +521,7 @@ condition: fmt_int(&x, ' ', Alignment::Right, false, false, 10) == \"        42\
             String::append_char(__local_25, 58);
             __local_26 = __inline_Formatter__new_6: block -> ref Formatter {
                 __local_49 = __local_25;
-                break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_49) };
+                break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_49) };
             };
             __local_51 = __local_26;
             i32::fmt_decimal(78, __local_51);
@@ -531,7 +531,7 @@ condition: fmt_int(&x, ' ', Alignment::Left, false, false, 10) == \"42        \"
             String::append(__local_25, String { repr: array.new_data<u8>("fmt_int(&x, ' ', Alignment::Left, false, false, 10): "), used: 53 });
             __local_26 = __inline_Formatter__new_9: block -> ref Formatter {
                 __local_54 = __local_25;
-                break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_54) };
+                break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_54) };
             };
             String^Inspect::inspect(__v0_5, __local_26);
             String::append_char(__local_25, 10);
@@ -554,7 +554,7 @@ condition: fmt_int(&x, ' ', Alignment::Left, false, false, 10) == \"42        \"
             String::append_char(__local_27, 58);
             __local_28 = __inline_Formatter__new_11: block -> ref Formatter {
                 __local_56 = __local_27;
-                break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_56) };
+                break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_56) };
             };
             __local_58 = __local_28;
             i32::fmt_decimal(81, __local_58);
@@ -564,7 +564,7 @@ condition: fmt_int(&x, ' ', Alignment::Center, false, false, 10) == \"    42    
             String::append(__local_27, String { repr: array.new_data<u8>("fmt_int(&x, ' ', Alignment::Center, false, false, 10): "), used: 55 });
             __local_28 = __inline_Formatter__new_14: block -> ref Formatter {
                 __local_61 = __local_27;
-                break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_61) };
+                break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_61) };
             };
             String^Inspect::inspect(__v0_7, __local_28);
             String::append_char(__local_27, 10);
@@ -587,7 +587,7 @@ condition: fmt_int(&x, ' ', Alignment::Center, false, false, 10) == \"    42    
             String::append_char(__local_29, 58);
             __local_30 = __inline_Formatter__new_16: block -> ref Formatter {
                 __local_63 = __local_29;
-                break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_63) };
+                break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_63) };
             };
             __local_65 = __local_30;
             i32::fmt_decimal(84, __local_65);
@@ -597,7 +597,7 @@ condition: fmt_int(&x, '0', Alignment::Right, false, true, 8) == \"00000042\"
             String::append(__local_29, String { repr: array.new_data<u8>("fmt_int(&x, '0', Alignment::Right, false, true, 8): "), used: 52 });
             __local_30 = __inline_Formatter__new_19: block -> ref Formatter {
                 __local_68 = __local_29;
-                break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_68) };
+                break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_68) };
             };
             String^Inspect::inspect(__v0_9, __local_30);
             String::append_char(__local_29, 10);
@@ -620,7 +620,7 @@ condition: fmt_int(&x, '0', Alignment::Right, false, true, 8) == \"00000042\"
             String::append_char(__local_31, 58);
             __local_32 = __inline_Formatter__new_21: block -> ref Formatter {
                 __local_70 = __local_31;
-                break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_70) };
+                break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_70) };
             };
             __local_72 = __local_32;
             i32::fmt_decimal(87, __local_72);
@@ -630,7 +630,7 @@ condition: fmt_int(&neg, '0', Alignment::Right, false, true, 8) == \"-0000042\"
             String::append(__local_31, String { repr: array.new_data<u8>("fmt_int(&neg, '0', Alignment::Right, false, true, 8): "), used: 54 });
             __local_32 = __inline_Formatter__new_24: block -> ref Formatter {
                 __local_75 = __local_31;
-                break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_75) };
+                break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_75) };
             };
             String^Inspect::inspect(__v0_11, __local_32);
             String::append_char(__local_31, 10);
@@ -653,7 +653,7 @@ condition: fmt_int(&neg, '0', Alignment::Right, false, true, 8) == \"-0000042\"
             String::append_char(__local_33, 58);
             __local_34 = __inline_Formatter__new_26: block -> ref Formatter {
                 __local_77 = __local_33;
-                break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_77) };
+                break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_77) };
             };
             __local_79 = __local_34;
             i32::fmt_decimal(90, __local_79);
@@ -663,7 +663,7 @@ condition: fmt_int(&x, ' ', Alignment::Right, true, false, -1) == \"+42\"
             String::append(__local_33, String { repr: array.new_data<u8>("fmt_int(&x, ' ', Alignment::Right, true, false, -1): "), used: 53 });
             __local_34 = __inline_Formatter__new_29: block -> ref Formatter {
                 __local_82 = __local_33;
-                break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_82) };
+                break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_82) };
             };
             String^Inspect::inspect(__v0_13, __local_34);
             String::append_char(__local_33, 10);
@@ -686,7 +686,7 @@ condition: fmt_int(&x, ' ', Alignment::Right, true, false, -1) == \"+42\"
             String::append_char(__local_35, 58);
             __local_36 = __inline_Formatter__new_31: block -> ref Formatter {
                 __local_84 = __local_35;
-                break __inline_Formatter__new_31: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_84) };
+                break __inline_Formatter__new_31: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_84) };
             };
             __local_86 = __local_36;
             i32::fmt_decimal(93, __local_86);
@@ -696,7 +696,7 @@ condition: fmt_int(&x, '*', Alignment::Center, false, false, 10) == \"****42****
             String::append(__local_35, String { repr: array.new_data<u8>("fmt_int(&x, '*', Alignment::Center, false, false, 10): "), used: 55 });
             __local_36 = __inline_Formatter__new_34: block -> ref Formatter {
                 __local_89 = __local_35;
-                break __inline_Formatter__new_34: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_89) };
+                break __inline_Formatter__new_34: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_89) };
             };
             String^Inspect::inspect(__v0_15, __local_36);
             String::append_char(__local_35, 10);
@@ -705,7 +705,7 @@ condition: fmt_int(&x, '*', Alignment::Center, false, false, 10) == \"****42****
         unreachable;
     };
     buf = String { repr: builtin::array_new<u8>(64), used: 0 };
-    f_18 = Formatter { fill: 32, align: 0, sign_plus: 0, alternate: 0, zero_pad: 0, width: 8, precision: -1, buf: ref.as_non_null(buf) };
+    f_18 = Formatter { fill: 32, align: 0, sign_plus: 0, zero_pad: 0, width: 8, precision: -1, indent: 0, buf: ref.as_non_null(buf) };
     f_92 = f_18;
     Formatter::pad(f_92, String { repr: array.new_data<u8>("true"), used: 4 });
     __v0_19 = value_copy String(buf);
@@ -723,7 +723,7 @@ condition: fmt_int(&x, '*', Alignment::Center, false, false, 10) == \"****42****
             String::append_char(__local_37, 58);
             __local_38 = __inline_Formatter__new_39: block -> ref Formatter {
                 __local_96 = __local_37;
-                break __inline_Formatter__new_39: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_96) };
+                break __inline_Formatter__new_39: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_96) };
             };
             __local_98 = __local_38;
             i32::fmt_decimal(108, __local_98);
@@ -737,7 +737,7 @@ condition: buf == \"true    \"
             String::append_char(__local_37, 32);
             __local_38 = __inline_Formatter__new_42: block -> ref Formatter {
                 __local_101 = __local_37;
-                break __inline_Formatter__new_42: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_101) };
+                break __inline_Formatter__new_42: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_101) };
             };
             String^Inspect::inspect(__v0_19, __local_38);
             String::append_char(__local_37, 10);
@@ -760,7 +760,7 @@ condition: buf == \"true    \"
             String::append_char(__local_39, 58);
             __local_40 = __inline_Formatter__new_44: block -> ref Formatter {
                 __local_103 = __local_39;
-                break __inline_Formatter__new_44: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_103) };
+                break __inline_Formatter__new_44: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_103) };
             };
             __local_105 = __local_40;
             i32::fmt_decimal(111, __local_105);
@@ -770,7 +770,7 @@ condition: fmt_int(&big, ' ', Alignment::Right, false, false, 2) == \"12345\"
             String::append(__local_39, String { repr: array.new_data<u8>("fmt_int(&big, ' ', Alignment::Right, false, false, 2): "), used: 55 });
             __local_40 = __inline_Formatter__new_47: block -> ref Formatter {
                 __local_108 = __local_39;
-                break __inline_Formatter__new_47: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_108) };
+                break __inline_Formatter__new_47: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_108) };
             };
             String^Inspect::inspect(__v0_21, __local_40);
             String::append_char(__local_39, 10);

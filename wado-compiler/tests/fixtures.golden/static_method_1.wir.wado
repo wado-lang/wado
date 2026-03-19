@@ -17,10 +17,10 @@ struct Formatter {
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
-    mut alternate: bool,
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
+    mut indent: i32,
     mut buf: ref String,
 }
 
@@ -148,7 +148,7 @@ fn static_method_basic() with Stdout {
         String::append(__local_1, String { repr: array.new_data<u8>("origin: ("), used: 9 });
         __local_2 = __inline_Formatter__new_2: block -> ref Formatter {
             __local_6 = __local_1;
-            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_6) };
+            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         };
         __local_8 = __local_2;
         i32::fmt_decimal(0, __local_8);
@@ -156,7 +156,7 @@ fn static_method_basic() with Stdout {
         String::append_char(__local_1, 32);
         __local_2 = __inline_Formatter__new_5: block -> ref Formatter {
             __local_11 = __local_1;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_11) };
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
         };
         __local_13 = __local_2;
         i32::fmt_decimal(0, __local_13);
@@ -172,7 +172,7 @@ fn static_method_basic() with Stdout {
         String::append_char(__local_3, 32);
         __local_4 = __inline_Formatter__new_9: block -> ref Formatter {
             __local_17 = __local_3;
-            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_17) };
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
         };
         __local_19 = __local_4;
         i32::fmt_decimal(0, __local_19);
@@ -206,7 +206,7 @@ fn static_method_chained() with Stdout {
         String::append(__local_6, String { repr: array.new_data<u8>("boxed first: "), used: 13 });
         __local_7 = __inline_Formatter__new_4: block -> ref Formatter {
             __local_19 = __local_6;
-            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_19) };
+            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_19) };
         };
         __local_21 = __local_7;
         i32::fmt_decimal(10, __local_21);
@@ -217,7 +217,7 @@ fn static_method_chained() with Stdout {
         String::append(__local_8, String { repr: array.new_data<u8>("inner first: "), used: 13 });
         __local_9 = __inline_Formatter__new_12: block -> ref Formatter {
             __local_30 = __local_8;
-            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_30) };
+            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_30) };
         };
         __local_32 = __local_9;
         i32::fmt_decimal(100, __local_32);
@@ -228,7 +228,7 @@ fn static_method_chained() with Stdout {
         String::append(__local_10, String { repr: array.new_data<u8>("inner second: "), used: 14 });
         __local_11 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_37 = __local_10;
-            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_37) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_37) };
         };
         __local_39 = __local_11;
         i32::fmt_decimal(200, __local_39);
@@ -249,7 +249,7 @@ fn static_method_chained() with Stdout {
         String::append(__local_12, String { repr: array.new_data<u8>("chained result: "), used: 16 });
         __local_13 = __inline_Formatter__new_26: block -> ref Formatter {
             __local_49 = __local_12;
-            break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_49) };
+            break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_49) };
         };
         __local_51 = __local_13;
         i32::fmt_decimal(val, __local_51);
@@ -285,7 +285,7 @@ fn static_method_generic() with Stdout {
         String::append(__local_1, String { repr: array.new_data<u8>("initial len: "), used: 13 });
         __local_2 = __inline_Formatter__new_2: block -> ref Formatter {
             __local_13 = __local_1;
-            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_13) };
+            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
         };
         __local_15 = __local_2;
         i32::fmt_decimal(arr.used, __local_15);
@@ -299,7 +299,7 @@ fn static_method_generic() with Stdout {
         String::append(__local_3, String { repr: array.new_data<u8>("after append len: "), used: 18 });
         __local_4 = __inline_Formatter__new_7: block -> ref Formatter {
             __local_20 = __local_3;
-            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_20) };
+            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
         };
         __local_22 = __local_4;
         i32::fmt_decimal(arr.used, __local_22);
@@ -317,7 +317,7 @@ fn static_method_generic() with Stdout {
         String::append_char(__local_5, 32);
         __local_6 = __inline_Formatter__new_12: block -> ref Formatter {
             __local_27 = __local_5;
-            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_27) };
+            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_27) };
         };
         __local_29 = __local_6;
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_14: block -> i32 {
@@ -341,7 +341,7 @@ fn static_method_generic() with Stdout {
         String::append_char(__local_7, 32);
         __local_8 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_35 = __local_7;
-            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_35) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_35) };
         };
         __local_37 = __local_8;
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_19: block -> i32 {
@@ -365,7 +365,7 @@ fn static_method_generic() with Stdout {
         String::append_char(__local_9, 32);
         __local_10 = __inline_Formatter__new_22: block -> ref Formatter {
             __local_43 = __local_9;
-            break __inline_Formatter__new_22: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_43) };
+            break __inline_Formatter__new_22: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_43) };
         };
         __local_45 = __local_10;
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_24: block -> i32 {
