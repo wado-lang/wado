@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773889947759,
+  "lastUpdate": 1773911796684,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4274,6 +4274,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/64397357f9572c9d18d24b7a2383e6f46f7e956e"
         },
         "date": 1773889947547,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b0333c19a250e7adf7ddf8f7b41bc3b4b89bc4f7",
+          "message": "Merge pull request #608 from wado-lang/claude/refactor-parser-trWnQ\n\nRefactor parser to defer pattern case disambiguation to resolver",
+          "timestamp": "2026-03-19T18:13:54+09:00",
+          "tree_id": "1101655627b01f2765993dc0c2957e584305c221",
+          "url": "https://github.com/wado-lang/wado/commit/b0333c19a250e7adf7ddf8f7b41bc3b4b89bc4f7"
+        },
+        "date": 1773911796468,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
