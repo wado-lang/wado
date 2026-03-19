@@ -836,6 +836,23 @@ fn add(a: i32, b: i32) -> i32 { return a + b; }  // no effects = pure
 fn for_each(items: Array<i32>, f: fn(i32) with Stdout) with Stdout {
     for let item of items { f(item); }
 }
+
+// Generic effects — polymorphic over effects
+fn wrapper<effect E>(f: fn() with E) with E {
+    f();
+}
+
+fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
+    return f(x);
+}
+
+// E is inferred from the closure's effects at each call site
+wrapper(|| { println("hello"); });           // E = Stdout
+let x = apply(|n: i32| n + 1, 41);          // E = (none)
+let y = apply(|n: i32| {                     // E = Stdout
+    println(`{n}`);
+    return n * 2;
+}, 21);
 ```
 
 ## Reference Storage

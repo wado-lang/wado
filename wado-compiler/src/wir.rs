@@ -930,7 +930,7 @@ pub struct WirFunction {
     /// Generic instantiation origin.
     pub generic_origin: Option<WirGenericOrigin>,
     /// Effect requirements (for unparse display).
-    pub effects: Vec<String>,
+    pub effects: Vec<crate::tir::EffectRef>,
     /// Compiler feature bitflags (e.g., `COMP_FEATURE_ARRAY_APPEND`).
     /// Set via `#[comp_feature("array_append")]` attribute in Wado source.
     pub comp_features: u32,

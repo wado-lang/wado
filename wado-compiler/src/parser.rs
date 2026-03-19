@@ -976,6 +976,13 @@ impl Parser {
         let mut effects = vec![self.consume_ident()?];
 
         while self.check(&TokenKind::Comma) {
+            // Look ahead: if the token after comma is `ident :`, it's a parameter
+            // declaration, not another effect name. Stop consuming.
+            if matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+                && self.peek_nth(2).kind == TokenKind::Colon
+            {
+                break;
+            }
             self.advance();
             effects.push(self.consume_ident()?);
         }
@@ -3115,6 +3122,15 @@ impl Parser {
 
         while !self.pending_gt && !self.check(&TokenKind::Gt) && !self.is_at_end() {
             let start_span = self.peek().span;
+
+            // Parse effect parameter: `effect E`
+            let is_effect = if self.check(&TokenKind::Effect) {
+                self.advance();
+                true
+            } else {
+                false
+            };
+
             let name = self.consume_ident()?;
 
             // Parse optional trait bounds: `T: Ord`, `T: Ord + Clone`, `T: Builder<Output = T>`
@@ -3135,6 +3151,7 @@ impl Parser {
 
             params.push(crate::ast::GenericParam {
                 name,
+                is_effect,
                 bounds,
                 default,
                 span: start_span,
@@ -3588,6 +3605,7 @@ impl Parser {
                 if !type_params.iter().any(|p| p.name == param_name) {
                     type_params.push(crate::ast::GenericParam {
                         name: param_name.clone(),
+                        is_effect: false,
                         bounds,
                         default: None,
                         span: param_span,

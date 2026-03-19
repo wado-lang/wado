@@ -567,7 +567,8 @@ impl<'a> WirUnparser<'a> {
 
         if !func.effects.is_empty() {
             self.write(" with ");
-            self.write(&func.effects.join(", "));
+            let effects_str: Vec<&str> = func.effects.iter().map(|e| e.name()).collect();
+            self.write(&effects_str.join(", "));
         }
 
         self.write(" {");

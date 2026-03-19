@@ -28,6 +28,52 @@ pub enum TypeParamScope {
     Function,
 }
 
+/// A resolved effect reference.
+///
+/// In AST, effects are bare strings. In TIR, they are resolved to include
+/// the module source where the effect is defined, enabling cross-module
+/// effect identity.
+///
+/// Equality and hashing are based on the effect name only, not the module source.
+/// This is because effects with the same name but imported from different modules
+/// (e.g., `Stdout` from `core:cli` vs `wasi:cli`) refer to the same effect.
+#[derive(Debug, Clone)]
+pub enum EffectRef {
+    /// A concrete effect resolved to a module source (e.g., `Stdout` from `wasi:cli`)
+    Concrete {
+        name: String,
+        module_source: ModuleSource,
+    },
+    /// An effect parameter from a generic effect declaration (e.g., `E` in `<effect E>`)
+    Param { name: String },
+}
+
+impl PartialEq for EffectRef {
+    fn eq(&self, other: &Self) -> bool {
+        self.name() == other.name()
+    }
+}
+
+impl Eq for EffectRef {}
+
+impl std::hash::Hash for EffectRef {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name().hash(state);
+    }
+}
+
+impl EffectRef {
+    pub fn name(&self) -> &str {
+        match self {
+            EffectRef::Concrete { name, .. } | EffectRef::Param { name } => name,
+        }
+    }
+
+    pub fn is_param(&self) -> bool {
+        matches!(self, EffectRef::Param { .. })
+    }
+}
+
 /// Identifies a type parameter with its scope and index
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeParamId {
@@ -342,7 +388,7 @@ pub enum ResolvedType {
     Function {
         params: Vec<TypeId>,
         return_type: TypeId,
-        effects: Vec<String>,
+        effects: Vec<EffectRef>,
     },
     Tuple(Vec<TypeId>),
     Reactive(TypeId),
@@ -730,7 +776,7 @@ impl TypeTable {
         &mut self,
         params: Vec<TypeId>,
         return_type: TypeId,
-        effects: Vec<String>,
+        effects: Vec<EffectRef>,
     ) -> TypeId {
         self.intern(ResolvedType::Function {
             params,
@@ -2035,6 +2081,8 @@ pub enum TirStmtKind {
 #[derive(Debug, Clone)]
 pub struct TirTypeParam {
     pub name: String,
+    /// Whether this is an effect parameter (`effect E`)
+    pub is_effect: bool,
     pub bounds: Vec<String>,
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,
@@ -2098,7 +2146,7 @@ pub struct TirFunction {
     pub method_info: Option<LocalMethodName>,
     pub params: Vec<TirParam>,
     pub return_type: TypeId,
-    pub effects: Vec<String>,
+    pub effects: Vec<EffectRef>,
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,
@@ -2151,6 +2199,13 @@ impl TirFunction {
         self.method_info
             .as_ref()
             .is_some_and(super::name::LocalMethodName::is_trait_method)
+    }
+
+    /// Returns true if this function has type params that need monomorphization
+    /// (excludes effect params, which are erased at compile time).
+    #[inline]
+    pub fn has_real_type_params(&self) -> bool {
+        self.type_params.iter().any(|p| !p.is_effect)
     }
 }
 
