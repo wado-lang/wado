@@ -803,12 +803,19 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         Ok(())
     }
 
-    /// Bind a pattern (may introduce variables)
+    /// Bind a pattern (may introduce variables).
+    /// Bare identifiers are tentatively defined: if the name already exists in the
+    /// current scope, it is silently skipped. This is necessary because the parser
+    /// no longer uses case to distinguish variant case names from variable bindings,
+    /// so duplicate bare names like `[Null, Null]` in a match pattern are valid
+    /// (the resolver disambiguates them using type information).
     fn bind_pattern(&mut self, pattern: &crate::ast::Pattern, span: Span) -> Result<(), Bail> {
         match pattern {
             crate::ast::Pattern::Ident(name) => {
-                // Pattern bindings are immutable by default
-                self.define(name, false, false, span)?;
+                let scope = self.scopes.last().unwrap();
+                if !scope.bindings.contains_key(name) {
+                    self.define(name, false, false, span)?;
+                }
             }
             crate::ast::Pattern::MutIdent(name) => {
                 self.define(name, true, false, span)?;

@@ -347,29 +347,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Wildcard pattern: let _ = expr; - evaluate but don't bind
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
-            ast::Pattern::Variant {
-                variant_name,
-                bindings,
-                ..
-            } if bindings.is_empty() && !self.is_variant_or_enum_type(type_id) => {
-                // Bare uppercase identifier used as a variable binding (e.g., `let K = 27`).
-                // The unified parser produces Pattern::Variant for all uppercase names;
-                // when the RHS type is not a variant/enum, the name is a plain binding.
-                let is_mut = let_stmt.is_mut;
-                let local_index = ctx.add_local(variant_name.clone(), type_id, is_mut);
-                TirStmt::new(
-                    TirStmtKind::Let {
-                        name: variant_name.clone(),
-                        local_index,
-                        is_mut,
-                        is_reactive: let_stmt.is_reactive,
-                        type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    let_stmt.span,
-                )
-            }
             _ => {
                 self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
@@ -403,27 +380,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
-                        local_index,
-                        is_mut,
-                        is_reactive: let_stmt.is_reactive,
-                        type_id,
-                        value: placeholder,
-                        skip_value_copy: false,
-                    },
-                    let_stmt.span,
-                )
-            }
-            ast::Pattern::Variant {
-                variant_name,
-                bindings,
-                ..
-            } if bindings.is_empty() && !self.is_variant_or_enum_type(type_id) => {
-                let is_mut = let_stmt.is_mut;
-                let local_index = ctx.add_local(variant_name.clone(), type_id, is_mut);
-                let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
-                TirStmt::new(
-                    TirStmtKind::Let {
-                        name: variant_name.clone(),
                         local_index,
                         is_mut,
                         is_reactive: let_stmt.is_reactive,
@@ -478,19 +434,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 });
                 false
             }
-        }
-    }
-
-    /// Return true if `type_id` resolves to a variant or enum type.
-    ///
-    /// Used to distinguish bare uppercase identifiers that are variable bindings
-    /// (e.g., `let K = 27`) from actual variant/enum case patterns (`let None = opt`).
-    fn is_variant_or_enum_type(&self, type_id: TypeId) -> bool {
-        let resolved = self.type_table.borrow().get(type_id).clone();
-        match &resolved {
-            ResolvedType::Variant { .. } | ResolvedType::Enum { .. } => true,
-            ResolvedType::GenericInstance { name, .. } => self.variant_cases.contains_key(name),
-            _ => false,
         }
     }
 
@@ -668,20 +611,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
             ast::Pattern::Wildcard => TirPattern::Wildcard,
-            ast::Pattern::Variant {
-                variant_name,
-                bindings,
-                ..
-            } if bindings.is_empty() && !self.is_variant_or_enum_type(type_id) => {
-                // Bare uppercase binding in a sub-pattern (e.g., `let [K, x] = pair`).
-                let pat_mut = is_mut;
-                let local_index = ctx.add_local(variant_name.clone(), type_id, pat_mut);
-                TirPattern::Binding {
-                    name: variant_name.clone(),
-                    local_index,
-                    type_id,
-                }
-            }
             ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
                 // Refutable pattern: error was already emitted by check_irrefutable_pattern.
                 TirPattern::Wildcard
@@ -904,6 +833,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
         match pattern {
             Pattern::Wildcard => TirPattern::Wildcard,
             Pattern::Ident(name) | Pattern::MutIdent(name) => {
+                // A bare identifier in a pattern context could be a variant/enum case
+                // (e.g., `None`, `Red`) or a variable binding (e.g., `x`, `val`).
+                // The parser does not use case to disambiguate; instead, we check
+                // whether the name is a known case of the scrutinee type.
+                if !matches!(pattern, Pattern::MutIdent(_))
+                    && self.is_known_case_of_type(scrutinee_type, name)
+                {
+                    // Delegate to the Variant branch with empty bindings
+                    return self.resolve_if_pattern_inner(
+                        &Pattern::Variant {
+                            variant_name: name.clone(),
+                            bindings: vec![],
+                            span,
+                        },
+                        scrutinee_type,
+                        ctx,
+                        span,
+                        ref_binding,
+                    );
+                }
                 let is_mut = matches!(pattern, Pattern::MutIdent(_));
                 let binding_type = if ref_binding {
                     self.type_table
