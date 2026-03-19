@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773924738863,
+  "lastUpdate": 1773931044144,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4430,6 +4430,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c7a6f41bf7c062c317a4db0664b3c609a422cd1a"
         },
         "date": 1773924738642,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dad06beb853665aa0ae3a27b111f3cd9799d0d61",
+          "message": "Merge pull request #612 from wado-lang/claude/integrate-wado-manifest-cli-qoEEi\n\nAdd wado.toml manifest support and init command",
+          "timestamp": "2026-03-19T23:34:49+09:00",
+          "tree_id": "060504f224f4d9d0a21812d0d45eaed691eec211",
+          "url": "https://github.com/wado-lang/wado/commit/dad06beb853665aa0ae3a27b111f3cd9799d0d61"
+        },
+        "date": 1773931043922,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
