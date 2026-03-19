@@ -1,0 +1,47 @@
+// Optimization: mixed stores and non-stores calls on different locals.
+// `read_point` (no stores) gets inlined and field forwarding succeeds for `a`.
+// `capture_point` (stores[p]) aliases `b`, preventing field forwarding.
+
+use { println } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Ref {
+    p: &Point,
+}
+
+// Small, no stores — will be inlined, field forwarding succeeds.
+fn read_point(p: &Point) -> i32 {
+    return p.x + p.y;
+}
+
+// Stores the reference — causes aliasing after inlining.
+fn capture_point(p: &Point) -> Ref with stores[p] {
+    return Ref { p };
+}
+
+export fn run() with Stdout {
+    let a = Point { x: 10, y: 20 };
+    let b = Point { x: 30, y: 40 };
+
+    // a: non-stores call, inlined → field forwarding eliminates this assert's panic.
+    let _ = read_point(&a);
+    assert a.x == 10;
+
+    // b: stores call, aliased → field forwarding cannot eliminate this assert's panic.
+    let _ = capture_point(&b);
+    assert b.x == 30;
+
+    println(`{a.x} {b.x}`);
+}
+
+__DATA__
+{
+    "stdout": "10 30\n",
+    "wir_expect:O2": [
+        "core:internal/panic"
+    ]
+}

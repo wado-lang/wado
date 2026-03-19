@@ -1,0 +1,38 @@
+// Optimization: multiple non-stores calls that get inlined.
+// After inlining, field knowledge should survive because the callee
+// does not store the reference (no alias created).
+
+use { println } from "core:cli";
+
+struct Vec3 {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+// Small enough to be inlined.
+fn get_x(v: &Vec3) -> i32 {
+    return v.x;
+}
+
+fn get_y(v: &Vec3) -> i32 {
+    return v.y;
+}
+
+export fn run() with Stdout {
+    let v = Vec3 { x: 1, y: 2, z: 3 };
+    let _a = get_x(&v);
+    let _b = get_y(&v);
+    // After inlining both non-stores calls, field forwarding should still work.
+    assert v.x == 1;
+    assert v.y == 2;
+    println(`{v.x} {v.y}`);
+}
+
+__DATA__
+{
+    "stdout": "1 2\n",
+    "wir_not_expect:O2": [
+        "panic("
+    ]
+}
