@@ -243,6 +243,25 @@ impl std::fmt::Display for SourceError {
 
 impl std::error::Error for SourceError {}
 
+/// Minimal trait for emitting span start/end events during optimization.
+///
+/// This enables optimization passes to emit profiling spans without depending
+/// on the full `Logger` type. The CLI host adds timestamps to measure duration.
+pub trait SpanEmitter {
+    fn span_start(&self, name: &str);
+    fn span_end(&self, name: &str);
+    fn debug(&self, message: &str);
+}
+
+/// No-op implementation for when profiling is not needed.
+pub struct NullSpanEmitter;
+
+impl SpanEmitter for NullSpanEmitter {
+    fn span_start(&self, _name: &str) {}
+    fn span_end(&self, _name: &str) {}
+    fn debug(&self, _message: &str) {}
+}
+
 /// Abstraction for compiler I/O operations
 ///
 /// This trait enables the compiler to work in different environments:

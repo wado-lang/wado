@@ -312,6 +312,7 @@ pub async fn compile_with_full_opts(
         skip_validation,
         inline_threshold,
         opt_iterations,
+        log_level: Some(log_level),
         allocator,
         ..Default::default()
     };

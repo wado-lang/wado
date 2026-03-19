@@ -37,6 +37,7 @@ mod sroa_return;
 mod string;
 mod util;
 
+use crate::compiler_host::SpanEmitter;
 use crate::optimize::OptLevel;
 use crate::wir::WirModule;
 
@@ -60,11 +61,18 @@ use sroa_param::sroa_single_field_parameters;
 use sroa_return::sroa_multi_value_returns;
 use string::simplify_short_string_appends;
 
+/// Run a single WIR optimization pass with profiling.
+fn wir_pass(name: &str, module: &mut WirModule, profiler: &dyn SpanEmitter, f: impl FnOnce(&mut WirModule)) {
+    profiler.span_start(name);
+    f(module);
+    profiler.span_end(name);
+}
+
 /// Run all WIR-level optimizations on the module (in-place).
 ///
 /// Optimization passes are skipped at `-O0`, but dead-item compaction always runs
 /// so the emitter receives a clean module with no dead_*_indices to filter.
-pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
+pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel, profiler: &dyn SpanEmitter) {
     if opt_level == OptLevel::O0 {
         dce::compact_dead_items(module);
         return;
@@ -73,37 +81,46 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
     // Phase 1: Type representation
     //
     // Rewrite type-level representations before any value-level passes see them.
+    profiler.span_start("wir/phase1_type_repr");
     optimize_nullable_refs(module);
     sroa_multi_value_returns(module);
     sroa_single_field_parameters(module);
+    profiler.span_end("wir/phase1_type_repr");
 
     // Phase 2: Struct local elimination (round 1)
     //
     // After parameter SROA, call sites may hold `LocalSet(x, StructNew { [inner] })`
     // where every use of `x` is via StructGet. Substitute `inner` directly.
-    elide_single_field_struct_locals(module);
+    wir_pass("wir/elide_single_field_struct", module, profiler, |m| {
+        elide_single_field_struct_locals(m);
+    });
 
     // Phase 3: Data flow
     //
     // Collapse inlined append sequences, forward constants, and eliminate
     // redundant bounds checks. Order matters: append collapse exposes StructNew
     // nodes that field forwarding then uses for bounds check elimination.
+    profiler.span_start("wir/phase3_data_flow");
     collapse_array_append_sequences(module);
     forward_struct_field_constants(module);
     eliminate_loop_guarded_bounds_checks(module);
+    profiler.span_end("wir/phase3_data_flow");
 
     // Phase 4: Library-specific rewrites
     //
     // Rewrite library call patterns into more efficient instruction sequences.
+    profiler.span_start("wir/phase4_lib_rewrites");
     simplify_short_string_appends(module);
     promote_constant_arrays_to_data(module);
     split_large_array_literals(module);
+    profiler.span_end("wir/phase4_lib_rewrites");
 
     // Phase 5: Peephole + struct local elimination (round 2)
     //
     // Run peephole optimizations (constant folding, copy elision, multi-value
     // struct elision), then flatten seq assignments to expose multi-field struct
     // locals for elimination.
+    profiler.span_start("wir/phase5_peephole");
     let types = &module.types;
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
@@ -114,24 +131,31 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
     flatten_seq_assignments(module);
     elide_multi_field_struct_locals(module);
     cleanup(module);
+    profiler.span_end("wir/phase5_peephole");
 
     // Phase 6: Dead value elimination
     //
     // Eliminate functions whose return value is always dropped, then clean up
     // write-only locals left behind.
+    profiler.span_start("wir/phase6_dead_value_elim");
     eliminate_dead_return_values(module);
     elide_write_only_locals(module);
     cleanup(module);
+    profiler.span_end("wir/phase6_dead_value_elim");
 
     // Phase 7: Global cleanup
     //
     // Remove trivial module-init guard globals that serve no purpose after DCE.
+    profiler.span_start("wir/phase7_global_cleanup");
     remove_trivial_init_globals(module);
     cleanup(module);
+    profiler.span_end("wir/phase7_global_cleanup");
 
     // Phase 8: Final DCE & compaction
     //
     // Mark unreachable types as dead and compact all dead items out of the module.
+    profiler.span_start("wir/phase8_dce_compact");
     dce_unreachable_types(module);
     dce::compact_dead_items(module);
+    profiler.span_end("wir/phase8_dce_compact");
 }
