@@ -1,0 +1,48 @@
+// Test that value_copy is elided when an if/else expression produces
+// fresh StructNew values in both branches.
+//
+// Pattern:
+//   x = value_copy T(if cond -> ref T {
+//       T { ... };    // fresh StructNew
+//   } else {
+//       T { ... };    // fresh StructNew
+//   })
+
+use { println } from "core:cli";
+
+struct Wrapper {
+    inner: i32,
+}
+
+fn conditional(flag: bool) -> Wrapper {
+    let w = if flag {
+        Wrapper { inner: 10 }
+    } else {
+        Wrapper { inner: 20 }
+    };
+    return w;
+}
+
+fn with_string(flag: bool) -> String {
+    let s = if flag {
+        "yes"
+    } else {
+        "no"
+    };
+    return s;
+}
+
+export fn run() with Stdout {
+    let a = conditional(true);
+    let b = conditional(false);
+    println(`{a.inner}`);
+    println(`{b.inner}`);
+    println(with_string(true));
+    println(with_string(false));
+}
+
+__DATA__
+{
+    "stdout": "10\n20\nyes\nno\n",
+    "wir_not_expect:O2": ["value_copy Wrapper(", "value_copy String("]
+}

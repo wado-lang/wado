@@ -89,7 +89,9 @@ fn run() with Stdout {
     opt1 = Option<i32>::Some { discriminant: 0, payload_0: 42 };
     opt2 = Option<i32>::Some { discriminant: 0, payload_0: 3 };
     none = Option<i32> { 1 };
-    msg1 = value_copy String(let __match_scrut_0: ref Option<i32>; __match_scrut_0 = opt1; if ref.test Option<i32>::Some(__match_scrut_0) -> ref String {
+    let __match_scrut_0: ref Option<i32>;
+    __match_scrut_0 = opt1;
+    msg1 = if ref.test Option<i32>::Some(__match_scrut_0) -> ref String {
         let __cast_3: ref Option<i32>::Some;
         __cast_3 = ref.cast Option<i32>::Some(__match_scrut_0);
         __local_3 = __cast_3.payload_0;
@@ -115,9 +117,11 @@ fn run() with Stdout {
         String { repr: array.new_data<u8>("no value"), used: 8 };
     } else {
         unreachable;
-    });
+    };
     "core:cli/println"(msg1);
-    msg2 = value_copy String(let __match_scrut_1: ref Option<i32>; __match_scrut_1 = opt2; if ref.test Option<i32>::Some(__match_scrut_1) -> ref String {
+    let __match_scrut_1: ref Option<i32>;
+    __match_scrut_1 = opt2;
+    msg2 = if ref.test Option<i32>::Some(__match_scrut_1) -> ref String {
         let __cast_6: ref Option<i32>::Some;
         __cast_6 = ref.cast Option<i32>::Some(__match_scrut_1);
         __local_5 = __cast_6.payload_0;
@@ -143,9 +147,11 @@ fn run() with Stdout {
         String { repr: array.new_data<u8>("no value"), used: 8 };
     } else {
         unreachable;
-    });
+    };
     "core:cli/println"(msg2);
-    msg3 = value_copy String(let __match_scrut_2: ref Option<i32>; __match_scrut_2 = none; if ref.test Option<i32>::Some(__match_scrut_2) -> ref String {
+    let __match_scrut_2: ref Option<i32>;
+    __match_scrut_2 = none;
+    msg3 = if ref.test Option<i32>::Some(__match_scrut_2) -> ref String {
         let __cast_9: ref Option<i32>::Some;
         __cast_9 = ref.cast Option<i32>::Some(__match_scrut_2);
         __local_7 = __cast_9.payload_0;
@@ -171,7 +177,7 @@ fn run() with Stdout {
         String { repr: array.new_data<u8>("no value"), used: 8 };
     } else {
         unreachable;
-    });
+    };
     "core:cli/println"(msg3);
 }
 

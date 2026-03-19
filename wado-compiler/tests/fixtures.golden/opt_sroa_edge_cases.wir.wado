@@ -265,13 +265,15 @@ fn interleaved_field_ops() {
 
 fn struct_in_match(n) {
     let p: ref Point;
-    p = value_copy Point(let __match_scrut_0: i32; __match_scrut_0 = n; if __match_scrut_0 == 0 -> ref Point {
+    let __match_scrut_0: i32;
+    __match_scrut_0 = n;
+    p = if __match_scrut_0 == 0 -> ref Point {
         Point { x: 1, y: 2 };
     } else if __match_scrut_0 == 1 -> ref Point {
         Point { x: 10, y: 20 };
     } else {
         Point { x: 100, y: 200 };
-    });
+    };
     return p.x + p.y;
 }
 
@@ -301,11 +303,11 @@ fn dependent_field_construction(base) {
 
 fn struct_from_conditional(flag) {
     let p: ref Point;
-    p = value_copy Point(if flag -> ref Point {
+    p = if flag -> ref Point {
         Point { x: 10, y: 20 };
     } else {
         Point { x: 30, y: 40 };
-    });
+    };
     return p.x + p.y;
 }
 

@@ -579,7 +579,7 @@ condition: all.len() == 2
         __tv_1 = __ok_val;
         "wasi/task-return"(0, __tv_1, 0, 0_i64, 0, 0, 0, 0);
     } else {
-        __err_val = value_copy "wasi:http/types.wado/ErrorCode"(ref.cast Result<Response,ErrorCode>::Err(__task_ret).payload_0);
+        __err_val = ref.cast Result<Response,ErrorCode>::Err(__task_ret).payload_0;
         __tv_1 = __err_val.discriminant;
         if ref.test "wasi:http/types.wado/ErrorCode::DnsError"(__err_val) {
             __case_payload_27 = ref.cast "wasi:http/types.wado/ErrorCode::DnsError"(__err_val).payload_0;

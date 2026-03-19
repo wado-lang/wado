@@ -1641,7 +1641,7 @@ fn __test_26_option_some_deserialize() {
     };
     r = "core/json/from_string<Option<i32>>"(String { repr: array.new_data<u8>("42"), used: 2 });
     if ref.test Result<Option<i32>,DeserializeError>::Ok(r) {
-        v = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(r).payload_0);
+        v = ref.cast Result<Option<i32>,DeserializeError>::Ok(r).payload_0;
         if ref.test Option<i32>::Some(v) {
             n = ref.cast Option<i32>::Some(v).payload_0;
             __cond = n == 42;
@@ -3945,7 +3945,7 @@ fn Color^Deserialize::deserialize<JsonDeserializer>(d) {
     let __pattern_temp_0: ref Result<JsonVariantAccess,DeserializeError>;
     let __pattern_temp_2: ref Result<String,DeserializeError>;
     __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Color"), used: 5 }, 3);
-    __pattern_temp_0 = value_copy Result<JsonVariantAccess,DeserializeError>(__va_r);
+    __pattern_temp_0 = __va_r;
     if ref.test Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0) {
         va = value_copy "core:json/JsonVariantAccess"(ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0);
         __disc_r = Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("JSON does not encode discriminants"), used: 34 }, offset: -1_i64 } };
@@ -3981,7 +3981,7 @@ fn Color^Deserialize::deserialize<JsonDeserializer>(d) {
             return Result<Color,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 2, message: String { repr: array.new_data<u8>("unknown variant discriminant"), used: 28 }, offset: -1_i64 } };
         } else {
             __name_r = Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(va.variant) };
-            __pattern_temp_2 = value_copy Result<String,DeserializeError>(__name_r);
+            __pattern_temp_2 = __name_r;
             if ref.test Result<String,DeserializeError>::Ok(__pattern_temp_2) {
                 __name = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__pattern_temp_2).payload_0);
                 if String^Eq::eq(__name, String { repr: array.new_data<u8>("Red"), used: 3 }) {
@@ -4091,7 +4091,7 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
         first = JsonSeqAccess^DeserializeSeq::next_element<i32>(seq);
         __pattern_temp_1 = first;
         if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
-            first_opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+            first_opt = ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0;
             if ref.test Option<i32>::Some(first_opt) {
                 first_elem = ref.cast Option<i32>::Some(first_opt).payload_0;
                 items = Array<i32> { repr: builtin::array_new<i32>(2), used: 0 };
@@ -4101,7 +4101,7 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
                         next = JsonSeqAccess^DeserializeSeq::next_element<i32>(seq);
                         __pattern_temp_3 = next;
                         if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_3) {
-                            next_opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_3).payload_0);
+                            next_opt = ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_3).payload_0;
                             if ref.test Option<i32>::Some(next_opt) {
                                 item = ref.cast Option<i32>::Some(next_opt).payload_0;
                                 Array<i32>::append(items, item);
@@ -4276,9 +4276,9 @@ fn Point^Deserialize::deserialize<JsonDeserializer>(d) {
         b343: block {
             l344: loop {
                 __next = "core:json/JsonStructAccess^DeserializeStruct::next_field"(sd);
-                __pattern_temp_1 = value_copy Result<Option<i32>,DeserializeError>(__next);
+                __pattern_temp_1 = __next;
                 if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
-                    __opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+                    __opt = ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0;
                     if ref.test Option<i32>::Some(__opt) {
                         __idx = ref.cast Option<i32>::Some(__opt).payload_0;
                         let __match_scrut_0: i32;
@@ -4288,7 +4288,7 @@ fn Point^Deserialize::deserialize<JsonDeserializer>(d) {
                                 __local_19 = sd.de;
                                 break __inline_i32_Deserialize__deserialize_JsonDeserializer__3: "core:json/JsonDeserializer::parse_i32_direct"(__local_19);
                             };
-                            __local_16 = value_copy Result<i32,DeserializeError>(__local_9);
+                            __local_16 = __local_9;
                             if ref.test Result<i32,DeserializeError>::Ok(__local_16) {
                                 __local_10 = ref.cast Result<i32,DeserializeError>::Ok(__local_16).payload_0;
                                 x = __local_10;
@@ -4301,7 +4301,7 @@ fn Point^Deserialize::deserialize<JsonDeserializer>(d) {
                                 __local_21 = sd.de;
                                 break __inline_i32_Deserialize__deserialize_JsonDeserializer__5: "core:json/JsonDeserializer::parse_i32_direct"(__local_21);
                             };
-                            __local_17 = value_copy Result<i32,DeserializeError>(__local_11);
+                            __local_17 = __local_11;
                             if ref.test Result<i32,DeserializeError>::Ok(__local_17) {
                                 __local_12 = ref.cast Result<i32,DeserializeError>::Ok(__local_17).payload_0;
                                 y = __local_12;

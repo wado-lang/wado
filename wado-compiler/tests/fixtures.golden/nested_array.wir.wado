@@ -668,7 +668,9 @@ fn nested_array_option_access_test() with Stdout {
             __pattern_temp_2 = ArrayIter<Option<i32>>^Iterator::next(__iter_6);
             if ref.is_null(__pattern_temp_2) == 0 {
                 item = value_copy Option<i32>(ref.as_non_null(__pattern_temp_2));
-                s = value_copy String(let __match_scrut_0: ref Option<i32>; __match_scrut_0 = item; if ref.test Option<i32>::Some(__match_scrut_0) -> ref String {
+                let __match_scrut_0: ref Option<i32>;
+                __match_scrut_0 = item;
+                s = if ref.test Option<i32>::Some(__match_scrut_0) -> ref String {
                     let __cast_1: ref Option<i32>::Some;
                     __cast_1 = ref.cast Option<i32>::Some(__match_scrut_0);
                     __local_8 = __cast_1.payload_0;
@@ -692,7 +694,7 @@ fn nested_array_option_access_test() with Stdout {
                     String { repr: array.new_data<u8>("None"), used: 4 };
                 } else {
                     unreachable;
-                });
+                };
                 "core:cli/println"(s);
             } else {
                 break b31;

@@ -100,7 +100,9 @@ fn run() with Stdout {
     let __local_11: ref String;
     ok_val = Result<String,String>::Ok { discriminant: 0, payload_0: String { repr: array.new_data<u8>("success"), used: 7 } };
     err_val = Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("failure"), used: 7 } };
-    x = value_copy String(let __match_scrut_0: ref Result<String,String>; __match_scrut_0 = ok_val; if ref.test Result<String,String>::Ok(__match_scrut_0) -> ref String {
+    let __match_scrut_0: ref Result<String,String>;
+    __match_scrut_0 = ok_val;
+    x = if ref.test Result<String,String>::Ok(__match_scrut_0) -> ref String {
         let __cast_2: ref Result<String,String>::Ok;
         __cast_2 = ref.cast Result<String,String>::Ok(__match_scrut_0);
         __local_2 = __cast_2.payload_0;
@@ -122,9 +124,11 @@ fn run() with Stdout {
         };
     } else {
         unreachable;
-    });
+    };
     "core:cli/println"(x);
-    y = value_copy String(let __match_scrut_1: ref Result<String,String>; __match_scrut_1 = err_val; if ref.test Result<String,String>::Ok(__match_scrut_1) -> ref String {
+    let __match_scrut_1: ref Result<String,String>;
+    __match_scrut_1 = err_val;
+    y = if ref.test Result<String,String>::Ok(__match_scrut_1) -> ref String {
         let __cast_4: ref Result<String,String>::Ok;
         __cast_4 = ref.cast Result<String,String>::Ok(__match_scrut_1);
         __local_5 = __cast_4.payload_0;
@@ -146,7 +150,7 @@ fn run() with Stdout {
         };
     } else {
         unreachable;
-    });
+    };
     "core:cli/println"(y);
 }
 

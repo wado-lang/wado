@@ -571,7 +571,7 @@ fn __test_3_variant_roundtrip_payload_case() {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         parsed_r = "core/json/from_string<Shape>"(json);
         if ref.test Result<Shape,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy Shape(ref.cast Result<Shape,DeserializeError>::Ok(parsed_r).payload_0);
+            parsed = ref.cast Result<Shape,DeserializeError>::Ok(parsed_r).payload_0;
             if ref.test Shape::Circle(parsed) {
                 r = ref.cast Shape::Circle(parsed).payload_0;
                 __cond = r == 3.14;
@@ -2405,7 +2405,7 @@ fn Shape^Deserialize::deserialize<JsonDeserializer>(d) {
     let __local_18: ref "core:json/JsonDeserializer";
     let __local_23: ref "core:json/JsonDeserializer";
     __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Shape"), used: 5 }, 2);
-    __pattern_temp_0 = value_copy Result<JsonVariantAccess,DeserializeError>(__va_r);
+    __pattern_temp_0 = __va_r;
     if ref.test Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0) {
         va = value_copy "core:json/JsonVariantAccess"(ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0);
         __disc_r = Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("JSON does not encode discriminants"), used: 34 }, offset: -1_i64 } };
@@ -2416,7 +2416,7 @@ fn Shape^Deserialize::deserialize<JsonDeserializer>(d) {
                     __local_18 = va.de;
                     break __inline_f64_Deserialize__deserialize_JsonDeserializer__2: "core:json/JsonDeserializer::parse_f64_direct"(__local_18);
                 };
-                __pattern_temp_2 = value_copy Result<f64,DeserializeError>(__p_r_8);
+                __pattern_temp_2 = __p_r_8;
                 if ref.test Result<f64,DeserializeError>::Ok(__pattern_temp_2) {
                     __payload_7 = ref.cast Result<f64,DeserializeError>::Ok(__pattern_temp_2).payload_0;
                     drop(__inline_JsonVariantAccess_DeserializeVariant__end_3: block -> ref null "core:serde/DeserializeError" {
@@ -2442,7 +2442,7 @@ fn Shape^Deserialize::deserialize<JsonDeserializer>(d) {
             return Result<Shape,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 2, message: String { repr: array.new_data<u8>("unknown variant discriminant"), used: 28 }, offset: -1_i64 } };
         } else {
             __name_r = Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(va.variant) };
-            __pattern_temp_3 = value_copy Result<String,DeserializeError>(__name_r);
+            __pattern_temp_3 = __name_r;
             if ref.test Result<String,DeserializeError>::Ok(__pattern_temp_3) {
                 __name = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__pattern_temp_3).payload_0);
                 if String^Eq::eq(__name, String { repr: array.new_data<u8>("Circle"), used: 6 }) {
@@ -2450,7 +2450,7 @@ fn Shape^Deserialize::deserialize<JsonDeserializer>(d) {
                         __local_23 = va.de;
                         break __inline_f64_Deserialize__deserialize_JsonDeserializer__7: "core:json/JsonDeserializer::parse_f64_direct"(__local_23);
                     };
-                    __pattern_temp_4 = value_copy Result<f64,DeserializeError>(__p_r_10);
+                    __pattern_temp_4 = __p_r_10;
                     if ref.test Result<f64,DeserializeError>::Ok(__pattern_temp_4) {
                         __payload_9 = ref.cast Result<f64,DeserializeError>::Ok(__pattern_temp_4).payload_0;
                         drop(__inline_JsonVariantAccess_DeserializeVariant__end_8: block -> ref null "core:serde/DeserializeError" {

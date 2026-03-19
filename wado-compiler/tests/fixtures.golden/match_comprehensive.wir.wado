@@ -299,7 +299,9 @@ fn match_option_chained() with Stdout {
         "core:cli/println"(String { repr: array.new_data<u8>("is null"), used: 7 });
     };
     big = Option<i32>::Some { discriminant: 0, payload_0: 100 };
-    desc = value_copy String(let __match_scrut_0: ref Option<i32>; __match_scrut_0 = big; if ref.test Option<i32>::Some(__match_scrut_0) -> ref String {
+    let __match_scrut_0: ref Option<i32>;
+    __match_scrut_0 = big;
+    desc = if ref.test Option<i32>::Some(__match_scrut_0) -> ref String {
         let __cast_3: ref Option<i32>::Some;
         __cast_3 = ref.cast Option<i32>::Some(__match_scrut_0);
         __local_5 = __cast_3.payload_0;
@@ -325,7 +327,7 @@ fn match_option_chained() with Stdout {
         String { repr: array.new_data<u8>("none"), used: 4 };
     } else {
         unreachable;
-    });
+    };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(22), used: 0 };
         String::append_char(__local_9, 100);
@@ -376,7 +378,9 @@ fn match_variant_comprehensive() with Stdout {
             __pattern_temp_0 = ArrayIter<Tree>^Iterator::next(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
                 tree = value_copy Tree(ref.as_non_null(__pattern_temp_0));
-                desc = value_copy String(let __match_scrut_0: ref Tree; __match_scrut_0 = tree; if ref.test Tree::Leaf(__match_scrut_0) -> ref String {
+                let __match_scrut_0: ref Tree;
+                __match_scrut_0 = tree;
+                desc = if ref.test Tree::Leaf(__match_scrut_0) -> ref String {
                     let __cast_4: ref Tree::Leaf;
                     __cast_4 = ref.cast Tree::Leaf(__match_scrut_0);
                     __local_4 = __cast_4.payload_0;
@@ -505,7 +509,7 @@ fn match_variant_comprehensive() with Stdout {
                     String { repr: array.new_data<u8>("empty"), used: 5 };
                 } else {
                     unreachable;
-                });
+                };
                 "core:cli/println"(desc);
             } else {
                 break b8;
@@ -757,7 +761,7 @@ fn if_let_with_else() with Stdout {
         l37: loop {
             __pattern_temp_0 = ArrayIter<Option<i32>>^Iterator::next(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
-                v = value_copy Option<i32>(ref.as_non_null(__pattern_temp_0));
+                v = ref.as_non_null(__pattern_temp_0);
                 if ref.test Option<i32>::Some(v) {
                     n = ref.cast Option<i32>::Some(v).payload_0;
                     "core:cli/println"(__tmpl: block -> ref String {

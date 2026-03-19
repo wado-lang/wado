@@ -2329,9 +2329,9 @@ fn Tuple<i32,String>^Deserialize::deserialize<JsonDeserializer>(d) {
     if ref.test Result<JsonSeqAccess,DeserializeError>::Ok(__result) {
         seq = value_copy "core:json/JsonSeqAccess"(ref.cast Result<JsonSeqAccess,DeserializeError>::Ok(__result).payload_0);
         __r0 = JsonSeqAccess^DeserializeSeq::next_element<i32>(seq);
-        __pattern_temp_1 = value_copy Result<Option<i32>,DeserializeError>(__r0);
+        __pattern_temp_1 = __r0;
         if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
-            __opt0 = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+            __opt0 = ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0;
             if ref.test Option<i32>::Some(__opt0) {
                 __val_9 = ref.cast Option<i32>::Some(__opt0).payload_0;
                 __local_3 = __val_9;
@@ -2342,7 +2342,7 @@ fn Tuple<i32,String>^Deserialize::deserialize<JsonDeserializer>(d) {
             return Result<Tuple<i32,String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Option<i32>,DeserializeError>::Err(__r0).payload_0) };
         };
         __r1 = JsonSeqAccess^DeserializeSeq::next_element<String>(seq);
-        __pattern_temp_3 = value_copy Result<Option<String>,DeserializeError>(__r1);
+        __pattern_temp_3 = __r1;
         if ref.test Result<Option<String>,DeserializeError>::Ok(__pattern_temp_3) {
             __opt1 = value_copy Option<String>(ref.cast Result<Option<String>,DeserializeError>::Ok(__pattern_temp_3).payload_0);
             if ref.is_null(__opt1) == 0 {

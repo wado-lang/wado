@@ -113,7 +113,7 @@ import fn stream-new from "wasi/stream-new";
 
 fn classify_builder(x) {
     let __local_1: ref String;
-    return let __match_scrut_0: i32; __match_scrut_0 = x; if 1 -> ref String {
+    return let __match_scrut_0: i32; __match_scrut_0 = x; block -> ref String {
         if x > 0 -> ref String {
             if x > 10 -> ref String {
                 __local_1 = String { repr: builtin::array_new<u8>(8), used: 0 };
@@ -127,8 +127,6 @@ fn classify_builder(x) {
         } else {
             String { repr: array.new_data<u8>("zero"), used: 4 };
         };
-    } else {
-        String { repr: array.new_data<u8>("zero"), used: 4 };
     };
 }
 

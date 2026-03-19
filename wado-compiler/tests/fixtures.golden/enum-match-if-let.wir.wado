@@ -92,16 +92,20 @@ fn run() with Stdout {
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("not left"), used: 8 });
     };
-    label = value_copy String(let __match_scrut_2: enum:Direction; __match_scrut_2 = d; if __match_scrut_2 == 0 -> ref String {
+    let __match_scrut_2: enum:Direction;
+    __match_scrut_2 = d;
+    label = if __match_scrut_2 == 0 -> ref String {
         String { repr: array.new_data<u8>("up!"), used: 3 };
     } else if __match_scrut_2 == 1 -> ref String {
         String { repr: array.new_data<u8>("down!"), used: 5 };
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
-    });
+    };
     "core:cli/println"(label);
     x = 3;
-    msg = value_copy String(let __match_scrut_3: enum:Direction; __match_scrut_3 = x; if __match_scrut_3 == 3 -> ref String {
+    let __match_scrut_3: enum:Direction;
+    __match_scrut_3 = x;
+    msg = if __match_scrut_3 == 3 -> ref String {
         block -> ref String {
             String { repr: array.new_data<u8>("right and big"), used: 13 };
         };
@@ -109,7 +113,7 @@ fn run() with Stdout {
         String { repr: array.new_data<u8>("right and small"), used: 15 };
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
-    });
+    };
     "core:cli/println"(msg);
 }
 

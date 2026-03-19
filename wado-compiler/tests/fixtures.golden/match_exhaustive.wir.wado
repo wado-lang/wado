@@ -193,11 +193,13 @@ fn match_exhaustive_wildcard_ok() with Stdout {
     let c: enum:Color;
     let name: ref String;
     c = 1;
-    name = value_copy String(let __match_scrut_0: enum:Color; __match_scrut_0 = c; if __match_scrut_0 == 0 -> ref String {
+    let __match_scrut_0: enum:Color;
+    __match_scrut_0 = c;
+    name = if __match_scrut_0 == 0 -> ref String {
         String { repr: array.new_data<u8>("red"), used: 3 };
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
-    });
+    };
     "core:cli/println"(name);
 }
 

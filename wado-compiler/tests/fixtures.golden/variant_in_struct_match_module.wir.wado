@@ -75,13 +75,15 @@ fn run() with Stdout {
     let name: ref String;
     let __sroa_opts_align: ref Align;
     __sroa_opts_align = Align { 1 };
-    name = value_copy String(let __match_scrut_0: ref Align; __match_scrut_0 = __sroa_opts_align; if __match_scrut_0.discriminant == 0 -> ref String {
+    let __match_scrut_0: ref Align;
+    __match_scrut_0 = __sroa_opts_align;
+    name = if __match_scrut_0.discriminant == 0 -> ref String {
         String { repr: array.new_data<u8>("left"), used: 4 };
     } else if __match_scrut_0.discriminant == 1 -> ref String {
         String { repr: array.new_data<u8>("right"), used: 5 };
     } else {
         unreachable;
-    });
+    };
     "core:cli/println"(name);
 }
 

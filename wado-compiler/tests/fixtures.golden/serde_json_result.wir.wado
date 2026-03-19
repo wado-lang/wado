@@ -447,7 +447,7 @@ fn __test_2_result_roundtrip_ok() {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         parsed_r = "core/json/from_string<Result<i32,String>>"(json);
         if ref.test Result<Result<i32,String>,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy Result<i32,String>(ref.cast Result<Result<i32,String>,DeserializeError>::Ok(parsed_r).payload_0);
+            parsed = ref.cast Result<Result<i32,String>,DeserializeError>::Ok(parsed_r).payload_0;
             if ref.test Result<i32,String>::Ok(parsed) {
                 v = ref.cast Result<i32,String>::Ok(parsed).payload_0;
                 __cond = v == 100;
@@ -517,7 +517,7 @@ fn __test_3_result_roundtrip_err() {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         parsed_r = "core/json/from_string<Result<i32,String>>"(json);
         if ref.test Result<Result<i32,String>,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy Result<i32,String>(ref.cast Result<Result<i32,String>,DeserializeError>::Ok(parsed_r).payload_0);
+            parsed = ref.cast Result<Result<i32,String>,DeserializeError>::Ok(parsed_r).payload_0;
             if ref.test Result<i32,String>::Err(parsed) {
                 e = value_copy String(ref.cast Result<i32,String>::Err(parsed).payload_0);
                 __v0 = e;
@@ -1562,7 +1562,7 @@ fn Result<i32,String>^Serialize::serialize<JsonSerializer>(self, s) {
     let __local_33: ref null "core:serde/SerializeError";
     let __local_38: ref String;
     let __sroa_v_value: i32;
-    __pattern_temp_0 = value_copy Result<i32,String>(self);
+    __pattern_temp_0 = self;
     if ref.test Result<i32,String>::Ok(__pattern_temp_0) {
         __sroa_v_value = ref.cast Result<i32,String>::Ok(__pattern_temp_0).payload_0;
         var_3 = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Result"), used: 6 }, String { repr: array.new_data<u8>("Ok"), used: 2 }, 0);
@@ -1593,7 +1593,7 @@ fn Result<i32,String>^Serialize::serialize<JsonSerializer>(self, s) {
             return ref.as_non_null(e_7);
         };
     };
-    __pattern_temp_4 = value_copy Result<i32,String>(self);
+    __pattern_temp_4 = self;
     if ref.test Result<i32,String>::Err(__pattern_temp_4) {
         v = ref.cast Result<i32,String>::Err(__pattern_temp_4).payload_0;
         var_9 = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Result"), used: 6 }, String { repr: array.new_data<u8>("Err"), used: 3 }, 1);

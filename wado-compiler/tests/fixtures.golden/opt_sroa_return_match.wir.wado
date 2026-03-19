@@ -112,13 +112,15 @@ import fn stream-new from "wasi/stream-new";
 
 fn use_small_match(x) {
     let p: ref Pair;
-    p = value_copy Pair(let __match_scrut_0: i32; __match_scrut_0 = x; if __match_scrut_0 == 0 -> ref Pair {
+    let __match_scrut_0: i32;
+    __match_scrut_0 = x;
+    p = if __match_scrut_0 == 0 -> ref Pair {
         Pair { a: 10, b: 20 };
     } else if __match_scrut_0 == 1 -> ref Pair {
         Pair { a: 30, b: 40 };
     } else {
         Pair { a: 50, b: 60 };
-    });
+    };
     return p.a + p.b;
 }
 
