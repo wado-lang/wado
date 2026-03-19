@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773944222457,
+  "lastUpdate": 1773956516234,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4508,6 +4508,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b8b7cc5cc3b38c86e39bb2c0be267a75c92414cf"
         },
         "date": 1773944222279,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "46d51eaf80eba7e0bcc48b0d98465979d80814f2",
+          "message": "Merge pull request #614 from wado-lang/claude/resource-operations-effects-iEC6v\n\nImplement effect polymorphism with generic effect parameters",
+          "timestamp": "2026-03-20T06:39:25+09:00",
+          "tree_id": "d40df7756b7fac4dce9ff72c1966eb904edb7dbd",
+          "url": "https://github.com/wado-lang/wado/commit/46d51eaf80eba7e0bcc48b0d98465979d80814f2"
+        },
+        "date": 1773956516153,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
