@@ -115,7 +115,7 @@ pub use logger::{Bail, Logger};
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
-pub use effect_check::{EffectError, check_effects};
+pub use effect_check::{EffectError, check_effects, check_stores};
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::{lower, lower_modules_indexed, lower_project};
@@ -370,6 +370,14 @@ pub async fn compile_with_options<H: CompilerHost>(
             Bail
         })?
     };
+
+    // === Phase 8a: Stores Check ===
+    // Runs after synthesis so synthesized functions are also checked.
+    // Runs before monomorphize/optimize so stores info is available for escape analysis.
+    {
+        let _span = logger.span("stores-check");
+        check_stores(&project.tir_modules, &logger)?;
+    }
 
     // === Phase 8b: Erase Newtypes and Flags (Project -> Project) ===
     // After synthesis (which needs full type info) and before monomorphize
