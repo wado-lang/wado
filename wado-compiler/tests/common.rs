@@ -10,11 +10,13 @@
 // Each test file includes this module but only uses a subset of functions.
 #![allow(dead_code)]
 
+use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use wasmtime::component::{Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime_wasi_http::p3::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 use wado_compiler::{Bail, CompileError, CompilerHost, Diagnostic, OptLevel, SourceError};
 
@@ -184,12 +186,12 @@ pub fn new_runtime() -> tokio::runtime::Runtime {
         .expect("Failed to create tokio runtime")
 }
 
-/// Shared wasmtime Engine for CLI tests (initialized once)
-static CLI_ENGINE: OnceLock<Engine> = OnceLock::new();
+/// Shared wasmtime Engine for all tests (initialized once)
+static ENGINE: OnceLock<Engine> = OnceLock::new();
 
-/// Get or initialize the shared wasmtime Engine for CLI (wasi:cli) tests
-pub fn cli_engine() -> &'static Engine {
-    CLI_ENGINE.get_or_init(|| {
+/// Get or initialize the shared wasmtime Engine for all tests
+pub fn engine() -> &'static Engine {
+    ENGINE.get_or_init(|| {
         let mut config = Config::new();
         config.wasm_component_model(true);
         config.wasm_component_model_gc(true);
@@ -202,28 +204,6 @@ pub fn cli_engine() -> &'static Engine {
         config.wasm_threads(true);
         config.wasm_gc(true);
         config.wasm_function_references(true);
-        // Use minimal optimization for faster compilation in tests
-        config.cranelift_opt_level(wasmtime::OptLevel::None);
-        Engine::new(&config).expect("Failed to create wasmtime Engine")
-    })
-}
-
-/// Shared wasmtime Engine for HTTP (wasi:http/service) tests (initialized once)
-static HTTP_ENGINE: OnceLock<Engine> = OnceLock::new();
-
-/// Get or initialize the shared wasmtime Engine for HTTP tests
-pub fn http_engine() -> &'static Engine {
-    HTTP_ENGINE.get_or_init(|| {
-        let mut config = Config::new();
-        config.wasm_component_model(true);
-        config.wasm_component_model_async(true);
-        config.wasm_component_model_async_stackful(true);
-        config.wasm_component_model_gc(true);
-        config.wasm_component_model_error_context(true);
-        config.wasm_gc(true);
-        config.wasm_function_references(true);
-        config.wasm_wide_arithmetic(true);
-        config.wasm_threads(true);
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         // Use minimal optimization for faster compilation in tests
         config.cranelift_opt_level(wasmtime::OptLevel::None);
@@ -231,13 +211,155 @@ pub fn http_engine() -> &'static Engine {
     })
 }
 
-/// WASI state for CLI tests
-pub struct CliWasiState {
-    pub ctx: WasiCtx,
-    pub table: ResourceTable,
+/// Backward-compat aliases
+pub fn cli_engine() -> &'static Engine {
+    engine()
 }
 
-impl WasiView for CliWasiState {
+pub fn http_engine() -> &'static Engine {
+    engine()
+}
+
+/// Mock spec for a single outgoing HTTP response
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct OutgoingMockResponse {
+    /// HTTP status code (default: 200)
+    #[serde(default = "default_status_200")]
+    pub status: u16,
+
+    /// Response body as UTF-8 string (default: empty)
+    #[serde(default)]
+    pub body: String,
+
+    /// Response headers as `[[name, value], ...]`
+    #[serde(default)]
+    pub headers: Vec<[String; 2]>,
+}
+
+fn default_status_200() -> u16 {
+    200
+}
+
+impl Default for OutgoingMockResponse {
+    fn default() -> Self {
+        Self {
+            status: 200,
+            body: String::new(),
+            headers: Vec::new(),
+        }
+    }
+}
+
+/// HTTP context for tests that supports outgoing request mocking.
+///
+/// Mock entries are keyed by URL pattern (matched against request URI).
+pub struct TestHttpCtx {
+    /// Mock responses keyed by URL (exact match against full request URI)
+    pub mocks: indexmap::IndexMap<String, OutgoingMockResponse>,
+}
+
+impl TestHttpCtx {
+    pub fn new() -> Self {
+        Self {
+            mocks: indexmap::IndexMap::new(),
+        }
+    }
+}
+
+impl WasiHttpCtx for TestHttpCtx {
+    fn send_request(
+        &mut self,
+        request: http::Request<
+            http_body_util::combinators::UnsyncBoxBody<
+                bytes::Bytes,
+                wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+            >,
+        >,
+        _options: Option<wasmtime_wasi_http::p3::RequestOptions>,
+        _fut: Box<
+            dyn Future<
+                    Output = Result<(), wasmtime_wasi_http::p3::bindings::http::types::ErrorCode>,
+                > + Send,
+        >,
+    ) -> Box<
+        dyn Future<
+                Output = Result<
+                    (
+                        http::Response<
+                            http_body_util::combinators::UnsyncBoxBody<
+                                bytes::Bytes,
+                                wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+                            >,
+                        >,
+                        Box<
+                            dyn Future<
+                                    Output = Result<
+                                        (),
+                                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+                                    >,
+                                > + Send,
+                        >,
+                    ),
+                    wasmtime_wasi::TrappableError<
+                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+                    >,
+                >,
+            > + Send,
+    > {
+        use http_body_util::BodyExt;
+        use wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
+
+        let uri = request.uri().to_string();
+
+        // Try exact URI match first, then try matching by path only
+        let mock = self
+            .mocks
+            .get(&uri)
+            .or_else(|| {
+                let path = request
+                    .uri()
+                    .path_and_query()
+                    .map(|pq| pq.as_str())
+                    .unwrap_or("/");
+                self.mocks.get(path)
+            })
+            .cloned();
+
+        match mock {
+            Some(mock_resp) => {
+                let mut builder = http::Response::builder().status(mock_resp.status);
+                for [name, value] in &mock_resp.headers {
+                    builder = builder.header(name.as_str(), value.as_str());
+                }
+                let body =
+                    http_body_util::Full::new(bytes::Bytes::from(mock_resp.body.into_bytes()))
+                        .map_err(|_: std::convert::Infallible| -> ErrorCode { unreachable!() })
+                        .boxed_unsync();
+                let resp = builder.body(body).unwrap();
+                Box::new(async {
+                    Ok((
+                        resp,
+                        Box::new(async { Ok(()) }) as Box<dyn Future<Output = _> + Send>,
+                    ))
+                })
+            }
+            None => Box::new(async move {
+                Err(wasmtime_wasi::TrappableError::trap(wasmtime::Error::msg(
+                    format!("no mock configured for outgoing HTTP request to {uri}"),
+                )))
+            }),
+        }
+    }
+}
+
+/// Unified WASI state for all test worlds (CLI, test, HTTP service)
+pub struct WasiState {
+    pub ctx: WasiCtx,
+    pub table: ResourceTable,
+    pub http: TestHttpCtx,
+}
+
+impl WasiView for WasiState {
     fn ctx(&mut self) -> WasiCtxView<'_> {
         WasiCtxView {
             ctx: &mut self.ctx,
@@ -246,36 +368,60 @@ impl WasiView for CliWasiState {
     }
 }
 
-impl CliWasiState {
-    /// Create a new CLI WASI state with captured stdout/stderr
+impl WasiHttpView for WasiState {
+    fn http(&mut self) -> WasiHttpCtxView<'_> {
+        WasiHttpCtxView {
+            ctx: &mut self.http,
+            table: &mut self.table,
+        }
+    }
+}
+
+impl WasiState {
+    /// Create a new state with captured stdout/stderr
     pub fn new_with_pipes(
         stdout: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
         stderr: wasmtime_wasi::p2::pipe::MemoryOutputPipe,
     ) -> Self {
         let ctx = WasiCtxBuilder::new().stdout(stdout).stderr(stderr).build();
-        let table = ResourceTable::new();
-        Self { ctx, table }
+        Self {
+            ctx,
+            table: ResourceTable::new(),
+            http: TestHttpCtx::new(),
+        }
     }
 
-    /// Create a basic CLI WASI state (no I/O capture)
+    /// Create a basic state (no I/O capture)
     pub fn new() -> Self {
         let ctx = WasiCtxBuilder::new().build();
-        let table = ResourceTable::new();
-        Self { ctx, table }
+        Self {
+            ctx,
+            table: ResourceTable::new(),
+            http: TestHttpCtx::new(),
+        }
     }
 }
 
-impl Default for CliWasiState {
+impl Default for WasiState {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// Set up a linker for CLI (wasi:cli) tests
-pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<CliWasiState>> {
-    let mut linker: Linker<CliWasiState> = Linker::new(engine);
+/// Backward-compat alias
+pub type CliWasiState = WasiState;
+
+/// Set up a linker for all test worlds (WASI + HTTP)
+pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
+    let mut linker: Linker<WasiState> = Linker::new(engine);
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
+    wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     Ok(linker)
+}
+
+/// Backward-compat alias
+pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
+    linker(engine)
 }
 
 /// Compile source string using in-memory host
@@ -429,48 +575,7 @@ pub struct WasmRunResult {
 
 /// Run a compiled Wasm component and capture its output
 pub fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
-    use wasmtime::component::Component;
-    use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
-
-    let rt = runtime();
-    let engine = cli_engine();
-
-    rt.block_on(async {
-        let component = Component::new(engine, &wasm)?;
-
-        let linker = cli_linker(engine)?;
-
-        let stdout_pipe = MemoryOutputPipe::new(65536);
-        let stdout_clone = stdout_pipe.clone();
-        let stderr_pipe = MemoryOutputPipe::new(65536);
-        let stderr_clone = stderr_pipe.clone();
-
-        let state = CliWasiState::new_with_pipes(stdout_pipe, stderr_pipe);
-        let mut store = Store::new(engine, state);
-
-        let instance = linker.instantiate_async(&mut store, &component).await?;
-        let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
-
-        let (trapped, trap_msg) = match run_func.call_async(&mut store, ()).await {
-            Ok((result,)) => (result.is_err(), String::new()),
-            Err(e) => (true, format!("{e:#}")),
-        };
-
-        let stdout = String::from_utf8(stdout_clone.contents().to_vec())?;
-        let mut stderr = String::from_utf8(stderr_clone.contents().to_vec())?;
-        if !trap_msg.is_empty() {
-            if !stderr.is_empty() {
-                stderr.push('\n');
-            }
-            stderr.push_str(&trap_msg);
-        }
-
-        Ok(WasmRunResult {
-            stdout,
-            stderr,
-            trapped,
-        })
-    })
+    run_wasm_with_options(wasm, &[], None)
 }
 
 /// Run a compiled Wasm component with preopened directories and capture its output.
@@ -488,15 +593,25 @@ pub fn run_wasm_with_options(
     dirs: &[(String, String)],
     stdin_data: Option<&str>,
 ) -> anyhow::Result<WasmRunResult> {
+    run_wasm_with_full_options(wasm, dirs, stdin_data, indexmap::IndexMap::new())
+}
+
+/// Run a compiled Wasm component with full options including outgoing HTTP mocks.
+pub fn run_wasm_with_full_options(
+    wasm: Vec<u8>,
+    dirs: &[(String, String)],
+    stdin_data: Option<&str>,
+    outgoing_mocks: indexmap::IndexMap<String, OutgoingMockResponse>,
+) -> anyhow::Result<WasmRunResult> {
     use wasmtime::component::Component;
     use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
 
     let rt = runtime();
-    let engine = cli_engine();
+    let engine = engine();
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm)?;
-        let linker = cli_linker(engine)?;
+        let linker = linker(engine)?;
 
         let stdout_pipe = MemoryOutputPipe::new(65536);
         let stdout_clone = stdout_pipe.clone();
@@ -515,9 +630,12 @@ pub fn run_wasm_with_options(
             builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
         }
         let ctx = builder.build();
-        let state = CliWasiState {
+        let state = WasiState {
             ctx,
             table: ResourceTable::new(),
+            http: TestHttpCtx {
+                mocks: outgoing_mocks,
+            },
         };
         let mut store = Store::new(engine, state);
 

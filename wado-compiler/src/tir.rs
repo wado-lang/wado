@@ -824,6 +824,41 @@ impl TypeTable {
         None
     }
 
+    /// Find a named type (resource, enum, or variant) scoped to a WASI package.
+    ///
+    /// Tries resource → enum → variant in order, restricting matches to types
+    /// whose `module_source` is `Wasi { interface }` where `interface` starts
+    /// with `{wasi_package}/`.  Falls back to the unscoped lookup when no
+    /// scoped match is found.
+    pub fn find_named_type_by_wasi_package(
+        &self,
+        name: &str,
+        wasi_package: &str,
+    ) -> Option<TypeId> {
+        let prefix = format!("{wasi_package}/");
+        for (&type_id, resolved) in &self.types {
+            let matches = match resolved {
+                ResolvedType::Resource {
+                    name: n,
+                    module_source: ModuleSource::Wasi { interface },
+                } => n == name && interface.starts_with(&prefix),
+                ResolvedType::Enum {
+                    name: n,
+                    module_source: ModuleSource::Wasi { interface },
+                } => n == name && interface.starts_with(&prefix),
+                ResolvedType::Variant {
+                    name: n,
+                    module_source: ModuleSource::Wasi { interface },
+                } => n == name && interface.starts_with(&prefix),
+                _ => false,
+            };
+            if matches {
+                return Some(type_id);
+            }
+        }
+        None
+    }
+
     /// Find a tuple type with the given element types.
     pub fn find_tuple(&self, elems: &[TypeId]) -> Option<TypeId> {
         let key = ResolvedType::Tuple(elems.to_vec());

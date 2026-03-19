@@ -58,6 +58,7 @@ The target world is indicated by the top-level key in the JSON object:
 | `allocator`           | `string`             | Override allocator: `"bump"` (default) or `"debug"`         |
 | `wir_expect:Ox`       | `string[]`           | Patterns that must appear in WIR at `-Ox` (substring match) |
 | `wir_not_expect:Ox`   | `string[]`           | Patterns that must NOT appear in WIR at `-Ox`               |
+| `outgoing_mocks`      | `object`             | Mock responses for outgoing HTTP requests (see below)       |
 
 HTTP sub-fields (inside `"wasi:http/service": {...}`):
 
@@ -72,6 +73,16 @@ HTTP sub-fields (inside `"wasi:http/service": {...}`):
 | `body`            | `string`             | Expected response body (exact UTF-8 match)    |
 | `body_contains`   | `string[]`           | Strings that must appear in the response body |
 | `headers_contain` | `[string, string][]` | Response headers that must be present         |
+
+Outgoing mock sub-fields (inside each entry of `"outgoing_mocks": {...}`):
+
+Keys are URL patterns matched against the request URI (exact match on full URI or path).
+
+| Field     | Type                 | Description                             |
+| --------- | -------------------- | --------------------------------------- |
+| `status`  | `number`             | HTTP status code (default: 200)         |
+| `body`    | `string`             | Response body as UTF-8 (default: empty) |
+| `headers` | `[string, string][]` | Response headers                        |
 
 #### Examples
 

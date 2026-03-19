@@ -17,7 +17,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::Type;
 use crate::cm_abi;
-use crate::component_model::{WasiFunctionInfo, WasiRegistry};
+use crate::component_model::{CmVariantCase, WasiFunctionInfo, WasiRegistry};
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
@@ -37,6 +37,10 @@ use super::common::{
 pub struct LiftContext<'a> {
     pub wasi_registry: &'a WasiRegistry,
     pub type_table: &'a RefCell<TypeTable>,
+    /// WASI package hint for scoped type resolution (e.g., "http").
+    /// When set, named types are first looked up within this package to avoid
+    /// name collisions (e.g., wasi:cli/ErrorCode vs wasi:http/ErrorCode).
+    pub wasi_package: Option<&'a str>,
 }
 
 /// Convert a WASI AST `Type` to a `TypeId` in the type table.
@@ -45,7 +49,7 @@ pub struct LiftContext<'a> {
 /// (e.g., `Array::<String>::with_capacity()`). The monomorphizer requires
 /// concrete `TypeId`s in `MonomorphInfo::type_args` to instantiate generic methods.
 pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
-    wasi_type_to_type_id_with_registry(ty, type_table, None)
+    wasi_type_to_type_id_scoped(ty, type_table, None, None)
 }
 
 /// Convert a WASI AST `Type` to a `TypeId`, with optional registry access for struct resolution.
@@ -53,6 +57,21 @@ pub fn wasi_type_to_type_id_with_registry(
     ty: &Type,
     type_table: &mut TypeTable,
     registry: Option<&WasiRegistry>,
+) -> TypeId {
+    wasi_type_to_type_id_scoped(ty, type_table, registry, None)
+}
+
+/// Convert a WASI AST `Type` to a `TypeId`, with optional WASI package scope.
+///
+/// When `wasi_package` is provided (e.g., `"http"`), named types are first
+/// looked up within that WASI package before falling back to the unscoped
+/// lookup.  This prevents name collisions such as `wasi:cli/ErrorCode` (enum)
+/// shadowing `wasi:http/ErrorCode` (variant).
+pub fn wasi_type_to_type_id_scoped(
+    ty: &Type,
+    type_table: &mut TypeTable,
+    registry: Option<&WasiRegistry>,
+    wasi_package: Option<&str>,
 ) -> TypeId {
     match ty {
         Type::Named(named) => match named.name.as_str() {
@@ -72,11 +91,15 @@ pub fn wasi_type_to_type_id_with_registry(
             "()" => TypeTable::UNIT,
             "String" => type_table.make_struct("String".to_string(), ModuleSource::string()),
             // Resource/enum/variant types - look up the already-resolved TypeId if available.
-            // We try resource, enum, variant, then struct to find the most specific match.
-            _ => type_table
-                .find_resource_type_by_name(named.name.as_str())
-                .or_else(|| type_table.find_enum_type_by_name(named.name.as_str()))
+            // When a WASI package hint is available, try scoped lookup first to avoid
+            // name collisions (e.g. wasi:cli/ErrorCode vs wasi:http/ErrorCode).
+            _ => wasi_package
+                .and_then(|pkg| {
+                    type_table.find_named_type_by_wasi_package(named.name.as_str(), pkg)
+                })
+                .or_else(|| type_table.find_resource_type_by_name(named.name.as_str()))
                 .or_else(|| type_table.find_variant_type_by_name(named.name.as_str()))
+                .or_else(|| type_table.find_enum_type_by_name(named.name.as_str()))
                 .or_else(|| {
                     // Check WASI struct registry
                     if let Some(reg) = registry
@@ -97,17 +120,19 @@ pub fn wasi_type_to_type_id_with_registry(
         Type::Generic(g) => match g.name.as_str() {
             "Array" if g.args.len() == 1 => {
                 let elem_type =
-                    wasi_type_to_type_id_with_registry(&g.args[0], type_table, registry);
+                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
                 type_table.make_array(elem_type)
             }
             "Option" if g.args.len() == 1 => {
                 let inner_type =
-                    wasi_type_to_type_id_with_registry(&g.args[0], type_table, registry);
+                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
                 type_table.make_option(inner_type)
             }
             "Result" if g.args.len() == 2 => {
-                let ok_type = wasi_type_to_type_id_with_registry(&g.args[0], type_table, registry);
-                let err_type = wasi_type_to_type_id_with_registry(&g.args[1], type_table, registry);
+                let ok_type =
+                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
+                let err_type =
+                    wasi_type_to_type_id_scoped(&g.args[1], type_table, registry, wasi_package);
                 type_table.make_result(ok_type, err_type)
             }
             // Stream/Future/Own/Borrow are handle types represented as i32
@@ -118,7 +143,7 @@ pub fn wasi_type_to_type_id_with_registry(
         Type::Tuple(types) => {
             let resolved: Vec<TypeId> = types
                 .iter()
-                .map(|t| wasi_type_to_type_id_with_registry(t, type_table, registry))
+                .map(|t| wasi_type_to_type_id_scoped(t, type_table, registry, wasi_package))
                 .collect();
             type_table.make_tuple(resolved)
         }
@@ -484,7 +509,7 @@ fn try_lift_wasi_struct(
 fn synthesize_lift_wasi_variant(
     _name: &str,
     variant_type: TypeId,
-    cases: &[(String, Option<crate::ast::Type>)],
+    cases: &[CmVariantCase],
     addr: TirExpr,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
@@ -512,7 +537,7 @@ fn synthesize_lift_wasi_variant(
     // Compute max payload alignment for payload offset calculation
     let max_payload_align = cases
         .iter()
-        .filter_map(|(_, p)| p.as_ref())
+        .filter_map(|case| case.payload.as_ref())
         .map(cm_abi::cm_align)
         .max()
         .unwrap_or(1);
@@ -522,9 +547,9 @@ fn synthesize_lift_wasi_variant(
     let case_count = cases.len();
     let mut current_else: Option<TirBlock> = None;
 
-    for (i, (cm_case_name, payload_type)) in cases.iter().enumerate().rev() {
-        // Convert kebab-case CM name to PascalCase Wado name
-        let case_name = kebab_to_pascal(cm_case_name);
+    for (i, case) in cases.iter().enumerate().rev() {
+        let case_name = case.wado_name.clone();
+        let payload_type = case.payload.as_ref();
 
         // Lift payload if present
         let mut case_stmts: Vec<TirStmt> = Vec::new();
@@ -865,7 +890,7 @@ fn synthesize_lift_option_inner(
     let option_type_id = if let Some(c) = ctx {
         let mut tt = c.type_table.borrow_mut();
         let inner_type_id =
-            wasi_type_to_type_id_with_registry(inner_ty, &mut tt, Some(c.wasi_registry));
+            wasi_type_to_type_id_scoped(inner_ty, &mut tt, Some(c.wasi_registry), c.wasi_package);
         tt.make_option(inner_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
@@ -953,8 +978,8 @@ fn synthesize_lift_result_inner(
     // i32 but initialized with `ref.null none` (a reference type).
     let result_type_id = if let Some(ctx) = ctx {
         let mut tt = ctx.type_table.borrow_mut();
-        let ok_type_id = wasi_type_to_type_id(ok_ty, &mut tt);
-        let err_type_id = wasi_type_to_type_id(err_ty, &mut tt);
+        let ok_type_id = wasi_type_to_type_id_scoped(ok_ty, &mut tt, None, ctx.wasi_package);
+        let err_type_id = wasi_type_to_type_id_scoped(err_ty, &mut tt, None, ctx.wasi_package);
         tt.make_result(ok_type_id, err_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
@@ -2409,6 +2434,7 @@ fn synthesize_adapter(
                 let lift_ctx = LiftContext {
                     wasi_registry,
                     type_table,
+                    wasi_package: Some(&func_info.package),
                 };
                 let lifted = synthesize_lift_with_context(
                     &resolved,
@@ -2471,6 +2497,7 @@ fn synthesize_adapter(
         let lift_ctx = LiftContext {
             wasi_registry,
             type_table,
+            wasi_package: Some(&func_info.package),
         };
         let lifted = synthesize_lift_with_context(
             &resolved,
@@ -2527,6 +2554,7 @@ fn synthesize_adapter(
             let lift_ctx = LiftContext {
                 wasi_registry,
                 type_table,
+                wasi_package: Some(&func_info.package),
             };
             let lifted = synthesize_lift_flat_result(
                 &resolved,
