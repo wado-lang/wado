@@ -28,11 +28,10 @@ pub(super) type BlanketTraitImplIndex = Vec<(ModuleSource, usize)>;
 /// Pre-built index of static methods (no `self` parameter) from impl blocks.
 /// Key: `(type_name, method_name)` → `(ModuleSource, item_index, method_index)`.
 /// Enables O(1) lookup of static methods instead of scanning all modules.
-pub(super) type StaticMethodIndex =
-    IndexMap<String, Vec<(String, ModuleSource, usize, usize)>>;
+pub(super) type StaticMethodIndex = IndexMap<String, Vec<(String, ModuleSource, usize, usize)>>;
 
 /// Pre-built index of static methods from resource declarations.
-/// Key: type_name → `[(method_name, ModuleSource, item_index, method_index)]`.
+/// Key: `type_name` → `[(method_name, ModuleSource, item_index, method_index)]`.
 pub(super) type ResourceStaticMethodIndex =
     IndexMap<String, Vec<(String, ModuleSource, usize, usize)>>;
 
@@ -48,9 +47,9 @@ pub(super) struct TraitEnv {
     pub(super) decl_index: TraitDeclIndex,
     /// Blanket impls (`impl<T: Bound> Trait for T`), checked as fallback.
     pub(super) blanket_impl_index: BlanketTraitImplIndex,
-    /// type_name → `[(method_name, ModuleSource, item_idx, method_idx)]` for static methods.
+    /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for static methods.
     pub(super) static_method_index: StaticMethodIndex,
-    /// type_name → `[(method_name, ModuleSource, item_idx, method_idx)]` for resource static methods.
+    /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for resource static methods.
     pub(super) resource_static_method_index: ResourceStaticMethodIndex,
 }
 

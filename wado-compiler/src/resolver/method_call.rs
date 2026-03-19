@@ -1233,57 +1233,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Search via pre-built index (handles impls defined outside the struct's defining module)
         if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
             for (name, ms, item_idx, method_idx) in methods {
-                if name == method_name {
-                    if let Some(module) = self.loaded_modules.get(ms) {
-                        if let Item::Impl(impl_block) = &module.items[*item_idx] {
-                            let method = &impl_block.methods[*method_idx];
+                if name == method_name
+                    && let Some(module) = self.loaded_modules.get(ms)
+                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                {
+                    let method = &impl_block.methods[*method_idx];
 
-                            let old_type_params =
-                                std::mem::take(&mut self.trait_ctx.type_params);
+                    let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
 
-                            if let ast::Type::Generic(generic) = &impl_block.ty {
-                                for (i, arg) in generic.args.iter().enumerate() {
-                                    if let ast::Type::Named(named) = arg {
-                                        let name = &named.name;
-                                        if !self.trait_ctx.type_params.contains_key(name) {
-                                            let type_id = self
-                                                .type_table
-                                                .borrow_mut()
-                                                .make_type_param(name.clone(), i as u32);
-                                            self.trait_ctx
-                                                .type_params
-                                                .insert(name.clone(), (i as u32, type_id));
-                                        }
-                                    }
-                                }
-                            }
-
-                            let result = method
-                                .return_type
-                                .as_ref()
-                                .map(|t| self.resolve_type(t))
-                                .unwrap_or(TypeTable::UNIT);
-
-                            self.trait_ctx.type_params = old_type_params;
-                            return result;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Search resource declarations via pre-built index
-        if let Some(methods) = self.trait_env.resource_static_method_index.get(struct_name) {
-            for (name, ms, item_idx, method_idx) in methods {
-                if name == method_name {
-                    if let Some(module) = self.loaded_modules.get(ms) {
-                        if let Item::Resource(resource) = &module.items[*item_idx] {
-                            let method = &resource.methods[*method_idx];
-
-                            let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-
-                            for (i, param) in resource.type_params.iter().enumerate() {
-                                let name = &param.name;
+                    if let ast::Type::Generic(generic) = &impl_block.ty {
+                        for (i, arg) in generic.args.iter().enumerate() {
+                            if let ast::Type::Named(named) = arg {
+                                let name = &named.name;
                                 if !self.trait_ctx.type_params.contains_key(name) {
                                     let type_id = self
                                         .type_table
@@ -1294,19 +1255,55 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
                             }
-
-                            let result = method
-                                .return_type
-                                .as_ref()
-                                .map(|t| self.resolve_type(t))
-                                .unwrap_or(TypeTable::UNIT);
-
-                            // Restore type parameters
-                            self.trait_ctx.type_params = old_type_params;
-
-                            return result;
                         }
                     }
+
+                    let result = method
+                        .return_type
+                        .as_ref()
+                        .map(|t| self.resolve_type(t))
+                        .unwrap_or(TypeTable::UNIT);
+
+                    self.trait_ctx.type_params = old_type_params;
+                    return result;
+                }
+            }
+        }
+
+        // Search resource declarations via pre-built index
+        if let Some(methods) = self.trait_env.resource_static_method_index.get(struct_name) {
+            for (name, ms, item_idx, method_idx) in methods {
+                if name == method_name
+                    && let Some(module) = self.loaded_modules.get(ms)
+                    && let Item::Resource(resource) = &module.items[*item_idx]
+                {
+                    let method = &resource.methods[*method_idx];
+
+                    let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+
+                    for (i, param) in resource.type_params.iter().enumerate() {
+                        let name = &param.name;
+                        if !self.trait_ctx.type_params.contains_key(name) {
+                            let type_id = self
+                                .type_table
+                                .borrow_mut()
+                                .make_type_param(name.clone(), i as u32);
+                            self.trait_ctx
+                                .type_params
+                                .insert(name.clone(), (i as u32, type_id));
+                        }
+                    }
+
+                    let result = method
+                        .return_type
+                        .as_ref()
+                        .map(|t| self.resolve_type(t))
+                        .unwrap_or(TypeTable::UNIT);
+
+                    // Restore type parameters
+                    self.trait_ctx.type_params = old_type_params;
+
+                    return result;
                 }
             }
         }
@@ -1346,17 +1343,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // O(1) lookup via pre-built static method index
         if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
             for (name, module_source, item_idx, method_idx) in methods {
-                if name == method_name {
-                    if let Some(module) = self.loaded_modules.get(module_source) {
-                        if let Item::Impl(impl_block) = &module.items[*item_idx] {
-                            let method = &impl_block.methods[*method_idx];
-                            return method
-                                .params
-                                .iter()
-                                .map(|p| self.resolve_type(&p.ty))
-                                .collect();
-                        }
-                    }
+                if name == method_name
+                    && let Some(module) = self.loaded_modules.get(module_source)
+                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                {
+                    let method = &impl_block.methods[*method_idx];
+                    return method
+                        .params
+                        .iter()
+                        .map(|p| self.resolve_type(&p.ty))
+                        .collect();
                 }
             }
         }
@@ -1564,12 +1560,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Use trait_env.impl_index for O(1) lookup instead of scanning all modules
         if let Some(entries) = self.trait_env.impl_index.get(struct_name) {
             for (module_source, item_idx) in entries {
-                if let Some(module) = self.loaded_modules.get(module_source) {
-                    if let Item::Impl(impl_block) = &module.items[*item_idx] {
-                        if let Some(name) = check_impl(impl_block) {
-                            return Some((name, module_source.clone()));
-                        }
-                    }
+                if let Some(module) = self.loaded_modules.get(module_source)
+                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && let Some(name) = check_impl(impl_block)
+                {
+                    return Some((name, module_source.clone()));
                 }
             }
         }
@@ -1587,10 +1582,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // O(1) lookup via pre-built static method index (impl blocks)
-        if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
-            if methods.iter().any(|(name, ..)| name == method_name) {
-                return true;
-            }
+        if let Some(methods) = self.trait_env.static_method_index.get(struct_name)
+            && methods.iter().any(|(name, ..)| name == method_name)
+        {
+            return true;
         }
 
         // Check current module's impl blocks (not in the pre-built index)
@@ -1612,10 +1607,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // O(1) lookup via pre-built resource static method index
-        if let Some(methods) = self.trait_env.resource_static_method_index.get(struct_name) {
-            if methods.iter().any(|(name, ..)| name == method_name) {
-                return true;
-            }
+        if let Some(methods) = self.trait_env.resource_static_method_index.get(struct_name)
+            && methods.iter().any(|(name, ..)| name == method_name)
+        {
+            return true;
         }
 
         // For newtypes/flags, check if the base type has the static method
