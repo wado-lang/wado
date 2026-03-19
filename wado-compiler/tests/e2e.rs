@@ -698,6 +698,7 @@ fn run_normal_test(
         inline_threshold: None,
         opt_iterations: None,
         allocator,
+        ..Default::default()
     };
 
     // Try to compile the fixture

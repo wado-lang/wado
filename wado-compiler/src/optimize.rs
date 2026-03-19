@@ -6,14 +6,14 @@
 //! - Reference elimination via `ref_elim` module
 //! - Scalar Replacement of Aggregates (SROA) via `sroa` module
 //! - Copy propagation via `copy_prop` module
-//! - Constant propagation via `const_prop` module
-//! - Constant folding via `const_fold` module
+//! - Constant optimizations (propagation, folding, global promotion, branch pruning) via `const_*` modules
 //! - Loop-Invariant Code Motion (LICM) via `licm` module
-//! - Post-optimization rewrites (select lowering) via `rewrite` module
+//! - Select lowering via `select_lowering` module
 
-mod const_fold;
+mod const_branch_prune;
+mod const_folding;
 mod const_global_promotion;
-mod const_prop;
+mod const_propagation;
 mod copy_prop;
 pub mod dce;
 mod field_scalarize;
@@ -21,18 +21,20 @@ mod inline;
 mod labeled_block_fusion;
 mod licm;
 mod ref_elim;
-mod rewrite;
+mod select_lowering;
 mod sroa;
 mod store_load_forward;
 mod tmpl_hoist;
+pub(crate) mod visitor;
 
-use const_fold::fold_constants;
+use const_branch_prune::prune_constant_branches;
+use const_folding::fold_constants;
 use const_global_promotion::promote_constant_globals;
-use const_prop::propagate_constants;
+use const_propagation::propagate_constants;
 use copy_prop::propagate_copies;
 use dce::{
-    analyze_project, prune_constant_branches, remove_unreachable_functions,
-    remove_unreachable_globals, remove_unreachable_types,
+    analyze_project, remove_unreachable_functions, remove_unreachable_globals,
+    remove_unreachable_types,
 };
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
@@ -43,6 +45,7 @@ use sroa::scalar_replace_aggregates;
 use store_load_forward::forward_stores_to_loads;
 use tmpl_hoist::hoist_template_buffers;
 
+use crate::compiler_host::SpanEmitter;
 use crate::project::Project;
 
 /// Configuration for optimization passes
@@ -116,11 +119,12 @@ pub fn optimize(
     opt_level: OptLevel,
     inline_threshold: Option<usize>,
     opt_iterations: Option<u32>,
+    profiler: &dyn SpanEmitter,
 ) -> Project {
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
-            run_dce(&mut project);
+            run_dce(&mut project, profiler);
         }
         OptLevel::O1 => {
             let config = OptConfig {
@@ -129,10 +133,10 @@ pub fn optimize(
             };
             // Early DCE: remove unreachable functions/types before optimization
             // to reduce the working set for subsequent passes
-            run_dce(&mut project);
-            run_optimization_passes(&mut project, &config);
+            run_dce(&mut project, profiler);
+            run_optimization_passes(&mut project, &config, profiler);
             // Final DCE: clean up code made dead by optimizations
-            run_dce(&mut project);
+            run_dce(&mut project, profiler);
         }
         OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
@@ -140,9 +144,9 @@ pub fn optimize(
                 // Threshold 12: allows index_assign (11 expressions) to be inlined
                 inline_threshold: inline_threshold.unwrap_or(12),
             };
-            run_dce(&mut project);
-            run_optimization_passes(&mut project, &config);
-            run_dce(&mut project);
+            run_dce(&mut project, profiler);
+            run_optimization_passes(&mut project, &config, profiler);
+            run_dce(&mut project, profiler);
             if opt_level == OptLevel::Os {
                 project.strip_names = true;
             }
@@ -152,23 +156,40 @@ pub fn optimize(
                 iterations: opt_iterations.unwrap_or(100),
                 inline_threshold: inline_threshold.unwrap_or(20),
             };
-            run_dce(&mut project);
-            run_optimization_passes(&mut project, &config);
-            run_dce(&mut project);
+            run_dce(&mut project, profiler);
+            run_optimization_passes(&mut project, &config, profiler);
+            run_dce(&mut project, profiler);
         }
     }
 
-    // Post-optimization rewrites: simplify labeled blocks and insert moves in a single pass.
-    rewrite::rewrite(&mut project);
+    // Post-optimization rewrites: select lowering for branchless Wasm
+    profiler.span_start("tir/select_lowering");
+    select_lowering::select_lowering(&mut project);
+    profiler.span_end("tir/select_lowering");
 
     project
 }
 
-fn run_dce(project: &mut Project) {
+fn run_dce(project: &mut Project, profiler: &dyn SpanEmitter) {
+    profiler.span_start("tir/dce");
     analyze_project(project);
     remove_unreachable_functions(project);
     remove_unreachable_globals(project);
     remove_unreachable_types(project);
+    profiler.span_end("tir/dce");
+}
+
+/// Run a single optimization pass with profiling, returning whether it changed anything.
+fn run_pass(
+    name: &str,
+    project: &mut Project,
+    profiler: &dyn SpanEmitter,
+    f: impl FnOnce(&mut Project) -> bool,
+) -> bool {
+    profiler.span_start(name);
+    let changed = f(project);
+    profiler.span_end(name);
+    changed
 }
 
 /// Run optimization passes with a fixed-point iteration strategy.
@@ -178,9 +199,7 @@ fn run_dce(project: &mut Project) {
 /// - Reference elimination
 /// - Scalar Replacement of Aggregates (SROA)
 /// - Copy propagation
-/// - Constant propagation (global constants → literals)
-/// - Constant folding
-/// - Constant branch pruning (dead branch elimination)
+/// - Constant optimizations (propagation → folding → global promotion → branch pruning)
 /// - Loop-invariant code motion (LICM)
 ///
 /// The `config` parameter controls the number of iterations and inline threshold.
@@ -188,22 +207,47 @@ fn run_dce(project: &mut Project) {
 ///
 /// Hot Field Scalarization (HFS) runs once after the loop converges; see
 /// `optimize` for the rationale.
-fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
-    for _ in 0..config.iterations {
+fn run_optimization_passes(project: &mut Project, config: &OptConfig, profiler: &dyn SpanEmitter) {
+    let threshold = config.inline_threshold;
+    for i in 0..config.iterations {
+        profiler.span_start(&format!("tir/iteration {}", i + 1));
         let mut changed = false;
-        changed |= inline_functions(project, config.inline_threshold);
-        changed |= fuse_labeled_blocks(project);
-        changed |= eliminate_unnecessary_refs(project);
-        changed |= scalar_replace_aggregates(project);
-        changed |= propagate_copies(project);
-        changed |= forward_stores_to_loads(project);
-        changed |= propagate_constants(project);
-        changed |= fold_constants(project);
-        changed |= promote_constant_globals(project);
-        changed |= prune_constant_branches(project);
-        changed |= apply_licm(project);
-        changed |= hoist_template_buffers(project);
+        changed |= run_pass("tir/inline", project, profiler, |p| {
+            inline_functions(p, threshold)
+        });
+        changed |= run_pass("tir/labeled_block_fusion", project, profiler, |p| {
+            fuse_labeled_blocks(p)
+        });
+        changed |= run_pass("tir/ref_elim", project, profiler, |p| {
+            eliminate_unnecessary_refs(p)
+        });
+        changed |= run_pass("tir/sroa", project, profiler, |p| {
+            scalar_replace_aggregates(p)
+        });
+        changed |= run_pass("tir/copy_prop", project, profiler, propagate_copies);
+        changed |= run_pass("tir/store_load_forward", project, profiler, |p| {
+            forward_stores_to_loads(p)
+        });
+        changed |= run_pass("tir/const_prop", project, profiler, |p| {
+            propagate_constants(p)
+        });
+        changed |= run_pass("tir/const_fold", project, profiler, fold_constants);
+        changed |= run_pass("tir/const_global_promotion", project, profiler, |p| {
+            promote_constant_globals(p)
+        });
+        changed |= run_pass("tir/branch_prune", project, profiler, |p| {
+            prune_constant_branches(p)
+        });
+        changed |= run_pass("tir/licm", project, profiler, apply_licm);
+        changed |= run_pass("tir/tmpl_hoist", project, profiler, |p| {
+            hoist_template_buffers(p)
+        });
+        profiler.span_end(&format!("tir/iteration {}", i + 1));
         if !changed {
+            profiler.debug(&format!(
+                "TIR optimizer converged after {} iteration(s)",
+                i + 1
+            ));
             break;
         }
     }
@@ -211,5 +255,8 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
     // Running inside the loop would cause the write-back/re-read stmts it
     // inserts to be counted as new field accesses on the next iteration,
     // triggering spurious re-scalarization of the same fields.
-    scalarize_hot_fields(project);
+    run_pass("tir/field_scalarize", project, profiler, |p| {
+        scalarize_hot_fields(p);
+        true // always runs once, mark as changed for profiling visibility
+    });
 }

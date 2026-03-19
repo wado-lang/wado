@@ -196,6 +196,9 @@ pub struct CompilerOptions {
     /// Override the number of fixed-point optimization iterations.
     /// When `None`, the default for the `opt_level` is used.
     pub opt_iterations: Option<u32>,
+    /// Log level for compiler diagnostics.
+    /// When `None`, uses the default (`Info`).
+    pub log_level: Option<LogLevel>,
     /// Which allocator to use (e.g., `"bump"`, `"debug"`).
     /// Matches `#[allocator("...")]` attributes in `core:allocator`.
     /// When `None`, the compiler auto-selects: `"debug"` for test world, `"bump"` otherwise.
@@ -248,7 +251,8 @@ pub async fn compile_with_options<H: CompilerHost>(
     filename: Option<&str>,
     options: CompilerOptions,
 ) -> Result<CompileResult, Bail> {
-    let logger = Logger::new(host, compiler_host::LogLevel::default());
+    let log_level = options.log_level.unwrap_or_default();
+    let logger = Logger::new(host, log_level);
     let filename = filename.map(String::from);
     if let Some(ref f) = filename {
         logger.set_file(f);
@@ -258,7 +262,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Loader performs: lex → parse → bind → desugar for each module
     // Also preserves the original (non-desugared) entry AST for tooling
     let load_result = {
-        let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
+        let module_loader = loader::ModuleLoader::new(host, log_level);
         module_loader
             .load_all(source, filename.as_deref())
             .await
@@ -397,6 +401,7 @@ pub async fn compile_with_options<H: CompilerHost>(
             options.opt_level,
             options.inline_threshold,
             options.opt_iterations,
+            &logger,
         )
     };
 
@@ -411,7 +416,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 11.5: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(&mut wir_module, options.opt_level);
+        wir_optimize::optimize_wir(&mut wir_module, options.opt_level, &logger);
     }
 
     // === Phase 12: Emit Wasm (WirModule → Wasm component bytes) ===
@@ -656,14 +661,20 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         // Optimize
         let project = {
             let _span = logger.span("optimize");
-            optimize(project, opt_level, inline_threshold, opt_iterations)
+            optimize(
+                project,
+                opt_level,
+                inline_threshold,
+                opt_iterations,
+                &logger,
+            )
         };
         let project = wir_build::plan_project(project);
 
         // WIR: Translate optimized Project to WirModule for inspection.
         let wir_module = Some({
             let mut wir = wir_build::build_wir_module(&project);
-            wir_optimize::optimize_wir(&mut wir, opt_level);
+            wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
             wir
         });
         let optimized = Some(project);

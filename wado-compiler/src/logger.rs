@@ -25,7 +25,7 @@
 
 use std::cell::{Cell, RefCell};
 
-use crate::compiler_host::{Code, CompilerHost, Diagnostic, LogLevel, Severity};
+use crate::compiler_host::{Code, CompilerHost, Diagnostic, LogLevel, Severity, SpanEmitter};
 
 /// Maximum number of errors before compilation is aborted
 pub const MAX_ERRORS: usize = 100;
@@ -306,6 +306,18 @@ pub struct SpanGuard<'l, 'a, H: CompilerHost> {
 impl<H: CompilerHost> Drop for SpanGuard<'_, '_, H> {
     fn drop(&mut self) {
         self.logger.span_end(&self.name);
+    }
+}
+
+impl<H: CompilerHost> SpanEmitter for Logger<'_, H> {
+    fn span_start(&self, name: &str) {
+        Logger::span_start(self, name);
+    }
+    fn span_end(&self, name: &str) {
+        Logger::span_end(self, name);
+    }
+    fn debug(&self, message: &str) {
+        Logger::debug(self, message);
     }
 }
 
