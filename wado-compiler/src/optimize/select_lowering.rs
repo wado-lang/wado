@@ -37,8 +37,7 @@ impl TirVisitor for SelectLoweringVisitor {
             then_branch,
             else_branch,
         } = &mut expr.kind
-        {
-            if let Some(select_call) =
+            && let Some(select_call) =
                 try_lower_to_select(condition, then_branch, else_branch, expr.type_id, expr.span)
             {
                 *expr = select_call;
@@ -46,7 +45,6 @@ impl TirVisitor for SelectLoweringVisitor {
                 changed |= self.visit_expr(expr);
                 return changed;
             }
-        }
         changed |= walk_expr(self, expr);
         changed
     }
