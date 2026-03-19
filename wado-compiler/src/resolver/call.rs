@@ -1149,7 +1149,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             // Also check current module items
             if found.is_none() {
-                'outer2: for item in &self.current_module_items.clone() {
+                'outer2: for item in &self.current_module_items {
                     if let Item::Impl(impl_block) = item
                         && Self::get_type_name_static(&impl_block.ty) == struct_name
                     {

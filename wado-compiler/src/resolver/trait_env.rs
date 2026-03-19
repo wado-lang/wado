@@ -25,6 +25,16 @@ pub(super) type TraitDeclIndex = IndexMap<String, (ModuleSource, usize)>;
 /// Stored separately because they can't be indexed by concrete type name.
 pub(super) type BlanketTraitImplIndex = Vec<(ModuleSource, usize)>;
 
+/// Pre-built index of static methods (no `self` parameter) from impl blocks.
+/// Key: `(type_name, method_name)` → `(ModuleSource, item_index, method_index)`.
+/// Enables O(1) lookup of static methods instead of scanning all modules.
+pub(super) type StaticMethodIndex = IndexMap<String, Vec<(String, ModuleSource, usize, usize)>>;
+
+/// Pre-built index of static methods from resource declarations.
+/// Key: `type_name` → `[(method_name, ModuleSource, item_index, method_index)]`.
+pub(super) type ResourceStaticMethodIndex =
+    IndexMap<String, Vec<(String, ModuleSource, usize, usize)>>;
+
 /// Immutable global knowledge base for trait resolution.
 ///
 /// Contains pre-built indices for fast lookup of trait implementations,
@@ -37,6 +47,10 @@ pub(super) struct TraitEnv {
     pub(super) decl_index: TraitDeclIndex,
     /// Blanket impls (`impl<T: Bound> Trait for T`), checked as fallback.
     pub(super) blanket_impl_index: BlanketTraitImplIndex,
+    /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for static methods.
+    pub(super) static_method_index: StaticMethodIndex,
+    /// `type_name` → `[(method_name, ModuleSource, item_idx, method_idx)]` for resource static methods.
+    pub(super) resource_static_method_index: ResourceStaticMethodIndex,
 }
 
 impl TraitEnv {
@@ -51,6 +65,9 @@ impl TraitEnv {
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
         // type name → module source, for orphan rule "is this type local?" checks
         let mut type_decl_index: IndexMap<String, ModuleSource> = IndexMap::default();
+
+        let mut static_method_index: StaticMethodIndex = IndexMap::default();
+        let mut resource_static_method_index: ResourceStaticMethodIndex = IndexMap::default();
 
         for (module_source, module) in modules {
             for (item_idx, item) in module.items.iter().enumerate() {
@@ -70,10 +87,52 @@ impl TraitEnv {
                             .or_default()
                             .push((module_source.clone(), item_idx));
                     }
+                    Item::Impl(impl_block) => {
+                        // Non-trait impl block: index static methods
+                        let type_name = get_type_name_static(&impl_block.ty);
+                        for (method_idx, method) in impl_block.methods.iter().enumerate() {
+                            let has_self = method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None);
+                            if !has_self {
+                                static_method_index
+                                    .entry(type_name.clone())
+                                    .or_default()
+                                    .push((
+                                        method.name.clone(),
+                                        module_source.clone(),
+                                        item_idx,
+                                        method_idx,
+                                    ));
+                            }
+                        }
+                    }
                     Item::Trait(trait_decl) => {
                         decl_index
                             .entry(trait_decl.name.clone())
                             .or_insert((module_source.clone(), item_idx));
+                    }
+                    Item::Resource(resource) => {
+                        // Index static methods from resource declarations
+                        for (method_idx, method) in resource.methods.iter().enumerate() {
+                            let has_self = method.params.iter().any(|p| {
+                                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
+                                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == resource.name))
+                                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == resource.name)
+                            });
+                            if !has_self {
+                                resource_static_method_index
+                                    .entry(resource.name.clone())
+                                    .or_default()
+                                    .push((
+                                        method.name.clone(),
+                                        module_source.clone(),
+                                        item_idx,
+                                        method_idx,
+                                    ));
+                            }
+                        }
                     }
                     Item::Struct(s) => {
                         type_decl_index
@@ -105,6 +164,34 @@ impl TraitEnv {
             }
         }
 
+        // Also index static methods from trait impl blocks (they have trait_type.is_some())
+        for (module_source, module) in modules {
+            for (item_idx, item) in module.items.iter().enumerate() {
+                if let Item::Impl(impl_block) = item
+                    && impl_block.trait_type.is_some()
+                {
+                    let type_name = get_type_name_static(&impl_block.ty);
+                    for (method_idx, method) in impl_block.methods.iter().enumerate() {
+                        let has_self = method
+                            .params
+                            .iter()
+                            .any(|p| p.self_kind != ast::SelfKind::None);
+                        if !has_self {
+                            static_method_index
+                                .entry(type_name.clone())
+                                .or_default()
+                                .push((
+                                    method.name.clone(),
+                                    module_source.clone(),
+                                    item_idx,
+                                    method_idx,
+                                ));
+                        }
+                    }
+                }
+            }
+        }
+
         let violations = check_all_orphan_rules(modules, &decl_index, &type_decl_index);
 
         (
@@ -112,6 +199,8 @@ impl TraitEnv {
                 impl_index,
                 decl_index,
                 blanket_impl_index,
+                static_method_index,
+                resource_static_method_index,
             }),
             violations,
         )
