@@ -248,7 +248,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
     let mut component_bytes = builder.finish();
 
     if project.has_http_handler_export {
-        append_http_handler_export(&mut component_bytes, &ctx);
+        append_http_handler_export(&mut component_bytes, &ctx, project);
     }
 
     component_bytes
@@ -974,6 +974,15 @@ fn generate_wasi_imports(
         .expect("WASI CLI version not found in registry - lib/wasi/*.wado not loaded?");
 
     // Import wasi:cli/types for shared types (error-code)
+    let cli_types_interface = format!("wasi:cli/types@{cli_version}");
+    let error_code_cm_name = project
+        .wasi_registry
+        .get_enum_cm_name_by_interface(&cli_types_interface, "ErrorCode")
+        .expect("ErrorCode CM name not found in wasi:cli/types");
+    let error_code_variants = project
+        .wasi_registry
+        .get_enum_variants_by_interface(&cli_types_interface, "ErrorCode")
+        .expect("ErrorCode enum not found in wasi:cli/types");
     let types_instance_type = ctx.register_type("types-instance-type");
     {
         let (_, enc) = builder.ty(Some("types-instance-type"));
@@ -981,9 +990,9 @@ fn generate_wasi_imports(
         instance_type
             .ty()
             .defined_type()
-            .enum_type(["io", "illegal-byte-sequence", "pipe"]);
+            .enum_type(error_code_variants.iter().map(String::as_str));
         instance_type.export(
-            "error-code",
+            error_code_cm_name,
             wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
         );
         enc.instance(&instance_type);
@@ -999,7 +1008,7 @@ fn generate_wasi_imports(
     ctx.register_type("error-code");
     builder.alias_export(
         ctx.instance_idx("types"),
-        "error-code",
+        error_code_cm_name,
         ComponentExportKind::Type,
     );
 
@@ -1559,7 +1568,7 @@ fn generate_wasi_imports(
 
     // Import wasi:http/client if Client::send is used
     if project.has_effect("Client") && ctx.has_type("http-handler-result") {
-        import_http_client(builder, ctx);
+        import_http_client(builder, ctx, project);
     }
 }
 
@@ -1568,33 +1577,40 @@ fn import_http_types_for_service(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
 ) {
+    // Collect HTTP resources from the registry
+    let http_resources: Vec<(String, String)> = project
+        .wasi_registry
+        .resources_for_interface("wasi:http/types")
+        .map(|(wado, cm)| (wado.to_string(), cm.to_string()))
+        .collect();
+
     let http_types_instance_type = ctx.register_type("http-types-instance-type");
     {
         let (_, enc) = builder.ty(Some("http-types-instance-type"));
         let mut instance_type = InstanceType::new();
 
-        instance_type.export(
-            "request",
-            wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
-        );
-        instance_type.export(
-            "response",
-            wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
-        );
-        instance_type.export(
-            "fields",
-            wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
-        );
+        for (_, cm_name) in &http_resources {
+            instance_type.export(
+                cm_name,
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+            );
+        }
 
-        // Type generation starts at index 3 (after the 3 SubResource exports).
+        // Type generation starts after the SubResource exports.
         // CmInstanceTypeGen emits error-code and its payload structs
-        // (DNS-error-payload, TLS-alert-received-payload, field-size-payload)
-        // on demand when the parameter/return types of [static]response.new are processed.
-        let mut type_gen = CmInstanceTypeGen::new(3);
-        let resource_exports: IndexMap<&str, u32> =
-            [("request", 0), ("response", 1), ("fields", 2)]
-                .into_iter()
-                .collect();
+        // on demand when the parameter/return types are processed.
+        let resource_count = http_resources.len() as u32;
+        let mut type_gen = CmInstanceTypeGen::new(resource_count);
+        let resource_exports: IndexMap<&str, u32> = http_resources
+            .iter()
+            .enumerate()
+            .map(|(i, (_, cm_name))| (cm_name.as_str(), i as u32))
+            .collect();
+
+        let http_resource_names: IndexSet<&str> = http_resources
+            .iter()
+            .map(|(wado, _)| wado.as_str())
+            .collect();
 
         let all_funcs: Vec<WasiFunctionInfo> = project
             .wasi_registry
@@ -1607,9 +1623,9 @@ fn import_http_types_for_service(
         // Processing their parameter and return types triggers on-demand emission of
         // all dependent types (error-code variant and its payload record types).
         let is_constructor_or_static = |f: &WasiFunctionInfo| {
-            f.wasi_func_name == "[constructor]fields"
-                || f.wasi_func_name == "[static]response.new"
-                || (f.effect_name == "Fields" && f.wasi_func_name.starts_with("[static]"))
+            http_resource_names.contains(f.effect_name.as_str())
+                && (f.wasi_func_name.starts_with("[constructor]")
+                    || f.wasi_func_name.starts_with("[static]"))
         };
         for func in all_funcs.iter().filter(|f| is_constructor_or_static(f)) {
             let resolved_return = func
@@ -1662,20 +1678,21 @@ fn import_http_types_for_service(
                 if is_constructor_or_static(f) {
                     return false;
                 }
-                let is_fields_func = f.effect_name == "Fields"
-                    && (f.wasi_func_name.starts_with("[method]")
-                        || f.wasi_func_name.starts_with("[static]"));
-                let is_response_method =
-                    f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]");
-                // Only include Request methods/statics that are actually used to avoid
+                // Only include methods for known HTTP resources
+                if !http_resource_names.contains(f.effect_name.as_str()) {
+                    return false;
+                }
+                // Only include method/static functions
+                let is_method_or_static = f.wasi_func_name.starts_with("[method]")
+                    || f.wasi_func_name.starts_with("[static]");
+                if !is_method_or_static {
+                    return false;
+                }
+                // Only include functions that are actually used to avoid
                 // referencing unsupported resource types (e.g. RequestOptions).
-                let is_used_request_func = f.effect_name == "Request"
-                    && (f.wasi_func_name.starts_with("[method]")
-                        || f.wasi_func_name.starts_with("[static]"))
-                    && project
-                        .used_wasi_functions
-                        .contains(&format!("{}::{}", f.effect_name, f.method_name));
-                is_fields_func || is_response_method || is_used_request_func
+                project
+                    .used_wasi_functions
+                    .contains(&format!("{}::{}", f.effect_name, f.method_name))
             })
             .cloned()
             .collect();
@@ -1728,54 +1745,63 @@ fn import_http_types_for_service(
     }
 
     ctx.register_instance("http-types");
-    let http_version = "0.3.0-rc-2026-01-06";
+    let http_version = project
+        .wasi_registry
+        .get_package_version("http")
+        .expect("WASI HTTP version not found in registry");
     let http_types_import_path = format!("wasi:http/types@{http_version}");
     builder.import(
         &http_types_import_path,
         wasm_encoder::ComponentTypeRef::Instance(http_types_instance_type),
     );
 
-    ctx.register_type("http-request-resource");
-    builder.alias_export(
-        ctx.instance_idx("http-types"),
-        "request",
-        ComponentExportKind::Type,
-    );
-    ctx.register_type("http-response-resource");
-    builder.alias_export(
-        ctx.instance_idx("http-types"),
-        "response",
-        ComponentExportKind::Type,
-    );
-    ctx.register_type("http-fields-resource");
-    builder.alias_export(
-        ctx.instance_idx("http-types"),
-        "fields",
-        ComponentExportKind::Type,
-    );
+    for (_, cm_name) in &http_resources {
+        let local_name = format!("http-{cm_name}-resource");
+        ctx.register_type(&local_name);
+        builder.alias_export(
+            ctx.instance_idx("http-types"),
+            cm_name,
+            ComponentExportKind::Type,
+        );
+    }
+    let http_error_code_cm = project
+        .wasi_registry
+        .get_variant_cm_name("ErrorCode")
+        .or_else(|| project.wasi_registry.get_enum_cm_name("ErrorCode"))
+        .expect("ErrorCode CM name not found for HTTP");
     ctx.register_type("http-error-code");
     builder.alias_export(
         ctx.instance_idx("http-types"),
-        "error-code",
+        http_error_code_cm,
         ComponentExportKind::Type,
     );
+
+    // Alias constructor/static functions needed for lowering
+    let fields_cm = project.wasi_registry.get_resource_cm_name("Fields").unwrap();
+    let response_cm = project.wasi_registry.get_resource_cm_name("Response").unwrap();
+    let constructor_fields = format!("[constructor]{fields_cm}");
+    let static_response_new = format!("[static]{response_cm}.new");
 
     ctx.register_comp_func("http-fields-constructor");
     builder.alias_export(
         ctx.instance_idx("http-types"),
-        "[constructor]fields",
+        &constructor_fields,
         ComponentExportKind::Func,
     );
     ctx.register_comp_func("http-response-new");
     builder.alias_export(
         ctx.instance_idx("http-types"),
-        "[static]response.new",
+        &static_response_new,
         ComponentExportKind::Func,
     );
     ctx.alias_comp_func("http-fields-constructor", "wasi:http/Fields::new");
 
-    // Alias Fields, Response, and used Request resource functions
+    // Alias resource method/static functions for HTTP resources
     {
+        let http_resource_names: IndexSet<&str> = http_resources
+            .iter()
+            .map(|(wado, _)| wado.as_str())
+            .collect();
         let resource_funcs: Vec<(String, String)> = project
             .wasi_registry
             .interfaces()
@@ -1784,18 +1810,25 @@ fn import_http_types_for_service(
                 i.functions
                     .iter()
                     .filter(|f| {
-                        let is_fields_method = f.effect_name == "Fields"
-                            && (f.wasi_func_name.starts_with("[method]")
-                                || f.wasi_func_name.starts_with("[static]"));
-                        let is_response_method =
-                            f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]");
-                        let is_used_request_func = f.effect_name == "Request"
-                            && (f.wasi_func_name.starts_with("[method]")
-                                || f.wasi_func_name.starts_with("[static]"))
+                        // Only include functions for known HTTP resources
+                        if !http_resource_names.contains(f.effect_name.as_str()) {
+                            return false;
+                        }
+                        // Skip constructors (handled above)
+                        if f.wasi_func_name.starts_with("[constructor]") {
+                            return false;
+                        }
+                        // Skip [static]response.new (handled above as http-response-new)
+                        if f.wasi_func_name == static_response_new {
+                            return false;
+                        }
+                        // Only include method/static functions that are actually used
+                        let is_method_or_static = f.wasi_func_name.starts_with("[method]")
+                            || f.wasi_func_name.starts_with("[static]");
+                        is_method_or_static
                             && project
                                 .used_wasi_functions
-                                .contains(&format!("{}::{}", f.effect_name, f.method_name));
-                        is_fields_method || is_response_method || is_used_request_func
+                                .contains(&format!("{}::{}", f.effect_name, f.method_name))
                     })
                     .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))
                     .collect()
@@ -1811,20 +1844,14 @@ fn import_http_types_for_service(
         }
     }
 
-    // Define own<request> type
-    let request_resource_idx = ctx.type_idx("http-request-resource");
-    ctx.register_type("http-request");
-    {
-        let (_, enc) = builder.ty(Some("http-request"));
-        enc.defined_type().own(request_resource_idx);
-    }
-
-    // Define own<response> type
-    let response_resource_idx = ctx.type_idx("http-response-resource");
-    ctx.register_type("http-response");
-    {
-        let (_, enc) = builder.ty(Some("http-response"));
-        enc.defined_type().own(response_resource_idx);
+    // Define own<resource> types for each HTTP resource
+    for (_, cm_name) in &http_resources {
+        let resource_local = format!("http-{cm_name}-resource");
+        let own_local = format!("http-{cm_name}");
+        let resource_idx = ctx.type_idx(&resource_local);
+        ctx.register_type(&own_local);
+        let (_, enc) = builder.ty(Some(&own_local));
+        enc.defined_type().own(resource_idx);
     }
 
     // Define result<own<response>, error-code>
@@ -1843,6 +1870,7 @@ fn import_http_types_for_service(
 fn import_http_client(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
+    project: &Project,
 ) {
     // Build the instance type for wasi:http/client
     // It contains a single async function: send(request) -> result<response, error-code>
@@ -1883,7 +1911,10 @@ fn import_http_client(
     }
 
     ctx.register_instance("http-client");
-    let http_version = "0.3.0-rc-2026-01-06";
+    let http_version = project
+        .wasi_registry
+        .get_package_version("http")
+        .expect("WASI HTTP version not found in registry");
     let client_import_path = format!("wasi:http/client@{http_version}");
     builder.import(
         &client_import_path,
@@ -2396,27 +2427,42 @@ fn lower_wasi_functions(
     }
 }
 
-fn append_http_handler_export(component_bytes: &mut Vec<u8>, ctx: &ComponentModelContext) {
+fn append_http_handler_export(
+    component_bytes: &mut Vec<u8>,
+    ctx: &ComponentModelContext,
+    project: &Project,
+) {
     use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
 
     let handle_func_idx = ctx.comp_func_idx("handle");
 
-    let request_type_idx = ctx.type_idx("http-request-resource");
-    let response_type_idx = ctx.type_idx("http-response-resource");
+    let request_cm = project.wasi_registry.get_resource_cm_name("Request").unwrap();
+    let response_cm = project.wasi_registry.get_resource_cm_name("Response").unwrap();
+    let error_code_cm = project
+        .wasi_registry
+        .get_variant_cm_name("ErrorCode")
+        .or_else(|| project.wasi_registry.get_enum_cm_name("ErrorCode"))
+        .unwrap();
+
+    let request_type_idx = ctx.type_idx(&format!("http-{request_cm}-resource"));
+    let response_type_idx = ctx.type_idx(&format!("http-{response_cm}-resource"));
     let error_code_type_idx = ctx.type_idx("http-error-code");
 
     let mut instances = ComponentInstanceSection::new();
     instances.export_items([
-        ("request", ComponentExportKind::Type, request_type_idx),
-        ("response", ComponentExportKind::Type, response_type_idx),
-        ("error-code", ComponentExportKind::Type, error_code_type_idx),
+        (request_cm, ComponentExportKind::Type, request_type_idx),
+        (response_cm, ComponentExportKind::Type, response_type_idx),
+        (error_code_cm, ComponentExportKind::Type, error_code_type_idx),
         ("handle", ComponentExportKind::Func, handle_func_idx),
     ]);
 
     let instance_idx = ctx.instance_count();
 
     let mut exports = ComponentExportSection::new();
-    let http_version = "0.3.0-rc-2026-01-06";
+    let http_version = project
+        .wasi_registry
+        .get_package_version("http")
+        .expect("WASI HTTP version not found in registry");
     let handler_path = format!("wasi:http/handler@{http_version}");
     exports.export(
         &handler_path,

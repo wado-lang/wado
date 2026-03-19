@@ -15,8 +15,8 @@ use crate::tir::{TypeId, TypeTable};
 
 /// A variant case with both CM and Wado names.
 #[derive(Debug, Clone)]
-pub struct WasiVariantCase {
-    /// Component Model name (from `#[wasi]` attribute, e.g., `"DNS-error"`).
+pub struct CmVariantCase {
+    /// Component Model name (e.g., `"DNS-error"`).
     pub cm_name: String,
     /// Wado source name (e.g., `"DnsError"`).
     pub wado_name: String,
@@ -261,7 +261,7 @@ pub struct WasiRegistry {
 
     /// Variant types collected from WASI modules (e.g., `HeaderError`)
     /// Maps Wado variant name -> (CM variant name, cases)
-    variants: IndexMap<String, (String, Vec<WasiVariantCase>)>,
+    variants: IndexMap<String, (String, Vec<CmVariantCase>)>,
 
     /// Struct types collected from WASI modules (e.g., `DnsErrorPayload`)
     /// Maps Wado struct name -> (CM record name kebab-case, source interface path, fields with CM names, fields with Wado names)
@@ -461,10 +461,10 @@ impl WasiRegistry {
                 // Use the #[wasi] fragment as the CM name (preserves acronym casing)
                 let cm_name = wasi_attr_cm_name(&variant_def.attrs, &variant_def.name);
                 // Store both CM and Wado names for each case
-                let cases: Vec<WasiVariantCase> = variant_def
+                let cases: Vec<CmVariantCase> = variant_def
                     .cases
                     .iter()
-                    .map(|c| WasiVariantCase {
+                    .map(|c| CmVariantCase {
                         cm_name: wasi_attr_cm_name(&c.attrs, &c.name),
                         wado_name: c.name.clone(),
                         payload: c.payload.clone(),
@@ -699,7 +699,7 @@ impl WasiRegistry {
     }
 
     /// Get the variant cases (CM kebab-case name, payload type if any)
-    pub fn get_variant_cases(&self, name: &str) -> Option<&[WasiVariantCase]> {
+    pub fn get_variant_cases(&self, name: &str) -> Option<&[CmVariantCase]> {
         self.variants.get(name).map(|(_, cases)| cases.as_slice())
     }
 
@@ -762,7 +762,7 @@ impl WasiRegistry {
     pub fn variants_for_interface(
         &self,
         interface_prefix: &str,
-    ) -> impl Iterator<Item = (&str, &str, &[WasiVariantCase])> {
+    ) -> impl Iterator<Item = (&str, &str, &[CmVariantCase])> {
         let prefix = format!("{interface_prefix}#");
         self.variants
             .iter()
@@ -771,6 +771,23 @@ impl WasiRegistry {
                     // key = "interface_path#WadoName"
                     let wado_name = key.split('#').nth(1).unwrap_or(key.as_str());
                     Some((wado_name, cm_name.as_str(), cases.as_slice()))
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Iterate over all resources from a specific interface (matched by prefix).
+    /// Returns (`wado_name`, `cm_name`) in insertion order.
+    pub fn resources_for_interface(
+        &self,
+        interface_prefix: &str,
+    ) -> impl Iterator<Item = (&str, &str)> {
+        self.resources
+            .iter()
+            .filter_map(move |(name, (cm_name, source))| {
+                if source.starts_with(interface_prefix) {
+                    Some((name.as_str(), cm_name.as_str()))
                 } else {
                     None
                 }
@@ -1182,7 +1199,7 @@ impl CmInstanceTypeGen {
         &mut self,
         instance_type: &mut InstanceType,
         cm_name: &str,
-        cases: &[WasiVariantCase],
+        cases: &[CmVariantCase],
         wasi_registry: &WasiRegistry,
         resource_exports: &IndexMap<&str, u32>,
     ) -> u32 {

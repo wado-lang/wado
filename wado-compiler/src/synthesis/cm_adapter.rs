@@ -17,7 +17,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::Type;
 use crate::cm_abi;
-use crate::component_model::{WasiFunctionInfo, WasiRegistry, WasiVariantCase};
+use crate::component_model::{CmVariantCase, WasiFunctionInfo, WasiRegistry};
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
@@ -505,7 +505,7 @@ fn try_lift_wasi_struct(
 fn synthesize_lift_wasi_variant(
     _name: &str,
     variant_type: TypeId,
-    cases: &[WasiVariantCase],
+    cases: &[CmVariantCase],
     addr: TirExpr,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
