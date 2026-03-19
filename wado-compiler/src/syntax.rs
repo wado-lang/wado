@@ -70,7 +70,9 @@ impl SyntaxDefinition {
                     "type", "use", "from", "pub", "import", "export", "test",
                 ],
                 // Modifiers
-                modifier: vec!["as", "with", "mut", "async", "move", "unique", "in", "of", "stores"],
+                modifier: vec![
+                    "as", "with", "mut", "async", "move", "unique", "in", "of", "stores",
+                ],
                 // Other keywords
                 other: vec![
                     "assert", "effect", "handler", "reactive", "resource", "world",

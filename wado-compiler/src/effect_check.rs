@@ -94,7 +94,11 @@ pub struct StoresError {
 
 impl std::fmt::Display for StoresError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}: {}", self.span.line, self.span.column, self.message)
+        write!(
+            f,
+            "{}:{}: {}",
+            self.span.line, self.span.column, self.message
+        )
     }
 }
 
@@ -204,17 +208,17 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
 
         // Track which parameters are reference types (only for stores checking)
         self.current_ref_params = IndexSet::default();
-        if self.should_check_stores(func) {
-            if let Some(tt_rc) = &self.current_type_table {
-                let tt = tt_rc.borrow();
-                for param in &func.params {
-                    let resolved = tt.get(param.type_id);
-                    if matches!(
-                        resolved,
-                        crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
-                    ) {
-                        self.current_ref_params.insert(param.name.clone());
-                    }
+        if self.should_check_stores(func)
+            && let Some(tt_rc) = &self.current_type_table
+        {
+            let tt = tt_rc.borrow();
+            for param in &func.params {
+                let resolved = tt.get(param.type_id);
+                if matches!(
+                    resolved,
+                    crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+                ) {
+                    self.current_ref_params.insert(param.name.clone());
                 }
             }
         }
@@ -480,10 +484,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
     }
 
     /// Check stores violations: a function that stores a reference parameter must declare stores[param]
-    fn check_stores_violation_return(
-        &mut self,
-        value: &TirExpr,
-    ) -> Result<(), Bail> {
+    fn check_stores_violation_return(&mut self, value: &TirExpr) -> Result<(), Bail> {
         if let Some(param_name) = self.find_unstored_ref_param(value) {
             self.logger.error(StoresError {
                 message: format!(

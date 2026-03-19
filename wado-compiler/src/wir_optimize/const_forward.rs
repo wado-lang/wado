@@ -81,10 +81,8 @@ fn collect_aliased_in_instr(
         // RefAsNonNull of a LocalGet: address taken — but suppress if inside
         // a non-stores call argument (the reference doesn't persist).
         WirInstr::RefAsNonNull(inner) => {
-            if !in_non_stores_arg {
-                if let WirInstr::LocalGet { name } = inner.as_ref() {
-                    aliased.insert(name.clone());
-                }
+            if !in_non_stores_arg && let WirInstr::LocalGet { name } = inner.as_ref() {
+                aliased.insert(name.clone());
             }
         }
         // LocalSet from another local: both are aliases of the same GC object.

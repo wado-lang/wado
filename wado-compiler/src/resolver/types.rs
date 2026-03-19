@@ -409,11 +409,9 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 ),
                 *span,
             ),
-            TypeError::InvalidStores { message, span } => (
-                Code::InvalidSyntax,
-                message.clone(),
-                *span,
-            ),
+            TypeError::InvalidStores { message, span } => {
+                (Code::InvalidSyntax, message.clone(), *span)
+            }
         };
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,

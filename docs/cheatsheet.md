@@ -867,6 +867,7 @@ fn store_and_log(data: &Data) -> Container with Stdout, stores[data] {
 ```
 
 Rules:
+
 - `stores[param]` declares that the function may store the reference parameter
 - Only reference parameters (`&T` or `&mut T`) can appear in `stores[...]`
 - Without `stores[param]`, a function cannot return, store in struct fields, or assign to globals the reference parameter

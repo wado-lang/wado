@@ -6251,11 +6251,11 @@ fn "Array<u64>^SequenceLiteralBuilder::build"(self: &Array<u64>) -> Array<u64> {
     return *self;
 }
 
-fn "Array<u64>^SequenceLiteralBuilder::push_literal"(self: &mut Array<u64>, value: u64) {
+fn "Array<u64>^SequenceLiteralBuilder::push_literal"(self: &mut Array<u64>, value: u64) with stores[value] {
     self."Array<u64>::append"(value);
 }
 
-pub fn "Array<u64>::append"(self: &mut Array<u64>, value: u64) {
+pub fn "Array<u64>::append"(self: &mut Array<u64>, value: u64) with stores[value] {
     let used: i32 = self.used;
     if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
         self."Array<u64>::grow"();
@@ -11955,7 +11955,7 @@ pub fn "Tuple<Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String
     self."Tuple<Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Array<char>::append"(self: &mut Array<char>, value: char) {
+pub fn "Array<char>::append"(self: &mut Array<char>, value: char) with stores[value] {
     let used: i32 = self.used;
     if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
         self."Array<char>::grow"();
@@ -11997,7 +11997,7 @@ pub fn "Array<char>::with_capacity"(capacity: i32) -> Array<char> {
     return Array<char> { repr: core::builtin::array_new::<char>(capacity), used: 0 };
 }
 
-pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
+pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) with stores[value] {
     let used: i32 = self.used;
     if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
         self."Array<u8>::grow"();
@@ -14064,7 +14064,7 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
+pub fn "Array<String>::append"(self: &mut Array<String>, value: String) with stores[value] {
     let used: i32 = self.used;
     if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
         self."Array<String>::grow"();
@@ -14098,7 +14098,7 @@ pub fn "Array<String>::with_capacity"(capacity: i32) -> Array<String> {
     return Array<String> { repr: core::builtin::array_new::<String>(capacity), used: 0 };
 }
 
-pub fn "Array<Tuple<String,String>>::append"(self: &mut Array<[String, String]>, value: [String, String]) {
+pub fn "Array<Tuple<String,String>>::append"(self: &mut Array<[String, String]>, value: [String, String]) with stores[value] {
     let used: i32 = self.used;
     if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
         self."Array<Tuple<String,String>>::grow"();
@@ -14161,11 +14161,11 @@ fn "Array<Array<i32>>^SequenceLiteralBuilder::build"(self: &Array<Array<i32>>) -
     return *self;
 }
 
-fn "Array<Array<i32>>^SequenceLiteralBuilder::push_literal"(self: &mut Array<Array<i32>>, value: Array<i32>) {
+fn "Array<Array<i32>>^SequenceLiteralBuilder::push_literal"(self: &mut Array<Array<i32>>, value: Array<i32>) with stores[value] {
     self."Array<Array<i32>>::append"(value);
 }
 
-pub fn "Array<Array<i32>>::append"(self: &mut Array<Array<i32>>, value: Array<i32>) {
+pub fn "Array<Array<i32>>::append"(self: &mut Array<Array<i32>>, value: Array<i32>) with stores[value] {
     let used: i32 = self.used;
     if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
         self."Array<Array<i32>>::grow"();
@@ -14207,11 +14207,11 @@ fn "Array<i32>^SequenceLiteralBuilder::build"(self: &Array<i32>) -> Array<i32> {
     return *self;
 }
 
-fn "Array<i32>^SequenceLiteralBuilder::push_literal"(self: &mut Array<i32>, value: i32) {
+fn "Array<i32>^SequenceLiteralBuilder::push_literal"(self: &mut Array<i32>, value: i32) with stores[value] {
     self."Array<i32>::append"(value);
 }
 
-pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
+pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) with stores[value] {
     let used: i32 = self.used;
     if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
         self."Array<i32>::grow"();
@@ -22134,7 +22134,7 @@ pub enum Alignment {
     Right,
 }
 
-pub fn Formatter::new(buf: &mut String) -> Formatter {
+pub fn Formatter::new(buf: &mut String) -> Formatter with stores[buf] {
     return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -1, indent: 0, buf: buf };
 }
 

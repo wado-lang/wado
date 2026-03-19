@@ -3741,11 +3741,11 @@ fn "Array<u64>^SequenceLiteralBuilder::build"(self: &Array<u64>) -> Array<u64> {
     return *self;
 }
 
-fn "Array<u64>^SequenceLiteralBuilder::push_literal"(self: &mut Array<u64>, value: u64) {
+fn "Array<u64>^SequenceLiteralBuilder::push_literal"(self: &mut Array<u64>, value: u64) with stores[value] {
     self."Array<u64>::append"(value);
 }
 
-pub fn "Array<u64>::append"(self: &mut Array<u64>, value: u64) {
+pub fn "Array<u64>::append"(self: &mut Array<u64>, value: u64) with stores[value] {
     let used: i32 = self.used;
     if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
         self."Array<u64>::grow"();
@@ -8553,7 +8553,7 @@ pub fn "Tuple<i128,i128>^DisplayAlt::fmt_alt"(self: &[i128, i128], f: &mut Forma
     self."Tuple<i128,i128>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Array<char>::append"(self: &mut Array<char>, value: char) {
+pub fn "Array<char>::append"(self: &mut Array<char>, value: char) with stores[value] {
     let used: i32 = self.used;
     if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
         self."Array<char>::grow"();
@@ -8595,7 +8595,7 @@ pub fn "Array<char>::with_capacity"(capacity: i32) -> Array<char> {
     return Array<char> { repr: core::builtin::array_new::<char>(capacity), used: 0 };
 }
 
-pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
+pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) with stores[value] {
     let used: i32 = self.used;
     if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
         self."Array<u8>::grow"();
@@ -10276,7 +10276,7 @@ pub enum Alignment {
     Right,
 }
 
-pub fn Formatter::new(buf: &mut String) -> Formatter {
+pub fn Formatter::new(buf: &mut String) -> Formatter with stores[buf] {
     return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -1, indent: 0, buf: buf };
 }
 

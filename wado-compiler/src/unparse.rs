@@ -1178,7 +1178,11 @@ impl<'a> Unparser<'a> {
             }
             if !f.stores.is_empty() {
                 self.output.push_str("stores[");
-                let entries: Vec<String> = f.stores.iter().map(|e| e.to_string()).collect();
+                let entries: Vec<String> = f
+                    .stores
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect();
                 self.output.push_str(&entries.join(", "));
                 self.output.push(']');
             }
