@@ -1,0 +1,31 @@
+// Minimal test: Client::send returns Result<Response, ErrorCode> and
+// task return forwards it directly. This exercises the variant lowering
+// in the task return expansion for ErrorCode (a variant with mixed
+// payload/no-payload cases).
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+use { Client } from "wasi:http/client.wado";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let headers = Fields::new();
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [out_req, _req_future] = Request::new(headers, null, trailers_future, null);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+
+    let upstream = Client::send(out_req);
+    task return upstream;
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200,
+        "body": "mocked"
+    },
+    "outgoing_mocks": {
+        "/": {
+            "status": 200,
+            "body": "mocked"
+        }
+    }
+}
