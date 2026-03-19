@@ -8,6 +8,7 @@ use wado_compiler::LogLevel;
 
 use crate::args::{self, CliExit};
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::manifest;
 
 /// Optimization level
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -67,6 +68,7 @@ pub struct CompileOptions {
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
+    pub lib: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -82,6 +84,7 @@ enum Opt {
     LogLevel,
     NoValidate,
     Allocator,
+    Lib,
     Help,
 }
 
@@ -97,6 +100,7 @@ impl Opt {
         Self::LogLevel,
         Self::NoValidate,
         Self::Allocator,
+        Self::Lib,
         Self::Help,
     ];
 
@@ -142,6 +146,12 @@ impl Opt {
                 value: Some("<mode>"),
                 desc: "Allocator mode: bump (default), debug (no-reuse + 0xFF poison)",
             },
+            Self::Lib => args::OptSpec {
+                long: Some("lib"),
+                short: None,
+                value: None,
+                desc: "Compile the library entry point from wado.toml ([package].lib)",
+            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -180,6 +190,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
+    let mut lib = false;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
@@ -228,6 +239,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 Opt::Allocator => {
                     allocator = Some(args::require_string(&mut parser)?);
                 }
+                Opt::Lib => lib = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -238,8 +250,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         }
     }
 
+    let entry_kind = if lib {
+        manifest::EntryPointKind::Lib
+    } else {
+        manifest::EntryPointKind::Command
+    };
+
     Ok(CompileOptions {
-        input: args::require_input(input, &usage)?,
+        input: manifest::resolve_input(input, entry_kind, &usage)?,
         output,
         format,
         opt_level,
@@ -250,6 +268,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         inline_threshold,
         opt_iterations,
         allocator,
+        lib,
     })
 }
 

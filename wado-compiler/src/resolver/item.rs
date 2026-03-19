@@ -81,6 +81,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .enumerate()
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
+                is_effect: p.is_effect,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
@@ -191,6 +192,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .enumerate()
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
+                is_effect: p.is_effect,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
@@ -284,24 +286,40 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
         let old_type_param_bounds = std::mem::take(&mut self.trait_ctx.type_param_bounds);
         let mut type_param_list = Vec::new();
-        for (index, param) in func.type_params.iter().enumerate() {
+        let mut real_type_param_index = 0u32;
+        for param in &func.type_params {
+            // Effect params are not types — skip them in type param registration
+            if param.is_effect {
+                continue;
+            }
             let type_id = self
                 .type_table
                 .borrow_mut()
-                .make_type_param(param.name.clone(), index as u32);
+                .make_type_param(param.name.clone(), real_type_param_index);
             self.trait_ctx
                 .type_params
-                .insert(param.name.clone(), (index as u32, type_id));
+                .insert(param.name.clone(), (real_type_param_index, type_id));
             if !param.bounds.is_empty() {
                 self.trait_ctx
                     .type_param_bounds
                     .insert(param.name.clone(), param.bounds.clone());
             }
             type_param_list.push((param.name.clone(), type_id));
+            real_type_param_index += 1;
         }
 
+        // Set effect params in scope (for resolving effect names in function types)
+        let old_effect_params = std::mem::take(&mut self.current_effect_params);
+        self.current_effect_params = func
+            .type_params
+            .iter()
+            .filter(|p| p.is_effect)
+            .map(|p| p.name.clone())
+            .collect();
+
         // Store type parameters for generic functions (for call site substitution)
-        if !func.type_params.is_empty() {
+        let has_real_type_params = func.type_params.iter().any(|p| !p.is_effect);
+        if has_real_type_params {
             // Resolve param types now (while type params are in scope) for later type inference.
             let resolved_param_types: Vec<crate::tir::TypeId> = func
                 .params
@@ -384,15 +402,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .enumerate()
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
+                is_effect: p.is_effect,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
             })
             .collect();
 
+        // Resolve effects while effect params are still in scope
+        let effects = self.resolve_effects(&func.effects);
+
         // Restore previous type params scope
         self.trait_ctx.type_params = old_type_params;
         self.trait_ctx.type_param_bounds = old_type_param_bounds;
+        self.current_effect_params = old_effect_params;
 
         Some(TirFunction {
             name: func.name.clone(),
@@ -405,8 +428,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             method_info: None,        // Not a method
             params,
             return_type,
+<<<<<<< HEAD
             effects: func.effects.clone(),
             stores: func.stores.clone(),
+||||||| c7a6f41
+            effects: func.effects.clone(),
+=======
+            effects,
+>>>>>>> origin/main
             body,
             span: func.span,
             local_count: ctx.next_local,
@@ -528,6 +557,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         // Store impl type param info for later monomorphization
                         impl_type_params.push(crate::tir::TirTypeParam {
                             name: name.clone(),
+                            is_effect: false,
                             bounds: vec![],
                             default: None, // Impl type params don't have defaults
                             index: i as u32,
@@ -553,6 +583,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .unwrap_or_default();
                 impl_type_params.push(crate::tir::TirTypeParam {
                     name: named.name.clone(),
+                    is_effect: false,
                     bounds,
                     default: None,
                     index: idx,
@@ -577,6 +608,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .unwrap_or_default();
                 impl_type_params.push(crate::tir::TirTypeParam {
                     name: named.name.clone(),
+                    is_effect: false,
                     bounds,
                     default: None,
                     index: idx,
@@ -691,6 +723,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .enumerate()
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
+                is_effect: p.is_effect,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
@@ -743,8 +776,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }),
             params,
             return_type,
+<<<<<<< HEAD
             effects: func.effects.clone(),
             stores: func.stores.clone(),
+||||||| c7a6f41
+            effects: func.effects.clone(),
+=======
+            effects: self.resolve_effects(&func.effects),
+>>>>>>> origin/main
             body,
             span: func.span,
             local_count: ctx.next_local,

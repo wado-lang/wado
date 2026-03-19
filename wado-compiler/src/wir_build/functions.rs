@@ -251,8 +251,8 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        // Skip generic template functions
-        if !tir_func.type_params.is_empty() && tir_func.monomorph_info.is_none() {
+        // Skip generic template functions (effect-only params don't count)
+        if tir_func.has_real_type_params() && tir_func.monomorph_info.is_none() {
             continue;
         }
 
@@ -427,7 +427,7 @@ fn register_single_function(
         } else {
             vec![ctx.type_id_to_wir_type(type_table, tir_func.return_type)]
         };
-    let effects: Vec<String> = tir_func.effects.clone();
+    let effects = tir_func.effects.clone();
 
     // Register function type
     let type_fq = format!("functype//{fq}");
@@ -672,7 +672,7 @@ fn has_unsupported_effects(tir_func: &TirFunction, project: &crate::project::Pro
     }
     let exit_available = project.has_effect("Exit");
     tir_func.effects.iter().any(|e| {
-        let effect_name = e.as_str();
+        let effect_name = e.name();
         if effect_name == "Exit" {
             return !exit_available;
         }

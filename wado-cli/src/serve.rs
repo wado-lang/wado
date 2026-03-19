@@ -22,6 +22,7 @@ use wasmtime_wasi_http::p3::{Request as WasiRequest, WasiHttpCtx, WasiHttpCtxVie
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, OptLevel};
+use crate::manifest;
 use crate::runtime;
 use wado_compiler::LogLevel;
 
@@ -148,7 +149,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     }
 
     Ok(ServeOptions {
-        input: args::require_input(input, &usage)?,
+        input: manifest::resolve_input(input, manifest::EntryPointKind::Service, &usage)?,
         opt_level,
         log_level,
         addr,

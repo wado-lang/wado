@@ -449,6 +449,7 @@ mod tests {
     fn type_param(name: &str) -> GenericParam {
         GenericParam {
             name: name.to_string(),
+            is_effect: false,
             bounds: vec![],
             default: None,
             span: dummy_span(),

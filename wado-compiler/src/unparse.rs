@@ -291,8 +291,22 @@ impl<'a> Unparser<'a> {
             self.unparse_type(ret);
         }
 
+<<<<<<< HEAD
         // Effects and stores
         self.unparse_with_clause(&f.effects, &f.stores);
+||||||| c7a6f41
+        // Effects
+        if !f.effects.is_empty() {
+            self.output.push_str(" with ");
+            self.output.push_str(&f.effects.join(", "));
+        }
+=======
+        // Effects (AST level — still strings)
+        if !f.effects.is_empty() {
+            self.output.push_str(" with ");
+            self.output.push_str(&f.effects.join(", "));
+        }
+>>>>>>> origin/main
 
         // Body
         if let Some(body) = &f.body {
@@ -460,6 +474,9 @@ impl<'a> Unparser<'a> {
         for (i, param) in params.iter().enumerate() {
             if i > 0 {
                 self.output.push_str(", ");
+            }
+            if param.is_effect {
+                self.output.push_str("effect ");
             }
             self.output.push_str(&param.name);
             if !param.bounds.is_empty() {
@@ -3591,8 +3608,24 @@ impl<'a> TirUnparser<'a> {
                 .push_str(&self.type_table.type_name(f.return_type));
         }
 
+<<<<<<< HEAD
         // Effects and stores
         self.unparse_tir_with_clause(&f.effects, &f.stores);
+||||||| c7a6f41
+        // Effects
+        if !f.effects.is_empty() {
+            self.output.push_str(" with ");
+            self.output.push_str(&f.effects.join(", "));
+        }
+=======
+        // Effects
+        if !f.effects.is_empty() {
+            self.output.push_str(" with ");
+            let effects_str: Vec<&str> =
+                f.effects.iter().map(super::tir::EffectRef::name).collect();
+            self.output.push_str(&effects_str.join(", "));
+        }
+>>>>>>> origin/main
 
         // Body
         if let Some(body) = &f.body {

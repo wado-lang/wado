@@ -1,0 +1,30 @@
+// Test: effect polymorphism with multiple concrete effects
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+fn run_with<effect E>(f: fn() with E) with E {
+    f();
+}
+
+export fn run() with Stdout, Stderr {
+    // E = Stdout
+    run_with(|| {
+        println("stdout effect");
+    });
+
+    // E = Stderr
+    run_with(|| {
+        eprintln("stderr effect");
+    });
+
+    // E = Stdout, Stderr (multiple effects via single effect param)
+    run_with(|| {
+        println("both stdout");
+        eprintln("both stderr");
+    });
+
+    println("done");
+}
+
+__DATA__
+{"stdout": "stdout effect\nboth stdout\ndone\n", "stderr_contains": ["stderr effect", "both stderr"]}
