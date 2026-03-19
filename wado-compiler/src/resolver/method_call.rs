@@ -1230,75 +1230,56 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Search all loaded modules (handles impls defined outside the struct's defining module)
-        {
-            for module in self.loaded_modules.values() {
-                for item in &module.items {
-                    if let Item::Impl(impl_block) = item {
-                        let impl_struct_name = self.get_type_name(&impl_block.ty);
-                        if impl_struct_name == struct_name {
-                            for method in &impl_block.methods {
-                                let has_self = method
-                                    .params
-                                    .iter()
-                                    .any(|p| p.self_kind != ast::SelfKind::None);
-                                if method.name == method_name && !has_self {
-                                    // Set up type parameters from impl block before resolving
-                                    let old_type_params =
-                                        std::mem::take(&mut self.trait_ctx.type_params);
+        // Search via pre-built index (handles impls defined outside the struct's defining module)
+        if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
+            for (name, ms, item_idx, method_idx) in methods {
+                if name == method_name {
+                    if let Some(module) = self.loaded_modules.get(ms) {
+                        if let Item::Impl(impl_block) = &module.items[*item_idx] {
+                            let method = &impl_block.methods[*method_idx];
 
-                                    // Extract type params from impl block type (e.g., impl Array<T>)
-                                    if let ast::Type::Generic(generic) = &impl_block.ty {
-                                        for (i, arg) in generic.args.iter().enumerate() {
-                                            if let ast::Type::Named(named) = arg {
-                                                let name = &named.name;
-                                                if !self.trait_ctx.type_params.contains_key(name) {
-                                                    let type_id = self
-                                                        .type_table
-                                                        .borrow_mut()
-                                                        .make_type_param(name.clone(), i as u32);
-                                                    self.trait_ctx
-                                                        .type_params
-                                                        .insert(name.clone(), (i as u32, type_id));
-                                                }
-                                            }
+                            let old_type_params =
+                                std::mem::take(&mut self.trait_ctx.type_params);
+
+                            if let ast::Type::Generic(generic) = &impl_block.ty {
+                                for (i, arg) in generic.args.iter().enumerate() {
+                                    if let ast::Type::Named(named) = arg {
+                                        let name = &named.name;
+                                        if !self.trait_ctx.type_params.contains_key(name) {
+                                            let type_id = self
+                                                .type_table
+                                                .borrow_mut()
+                                                .make_type_param(name.clone(), i as u32);
+                                            self.trait_ctx
+                                                .type_params
+                                                .insert(name.clone(), (i as u32, type_id));
                                         }
                                     }
-
-                                    let result = method
-                                        .return_type
-                                        .as_ref()
-                                        .map(|t| self.resolve_type(t))
-                                        .unwrap_or(TypeTable::UNIT);
-
-                                    // Restore type parameters
-                                    self.trait_ctx.type_params = old_type_params;
-
-                                    return result;
                                 }
                             }
+
+                            let result = method
+                                .return_type
+                                .as_ref()
+                                .map(|t| self.resolve_type(t))
+                                .unwrap_or(TypeTable::UNIT);
+
+                            self.trait_ctx.type_params = old_type_params;
+                            return result;
                         }
                     }
                 }
             }
         }
 
-        // Search resource declarations in all modules
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Resource(resource) = item
-                    && resource.name == struct_name
-                {
-                    // Find the method in the resource
-                    for method in &resource.methods {
-                        // Static methods have no self parameter
-                        let has_self = method.params.iter().any(|p| {
-                                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
-                                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name))
-                                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
-                            });
-                        if method.name == method_name && !has_self {
-                            // Set up type parameters from resource declaration before resolving
+        // Search resource declarations via pre-built index
+        if let Some(methods) = self.trait_env.resource_static_method_index.get(struct_name) {
+            for (name, ms, item_idx, method_idx) in methods {
+                if name == method_name {
+                    if let Some(module) = self.loaded_modules.get(ms) {
+                        if let Item::Resource(resource) = &module.items[*item_idx] {
+                            let method = &resource.methods[*method_idx];
+
                             let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
 
                             for (i, param) in resource.type_params.iter().enumerate() {
@@ -1339,7 +1320,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Vec<TypeId> {
-        // Check in current module's impl blocks
+        // Check in current module's impl blocks first (highest priority)
         let params: Option<Vec<_>> = self.current_module_items.iter().find_map(|item| {
             if let Item::Impl(impl_block) = item {
                 let impl_struct_name = self.get_type_name(&impl_block.ty);
@@ -1362,28 +1343,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
         }
 
-        // Check loaded modules' impl blocks
-        for module in self.loaded_modules.values() {
-            let params: Option<Vec<_>> = module.items.iter().find_map(|item| {
-                if let Item::Impl(impl_block) = item {
-                    let impl_struct_name = self.get_type_name(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            let has_self = method
+        // O(1) lookup via pre-built static method index
+        if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
+            for (name, module_source, item_idx, method_idx) in methods {
+                if name == method_name {
+                    if let Some(module) = self.loaded_modules.get(module_source) {
+                        if let Item::Impl(impl_block) = &module.items[*item_idx] {
+                            let method = &impl_block.methods[*method_idx];
+                            return method
                                 .params
                                 .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                return Some(method.params.clone());
-                            }
+                                .map(|p| self.resolve_type(&p.ty))
+                                .collect();
                         }
                     }
                 }
-                None
-            });
-
-            if let Some(params) = params {
-                return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
             }
         }
 
@@ -1587,12 +1561,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        for (module_source, module) in self.loaded_modules {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
-                    && let Some(name) = check_impl(impl_block)
-                {
-                    return Some((name, module_source.clone()));
+        // Use trait_env.impl_index for O(1) lookup instead of scanning all modules
+        if let Some(entries) = self.trait_env.impl_index.get(struct_name) {
+            for (module_source, item_idx) in entries {
+                if let Some(module) = self.loaded_modules.get(module_source) {
+                    if let Item::Impl(impl_block) = &module.items[*item_idx] {
+                        if let Some(name) = check_impl(impl_block) {
+                            return Some((name, module_source.clone()));
+                        }
+                    }
                 }
             }
         }
@@ -1609,28 +1586,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return true;
         }
 
-        // Also check in loaded modules' impl blocks
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item {
-                    let impl_struct_name = self.get_type_name(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            // Static methods have no self parameter
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                return true;
-                            }
-                        }
-                    }
-                }
+        // O(1) lookup via pre-built static method index (impl blocks)
+        if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
+            if methods.iter().any(|(name, ..)| name == method_name) {
+                return true;
             }
         }
 
-        // Check current module's impl blocks
+        // Check current module's impl blocks (not in the pre-built index)
         for item in &self.current_module_items {
             if let Item::Impl(impl_block) = item {
                 let impl_struct_name = self.get_type_name(&impl_block.ty);
@@ -1648,24 +1611,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Check resource declarations in loaded modules
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Resource(resource) = item
-                    && resource.name == struct_name
-                {
-                    for method in &resource.methods {
-                        // Static methods have no self parameter
-                        let has_self = method.params.iter().any(|p| {
-                                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
-                                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name))
-                                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
-                            });
-                        if method.name == method_name && !has_self {
-                            return true;
-                        }
-                    }
-                }
+        // O(1) lookup via pre-built resource static method index
+        if let Some(methods) = self.trait_env.resource_static_method_index.get(struct_name) {
+            if methods.iter().any(|(name, ..)| name == method_name) {
+                return true;
             }
         }
 
