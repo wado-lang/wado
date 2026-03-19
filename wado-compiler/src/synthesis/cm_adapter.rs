@@ -17,7 +17,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::Type;
 use crate::cm_abi;
-use crate::component_model::{WasiFunctionInfo, WasiRegistry};
+use crate::component_model::{WasiFunctionInfo, WasiRegistry, WasiVariantCase};
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
@@ -505,7 +505,7 @@ fn try_lift_wasi_struct(
 fn synthesize_lift_wasi_variant(
     _name: &str,
     variant_type: TypeId,
-    cases: &[(String, Option<crate::ast::Type>)],
+    cases: &[WasiVariantCase],
     addr: TirExpr,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
@@ -533,7 +533,7 @@ fn synthesize_lift_wasi_variant(
     // Compute max payload alignment for payload offset calculation
     let max_payload_align = cases
         .iter()
-        .filter_map(|(_, p)| p.as_ref())
+        .filter_map(|case| case.payload.as_ref())
         .map(cm_abi::cm_align)
         .max()
         .unwrap_or(1);
@@ -543,9 +543,9 @@ fn synthesize_lift_wasi_variant(
     let case_count = cases.len();
     let mut current_else: Option<TirBlock> = None;
 
-    for (i, (cm_case_name, payload_type)) in cases.iter().enumerate().rev() {
-        // Convert kebab-case CM name to PascalCase Wado name
-        let case_name = kebab_to_pascal(cm_case_name);
+    for (i, case) in cases.iter().enumerate().rev() {
+        let case_name = case.wado_name.clone();
+        let payload_type = case.payload.as_ref();
 
         // Lift payload if present
         let mut case_stmts: Vec<TirStmt> = Vec::new();

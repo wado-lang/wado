@@ -13,6 +13,17 @@ use wasm_encoder::ValType;
 use crate::ast::{GenericType, Type, WasiImport};
 use crate::tir::{TypeId, TypeTable};
 
+/// A variant case with both CM and Wado names.
+#[derive(Debug, Clone)]
+pub struct WasiVariantCase {
+    /// Component Model name (from `#[wasi]` attribute, e.g., `"DNS-error"`).
+    pub cm_name: String,
+    /// Wado source name (e.g., `"DnsError"`).
+    pub wado_name: String,
+    /// Payload type, if any.
+    pub payload: Option<Type>,
+}
+
 /// Extract the CM name from a `#[wasi("...")]` attribute.
 ///
 /// Handles two formats:
@@ -130,7 +141,7 @@ impl WasiFunctionInfo {
             if let Some(cases) = registry.get_variant_cases(&named.name) {
                 return cases
                     .iter()
-                    .any(|(_, payload)| payload.as_ref().is_some_and(Self::type_requires_memory));
+                    .any(|case| case.payload.as_ref().is_some_and(Self::type_requires_memory));
             }
             // WASI struct (record) types always need memory since they have multiple
             // fields and exceed MAX_FLAT_RESULTS (1) in canon lower.
@@ -249,8 +260,8 @@ pub struct WasiRegistry {
     enums: IndexMap<String, (String, Vec<String>)>,
 
     /// Variant types collected from WASI modules (e.g., `HeaderError`)
-    /// Maps Wado variant name -> (CM variant name kebab-case, cases: Vec<(`case_cm_name`, `payload_type`)>)
-    variants: IndexMap<String, (String, Vec<(String, Option<Type>)>)>,
+    /// Maps Wado variant name -> (CM variant name, cases)
+    variants: IndexMap<String, (String, Vec<WasiVariantCase>)>,
 
     /// Struct types collected from WASI modules (e.g., `DnsErrorPayload`)
     /// Maps Wado struct name -> (CM record name kebab-case, source interface path, fields with CM names, fields with Wado names)
@@ -449,11 +460,15 @@ impl WasiRegistry {
             if let Item::Variant(variant_def) = item {
                 // Use the #[wasi] fragment as the CM name (preserves acronym casing)
                 let cm_name = wasi_attr_cm_name(&variant_def.attrs, &variant_def.name);
-                // Use per-case #[wasi] attr for CM name; store actual payload type for codegen
-                let cases: Vec<(String, Option<Type>)> = variant_def
+                // Store both CM and Wado names for each case
+                let cases: Vec<WasiVariantCase> = variant_def
                     .cases
                     .iter()
-                    .map(|c| (wasi_attr_cm_name(&c.attrs, &c.name), c.payload.clone()))
+                    .map(|c| WasiVariantCase {
+                        cm_name: wasi_attr_cm_name(&c.attrs, &c.name),
+                        wado_name: c.name.clone(),
+                        payload: c.payload.clone(),
+                    })
                     .collect();
 
                 self.variants
@@ -684,7 +699,7 @@ impl WasiRegistry {
     }
 
     /// Get the variant cases (CM kebab-case name, payload type if any)
-    pub fn get_variant_cases(&self, name: &str) -> Option<&[(String, Option<Type>)]> {
+    pub fn get_variant_cases(&self, name: &str) -> Option<&[WasiVariantCase]> {
         self.variants.get(name).map(|(_, cases)| cases.as_slice())
     }
 
@@ -747,7 +762,7 @@ impl WasiRegistry {
     pub fn variants_for_interface(
         &self,
         interface_prefix: &str,
-    ) -> impl Iterator<Item = (&str, &str, &[(String, Option<Type>)])> {
+    ) -> impl Iterator<Item = (&str, &str, &[WasiVariantCase])> {
         let prefix = format!("{interface_prefix}#");
         self.variants
             .iter()
@@ -1167,7 +1182,7 @@ impl CmInstanceTypeGen {
         &mut self,
         instance_type: &mut InstanceType,
         cm_name: &str,
-        cases: &[(String, Option<Type>)],
+        cases: &[WasiVariantCase],
         wasi_registry: &WasiRegistry,
         resource_exports: &IndexMap<&str, u32>,
     ) -> u32 {
@@ -1179,8 +1194,8 @@ impl CmInstanceTypeGen {
         // Build payload CM types first (before emitting the variant, to maintain type order)
         let payload_cm_types: Vec<Option<ComponentValType>> = cases
             .iter()
-            .map(|(_, payload)| {
-                payload.as_ref().map(|ty| {
+            .map(|case| {
+                case.payload.as_ref().map(|ty| {
                     let resolved = wasi_registry.resolve_type(ty);
                     self.ast_type_to_cm(&resolved, instance_type, wasi_registry, resource_exports)
                 })
@@ -1190,7 +1205,7 @@ impl CmInstanceTypeGen {
         let variant_cases: Vec<(&str, Option<ComponentValType>, Option<u32>)> = cases
             .iter()
             .zip(payload_cm_types.iter())
-            .map(|((name, _), payload_cm)| (name.as_str(), *payload_cm, None))
+            .map(|(case, payload_cm)| (case.cm_name.as_str(), *payload_cm, None))
             .collect();
         instance_type.ty().defined_type().variant(variant_cases);
         let variant_idx = self.alloc_idx();
@@ -2002,7 +2017,7 @@ pub fn return_type_requires_outptr(ty: &Type) -> bool {
 pub fn wasi_named_type_return_needs_outptr(ty: &Type, registry: &WasiRegistry) -> bool {
     if let Type::Named(named) = ty {
         if let Some(cases) = registry.get_variant_cases(&named.name) {
-            return cases.iter().any(|(_, payload)| payload.is_some());
+            return cases.iter().any(|case| case.payload.is_some());
         }
         // WASI structs (records) always need outptr — they have multiple fields
         if registry.get_struct_fields(&named.name).is_some() {
@@ -2119,13 +2134,13 @@ pub fn cm_align_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
 /// - total: `align_to(payload_offset + max_payload_size, max_payload_align)`
 pub fn wasi_variant_cm_size_align(name: &str, registry: &WasiRegistry) -> Option<(u32, u32)> {
     let cases = registry.get_variant_cases(name)?;
-    if !cases.iter().any(|(_, p)| p.is_some()) {
+    if !cases.iter().any(|case| case.payload.is_some()) {
         return None; // no payload cases — not outptr
     }
     let mut max_payload_size = 0u32;
     let mut max_payload_align = 1u32;
-    for (_, payload) in cases {
-        if let Some(ty) = payload {
+    for case in cases {
+        if let Some(ty) = &case.payload {
             max_payload_size = max_payload_size.max(crate::cm_abi::cm_size(ty));
             max_payload_align = max_payload_align.max(crate::cm_abi::cm_align(ty));
         }

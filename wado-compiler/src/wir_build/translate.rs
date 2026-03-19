@@ -6129,29 +6129,7 @@ impl FunctionTranslator<'_, '_> {
         // Look up case-specific struct type
         let case_fq = format!("{fq}::{case_name}");
 
-        // Try direct lookup first, then scan variant_type_map for alternative fq formats.
-        // The fq may differ when type_args are mangled from different module type tables.
-        let case_type_id = self
-            .ctx
-            .type_map
-            .get(&case_fq)
-            .cloned()
-            .or_else(|| {
-                // Scan variant_type_map for a registered variant whose fq ends with
-                // the same display name, then derive the case fq from it.
-                let suffix = format!("//{variant_name}");
-                for (registered_fq, _) in &self.ctx.variant_type_map {
-                    if registered_fq.ends_with(&suffix) || registered_fq == &fq {
-                        let alt_case_fq = format!("{registered_fq}::{case_name}");
-                        if let Some(tid) = self.ctx.type_map.get(&alt_case_fq) {
-                            return Some(tid.clone());
-                        }
-                    }
-                }
-                None
-            });
-
-        if let Some(case_type_id) = case_type_id {
+        if let Some(case_type_id) = self.ctx.type_map.get(&case_fq).cloned() {
             // Build struct.new for the case type: (tag, payload?)
             let mut fields = vec![WirInstr::I32Const(case_index as i32)];
             if let Some(payload_expr) = payload {
@@ -6159,15 +6137,8 @@ impl FunctionTranslator<'_, '_> {
             }
             self.struct_new(case_type_id, fields)
         } else {
-            // No-payload case or truly unknown: use the base variant type
-            let wir_type = if let Some(base_id) = self.ctx.variant_type_map.get(&fq).cloned() {
-                WirType::Ref {
-                    type_id: base_id,
-                    nullable: true,
-                }
-            } else {
-                self.ctx.type_id_to_wir_type(self.type_table, result_type)
-            };
+            // Fallback: try the base variant type
+            let wir_type = self.ctx.type_id_to_wir_type(self.type_table, result_type);
             if let WirType::Ref { type_id, .. } = wir_type {
                 let mut fields = vec![WirInstr::I32Const(case_index as i32)];
                 if let Some(payload_expr) = payload {
