@@ -3616,8 +3616,7 @@ impl<'a> TirUnparser<'a> {
         }
         self.output.push_str(" with ");
         if !effects.is_empty() {
-            let effects_str: Vec<&str> =
-                effects.iter().map(super::tir::EffectRef::name).collect();
+            let effects_str: Vec<&str> = effects.iter().map(super::tir::EffectRef::name).collect();
             self.output.push_str(&effects_str.join(", "));
             if !stores.is_empty() {
                 self.output.push_str(", ");

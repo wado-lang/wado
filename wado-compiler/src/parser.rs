@@ -1034,6 +1034,13 @@ impl Parser {
         let mut effects = vec![self.consume_ident()?];
 
         while self.check(&TokenKind::Comma) {
+            // Lookahead: if the token after comma is `ident:`, this is a parameter
+            // in the enclosing parameter list, not another effect. Stop here.
+            if matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+                && self.peek_nth(2).kind == TokenKind::Colon
+            {
+                break;
+            }
             self.advance();
             if self.check(&TokenKind::Stores) {
                 let stores = self.parse_stores_list_for_fn_type()?;
@@ -4240,6 +4247,40 @@ mod tests {
             assert_eq!(func.stores, vec!["a", "b"]);
         } else {
             panic!("expected function");
+        }
+    }
+
+    #[test]
+    fn test_fn_type_with_effect_in_param_list() {
+        // `fn(T) -> T with E` inside a parameter list must not consume the next parameter
+        let module =
+            parse("fn apply<T>(f: fn(T) -> T with Stdout, x: T) -> T with Stdout { return f(x); }")
+                .unwrap();
+        if let Item::Function(func) = &module.items[0] {
+            assert_eq!(func.params.len(), 2);
+            assert_eq!(func.params[0].name, "f");
+            assert_eq!(func.params[1].name, "x");
+            if let Type::Function(ft) = &func.params[0].ty {
+                assert_eq!(ft.effects, vec!["Stdout"]);
+            } else {
+                panic!("expected function type for param f");
+            }
+        } else {
+            panic!("expected function");
+        }
+    }
+
+    #[test]
+    fn test_function_with_stores_self() {
+        let module = parse(
+            "impl Data { fn store_self(&self) -> Container with stores[self] { return Container { data: self }; } }",
+        )
+        .unwrap();
+        if let Item::Impl(impl_block) = &module.items[0] {
+            let method = &impl_block.methods[0];
+            assert_eq!(method.stores, vec!["self"]);
+        } else {
+            panic!("expected impl block");
         }
     }
 

@@ -408,6 +408,31 @@ fn kv_list_long(entries: Array<[String, i32]>) {
     let _ = long;
 }
 
+/// Stores: function storing a reference parameter
+struct  Holder {
+    data:  &Point,
+}
+
+fn hold_ref(  p:  &Point  )  ->  Holder  with  stores[p] {
+    return Holder { data: p };
+}
+
+fn hold_ref_with_effects(  p:  &Point  )  ->  Holder  with  Stdout,  stores[p] {
+    return Holder { data: p };
+}
+
+/// Stores: method with stores[self]
+impl Point {
+    fn to_holder(&self) -> Holder with stores[self] {
+        return Holder { data: self };
+    }
+}
+
+/// Function type with effect in parameter position
+fn apply_fn(f:   fn(i32) -> i32   with   Stdout,  x:  i32)  ->  i32  with  Stdout {
+    return f(x);
+}
+
 export fn run() {
 }
 
