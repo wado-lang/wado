@@ -216,11 +216,11 @@ fn process_wrapper(w) {
 
 fn conditional_wrapper(flag) {
     let w: ref Wrapper;
-    w = value_copy Wrapper(if flag -> ref Wrapper {
+    w = if flag -> ref Wrapper {
         Wrapper { inner: 10 };
     } else {
         Wrapper { inner: 20 };
-    });
+    };
     return Wrapper::get(w.inner);
 }
 

@@ -382,7 +382,9 @@ fn match_ergonomics_match() with Stdout {
     let __sroa_opt_value: ref Option<i32>;
     c = 0;
     rc = c;
-    name = value_copy String(let __match_scrut_0: enum:Color; __match_scrut_0 = rc; if __match_scrut_0 == 0 -> ref String {
+    let __match_scrut_0: enum:Color;
+    __match_scrut_0 = rc;
+    name = if __match_scrut_0 == 0 -> ref String {
         String { repr: array.new_data<u8>("red"), used: 3 };
     } else if __match_scrut_0 == 1 -> ref String {
         String { repr: array.new_data<u8>("green"), used: 5 };
@@ -390,7 +392,7 @@ fn match_ergonomics_match() with Stdout {
         String { repr: array.new_data<u8>("blue"), used: 4 };
     } else {
         unreachable;
-    });
+    };
     __v0_3 = name;
     __cond_4 = String^Eq::eq(__v0_3, String { repr: array.new_data<u8>("red"), used: 3 });
     if __cond_4 == 0 {

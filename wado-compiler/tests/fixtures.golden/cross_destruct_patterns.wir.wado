@@ -263,7 +263,9 @@ fn run() with Stdout {
         };
     };
     t = Tagged { label: String { repr: array.new_data<u8>("X"), used: 1 }, coords: "tuple/[i32, i32]" { 0: 100, 1: 200 } };
-    desc = value_copy String(let __match_scrut_0: ref Tagged; __match_scrut_0 = t; block -> ref String {
+    let __match_scrut_0: ref Tagged;
+    __match_scrut_0 = t;
+    desc = block -> ref String {
         let __struct_field_3: ref "tuple/[i32, i32]";
         __struct_field_3 = __match_scrut_0.coords;
         __local_15 = __struct_field_3.0;
@@ -300,7 +302,7 @@ fn run() with Stdout {
                 break __tmpl: __local_29;
             };
         };
-    });
+    };
     "core:cli/println"(desc);
     opt = Point { x: 7, y: 8 };
     if ref.is_null(opt) == 0 {

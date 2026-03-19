@@ -539,7 +539,7 @@ fn __test_1_nested_struct_roundtrip() {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         parsed_r = "core/json/from_string<Line>"(json);
         if ref.test Result<Line,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy Line(ref.cast Result<Line,DeserializeError>::Ok(parsed_r).payload_0);
+            parsed = ref.cast Result<Line,DeserializeError>::Ok(parsed_r).payload_0;
             __v0_5 = parsed.start_point.x;
             __cond_6 = __v0_5 == 10.5;
             if __cond_6 == 0 {
@@ -2573,16 +2573,16 @@ fn Line^Deserialize::deserialize<JsonDeserializer>(d) {
         b232: block {
             l233: loop {
                 __next = "core:json/JsonStructAccess^DeserializeStruct::next_field"(sd);
-                __pattern_temp_1 = value_copy Result<Option<i32>,DeserializeError>(__next);
+                __pattern_temp_1 = __next;
                 if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
-                    __opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+                    __opt = ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0;
                     if ref.test Option<i32>::Some(__opt) {
                         __idx = ref.cast Option<i32>::Some(__opt).payload_0;
                         let __match_scrut_0: i32;
                         __match_scrut_0 = __idx;
                         if __match_scrut_0 == 0 {
                             __local_9 = Point^Deserialize::deserialize<JsonDeserializer>(sd.de);
-                            __local_16 = value_copy Result<Point,DeserializeError>(__local_9);
+                            __local_16 = __local_9;
                             if ref.test Result<Point,DeserializeError>::Ok(__local_16) {
                                 __local_10 = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(__local_16).payload_0);
                                 start_point = __local_10;
@@ -2592,7 +2592,7 @@ fn Line^Deserialize::deserialize<JsonDeserializer>(d) {
                             };
                         } else if __match_scrut_0 == 1 {
                             __local_11 = Point^Deserialize::deserialize<JsonDeserializer>(sd.de);
-                            __local_17 = value_copy Result<Point,DeserializeError>(__local_11);
+                            __local_17 = __local_11;
                             if ref.test Result<Point,DeserializeError>::Ok(__local_17) {
                                 __local_12 = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(__local_17).payload_0);
                                 end_point = __local_12;
@@ -2649,9 +2649,9 @@ fn Point^Deserialize::deserialize<JsonDeserializer>(d) {
         b242: block {
             l243: loop {
                 __next = "core:json/JsonStructAccess^DeserializeStruct::next_field"(sd);
-                __pattern_temp_1 = value_copy Result<Option<i32>,DeserializeError>(__next);
+                __pattern_temp_1 = __next;
                 if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
-                    __opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+                    __opt = ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0;
                     if ref.test Option<i32>::Some(__opt) {
                         __idx = ref.cast Option<i32>::Some(__opt).payload_0;
                         let __match_scrut_0: i32;
@@ -2661,7 +2661,7 @@ fn Point^Deserialize::deserialize<JsonDeserializer>(d) {
                                 __local_19 = sd.de;
                                 break __inline_f64_Deserialize__deserialize_JsonDeserializer__3: "core:json/JsonDeserializer::parse_f64_direct"(__local_19);
                             };
-                            __local_16 = value_copy Result<f64,DeserializeError>(__local_9);
+                            __local_16 = __local_9;
                             if ref.test Result<f64,DeserializeError>::Ok(__local_16) {
                                 __local_10 = ref.cast Result<f64,DeserializeError>::Ok(__local_16).payload_0;
                                 x = __local_10;
@@ -2674,7 +2674,7 @@ fn Point^Deserialize::deserialize<JsonDeserializer>(d) {
                                 __local_21 = sd.de;
                                 break __inline_f64_Deserialize__deserialize_JsonDeserializer__5: "core:json/JsonDeserializer::parse_f64_direct"(__local_21);
                             };
-                            __local_17 = value_copy Result<f64,DeserializeError>(__local_11);
+                            __local_17 = __local_11;
                             if ref.test Result<f64,DeserializeError>::Ok(__local_17) {
                                 __local_12 = ref.cast Result<f64,DeserializeError>::Ok(__local_17).payload_0;
                                 y = __local_12;

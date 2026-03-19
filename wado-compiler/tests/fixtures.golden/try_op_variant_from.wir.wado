@@ -320,7 +320,7 @@ condition: n == 42
     };
     r2 = process(0, 1);
     if ref.test Result<i32,AppError>::Err(r2) {
-        e_5 = value_copy AppError(ref.cast Result<i32,AppError>::Err(r2).payload_0);
+        e_5 = ref.cast Result<i32,AppError>::Err(r2).payload_0;
         if ref.test AppError::Io(e_5) {
             inner_6 = ref.cast AppError::Io(e_5).payload_0;
             __v0_7 = inner_6.message;
@@ -368,7 +368,7 @@ condition: inner.message == \"disk error\"
     };
     r3 = process(1, 0);
     if ref.test Result<i32,AppError>::Err(r3) {
-        e_10 = value_copy AppError(ref.cast Result<i32,AppError>::Err(r3).payload_0);
+        e_10 = ref.cast Result<i32,AppError>::Err(r3).payload_0;
         if ref.test AppError::Parse(e_10) {
             inner_11 = ref.cast AppError::Parse(e_10).payload_0;
             __v0_12 = inner_11.input;

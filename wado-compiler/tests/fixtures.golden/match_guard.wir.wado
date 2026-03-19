@@ -99,7 +99,9 @@ fn match_guard_basic() with Stdout {
     let __local_6: i32;
     let __local_7: i32;
     let result2: ref String;
-    result = value_copy String(let __match_scrut_0: i32; __match_scrut_0 = 15; if __match_scrut_0 == 0 -> ref String {
+    let __match_scrut_0: i32;
+    __match_scrut_0 = 15;
+    result = if __match_scrut_0 == 0 -> ref String {
         String { repr: array.new_data<u8>("zero"), used: 4 };
     } else {
         block -> ref String {
@@ -119,9 +121,11 @@ fn match_guard_basic() with Stdout {
                 };
             };
         };
-    });
+    };
     "core:cli/println"(result);
-    result2 = value_copy String(let __match_scrut_1: i32; __match_scrut_1 = 5; block -> ref String {
+    let __match_scrut_1: i32;
+    __match_scrut_1 = 5;
+    result2 = block -> ref String {
         __local_5 = __match_scrut_1;
         if __local_5 > 100 -> ref String {
             __local_5 = __match_scrut_1;
@@ -145,7 +149,7 @@ fn match_guard_basic() with Stdout {
                 };
             };
         };
-    });
+    };
     "core:cli/println"(result2);
 }
 
@@ -162,7 +166,9 @@ fn match_guard_custom_variant() with Stdout {
     s1 = Shape::Circle { discriminant: 0, payload_0: 5 };
     s2 = Shape::Circle { discriminant: 0, payload_0: 0.5 };
     s3 = Shape { 2 };
-    desc1 = value_copy String(let __match_scrut_0: ref Shape; __match_scrut_0 = s1; if ref.test Shape::Circle(__match_scrut_0) -> ref String {
+    let __match_scrut_0: ref Shape;
+    __match_scrut_0 = s1;
+    desc1 = if ref.test Shape::Circle(__match_scrut_0) -> ref String {
         let __cast_4: ref Shape::Circle;
         __cast_4 = ref.cast Shape::Circle(__match_scrut_0);
         __local_3 = __cast_4.payload_0;
@@ -196,9 +202,11 @@ fn match_guard_custom_variant() with Stdout {
         String { repr: array.new_data<u8>("point"), used: 5 };
     } else {
         unreachable;
-    });
+    };
     "core:cli/println"(desc1);
-    desc2 = value_copy String(let __match_scrut_1: ref Shape; __match_scrut_1 = s2; if ref.test Shape::Circle(__match_scrut_1) -> ref String {
+    let __match_scrut_1: ref Shape;
+    __match_scrut_1 = s2;
+    desc2 = if ref.test Shape::Circle(__match_scrut_1) -> ref String {
         let __cast_8: ref Shape::Circle;
         __cast_8 = ref.cast Shape::Circle(__match_scrut_1);
         __local_5 = __cast_8.payload_0;
@@ -232,9 +240,11 @@ fn match_guard_custom_variant() with Stdout {
         String { repr: array.new_data<u8>("point"), used: 5 };
     } else {
         unreachable;
-    });
+    };
     "core:cli/println"(desc2);
-    desc3 = value_copy String(let __match_scrut_2: ref Shape; __match_scrut_2 = s3; if ref.test Shape::Circle(__match_scrut_2) -> ref String {
+    let __match_scrut_2: ref Shape;
+    __match_scrut_2 = s3;
+    desc3 = if ref.test Shape::Circle(__match_scrut_2) -> ref String {
         let __cast_12: ref Shape::Circle;
         __cast_12 = ref.cast Shape::Circle(__match_scrut_2);
         __local_7 = __cast_12.payload_0;
@@ -268,7 +278,7 @@ fn match_guard_custom_variant() with Stdout {
         String { repr: array.new_data<u8>("point"), used: 5 };
     } else {
         unreachable;
-    });
+    };
     "core:cli/println"(desc3);
 }
 

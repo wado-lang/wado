@@ -1,0 +1,53 @@
+// Test that value_copy is elided when a match expression produces fresh
+// StructNew values in every branch.
+//
+// Pattern:
+//   x = value_copy String(let __match_scrut: T; ...; if ... -> ref String {
+//       String { ... };  // fresh StructNew
+//   } else {
+//       String { ... };  // fresh StructNew
+//   })
+//
+// Since every branch creates a fresh String, no aliasing exists and the
+// value_copy is unnecessary.
+
+use { println } from "core:cli";
+
+fn classify(x: i32) -> String {
+    return match x {
+        0 => "zero",
+        1 => "one",
+        _ => "other",
+    };
+}
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+fn make_pair(x: i32) -> Pair {
+    return match x {
+        0 => Pair { a: 10, b: 20 },
+        1 => Pair { a: 30, b: 40 },
+        _ => Pair { a: 50, b: 60 },
+    };
+}
+
+export fn run() with Stdout {
+    println(classify(0));
+    println(classify(1));
+    println(classify(42));
+    let p0 = make_pair(0);
+    let p1 = make_pair(1);
+    let p2 = make_pair(2);
+    println(`{p0.a + p0.b}`);
+    println(`{p1.a + p1.b}`);
+    println(`{p2.a + p2.b}`);
+}
+
+__DATA__
+{
+    "stdout": "zero\none\nother\n30\n70\n110\n",
+    "wir_not_expect:O2": ["value_copy String(", "value_copy Pair("]
+}

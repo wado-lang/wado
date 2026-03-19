@@ -1,0 +1,43 @@
+// Test that value_copy is elided when the copy result is only used for
+// variant discriminant testing (ref.test) and payload field reads stored
+// into locals (ref.cast(...).payload → LocalSet).
+//
+// This targets the pattern where a value_copy'd variant is matched and
+// its fields are destructured into separate locals.
+
+use { println } from "core:cli";
+
+struct Pair {
+    first: i32,
+    second: i32,
+}
+
+variant BoxedPair {
+    Some(Pair),
+    None,
+}
+
+fn make_boxed(a: i32, b: i32) -> BoxedPair {
+    return BoxedPair::Some(Pair { first: a, second: b });
+}
+
+// Destructure the variant payload into separate locals.
+fn describe(bp: BoxedPair) -> String {
+    if let Some(p) = bp {
+        let f = p.first;
+        let s = p.second;
+        return `{f},{s}`;
+    }
+    return "none";
+}
+
+export fn run() with Stdout {
+    println(describe(make_boxed(10, 20)));
+    println(describe(BoxedPair::None));
+}
+
+__DATA__
+{
+    "stdout": "10,20\nnone\n",
+    "wir_not_expect:O2": ["value_copy Pair("]
+}

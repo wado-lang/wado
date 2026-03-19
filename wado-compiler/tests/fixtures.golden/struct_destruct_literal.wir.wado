@@ -121,7 +121,9 @@ fn run() with Stdout {
     let __local_29: bool;
     let __sroa_ip2_label: ref String;
     ip = IntPair { label: String { repr: array.new_data<u8>("int"), used: 3 }, value: 42 };
-    result = value_copy String(let __match_scrut_0: ref IntPair; __match_scrut_0 = ip; block -> ref String {
+    let __match_scrut_0: ref IntPair;
+    __match_scrut_0 = ip;
+    result = block -> ref String {
         __local_1 = __match_scrut_0.label;
         __local_22 = __match_scrut_0.value;
         if __local_22 == 42 -> ref String {
@@ -136,10 +138,12 @@ fn run() with Stdout {
         } else {
             String { repr: array.new_data<u8>("no match"), used: 8 };
         };
-    });
+    };
     "core:cli/println"(result);
     bp = BoolPair { label: String { repr: array.new_data<u8>("bool"), used: 4 }, flag: 1 };
-    result3 = value_copy String(let __match_scrut_1: ref BoolPair; __match_scrut_1 = bp; block -> ref String {
+    let __match_scrut_1: ref BoolPair;
+    __match_scrut_1 = bp;
+    result3 = block -> ref String {
         __local_4 = __match_scrut_1.label;
         __local_23 = __match_scrut_1.flag;
         if __local_23 == 1 -> ref String {
@@ -169,10 +173,12 @@ fn run() with Stdout {
                 };
             };
         };
-    });
+    };
     "core:cli/println"(result3);
     cp = CharPair { label: String { repr: array.new_data<u8>("char"), used: 4 }, ch: 90 };
-    result4 = value_copy String(let __match_scrut_2: ref CharPair; __match_scrut_2 = cp; block -> ref String {
+    let __match_scrut_2: ref CharPair;
+    __match_scrut_2 = cp;
+    result4 = block -> ref String {
         __local_8 = __match_scrut_2.label;
         __local_25 = __match_scrut_2.ch;
         if __local_25 == 90 -> ref String {
@@ -187,10 +193,12 @@ fn run() with Stdout {
         } else {
             String { repr: array.new_data<u8>("no match"), used: 8 };
         };
-    });
+    };
     "core:cli/println"(result4);
     sp = StringPair { first: String { repr: array.new_data<u8>("hello"), used: 5 }, second: String { repr: array.new_data<u8>("world"), used: 5 } };
-    result5 = value_copy String(let __match_scrut_3: ref StringPair; __match_scrut_3 = sp; block -> ref String {
+    let __match_scrut_3: ref StringPair;
+    __match_scrut_3 = sp;
+    result5 = block -> ref String {
         __local_11 = __match_scrut_3.first;
         __local_26 = __match_scrut_3.second;
         if String^Eq::eq(__local_26, String { repr: array.new_data<u8>("world"), used: 5 }) -> ref String {
@@ -205,7 +213,7 @@ fn run() with Stdout {
         } else {
             String { repr: array.new_data<u8>("no match"), used: 8 };
         };
-    });
+    };
     "core:cli/println"(result5);
     __sroa_ip2_label = String { repr: array.new_data<u8>("test"), used: 4 };
     "core:cli/println"(__tmpl: block -> ref String {

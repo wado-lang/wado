@@ -73,6 +73,36 @@ fn optimize_nested(instr: &mut WirInstr, types: &[WirTypeDef]) {
         WirInstr::ValueCopy { expr, .. } => {
             optimize_nested(expr, types);
         }
+        WirInstr::Call { args, .. } => {
+            for arg in args {
+                optimize_nested(arg, types);
+            }
+        }
+        WirInstr::CallIndirect { index, args, .. } => {
+            optimize_nested(index, types);
+            for arg in args {
+                optimize_nested(arg, types);
+            }
+        }
+        WirInstr::StructNew { fields, .. } => {
+            for field in fields {
+                optimize_nested(field, types);
+            }
+        }
+        WirInstr::Drop(inner)
+        | WirInstr::RefAsNonNull(inner)
+        | WirInstr::RefCast { expr: inner, .. }
+        | WirInstr::RefTest { expr: inner, .. }
+        | WirInstr::StructGet { expr: inner, .. } => {
+            optimize_nested(inner, types);
+        }
+        WirInstr::StructSet { expr, value, .. } => {
+            optimize_nested(expr, types);
+            optimize_nested(value, types);
+        }
+        WirInstr::Return { value: Some(v) } => {
+            optimize_nested(v, types);
+        }
         _ => {}
     }
 }
@@ -221,26 +251,34 @@ fn elide_copy_used_only_for_field_reads(instrs: &mut [WirInstr]) {
     }
 }
 
-/// Returns `true` if every use of `var_name` in `instr` is a struct field read,
-/// or if `var_name` does not appear in `instr` at all.
+/// Returns `true` if every use of `var_name` in `instr` is a struct field read
+/// stored directly into a local, or if `var_name` does not appear at all.
+///
+/// Safe patterns (where the field-read result is isolated into a local):
+/// - `LocalSet { x, StructGet { expr: LocalGet(var) } }` — direct field read
+/// - `LocalSet { x, StructGet { expr: StructGet { expr: LocalGet(var) } } }` — chained
+/// - `LocalSet { x, StructGet { expr: RefCast { expr: LocalGet(var) } } }` — variant payload
+/// - `LocalSet { x, ValueCopy { expr: StructGet { expr: ... LocalGet(var) } } }` — with copy
+/// - `RefTest(LocalGet(var))` embedded in a condition — discriminant check
+///
+/// We intentionally do NOT allow StructGet(var) embedded in arbitrary expressions
+/// (e.g., `var.repr` as a function argument), because the extracted reference
+/// could alias mutable internals of the struct.
 fn uses_of_var_are_field_reads_only(instr: &WirInstr, var_name: &str) -> bool {
     match instr {
         WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. } => {
             match value.as_ref() {
-                // `x = t.field` — direct field read.
+                // `x = t.field` or `x = t.inner.field` — field read chain.
                 WirInstr::StructGet { expr, .. } => {
-                    if let WirInstr::LocalGet { name } = expr.as_ref()
-                        && name == var_name
-                    {
+                    if expr_roots_at_var(expr, var_name) {
                         return true;
                     }
                     !instr_contains_local_get(value, var_name)
                 }
-                // `x = value_copy T(t.field)` — field read wrapped in value_copy.
+                // `x = value_copy T(t.field)` or chained — field read with copy.
                 WirInstr::ValueCopy { expr, .. } => {
                     if let WirInstr::StructGet { expr: inner, .. } = expr.as_ref()
-                        && let WirInstr::LocalGet { name } = inner.as_ref()
-                        && name == var_name
+                        && expr_roots_at_var(inner, var_name)
                     {
                         return true;
                     }
@@ -258,7 +296,7 @@ fn uses_of_var_are_field_reads_only(instr: &WirInstr, var_name: &str) -> bool {
             else_body,
             ..
         } => {
-            !instr_contains_local_get(condition, var_name)
+            is_safe_condition_use(condition, var_name)
                 && then_body
                     .iter()
                     .all(|i| uses_of_var_are_field_reads_only(i, var_name))
@@ -266,6 +304,29 @@ fn uses_of_var_are_field_reads_only(instr: &WirInstr, var_name: &str) -> bool {
                     eb.iter()
                         .all(|i| uses_of_var_are_field_reads_only(i, var_name))
                 })
+        }
+        _ => !instr_contains_local_get(instr, var_name),
+    }
+}
+
+/// Check if a condition expression uses `var_name` only in safe read-only ways.
+///
+/// Allows `RefTest(LocalGet(var))` and comparisons involving `RefTest`/`RefIsNull`
+/// of the variable, which are purely discriminant checks.
+fn is_safe_condition_use(instr: &WirInstr, var_name: &str) -> bool {
+    match instr {
+        // ref.test T(var) — discriminant check, read-only.
+        WirInstr::RefTest { expr, .. } | WirInstr::RefIsNull(expr) => {
+            if let WirInstr::LocalGet { name } = expr.as_ref()
+                && name == var_name
+            {
+                return true;
+            }
+            !instr_contains_local_get(instr, var_name)
+        }
+        // Comparison wrapping a ref.test/ref.is_null: `ref.test(var) != 0`
+        WirInstr::I32Eq(a, b) | WirInstr::I32Ne(a, b) => {
+            is_safe_condition_use(a, var_name) && is_safe_condition_use(b, var_name)
         }
         _ => !instr_contains_local_get(instr, var_name),
     }
@@ -285,6 +346,22 @@ fn instr_contains_local_get(instr: &WirInstr, var_name: &str) -> bool {
     found
 }
 
+/// Check if an expression's root (innermost non-StructGet, non-RefCast node)
+/// is `LocalGet(var_name)`. This recognizes chains like:
+/// - `LocalGet(var)`
+/// - `StructGet(LocalGet(var))`
+/// - `RefCast(LocalGet(var))`
+/// - `StructGet(RefCast(StructGet(LocalGet(var))))`
+fn expr_roots_at_var(expr: &WirInstr, var_name: &str) -> bool {
+    match expr {
+        WirInstr::LocalGet { name } => name == var_name,
+        WirInstr::StructGet { expr: inner, .. } | WirInstr::RefCast { expr: inner, .. } => {
+            expr_roots_at_var(inner, var_name)
+        }
+        _ => false,
+    }
+}
+
 /// Check if a WIR instruction provably produces a fresh value (no aliases).
 fn is_fresh_wir_value(instr: &WirInstr) -> bool {
     match instr {
@@ -298,6 +375,9 @@ fn is_fresh_wir_value(instr: &WirInstr) -> bool {
         // Function calls return fresh values (callee constructs them).
         WirInstr::Call { .. } | WirInstr::CallRef { .. } => true,
 
+        // Unreachable never produces a value, so it's trivially "fresh".
+        WirInstr::Unreachable => true,
+
         // RefAsNonNull wrapping a fresh value is still fresh.
         WirInstr::RefAsNonNull(inner) => is_fresh_wir_value(inner),
 
@@ -310,6 +390,19 @@ fn is_fresh_wir_value(instr: &WirInstr) -> bool {
 
         // Seq: check the effective result instruction.
         WirInstr::Seq(body) => find_seq_result(body).is_some_and(is_fresh_wir_value),
+
+        // If/else expression: fresh if every branch produces a fresh value.
+        WirInstr::If {
+            then_body,
+            else_body,
+            result: Some(_),
+            ..
+        } => {
+            body_result_is_fresh(then_body)
+                && else_body
+                    .as_ref()
+                    .is_some_and(|eb| body_result_is_fresh(eb))
+        }
 
         _ => false,
     }
@@ -332,6 +425,17 @@ fn block_result_is_fresh(body: &[WirInstr]) -> bool {
             // Trace back: find what this local was set to within the block.
             find_local_set_value(body, name).is_some_and(is_fresh_wir_value)
         }
+        Some(instr) => is_fresh_wir_value(instr),
+        None => false,
+    }
+}
+
+/// Determine if an instruction body's result is fresh (for If branches).
+///
+/// The result of an If branch is the last instruction in the body.
+/// Unlike blocks, If branches don't use Br to carry values.
+fn body_result_is_fresh(body: &[WirInstr]) -> bool {
+    match body.last() {
         Some(instr) => is_fresh_wir_value(instr),
         None => false,
     }

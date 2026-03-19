@@ -1,0 +1,28 @@
+// Negative test: value_copy MUST be preserved when the copy is passed
+// to a function that could mutate it.
+//
+// Pattern:
+//   copy = value_copy Array<i32>(original)
+//   mutate(copy)      // function call — may mutate via &mut self
+//
+// Without value_copy, the mutation would affect the original.
+
+use { println } from "core:cli";
+
+fn append_zero(mut arr: Array<i32>) -> i32 {
+    arr.append(0);
+    return arr.len();
+}
+
+export fn run() with Stdout {
+    let a: Array<i32> = [1, 2, 3];
+    let new_len = append_zero(a);
+    println(`{a.len()}`);
+    println(`{new_len}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n4\n",
+    "wir_expect:O2": ["value_copy Array<i32>("]
+}

@@ -1,0 +1,33 @@
+// Negative test: value_copy MUST be preserved when the copy is mutated.
+//
+// Pattern:
+//   copy = value_copy Point(original)
+//   copy.x = 99       // StructSet — mutates the copy
+//
+// Without value_copy, the mutation would affect the original.
+
+use { println } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn modify_copy(p: Point) -> i32 {
+    let mut q = p;
+    q.x = 99;
+    return p.x + q.x;
+}
+
+export fn run() with Stdout {
+    let p = Point { x: 1, y: 2 };
+    println(`{modify_copy(p)}`);
+    // p.x should still be 1, q.x should be 99
+    println(`{p.x}`);
+}
+
+__DATA__
+{
+    "stdout": "100\n1\n",
+    "wir_expect:O2": ["value_copy Point("]
+}

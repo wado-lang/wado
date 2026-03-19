@@ -1,0 +1,46 @@
+// Test that value_copy is elided when the copy result is only used for
+// chained struct field reads stored into locals.
+//
+// Pattern:
+//   p = value_copy Outer(expr)
+//   x = p.inner.value   // LocalSet { StructGet(StructGet(LocalGet(p))) }
+//   n = p.name           // LocalSet { StructGet(LocalGet(p)) }
+//
+// This is safe because field reads stored into locals are read-only.
+
+use { println } from "core:cli";
+
+struct Inner {
+    value: i32,
+}
+
+struct Outer {
+    inner: Inner,
+    name: String,
+}
+
+fn make_outer() -> Outer {
+    return Outer { inner: Inner { value: 42 }, name: "hello" };
+}
+
+variant Container {
+    Filled(Outer),
+    Empty,
+}
+
+export fn run() with Stdout {
+    let c = Container::Filled(make_outer());
+    if let Filled(o) = c {
+        // Chained field access stored to locals
+        let v = o.inner.value;
+        let n = o.name;
+        println(`{v}`);
+        println(n);
+    }
+}
+
+__DATA__
+{
+    "stdout": "42\nhello\n",
+    "wir_not_expect:O2": ["value_copy Outer("]
+}
