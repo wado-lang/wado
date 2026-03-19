@@ -63,10 +63,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|p| self.resolve_type(p))
                     .collect();
                 let return_type = self.resolve_type(&func_ty.return_type);
+                let stores: Vec<u32> = func_ty
+                    .stores
+                    .iter()
+                    .filter_map(|e| match e {
+                        crate::ast::StoresEntry::Index(n) => Some(*n),
+                        crate::ast::StoresEntry::Name(_) => None, // Names only valid in fn decls
+                    })
+                    .collect();
                 self.type_table.borrow_mut().make_function(
                     params,
                     return_type,
                     func_ty.effects.clone(),
+                    stores,
                 )
             }
             Type::Tuple(elements) => {

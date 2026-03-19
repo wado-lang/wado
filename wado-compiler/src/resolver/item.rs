@@ -247,6 +247,34 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
+    /// Validate that stores declarations reference valid reference parameters.
+    fn validate_stores(&self, stores: &[String], params: &[TirParam], span: crate::token::Span) {
+        let tt = self.type_table.borrow();
+        for store_name in stores {
+            if let Some(param) = params.iter().find(|p| p.name == *store_name) {
+                let resolved = tt.get(param.type_id);
+                if !matches!(
+                    resolved,
+                    crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+                ) {
+                    let type_name = tt.type_name(param.type_id);
+                    let _ = self.logger.error(TypeError::InvalidStores {
+                        message: format!(
+                            "stores[{store_name}]: parameter '{store_name}' has type '{type_name}', \
+                             but only reference parameters (&T or &mut T) can be stored"
+                        ),
+                        span,
+                    });
+                }
+            } else {
+                let _ = self.logger.error(TypeError::InvalidStores {
+                    message: format!("stores[{store_name}]: no parameter named '{store_name}'"),
+                    span,
+                });
+            }
+        }
+    }
+
     /// Resolve a function
     pub(super) fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
         // Set up type parameters in scope before resolving types
@@ -325,6 +353,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
 
+        // Validate stores declarations
+        self.validate_stores(&func.stores, &params, func.span);
+
         // Resolve body
         let body = func
             .body
@@ -372,6 +403,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             params,
             return_type,
             effects: func.effects.clone(),
+            stores: func.stores.clone(),
             body,
             span: func.span,
             local_count: ctx.next_local,
@@ -437,6 +469,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             params: vec![], // Tests have no parameters
             return_type,
             effects: vec![], // Tests can have any effects (they're allowed to do I/O)
+            stores: vec![],
             body: Some(body),
             span: test_decl.span,
             local_count: ctx.next_local,
@@ -627,6 +660,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
 
+        // Validate stores declarations
+        self.validate_stores(&func.stores, &params, func.span);
+
         // Resolve body
         let body = func
             .body
@@ -705,6 +741,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             params,
             return_type,
             effects: func.effects.clone(),
+            stores: func.stores.clone(),
             body,
             span: func.span,
             local_count: ctx.next_local,

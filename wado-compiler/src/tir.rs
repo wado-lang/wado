@@ -167,13 +167,14 @@ impl SubstitutionContext {
                 params,
                 return_type,
                 effects,
+                stores,
             } => {
                 let new_params: Vec<TypeId> = params
                     .iter()
                     .map(|&p| self.substitute(p, type_table))
                     .collect();
                 let new_return = self.substitute(return_type, type_table);
-                type_table.make_function(new_params, new_return, effects)
+                type_table.make_function(new_params, new_return, effects, stores)
             }
             ResolvedType::GenericResource {
                 name,
@@ -343,6 +344,8 @@ pub enum ResolvedType {
         params: Vec<TypeId>,
         return_type: TypeId,
         effects: Vec<String>,
+        /// Positional indices of parameters the function may store.
+        stores: Vec<u32>,
     },
     Tuple(Vec<TypeId>),
     Reactive(TypeId),
@@ -731,11 +734,13 @@ impl TypeTable {
         params: Vec<TypeId>,
         return_type: TypeId,
         effects: Vec<String>,
+        stores: Vec<u32>,
     ) -> TypeId {
         self.intern(ResolvedType::Function {
             params,
             return_type,
             effects,
+            stores,
         })
     }
 
@@ -2099,6 +2104,8 @@ pub struct TirFunction {
     pub params: Vec<TirParam>,
     pub return_type: TypeId,
     pub effects: Vec<String>,
+    /// Parameter names declared in `stores[...]` — the function may store these references.
+    pub stores: Vec<String>,
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,

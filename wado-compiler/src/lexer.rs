@@ -659,6 +659,7 @@ impl<'a> Lexer<'a> {
             "global" => TokenKind::Global,
             "const" => TokenKind::Const,
             "matches" => TokenKind::Matches,
+            "stores" => TokenKind::Stores,
             // Note: "test" is handled as a contextual keyword in the parser, not here
             "true" => TokenKind::True,
             "false" => TokenKind::False,

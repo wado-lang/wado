@@ -1,0 +1,15 @@
+// Stores violation: returning a reference parameter without declaring stores[param]
+
+struct Data {
+    value: i32,
+}
+
+// This function returns a reference parameter but does NOT declare stores
+fn bad_return(data: &Data) -> &Data {
+    return data;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "stores[data]"}

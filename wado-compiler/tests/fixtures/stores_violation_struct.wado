@@ -1,0 +1,19 @@
+// Stores violation: storing a reference parameter in a struct field without declaring stores
+
+struct Data {
+    value: i32,
+}
+
+struct Container {
+    data: &Data,
+}
+
+// This function stores a reference parameter in a struct but does NOT declare stores
+fn bad_store(data: &Data) -> Container {
+    return Container { data };
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "stores[data]"}

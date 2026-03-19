@@ -1,0 +1,30 @@
+// Basic stores syntax: a function that stores a reference parameter.
+
+struct Data {
+    value: i32,
+}
+
+struct Container {
+    data: &Data,
+}
+
+// A function that stores a reference parameter — valid
+fn store_data(data: &Data) -> Container with stores[data] {
+    return Container { data };
+}
+
+// A function that uses but does NOT store a reference — valid
+fn use_data(data: &Data) -> i32 {
+    return data.value;
+}
+
+export fn run() {
+    let d = Data { value: 42 };
+    let c = store_data(&d);
+    let v = use_data(&d);
+    assert v == 42;
+    assert c.data.value == 42;
+}
+
+__DATA__
+{"stdout": ""}

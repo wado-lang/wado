@@ -1243,6 +1243,7 @@ impl Monomorphizer {
                 params,
                 return_type,
                 effects,
+                stores,
             } => {
                 // Substitute type parameters in function parameter types and return type
                 let new_params: Vec<TypeId> = params
@@ -1250,7 +1251,7 @@ impl Monomorphizer {
                     .map(|&p| self.substitute_type(p, substitution, type_table))
                     .collect();
                 let new_return_type = self.substitute_type(return_type, substitution, type_table);
-                type_table.make_function(new_params, new_return_type, effects)
+                type_table.make_function(new_params, new_return_type, effects, stores)
             }
             ResolvedType::GenericInstance {
                 name,
@@ -2366,6 +2367,7 @@ impl Monomorphizer {
             params,
             return_type,
             effects: generic.effects.clone(),
+            stores: generic.stores.clone(),
             body,
             span: generic.span,
             local_count: generic.local_count,

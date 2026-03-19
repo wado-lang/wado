@@ -368,6 +368,7 @@ pub fn make_synthetic_method(
         params,
         return_type,
         effects: Vec::new(),
+        stores: vec![],
         body: Some(body),
         span: synth_span(),
         local_count,

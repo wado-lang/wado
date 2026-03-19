@@ -1,0 +1,16 @@
+// Stores violation: assigning a reference parameter to a global without declaring stores
+
+struct Data {
+    value: i32,
+}
+
+global mut SAVED: &Data = &Data { value: 0 };
+
+fn bad_global(data: &Data) {
+    SAVED = data;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "stores[data]"}

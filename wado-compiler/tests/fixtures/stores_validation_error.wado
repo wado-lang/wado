@@ -1,0 +1,14 @@
+// Stores validation: stores must reference a parameter that is a reference type
+
+struct Data {
+    value: i32,
+}
+
+// Error: 'x' is i32, not a reference type
+fn bad_stores(x: i32) with stores[x] {
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "only reference parameters"}
