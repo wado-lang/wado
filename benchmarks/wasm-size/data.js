@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773868476203,
+  "lastUpdate": 1773889947759,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4235,6 +4235,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2c0ed08cd259964c4f132343aad3047a69e2b1fd"
         },
         "date": 1773868476014,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "64397357f9572c9d18d24b7a2383e6f46f7e956e",
+          "message": "Merge pull request #607 from wado-lang/claude/inspect-pretty-print-mode-Rt6sE\n\nAdd InspectAlt and DisplayAlt trait synthesis for pretty-printing",
+          "timestamp": "2026-03-19T12:09:58+09:00",
+          "tree_id": "90012dbc6edc7b79919db6f191f02f5b09f1ebd0",
+          "url": "https://github.com/wado-lang/wado/commit/64397357f9572c9d18d24b7a2383e6f46f7e956e"
+        },
+        "date": 1773889947547,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
