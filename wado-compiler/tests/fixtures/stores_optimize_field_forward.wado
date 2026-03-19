@@ -1,0 +1,33 @@
+// Optimization: stores-aware field forwarding.
+// When a struct local is passed by reference to a function without `stores`,
+// the struct should NOT be marked as aliased, enabling field constant forwarding.
+
+use { println } from "core:cli";
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+// Does NOT store the reference — no `stores` declaration.
+fn read_value(p: &Pair) -> i32 {
+    return p.a;
+}
+
+export fn run() with Stdout {
+    let p = Pair { a: 42, b: 99 };
+    // read_value takes &Pair without stores — p is not aliased.
+    // Field knowledge from the StructNew (a=42) should be forwarded
+    // to the assert, constant-folding the comparison and eliminating panic.
+    let _ = read_value(&p);
+    assert p.a == 42;
+    println(`{p.a}`);
+}
+
+__DATA__
+{
+    "stdout": "42\n",
+    "wir_not_expect:O2": [
+        "panic("
+    ]
+}

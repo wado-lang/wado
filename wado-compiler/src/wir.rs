@@ -160,6 +160,7 @@ impl WasmModuleInfo {
                 },
                 generic_origin: None,
                 effects: Vec::new(),
+                stores: Vec::new(),
                 comp_features: 0,
                 export_name: None,
             });
@@ -931,6 +932,9 @@ pub struct WirFunction {
     pub generic_origin: Option<WirGenericOrigin>,
     /// Effect requirements (for unparse display).
     pub effects: Vec<String>,
+    /// Parameter names declared in `stores[...]` — the function may store these references.
+    /// Used by WIR optimizations for stores-aware alias analysis.
+    pub stores: Vec<String>,
     /// Compiler feature bitflags (e.g., `COMP_FEATURE_ARRAY_APPEND`).
     /// Set via `#[comp_feature("array_append")]` attribute in Wado source.
     pub comp_features: u32,
