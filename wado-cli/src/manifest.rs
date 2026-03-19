@@ -87,10 +87,7 @@ impl EntryPointKind {
 /// Returns the absolute path to the entry point source file, or `None` if the
 /// manifest has no `[package]` section or the requested field is not set.
 #[must_use]
-pub fn resolve_entry_point(
-    project: &ProjectManifest,
-    kind: EntryPointKind,
-) -> Option<PathBuf> {
+pub fn resolve_entry_point(project: &ProjectManifest, kind: EntryPointKind) -> Option<PathBuf> {
     let pkg = project.manifest.package.as_ref()?;
     let relative = match kind {
         EntryPointKind::Command => pkg.command.as_deref(),
@@ -118,12 +115,16 @@ pub fn resolve_input(
         return Ok(input);
     }
 
-    let cwd = env::current_dir().map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
+    let cwd = env::current_dir()
+        .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
 
     let project = match discover(&cwd) {
         Ok(Some(p)) => p,
         Ok(None) => {
-            return Err(CliExit::error_with_usage("no input file specified and no wado.toml found", usage));
+            return Err(CliExit::error_with_usage(
+                "no input file specified and no wado.toml found",
+                usage,
+            ));
         }
         Err(e) => {
             return Err(CliExit::error(e));

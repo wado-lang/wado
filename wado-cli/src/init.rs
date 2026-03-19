@@ -53,7 +53,11 @@ fn format_usage() -> String {
     let mut buf = String::new();
     writeln!(buf, "Usage: wado init [options]").unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Create a new wado.toml manifest in the current directory.").unwrap();
+    writeln!(
+        buf,
+        "Create a new wado.toml manifest in the current directory."
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
@@ -91,14 +95,20 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<InitOptions, CliExit> {
 
     let name = name.ok_or_else(|| CliExit::error_with_usage("--name is required", &usage))?;
 
-    Ok(InitOptions { name, namespace, force })
+    Ok(InitOptions {
+        name,
+        namespace,
+        force,
+    })
 }
 
 pub fn run(opts: InitOptions) {
     let manifest_path = Path::new("wado.toml");
 
     if manifest_path.exists() && !opts.force {
-        eprintln!("Error: wado.toml already exists in the current directory (use --force to overwrite)");
+        eprintln!(
+            "Error: wado.toml already exists in the current directory (use --force to overwrite)"
+        );
         std::process::exit(1);
     }
 

@@ -43,8 +43,11 @@ fn test_init_with_namespace() {
 #[test]
 fn test_init_fails_when_manifest_exists() {
     let tmp = tempfile::tempdir().unwrap();
-    fs::write(tmp.path().join("wado.toml"), "[package]\nname = \"x\"\nversion = \"0.1.0\"\n")
-        .unwrap();
+    fs::write(
+        tmp.path().join("wado.toml"),
+        "[package]\nname = \"x\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
 
     wado_in(tmp.path())
         .args(["init", "--name", "my-app"])
@@ -57,8 +60,11 @@ fn test_init_fails_when_manifest_exists() {
 #[test]
 fn test_init_force_overwrites() {
     let tmp = tempfile::tempdir().unwrap();
-    fs::write(tmp.path().join("wado.toml"), "[package]\nname = \"old\"\nversion = \"0.1.0\"\n")
-        .unwrap();
+    fs::write(
+        tmp.path().join("wado.toml"),
+        "[package]\nname = \"old\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
 
     wado_in(tmp.path())
         .args(["init", "--name", "new-app", "--force"])

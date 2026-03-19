@@ -120,8 +120,7 @@ async fn main() {
             if let Some(cmd) = Cmd::from_name(&cmd_str) {
                 match cmd {
                     Cmd::Init => {
-                        let opts =
-                            wado_cli::init::parse_args(parser).unwrap_or_else(|e| e.exit());
+                        let opts = wado_cli::init::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::init::run(opts);
                     }
                     Cmd::Compile => {
