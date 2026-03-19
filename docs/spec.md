@@ -3744,6 +3744,28 @@ pub fn api_function() with Http, FileSystem {
 }
 ```
 
+### Generic Effects (Effect Polymorphism)
+
+Use `<effect E>` to declare a generic effect parameter. `E` can represent zero or more concrete effects, inferred from function-typed arguments at each call site.
+
+```wado
+fn wrapper<effect E>(f: fn() with E) with E {
+    f();
+}
+
+fn map<T, U, effect E>(arr: Array<T>, f: fn(T) -> U with E) -> Array<U> with E {
+    // ...
+}
+```
+
+Effect parameters:
+
+- Are declared with the `effect` keyword in generic parameter lists
+- Do not participate in monomorphization (effects are erased at runtime)
+- Are inferred from the effects of function-typed arguments at each call site
+- Can coexist with type parameters: `<T, effect E>`
+- Test functions implicitly have all effects
+
 ### Reference Storage (`stores[...]`)
 
 > **Not yet implemented.** See [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md) for the design.

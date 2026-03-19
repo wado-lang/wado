@@ -41,7 +41,8 @@ use crate::name::{self as name, MethodName, ModuleSource};
 use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, TirNewtype, TypeId, TypeTable,
+    self as tir, TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, TirNewtype, TypeId,
+    TypeTable,
 };
 
 use trait_env::TraitEnv;
@@ -109,6 +110,11 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Resolved param types for generic methods (`mangled_name` -> `param TypeIds`)
     /// Resolved in the method's own type param scope so `TypeParams` have correct ids.
     generic_method_resolved_param_types: IndexMap<String, Vec<TypeId>>,
+    /// Effect name to source module mapping (e.g., "Stdout" -> wasi:cli module source)
+    /// Built from import declarations and local effect declarations.
+    effect_sources: IndexMap<String, ModuleSource>,
+    /// Effect parameter names currently in scope (from enclosing function's `<effect E>`)
+    current_effect_params: IndexSet<String>,
     /// WASI registry for looking up effect return types
     wasi_registry: &'static WasiRegistry,
     /// Builtin registry for looking up builtin function return types
@@ -173,6 +179,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             logger,
             current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
             current_module_items: Vec::new(),
+            effect_sources: IndexMap::default(),
+            current_effect_params: IndexSet::default(),
             trait_ctx: trait_env::TraitContext::default(),
             generic_struct_names: IndexSet::default(),
             generic_function_params: IndexMap::default(),
@@ -244,6 +252,68 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.known_type_names_cache = cache;
     }
 
+    /// Build effect name → module source map from a module's import declarations.
+    ///
+    /// For `use { Stdout::{write_via_stream} } from "wasi:cli"`, maps "Stdout" → resolved("wasi:cli").
+    /// For `use { Stdout } from "core:cli"`, maps "Stdout" → resolved("core:cli").
+    /// For local effect declarations, maps name → current module source.
+    fn build_effect_sources(
+        module: &Module,
+        module_source: &ModuleSource,
+    ) -> IndexMap<String, ModuleSource> {
+        let mut sources = IndexMap::default();
+        for item in &module.items {
+            match item {
+                Item::Use(use_decl) => {
+                    let source = name::resolve_import(module_source, &use_decl.source);
+                    for use_item in &use_decl.items {
+                        match use_item {
+                            ast::UseItem::EffectFunctions { effect_name, .. } => {
+                                sources.insert(effect_name.clone(), source.clone());
+                            }
+                            ast::UseItem::Simple { name, alias } => {
+                                // Track simple imports that look like effect names (PascalCase)
+                                let local_name = alias.as_ref().unwrap_or(name);
+                                if local_name.starts_with(|c: char| c.is_ascii_uppercase()) {
+                                    sources.insert(local_name.clone(), source.clone());
+                                }
+                            }
+                            ast::UseItem::Wildcard => {}
+                        }
+                    }
+                }
+                Item::Effect(effect_decl) => {
+                    sources.insert(effect_decl.name.clone(), module_source.clone());
+                }
+                _ => {}
+            }
+        }
+        sources
+    }
+
+    /// Resolve AST effect names (strings) to TIR `EffectRefs` with module source information.
+    pub(crate) fn resolve_effects(&self, effects: &[String]) -> Vec<tir::EffectRef> {
+        effects
+            .iter()
+            .map(|name| {
+                if self.current_effect_params.contains(name) {
+                    tir::EffectRef::Param { name: name.clone() }
+                } else if let Some(source) = self.effect_sources.get(name) {
+                    tir::EffectRef::Concrete {
+                        name: name.clone(),
+                        module_source: source.clone(),
+                    }
+                } else {
+                    // Fallback: effect from current module (local effect declaration)
+                    tir::EffectRef::Concrete {
+                        name: name.clone(),
+                        module_source: self.current_module_source.clone(),
+                    }
+                }
+            })
+            .collect()
+    }
+
     /// Resolve a module, converting AST to TIR
     pub fn resolve_module(
         &mut self,
@@ -256,6 +326,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.current_module_items = module.items.clone();
         // Clear trait lookup caches (current_module_items changed)
         self.indexing_trait_cache.clear();
+        // Build effect source map from imports
+        self.effect_sources = Self::build_effect_sources(module, &module_source);
 
         // First pass: collect type definitions
         self.collect_types(module);

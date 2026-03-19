@@ -1165,9 +1165,12 @@ pub struct TraitBound {
 }
 
 /// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`
+/// Effect parameter declaration: `<effect E>` — represents a set of effects
 #[derive(Debug, Clone)]
 pub struct GenericParam {
     pub name: String,
+    /// Whether this is an effect parameter (`effect E`)
+    pub is_effect: bool,
     /// Trait bounds (e.g., `Ord`, `Builder<Output = T>`)
     pub bounds: Vec<TraitBound>,
     /// Default type (e.g., `T = []` or `Effects = []`)

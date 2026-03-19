@@ -1,0 +1,23 @@
+// Test: effect polymorphism compile error
+// Calling a function with effect param E, but the closure requires
+// an effect that the caller doesn't have
+
+use { println, Stdout } from "core:cli";
+
+fn wrapper<effect E>(f: fn() with E) with E {
+    f();
+}
+
+fn bad() {
+    // ERROR: bad() doesn't have Stdout, but the closure needs it
+    wrapper(|| {
+        println("this should fail");
+    });
+}
+
+export fn run() with Stdout {
+    println("should not reach here");
+}
+
+__DATA__
+{"compile_error": "missing effect"}

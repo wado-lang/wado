@@ -291,7 +291,7 @@ impl<'a> Unparser<'a> {
             self.unparse_type(ret);
         }
 
-        // Effects
+        // Effects (AST level — still strings)
         if !f.effects.is_empty() {
             self.output.push_str(" with ");
             self.output.push_str(&f.effects.join(", "));
@@ -445,6 +445,9 @@ impl<'a> Unparser<'a> {
         for (i, param) in params.iter().enumerate() {
             if i > 0 {
                 self.output.push_str(", ");
+            }
+            if param.is_effect {
+                self.output.push_str("effect ");
             }
             self.output.push_str(&param.name);
             if !param.bounds.is_empty() {
@@ -3564,7 +3567,9 @@ impl<'a> TirUnparser<'a> {
         // Effects
         if !f.effects.is_empty() {
             self.output.push_str(" with ");
-            self.output.push_str(&f.effects.join(", "));
+            let effects_str: Vec<&str> =
+                f.effects.iter().map(super::tir::EffectRef::name).collect();
+            self.output.push_str(&effects_str.join(", "));
         }
 
         // Body

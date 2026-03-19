@@ -73,7 +73,7 @@ pub fn monomorphize_modules_indexed(
     for (module_source, module) in &modules {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
-            if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
+            if func.has_real_type_params() || !func.impl_type_params.is_empty() {
                 let key = generic_function_key(func.is_method(), module_source, &func.name);
                 all_generic_functions.insert(key, Rc::clone(func_rc));
             }
@@ -131,7 +131,7 @@ pub fn monomorphize_modules_indexed(
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             // Only collect non-generic trait methods (concrete impls like "i32^Stringify::to_str")
-            if func.type_params.is_empty()
+            if !func.has_real_type_params()
                 && func.impl_type_params.is_empty()
                 && let Some(ref info) = func.method_info
                 && info.trait_name.is_some()
@@ -362,7 +362,7 @@ impl Monomorphizer {
             .iter()
             .filter(|f| {
                 let func = f.borrow();
-                !func.type_params.is_empty() || !func.impl_type_params.is_empty()
+                func.has_real_type_params() || !func.impl_type_params.is_empty()
             })
             .map(|f| (f.borrow().name.clone(), Rc::clone(f)))
             .collect();
@@ -425,9 +425,10 @@ impl Monomorphizer {
         // Phase 11: Remove generic functions from the functions list
         // (they stay in generic_functions for reference)
         // Remove functions with type_params OR impl_type_params (unless monomorphized)
+        // Effect-only params don't count as generic (they're erased at compile time).
         module.functions.retain(|f| {
             let func = f.borrow();
-            (func.type_params.is_empty() && func.impl_type_params.is_empty())
+            (!func.has_real_type_params() && func.impl_type_params.is_empty())
                 || func.monomorph_info.is_some()
         });
 
@@ -543,7 +544,7 @@ impl Monomorphizer {
 
         for func_rc in &module.functions {
             let func = func_rc.borrow();
-            if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
+            if func.has_real_type_params() || !func.impl_type_params.is_empty() {
                 let key =
                     generic_function_key(func.is_method(), &self.current_module_source, &func.name);
                 generic_functions.insert(key, Rc::clone(func_rc));
@@ -607,9 +608,10 @@ impl Monomorphizer {
 
         // Phase 11: Remove generic functions from the functions list
         // Remove functions with type_params OR impl_type_params (unless monomorphized)
+        // Effect-only params don't count as generic (they're erased at compile time).
         module.functions.retain(|f| {
             let func = f.borrow();
-            (func.type_params.is_empty() && func.impl_type_params.is_empty())
+            (!func.has_real_type_params() && func.impl_type_params.is_empty())
                 || func.monomorph_info.is_some()
         });
 
@@ -1367,7 +1369,8 @@ impl Monomorphizer {
             // would incorrectly queue instantiations with TypeParam TypeIds instead of
             // concrete types. We only scan concrete functions; generic function bodies
             // are scanned after instantiation in Phase 9.
-            if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
+            // Effect-only params don't count as generic.
+            if func.has_real_type_params() || !func.impl_type_params.is_empty() {
                 continue;
             }
             if let Some(body) = &func.body {
@@ -1745,7 +1748,7 @@ impl Monomorphizer {
                         if let Some(generic_func_rc) = generic_functions.get(generic_method_name) {
                             let generic_func = generic_func_rc.borrow();
                             // Check if method has its own type params (double generics)
-                            let has_method_type_params = !generic_func.type_params.is_empty();
+                            let has_method_type_params = generic_func.has_real_type_params();
                             // Queue if we have at least enough impl type args.
                             // impl_type_args may be longer than impl_type_params when the impl
                             // fixes some struct type params to concrete types
@@ -1810,7 +1813,7 @@ impl Monomorphizer {
                         if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
                             let generic_func = generic_func_rc.borrow();
                             // Check if method has its own type params (double generics)
-                            let has_method_type_params = !generic_func.type_params.is_empty();
+                            let has_method_type_params = generic_func.has_real_type_params();
                             // Queue if we have at least enough impl type args.
                             // impl_type_args may be longer than impl_type_params when the impl
                             // fixes some struct type params to concrete types

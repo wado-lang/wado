@@ -13,10 +13,12 @@ use crate::compiler_host::CompilerHost;
 use crate::logger::{Bail, Logger};
 use crate::name::ModuleSource;
 use crate::tir::{
-    FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt, TirStmtKind,
-    TirTemplatePart,
+    CallArg, EffectRef, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirModule, TirStmt, TirStmtKind, TirTemplatePart, TypeTable,
 };
 use crate::token::Span;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Error from effect checking
 #[derive(Debug, Clone)]
@@ -74,15 +76,19 @@ struct EffectChecker<'a, H: CompilerHost> {
     modules: &'a IndexMap<ModuleSource, TirModule>,
     logger: &'a Logger<'a, H>,
     /// Current function's effects (set when entering a function)
-    current_effects: IndexSet<String>,
+    current_effects: IndexSet<EffectRef>,
+    /// Type table (shared across modules)
+    type_table: Option<Rc<RefCell<TypeTable>>>,
 }
 
 impl<'a, H: CompilerHost> EffectChecker<'a, H> {
     fn new(modules: &'a IndexMap<ModuleSource, TirModule>, logger: &'a Logger<'a, H>) -> Self {
+        let type_table = modules.values().next().map(|m| Rc::clone(&m.type_table));
         Self {
             modules,
             logger,
             current_effects: IndexSet::default(),
+            type_table,
         }
     }
 
@@ -197,7 +203,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
     fn check_expr(&mut self, expr: &TirExpr) -> Result<(), Bail> {
         match &expr.kind {
             TirExprKind::Call { func, args, .. } => {
-                self.check_call(func, expr.span)?;
+                self.check_call_with_args(func, args, expr.span)?;
                 for arg in args {
                     self.check_expr(&arg.expr)?;
                 }
@@ -209,7 +215,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                 ..
             } => {
                 self.check_expr(receiver)?;
-                self.check_call(func, expr.span)?;
+                self.check_call_with_args(func, args, expr.span)?;
                 for arg in args {
                     self.check_expr(&arg.expr)?;
                 }
@@ -343,15 +349,31 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         Ok(())
     }
 
-    /// Check a function call for effect violations
-    fn check_call(&mut self, func_ref: &FunctionRef, span: Span) -> Result<(), Bail> {
+    /// Check a function call for effect violations, resolving effect parameters
+    /// from function-typed arguments when needed.
+    fn check_call_with_args(
+        &mut self,
+        func_ref: &FunctionRef,
+        args: &[CallArg],
+        span: Span,
+    ) -> Result<(), Bail> {
         let callee_effects = self.get_function_effects(func_ref);
 
-        for effect in &callee_effects {
+        // Separate effect params from concrete effects
+        let has_params = callee_effects.iter().any(super::tir::EffectRef::is_param);
+
+        // Resolve effect params to concrete effects from function-typed arguments
+        let resolved_effects = if has_params {
+            self.resolve_effect_params(&callee_effects, func_ref, args)
+        } else {
+            callee_effects
+        };
+
+        for effect in &resolved_effects {
             if !self.current_effects.contains(effect) {
                 self.logger.error(EffectError {
                     callee: func_ref.name.clone(),
-                    missing_effect: effect.clone(),
+                    missing_effect: effect.name().to_string(),
                     span,
                 })?;
             }
@@ -359,28 +381,113 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         Ok(())
     }
 
-    /// Get the effects required by a function
-    fn get_function_effects(&self, func_ref: &FunctionRef) -> Vec<String> {
-        // Look up in the appropriate module
-        if let Some(module) = self.modules.get(&func_ref.module_source) {
-            // Check functions
-            for func_rc in &module.functions {
-                let func = func_rc.borrow();
-                if func.name == func_ref.name {
-                    return func.effects.clone();
-                }
-            }
-            // Check impl methods
-            for impl_block in &module.impls {
-                for method in &impl_block.methods {
-                    if method.name == func_ref.name {
-                        return method.effects.clone();
+    /// Resolve effect parameters to concrete effects by examining function-typed arguments.
+    ///
+    /// For `fn wrapper<effect E>(f: fn() with E) with E`, when called with a closure
+    /// that has effects `[Stdout]`, E resolves to `[Stdout]`.
+    fn resolve_effect_params(
+        &self,
+        callee_effects: &[EffectRef],
+        func_ref: &FunctionRef,
+        args: &[CallArg],
+    ) -> Vec<EffectRef> {
+        // Collect the names of effect params
+        let effect_param_names: IndexSet<String> = callee_effects
+            .iter()
+            .filter_map(|e| match e {
+                EffectRef::Param { name } => Some(name.clone()),
+                EffectRef::Concrete { .. } => None,
+            })
+            .collect();
+
+        // Map each effect param name to its resolved concrete effects
+        let mut effect_param_concrete: IndexMap<String, IndexSet<EffectRef>> = IndexMap::default();
+        for name in &effect_param_names {
+            effect_param_concrete.insert(name.clone(), IndexSet::default());
+        }
+
+        // Look at the callee's parameter types and actual argument types
+        if let Some(callee_func) = self.find_function(func_ref)
+            && let Some(tt) = &self.type_table
+        {
+            let tt = tt.borrow();
+            for (param, arg) in callee_func.params.iter().zip(args.iter()) {
+                if let ResolvedType::Function {
+                    effects: formal_effects,
+                    ..
+                } = tt.get(param.type_id).clone()
+                {
+                    let has_effect_params = formal_effects
+                        .iter()
+                        .any(|e| e.is_param() && effect_param_names.contains(e.name()));
+                    if !has_effect_params {
+                        continue;
+                    }
+
+                    if let ResolvedType::Function {
+                        effects: actual_effects,
+                        ..
+                    } = tt.get(arg.expr.type_id).clone()
+                    {
+                        for formal_effect in &formal_effects {
+                            if let EffectRef::Param { name } = formal_effect
+                                && let Some(concrete_set) = effect_param_concrete.get_mut(name)
+                            {
+                                for actual in &actual_effects {
+                                    concrete_set.insert(actual.clone());
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
-        // Default: no effects required (builtins, unknown functions)
-        Vec::new()
+
+        // Build resolved effect list: replace param names with concrete effects
+        let mut resolved: IndexSet<EffectRef> = IndexSet::default();
+        for effect in callee_effects {
+            match effect {
+                EffectRef::Param { name } => {
+                    if let Some(concrete_set) = effect_param_concrete.get(name) {
+                        for concrete in concrete_set {
+                            resolved.insert(concrete.clone());
+                        }
+                    }
+                }
+                EffectRef::Concrete { .. } => {
+                    resolved.insert(effect.clone());
+                }
+            }
+        }
+        resolved.into_iter().collect()
+    }
+
+    /// Get the effects for a function
+    fn get_function_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
+        if let Some(func) = self.find_function(func_ref) {
+            func.effects.clone()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Find a function by reference
+    fn find_function(&self, func_ref: &FunctionRef) -> Option<TirFunction> {
+        let module = self.modules.get(&func_ref.module_source)?;
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if func.name == func_ref.name {
+                return Some(func.clone());
+            }
+        }
+        for impl_block in &module.impls {
+            for method in &impl_block.methods {
+                if method.name == func_ref.name {
+                    return Some(method.clone());
+                }
+            }
+        }
+        None
     }
 }
 
