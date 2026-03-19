@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773912078621,
+  "lastUpdate": 1773918591006,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4352,6 +4352,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/098fd0d62641095d3a468efd92a56245cad3916b"
         },
         "date": 1773912078407,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d673f3ad06f2a76486d2b95709d3f41b019f6ebf",
+          "message": "Merge pull request #610 from wado-lang/claude/profile-compiler-performance-Euf7a\n\nOptimize static method lookup with pre-built indices",
+          "timestamp": "2026-03-19T20:07:24+09:00",
+          "tree_id": "72d9bac46ddf75df52722828a86489e225a855cb",
+          "url": "https://github.com/wado-lang/wado/commit/d673f3ad06f2a76486d2b95709d3f41b019f6ebf"
+        },
+        "date": 1773918590797,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
