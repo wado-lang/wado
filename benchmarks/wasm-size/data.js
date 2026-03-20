@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774047568015,
+  "lastUpdate": 1774047908131,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5171,6 +5171,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8d373a8340d704fc43a394aeb7de3edbb9281eab"
         },
         "date": 1774047567794,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22261,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "da46dbc856314aa5100792ed104c51016b005bfa",
+          "message": "Merge pull request #631 from wado-lang/claude/remove-clippy-perf-rules-cBAjM\n\nUse clone_from() pattern and enable assigning_clones lint",
+          "timestamp": "2026-03-21T08:02:51+09:00",
+          "tree_id": "68035671356acff19a2ffde8a4dae00364ddd447",
+          "url": "https://github.com/wado-lang/wado/commit/da46dbc856314aa5100792ed104c51016b005bfa"
+        },
+        "date": 1774047907911,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
