@@ -22,26 +22,17 @@ node = "24"
 #   github:cli/cli = "latest"  # GitHub CLI
 
 [settings]
-# Automatically install missing tools when entering the directory
 auto_install = true
-
-# Use verbose output for debugging (can be set to false for quieter operation)
 verbose = false
 
 [env]
 RUSTFLAGS = {value = "-D warnings", default = true}
 
-# =============================================================================
-# Setup & Workflow
-# =============================================================================
-
 [tasks.on-task-started]
 description = "Set up development environment (install mise and project tools)"
 run = """
 #!/usr/bin/env bash
-echo "Setting up development environment..."
 if ! command -v mise >/dev/null 2>&1; then
-    echo "Installing mise..."
     curl -fsSL https://mise.run | sh
     echo ""
     echo "mise installed. Please restart your shell or run:"
@@ -50,13 +41,8 @@ if ! command -v mise >/dev/null 2>&1; then
     echo ""
     echo "Then run 'mise run on-task-started' again to install project tools."
 else
-    echo "mise is already installed."
-    echo "Installing project tools..."
     mise install
-    echo "Installing optional tools..."
-    mise install github:cli/cli@latest 2>&1 || echo "  [skip] github:cli/cli (install failed, non-fatal)"
-    echo ""
-    echo "Development environment ready."
+    mise install github:cli/cli@latest 2>&1 || true
 fi
 """
 
@@ -64,34 +50,21 @@ fi
 description = "Format, clippy-fix, update golden fixtures, regenerate stdlib docs, and test"
 run = """
 #!/usr/bin/env bash
-set -e
-echo "=== clippy-fix ==="
+set -xe -o pipefail
 mise run clippy-fix
-echo "=== update-golden-fixtures ==="
 mise run update-golden-fixtures
-echo "=== update-golden-format-fixtures ==="
 mise run update-golden-format-fixtures
-echo "=== doc-stdlib ==="
 mise run doc-stdlib
-echo "=== format ==="
 mise run format
-echo "=== test ==="
 mise run test
-echo "=== test-wado ==="
 mise run test-wado
-echo ""
-echo "All artifacts are up-to-date and tested."
 """
-
-# =============================================================================
-# Build
-# =============================================================================
 
 [tasks.build]
 description = "Check Rust crates (host + wasm32 targets)"
 run = """
 #!/usr/bin/env bash
-set -e
+set -xe -o pipefail
 mise run update-bundled
 cargo check
 cargo check -p wado-compiler --target wasm32-unknown-unknown
@@ -102,7 +75,7 @@ cargo check -p wado-manifest --target wasm32-unknown-unknown
 description = "Compile example/hello.wado to WAT and Wasm"
 run = """
 #!/usr/bin/env bash
-set -e
+set -xe -o pipefail
 cargo run -p wado-cli -- compile -O2 -o example/hello.wat  example/hello.wado
 cargo run -p wado-cli -- compile -O2 -o example/hello.wasm example/hello.wado
 """
@@ -116,15 +89,11 @@ description = "Compile and run hello.wado directly with wasmtime"
 depends = ["hello"]
 run = "wasmtime run -S p3=y -W component-model=y -W component-model-gc=y -W component-model-async=y -W component-model-async-builtins=y -W component-model-async-stackful=y -W gc=y -W function-references=y -W simd=y -W wide-arithmetic=y -W threads=y --invoke 'run()' example/hello.wasm"
 
-# =============================================================================
-# Test
-# =============================================================================
-
 [tasks.test]
 description = "Run Rust crate tests"
 run = """
 #!/usr/bin/env bash
-set -e
+set -xe -o pipefail
 touch wado-compiler/tests/e2e.rs
 cargo test
 """
@@ -139,22 +108,13 @@ run = "cargo llvm-cov --all-features --workspace"
 
 [tasks.test-cov-html]
 description = "Run tests with coverage (HTML report)"
-run = """
-#!/usr/bin/env bash
-set -e
-cargo llvm-cov --all-features --workspace --html
-echo "Coverage report generated at target/llvm-cov/html/index.html"
-"""
-
-# =============================================================================
-# Format & Lint
-# =============================================================================
+run = "cargo llvm-cov --all-features --workspace --html"
 
 [tasks.format]
 description = "Format Rust and Markdown files"
 run = """
 #!/usr/bin/env bash
-set -e
+set -xe -o pipefail
 cargo fmt --verbose --all
 dprint fmt
 """
@@ -163,7 +123,7 @@ dprint fmt
 description = "Format all Wado source files"
 run = """
 #!/usr/bin/env bash
-set -e
+set -xe -o pipefail
 cargo run --bin wado -- format -w \
     $(grep -L '"compile_error"' wado-compiler/tests/fixtures/**/*.wado) \
     $(find wado-compiler/lib example benchmark wasm-size -name '*.wado')
@@ -177,15 +137,11 @@ run = "cargo clippy --all --all-features -- -D warnings"
 description = "Run clippy auto-fix"
 run = "cargo clippy --all --all-features --fix --allow-dirty --allow-staged"
 
-# =============================================================================
-# Golden Fixtures
-# =============================================================================
-
 [tasks.update-golden-fixtures]
 description = "Regenerate WIR golden fixtures"
 run = """
 #!/usr/bin/env bash
-set -e
+set -xe -o pipefail
 mkdir -p wado-compiler/tests/fixtures.golden
 rm -rf wado-compiler/tests/fixtures.golden/*.*
 cargo run --bin wado -- dump --wir -O2 \
@@ -197,77 +153,53 @@ cargo run --bin wado -- dump --wir -O2 \
 description = "Regenerate format fixture golden files (clean, TIR, lower, optimize, WIR, WAT)"
 file = "scripts/update-golden-format-fixtures.sh"
 
-# =============================================================================
-# Documentation
-# =============================================================================
-
 [tasks.doc-stdlib]
 description = "Generate stdlib cheatsheet docs (core + wasi)"
 run = """
 #!/usr/bin/env bash
-set -e
+set -xe -o pipefail
 cargo build --bin wado --quiet
 
 CORE_MODULES="core:prelude core:cli core:collections core:base64 core:zlib"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets"
 
-echo "Generating docs/cheatsheet-stdlib-core.md..."
 cargo run --bin wado --quiet -- doc -f simple --title "Core Standard Library" \
   $CORE_MODULES > docs/cheatsheet-stdlib-core.md
-
-echo "Generating docs/cheatsheet-stdlib-wasi.md..."
 cargo run --bin wado --quiet -- doc -f simple --title "WASI Standard Library" \
   $WASI_MODULES > docs/cheatsheet-stdlib-wasi.md
-
-echo "Generating docs/stdlib-core.md..."
 cargo run --bin wado --quiet -- doc -f markdown --title "Core Standard Library" \
   $CORE_MODULES > docs/stdlib-core.md
-
-echo "Generating docs/stdlib-wasi.md..."
 cargo run --bin wado --quiet -- doc -f markdown --title "WASI Standard Library" \
   $WASI_MODULES > docs/stdlib-wasi.md
-
-echo "Done."
 """
-
-# =============================================================================
-# Clean
-# =============================================================================
 
 [tasks.clean]
 description = "Clean all build artifacts"
 run = """
 #!/usr/bin/env bash
+set -xe -o pipefail
 cargo clean
 rm -f example/*.wat example/*.wasm
 mise run -C benchmark clean
 mise run -C wasm-size clean
 """
 
-# =============================================================================
-# VS Code Extension
-# =============================================================================
-
 [tasks.install-wado-vscode-dev]
 description = "Install wado-vscode extension for development"
 run = """
 #!/usr/bin/env bash
+set -xe -o pipefail
 if [ -e ~/.vscode/extensions/wado-lang.wado-0.0.1 ]; then
     echo "wado-vscode is already installed"
 else
     cd wado-vscode && npm install && npm run compile
     ln -s "$PWD" ~/.vscode/extensions/wado-lang.wado-0.0.1
-    echo "wado-vscode installed. Restart VS Code to activate."
 fi
 """
 
 [tasks.clean-wado-vscode-dev]
 description = "Remove wado-vscode development symlink"
-run = """
-#!/usr/bin/env bash
-rm -f ~/.vscode/extensions/wado-lang.wado-0.0.1
-echo "wado-vscode symlink removed. Restart VS Code to deactivate."
-"""
+run = "rm -f ~/.vscode/extensions/wado-lang.wado-0.0.1"
 
 [tasks.test-wado-vscode]
 description = "Run wado-vscode tests"
@@ -277,31 +209,23 @@ run = "cd wado-vscode && npm install && npm run test:unit && npm run test"
 description = "Regenerate wado-vscode syntax files from syntax.rs"
 run = """
 #!/usr/bin/env bash
-set -e
+set -xe -o pipefail
 cargo run --bin wado -- syntax --format tmLanguage -o wado-vscode/syntaxes/wado.tmLanguage.json
 cargo run --bin wado -- syntax --format language-config -o wado-vscode/language-configuration.json
-echo "Updated wado-vscode syntax files"
 """
 
 [tasks.update-json-schema-files]
 description = "Download TextMate grammar and language-configuration JSON schemas"
 run = """
 #!/usr/bin/env bash
-set -e
+set -xe -o pipefail
 mkdir -p wado-cli/schemas
-echo "Downloading TextMate grammar schema..."
 curl -sL "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json" \
     | sed 's|"$schema": "http://json-schema.org/schema#"|"$schema": "http://json-schema.org/draft-07/schema#"|g; s|"id":|"$id":|g' \
     > wado-cli/schemas/tmlanguage.schema.json
-echo "Downloading VS Code language-configuration schema..."
 curl -sL "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/language-configuration.json" \
     > wado-cli/schemas/language-configuration.schema.json
-echo "Updated JSON schema files in wado-cli/schemas/"
 """
-
-# =============================================================================
-# Vendor & Stdlib
-# =============================================================================
 
 [tasks.sync-vendor]
 description = "Sync vendor submodules (wasmtime pinned to Cargo.lock, others to latest)"
@@ -315,7 +239,7 @@ run = "git submodule update --remote vendor/wasm vendor/wasi vendor/wasmtime ven
 description = "Regenerate wasi stdlib from WIT files"
 run = """
 #!/usr/bin/env bash
-set -e
+set -xe -o pipefail
 rm -rf wado-compiler/lib/wasi/
 mkdir -p wado-compiler/lib/wasi/
 cargo run -p wado-from-wit -- \
@@ -330,25 +254,16 @@ cargo run -p wado-from-wit -- \
 description = "Rebuild bundled libm Wasm module"
 run = """
 #!/usr/bin/env bash
-set -e
+set -xe -o pipefail
 cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release
 wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > wado-compiler/lib/builtins/wado-bundled-libm.wat
 """
 
-# =============================================================================
-# Misc
-# =============================================================================
-
 [tasks.list-todo]
 description = "List E2E test fixtures marked with TODO: true"
 run = """
-grep -l '"TODO": true' wado-compiler/tests/fixtures/*.wado 2>/dev/null | \
-  sort
+grep -l '"TODO": true' wado-compiler/tests/fixtures/*.wado 2>/dev/null | sort
 """
-
-# =============================================================================
-# Benchmarks & Wasm Size (delegate to subdirectory mise configs)
-# =============================================================================
 
 [tasks.benchmark-all]
 description = "Run all benchmarks"
