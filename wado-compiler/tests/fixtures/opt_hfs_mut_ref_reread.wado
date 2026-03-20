@@ -1,0 +1,38 @@
+// Negative test: HFS must re-read after &mut local is passed to a function.
+//
+// When &mut local is passed to a function, the callee CAN modify the struct.
+// Both write-back (before call) and re-read (after call) are needed.
+
+struct Counter {
+    x: i32,
+    y: i32,
+}
+
+#[inline(never)]
+fn double_x(c: &mut Counter) {
+    c.x = c.x * 2;
+}
+
+export fn run() {
+    let mut c = Counter { x: 1, y: 0 };
+    let mut total = 0;
+    for let mut i = 0; i < 4; i += 1 {
+        c.x += 1;
+        total += c.x;
+        total += c.x;
+        double_x(&mut c);
+        total += c.x;
+    }
+    // i=0: x=2, total=2+2=4, double→x=4, total=4+4=8
+    // i=1: x=5, total=8+5+5=18, double→x=10, total=18+10=28
+    // i=2: x=11, total=28+11+11=50, double→x=22, total=50+22=72
+    // i=3: x=23, total=72+23+23=118, double→x=46, total=118+46=164
+    assert total == 164;
+    assert c.x == 46;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["_hfs_x"]
+}

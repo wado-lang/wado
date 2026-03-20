@@ -1,0 +1,50 @@
+// Optimization: LICM with mixed immutable and mutable ref locals.
+//
+// In the same loop, an immutable ref local's field access should be hoisted
+// while a mutable ref local's field access should remain inside the loop.
+
+use { println } from "core:cli";
+
+struct Config {
+    threshold: i32,
+    scale: i32,
+}
+
+struct Counter {
+    value: i32,
+    limit: i32,
+}
+
+#[inline("never")]
+fn read_config(c: &Config) -> i32 {
+    return c.threshold;
+}
+
+#[inline("never")]
+fn increment(ctr: &mut Counter) {
+    ctr.value = ctr.value + 1;
+}
+
+// Case: Mixed — immutable ref hoisted, mutable ref not hoisted.
+export fn run() with Stdout {
+    let config = Config { threshold: 10, scale: 2 };
+    let mut counter = Counter { value: 0, limit: 100 };
+    let cr = &config;
+    let cm = &mut counter;
+    let mut sum = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let _ = read_config(cr);
+        increment(cm);
+        // cr.threshold should be hoisted (immutable ref)
+        // cm.value should NOT be hoisted (mutable ref, modified by increment)
+        sum += cr.threshold + cm.value;
+    }
+    println(`{sum}`);
+}
+
+__DATA__
+{
+    "stdout": "65\n",
+    "wir_expect:O2": ["_licm_threshold"],
+    "wir_not_expect:O2": ["_licm_value"]
+}

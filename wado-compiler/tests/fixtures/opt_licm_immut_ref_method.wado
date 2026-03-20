@@ -1,0 +1,41 @@
+// Optimization: LICM should hoist field accesses when methods are called on
+// immutable ref locals.
+//
+// When `config_ref: &Config` calls a method with `&self`, the receiver is
+// `Local { config_ref }` (already a reference, no additional `&` is added).
+// Since config_ref has type `Ref(Config)`, it should NOT be marked as fully
+// modified, enabling field access hoisting.
+
+use { println } from "core:cli";
+
+struct Config {
+    threshold: i32,
+    scale: i32,
+}
+
+impl Config {
+    #[inline("never")]
+    fn get_scale(&self) -> i32 {
+        return self.scale;
+    }
+}
+
+// Case: Method call on immutable ref local — field access should be hoisted.
+export fn run() with Stdout {
+    let config = Config { threshold: 100, scale: 2 };
+    let config_ref = &config;
+    let mut sum = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let _ = config_ref.get_scale();
+        // config_ref.threshold is loop-invariant because:
+        // config_ref is &Config, get_scale takes &self (immutable)
+        sum += config_ref.threshold * i;
+    }
+    println(`{sum}`);
+}
+
+__DATA__
+{
+    "stdout": "1000\n",
+    "wir_expect:O2": ["_licm_threshold"]
+}

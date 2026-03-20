@@ -1,0 +1,44 @@
+// Test: HFS with mixed &local and &mut local in the same loop.
+//
+// read_counter takes &Counter (immutable) — write-back only, no re-read.
+// scale_x takes &mut Counter (mutable) — write-back AND re-read.
+// Both calls must produce correct results.
+
+struct Counter {
+    x: i32,
+    y: i32,
+}
+
+#[inline(never)]
+fn read_counter(c: &Counter) -> i32 {
+    return c.x + c.y;
+}
+
+#[inline(never)]
+fn scale_x(c: &mut Counter, factor: i32) {
+    c.x = c.x * factor;
+}
+
+export fn run() {
+    let mut c = Counter { x: 1, y: 100 };
+    let mut total = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        c.x += 1;
+        total += c.x;
+        total += c.x;
+        total += read_counter(&c);
+        scale_x(&mut c, 2);
+        total += c.x;
+    }
+    // i=0: x=2, total=2+2=4, read→102, total=106, scale→x=4, total=110
+    // i=1: x=5, total=110+5+5=120, read→105, total=225, scale→x=10, total=235
+    // i=2: x=11, total=235+11+11=257, read→111, total=368, scale→x=22, total=390
+    assert total == 390;
+    assert c.x == 22;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["_hfs_x"]
+}

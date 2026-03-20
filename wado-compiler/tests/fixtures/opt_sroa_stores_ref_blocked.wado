@@ -1,0 +1,33 @@
+// Negative test: SROA must NOT decompose when &s is passed to a stores function.
+//
+// When the callee declares `stores[p]`, the reference persists beyond the call.
+// The stored ref points to the original struct, so SROA decomposition would
+// create inconsistency (stored ref sees original, scalars see decomposed).
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Holder {
+    p: &Point,
+}
+
+fn store_point(p: &Point) -> Holder with stores[p] {
+    return Holder { p };
+}
+
+// Case: &p passed to stores function — struct must NOT be SROA'd.
+export fn run() {
+    let p = Point { x: 10, y: 20 };
+    let h = store_point(&p);
+    // The stored ref must see the same struct, so p must remain allocated.
+    assert p.x == 10;
+    assert h.p.x == 10;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["Point { x: 10, y: 20 }"]
+}

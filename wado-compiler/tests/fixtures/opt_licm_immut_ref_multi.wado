@@ -1,0 +1,48 @@
+// Optimization: LICM with multiple immutable ref locals and function calls.
+//
+// Tests that field accesses on multiple immutable ref locals are hoisted
+// when they are passed to different non-mutating functions in a loop.
+
+use { println } from "core:cli";
+
+struct Config {
+    threshold: i32,
+    scale: i32,
+}
+
+struct Stats {
+    count: i32,
+    total: i32,
+}
+
+#[inline("never")]
+fn read_config(c: &Config) -> i32 {
+    return c.threshold;
+}
+
+#[inline("never")]
+fn read_stats(s: &Stats) -> i32 {
+    return s.count;
+}
+
+// Case: Multiple immutable ref locals, each passed to a function.
+// Both threshold and count field accesses should be hoisted.
+export fn run() with Stdout {
+    let config = Config { threshold: 10, scale: 2 };
+    let stats = Stats { count: 5, total: 0 };
+    let cr = &config;
+    let sr = &stats;
+    let mut sum = 0;
+    for let mut i = 0; i < 4; i += 1 {
+        let _ = read_config(cr);
+        let _ = read_stats(sr);
+        sum += cr.threshold * sr.count * i;
+    }
+    println(`{sum}`);
+}
+
+__DATA__
+{
+    "stdout": "300\n",
+    "wir_expect:O2": ["_licm_threshold", "_licm_count"]
+}

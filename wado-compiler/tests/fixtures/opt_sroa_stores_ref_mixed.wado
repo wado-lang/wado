@@ -1,0 +1,42 @@
+// Optimization: SROA with mixed stores/non-stores &s usage.
+//
+// `a` has only non-stores ref → should be SROA'd.
+// `b` has stores ref → should NOT be SROA'd.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Holder {
+    p: &Point,
+}
+
+#[inline("never")]
+fn read_point(p: &Point) -> i32 {
+    return p.x + p.y;
+}
+
+fn store_point(p: &Point) -> Holder with stores[p] {
+    return Holder { p };
+}
+
+export fn run() {
+    // a: only non-stores ref — should be SROA'd
+    let a = Point { x: 1, y: 2 };
+    let ra = read_point(&a);
+    assert a.x + ra == 4;
+
+    // b: has stores ref — should NOT be SROA'd
+    let b = Point { x: 3, y: 4 };
+    let h = store_point(&b);
+    assert b.x == 3;
+    assert h.p.x == 3;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["a = Point"],
+    "wir_expect:O2": ["Point { x: 3, y: 4 }"]
+}

@@ -1,0 +1,43 @@
+// Test: HFS with &local passed to a stores function in a loop.
+//
+// store_ref stores the immutable reference (persists beyond the call).
+// Since &Counter is immutable, the callee cannot modify the struct.
+// Write-back is needed before the call; re-read should not be needed.
+
+struct Counter {
+    x: i32,
+    y: i32,
+}
+
+struct Holder {
+    c: &Counter,
+}
+
+#[inline(never)]
+fn store_ref(c: &Counter) -> Holder with stores[c] {
+    return Holder { c };
+}
+
+#[inline(never)]
+fn bump_y(c: &mut Counter) {
+    c.y += 10;
+}
+
+export fn run() {
+    let mut c = Counter { x: 0, y: 0 };
+    let mut total = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        c.x += 1;
+        total += c.x;
+        total += c.x;
+        let h = store_ref(&c);
+        total += h.c.x;
+        bump_y(&mut c);
+    }
+    assert total == 45;
+    assert c.x == 5;
+    assert c.y == 50;
+}
+
+__DATA__
+{"stdout": ""}

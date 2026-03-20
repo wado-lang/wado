@@ -1,0 +1,43 @@
+// Bug fix: HFS must write-back scalarized fields before &local is passed to a function.
+//
+// When a struct local has scalarized fields (promoted to scalar locals in a loop),
+// passing &local to a function must write-back the scalar values to the struct
+// before the call, so the callee reads current values through the reference.
+//
+// Previously, extract_gc_local_index didn't match Unary{Ref, Local}, so no
+// write-back was generated for &local args. The callee read stale struct values.
+
+struct Counter {
+    x: i32,
+    y: i32,
+}
+
+#[inline(never)]
+fn read_x(c: &Counter) -> i32 {
+    return c.x;
+}
+
+#[inline(never)]
+fn bump_y(c: &mut Counter) {
+    c.y += 10;
+}
+
+export fn run() {
+    let mut c = Counter { x: 0, y: 0 };
+    let mut total = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        c.x += 1;
+        total += c.x;
+        total += c.x;
+        total += read_x(&c);
+        bump_y(&mut c);
+    }
+    // Without bug fix: total == 30 (read_x sees stale c.x == 0)
+    // With bug fix:    total == 45 (read_x sees current c.x)
+    assert total == 45;
+    assert c.x == 5;
+    assert c.y == 50;
+}
+
+__DATA__
+{"stdout": ""}

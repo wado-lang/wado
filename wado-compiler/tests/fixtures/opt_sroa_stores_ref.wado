@@ -1,0 +1,30 @@
+// Optimization: SROA should decompose struct locals even when &s is taken,
+// if the reference is only passed to functions that don't declare `stores`.
+//
+// With stores-aware analysis: if the callee doesn't declare `stores[param]`,
+// the reference doesn't persist beyond the call, so SROA can reconstruct
+// the struct at the call boundary and decompose the rest.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+#[inline("never")]
+fn read_point(p: &Point) -> i32 {
+    return p.x + p.y;
+}
+
+// Case: &p passed to non-stores function — struct should be SROA'd.
+// After SROA + constant propagation, p.x resolves to the literal 10.
+export fn run() {
+    let p = Point { x: 10, y: 20 };
+    let r = read_point(&p);
+    assert p.x + r == 40;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["p = Point"]
+}
