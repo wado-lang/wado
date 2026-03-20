@@ -672,11 +672,6 @@ fn has_unsupported_effects(tir_func: &TirFunction, project: &crate::project::Pro
     }
     let exit_available = project.has_effect("Exit");
     tir_func.effects.iter().any(|e| {
-        // Effect params are resolved at call sites by the effect checker;
-        // they don't represent concrete effects and should not block registration.
-        if e.is_param() {
-            return false;
-        }
         let effect_name = e.name();
         if effect_name == "Exit" {
             return !exit_available;

@@ -300,12 +300,6 @@ pub async fn compile_with_options<H: CompilerHost>(
         )?
     };
 
-    // === Phase 7: Effect Check ===
-    {
-        let _span = logger.span("effect-check");
-        check_effects(&project.tir_modules, &logger)?;
-    }
-
     // Apply options to project (must be before synthesis)
     let mut project = project;
     if let Some(world) = options.target_world {
@@ -371,7 +365,16 @@ pub async fn compile_with_options<H: CompilerHost>(
         })?
     };
 
-    // === Phase 8a: Stores Check ===
+    // === Phase 8a: Effect Check ===
+    // Runs after synthesis so synthesized functions (trait impls, Inspect, Display, serde, etc.)
+    // are also validated. Runs before monomorphize so effect params are still present.
+    // CM adapters are skipped (they are boundary code with special effect semantics).
+    {
+        let _span = logger.span("effect-check");
+        check_effects(&project.tir_modules, &logger)?;
+    }
+
+    // === Phase 8b: Stores Check ===
     // Runs after synthesis so synthesized functions are also checked.
     // Runs before monomorphize/optimize so stores info is available for escape analysis.
     {

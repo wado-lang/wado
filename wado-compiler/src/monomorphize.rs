@@ -55,6 +55,16 @@ pub fn monomorphize_module(module: TirModule) -> TirModule {
 /// in the project with cross-module generic function support.
 pub fn monomorphize_project(mut project: Project) -> Project {
     project.tir_modules = monomorphize_modules_indexed(project.tir_modules);
+
+    // Strip effect params from all functions. Effect params have been validated by the
+    // effect checker (which runs before monomorphization) and are not needed downstream.
+    for module in project.tir_modules.values() {
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            func.effects.retain(|e| !e.is_param());
+        }
+    }
+
     project
 }
 

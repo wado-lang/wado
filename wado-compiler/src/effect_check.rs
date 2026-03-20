@@ -204,6 +204,11 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             return Ok(());
         }
 
+        // Skip CM adapter functions - they are boundary code with special effect semantics
+        if func.is_cm_adapter {
+            return Ok(());
+        }
+
         // Set current context
         self.current_effects = func.effects.iter().cloned().collect();
         self.current_stores = func.stores.iter().cloned().collect();
