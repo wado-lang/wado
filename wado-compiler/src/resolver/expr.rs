@@ -773,8 +773,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.type_table
                     .borrow_mut()
                     .intern(ResolvedType::GenericResource {
-                        name: name,
-                        module_source: module_source,
+                        name,
+                        module_source,
                         type_args: new_args,
                     })
             }

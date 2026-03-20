@@ -252,10 +252,7 @@ impl<'a> WirContext<'a> {
         self.imports.push(WirImport {
             module,
             field,
-            desc: WirImportDesc::Func {
-                type_id,
-                name: name,
-            },
+            desc: WirImportDesc::Func { type_id, name },
         });
         self.import_func_map.insert(fq.clone(), func_id.clone());
         self.func_map.insert(fq, func_id.clone());

@@ -436,7 +436,7 @@ fn register_single_function(
     let wir_func = WirFunction {
         name: WirName {
             display: mangled_name,
-            fq: fq,
+            fq,
         },
         type_id,
         param_names,

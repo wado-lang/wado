@@ -2689,7 +2689,7 @@ impl Monomorphizer {
                                     is_blanket: false,
                                 });
                                 *call_func = FunctionRef {
-                                    module_source: module_source,
+                                    module_source,
                                     name: new_func_name,
                                     monomorph_info,
                                     method_info: Some(new_info),
@@ -2845,7 +2845,7 @@ impl Monomorphizer {
                                     // Potential blanket impl method — mark for blanket instantiation
                                     Some(MonomorphInfo {
                                         generic_name: old_func_name,
-                                        type_args: type_args,
+                                        type_args,
                                         is_blanket: true,
                                     })
                                 };
@@ -2897,7 +2897,7 @@ impl Monomorphizer {
                             // belongs to the module where the generic was defined, not the
                             // module that triggered monomorphization.
                             *method_func = FunctionRef {
-                                module_source: module_source,
+                                module_source,
                                 name: new_func_name,
                                 monomorph_info,
                                 method_info: Some(new_info),

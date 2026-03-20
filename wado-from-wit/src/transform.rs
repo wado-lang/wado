@@ -82,7 +82,7 @@ impl<'a> Transformer<'a> {
             module.effects.push(WadoEffect {
                 name: to_upper_camel_case(&iface_name),
                 doc_comment: iface.docs.contents.clone(),
-                wasi_interface: wasi_interface,
+                wasi_interface,
                 functions,
             });
         }
