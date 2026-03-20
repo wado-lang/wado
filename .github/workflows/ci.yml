@@ -28,11 +28,11 @@ jobs:
         env:
           MISE_VERBOSE: ${{ runner.debug }}
 
-      - run: make clippy-fix
-      - run: make update-golden-fixtures
-      - run: make update-golden-format-fixtures
-      - run: make doc-stdlib
-      - run: make format
+      - run: mise run clippy-fix
+      - run: mise run update-golden-fixtures
+      - run: mise run update-golden-format-fixtures
+      - run: mise run doc-stdlib
+      - run: mise run format
 
       - name: Check working tree is clean
         id: diff
@@ -42,7 +42,7 @@ jobs:
             echo "clean=true" >> $GITHUB_OUTPUT
           else
             echo "clean=false" >> $GITHUB_OUTPUT
-            echo "::error::Working tree is dirty. Run 'make on-task-done' locally and commit the changes."
+            echo "::error::Working tree is dirty. Run 'mise run on-task-done' locally and commit the changes."
             git diff --cached --stat
             exit 1
           fi
@@ -63,7 +63,7 @@ jobs:
           ${DIFF_STAT}
           \`\`\`
 
-          Please run \`make on-task-done\` locally and commit the changes."
+          Please run \`mise run on-task-done\` locally and commit the changes."
 
           # Find existing comment with marker
           COMMENT_ID=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
@@ -145,7 +145,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: rui314/setup-mold@v1
 
-      - run: make test-wado
+      - run: mise run test-wado
 
   check-wasm32:
     name: Check (wasm32)

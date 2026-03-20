@@ -248,7 +248,7 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 Stdlib tests are co-located with their source as `*_test.wado` files (e.g., `lib/core/zlib_test.wado`). They use Wado's `test` declaration syntax and run via `wado test`:
 
 ```sh
-make test-wado   # runs all *_test.wado files
+mise run test-wado   # runs all *_test.wado files
 cargo run --bin wado -- test wado-compiler/lib/core/zlib_test.wado  # run one file
 ```
 

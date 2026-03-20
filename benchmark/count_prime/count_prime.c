@@ -3,7 +3,7 @@
 // Reference: π(1,000,000) = 78,498
 //
 // How to run:
-//   make benchmark-count-prime
+//   mise run benchmark-count-prime
 //
 // Or manually:
 //   cc -O3 -o benchmark/count_prime benchmark/count_prime.c

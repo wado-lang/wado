@@ -42,7 +42,7 @@ git commit -m "resolve merge conflicts"
 ### 4. Run `on-task-done` to regenerate golden fixtures and test
 
 ```sh
-make on-task-done
+mise run on-task-done
 ```
 
 This will format, clippy-fix, regenerate golden fixtures, and run tests — automatically fixing any golden fixture conflicts.
@@ -52,4 +52,4 @@ This will format, clippy-fix, regenerate golden fixtures, and run tests — auto
 - Always use `-c merge.conflictstyle=zdiff3` so the merge base is visible in conflict markers (with zealous zdiff3 reducing noise)
 - Always commit the unresolved conflicts first, then resolve in a separate commit — this preserves a clear record of what the conflicts looked like vs how they were resolved
 - Do NOT squash the two commits together
-- Do NOT manually resolve golden fixture conflicts — `make on-task-done` handles them
+- Do NOT manually resolve golden fixture conflicts — `mise run on-task-done` handles them

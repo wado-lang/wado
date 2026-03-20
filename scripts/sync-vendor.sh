@@ -52,7 +52,7 @@ else
 fi
 
 # Verify mise.toml wasmtime CLI version consistency
-MISE_VERSION=$(grep '^wasmtime' .mise.toml 2>/dev/null | sed 's/.*= "//;s/"//')
+MISE_VERSION=$(grep '^wasmtime' mise.toml 2>/dev/null | sed 's/.*= "//;s/"//')
 if [ -n "${MISE_VERSION}" ] && [ "${MISE_VERSION}" != "${MAJOR}" ]; then
     echo "WARNING: .mise.toml wasmtime = \"${MISE_VERSION}\" does not match major version ${MAJOR}"
     echo "Consider updating .mise.toml: wasmtime = \"${MAJOR}\""
@@ -67,4 +67,4 @@ for submodule in vendor/wasm vendor/wasi vendor/wasm-tools vendor/component-mode
 done
 
 echo ""
-echo "Done. Run 'make update-stdlib-wasi' to regenerate WASI stdlib files if needed."
+echo "Done. Run 'mise run update-stdlib-wasi' to regenerate WASI stdlib files if needed."

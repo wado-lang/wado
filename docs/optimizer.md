@@ -205,7 +205,7 @@ After parameter SROA, substitutes `StructGet(LocalGet(x), field)` with the inner
 
 ## Testing Strategy
 
-1. **Golden Fixtures:** `tests/fixtures.golden/*.wir.wado` captures optimized WIR output. Regenerate with `make update-golden-fixtures`.
+1. **Golden Fixtures:** `tests/fixtures.golden/*.wir.wado` captures optimized WIR output. Regenerate with `mise run update-golden-fixtures`.
 2. **Benchmark Suite:** sieve, mandelbrot, count-prime benchmarks.
 3. **Correctness Tests:** E2E fixtures ensure optimizations preserve semantics.
 4. **WIR pattern tests:** `wir_expect:Ox` / `wir_not_expect:Ox` in E2E fixtures verify specific optimization effects.

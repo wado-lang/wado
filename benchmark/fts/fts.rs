@@ -3,7 +3,7 @@
 // Uses a linear congruential generator for deterministic float sequence.
 //
 // How to run:
-//   make benchmark-fts
+//   mise run benchmark-fts
 
 use std::fmt::Write;
 use std::time::Instant;

@@ -18,7 +18,7 @@ wasmtime = "42"
 node = "24"
 
 # Optional tools below are NOT in [tools] because mise doesn't support per-tool
-# optional flag. They are installed best-effort via `make on-task-started`.
+# optional flag. They are installed best-effort via `mise run on-task-started`.
 #   github:cli/cli = "latest"  # GitHub CLI
 
 [settings]
@@ -28,24 +28,183 @@ auto_install = true
 # Use verbose output for debugging (can be set to false for quieter operation)
 verbose = false
 
-[tasks.sync-vendor]
-description = "Sync vendor submodules (wasmtime pinned to Cargo.lock, others to latest)"
-run = "scripts/sync-vendor.sh"
+[env]
+RUSTFLAGS = {value = "-D warnings", default = true}
 
-[tasks.list-todo]
-description = "List E2E test fixtures marked with TODO: true"
+# =============================================================================
+# Setup & Workflow
+# =============================================================================
+
+[tasks.on-task-started]
+description = "Set up development environment (install mise and project tools)"
 run = """
-grep -l '"TODO": true' wado-compiler/tests/fixtures/*.wado 2>/dev/null | \
-  sort
+#!/usr/bin/env bash
+echo "Setting up development environment..."
+if ! command -v mise >/dev/null 2>&1; then
+    echo "Installing mise..."
+    curl -fsSL https://mise.run | sh
+    echo ""
+    echo "mise installed. Please restart your shell or run:"
+    echo "  echo 'eval \"$(~/.local/bin/mise activate bash)\"' >> ~/.bashrc  # for bash"
+    echo "  echo 'eval \"$(~/.local/bin/mise activate zsh)\"' >> ~/.zshrc   # for zsh"
+    echo ""
+    echo "Then run 'mise run on-task-started' again to install project tools."
+else
+    echo "mise is already installed."
+    echo "Installing project tools..."
+    mise install
+    echo "Installing optional tools..."
+    mise install github:cli/cli@latest 2>&1 || echo "  [skip] github:cli/cli (install failed, non-fatal)"
+    echo ""
+    echo "Development environment ready."
+fi
+"""
+
+[tasks.on-task-done]
+description = "Format, clippy-fix, update golden fixtures, regenerate stdlib docs, and test"
+run = """
+#!/usr/bin/env bash
+set -e
+echo "=== clippy-fix ==="
+mise run clippy-fix
+echo "=== update-golden-fixtures ==="
+mise run update-golden-fixtures
+echo "=== update-golden-format-fixtures ==="
+mise run update-golden-format-fixtures
+echo "=== doc-stdlib ==="
+mise run doc-stdlib
+echo "=== format ==="
+mise run format
+echo "=== test ==="
+mise run test
+echo "=== test-wado ==="
+mise run test-wado
+echo ""
+echo "All artifacts are up-to-date and tested."
+"""
+
+# =============================================================================
+# Build
+# =============================================================================
+
+[tasks.build]
+description = "Check Rust crates (host + wasm32 targets)"
+run = """
+#!/usr/bin/env bash
+set -e
+mise run update-bundled
+cargo check
+cargo check -p wado-compiler --target wasm32-unknown-unknown
+cargo check -p wado-manifest --target wasm32-unknown-unknown
+"""
+
+[tasks.hello]
+description = "Compile example/hello.wado to WAT and Wasm"
+run = """
+#!/usr/bin/env bash
+set -e
+cargo run -p wado-cli -- compile -O2 -o example/hello.wat  example/hello.wado
+cargo run -p wado-cli -- compile -O2 -o example/hello.wasm example/hello.wado
+"""
+
+[tasks.hello-run]
+description = "Run example/hello.wado"
+run = "cargo run -p wado-cli -- run example/hello.wado"
+
+[tasks.hello-run-wasmtime]
+description = "Compile and run hello.wado directly with wasmtime"
+depends = ["hello"]
+run = "wasmtime run -S p3=y -W component-model=y -W component-model-gc=y -W component-model-async=y -W component-model-async-builtins=y -W component-model-async-stackful=y -W gc=y -W function-references=y -W simd=y -W wide-arithmetic=y -W threads=y --invoke 'run()' example/hello.wasm"
+
+# =============================================================================
+# Test
+# =============================================================================
+
+[tasks.test]
+description = "Run Rust crate tests"
+run = """
+#!/usr/bin/env bash
+set -e
+touch wado-compiler/tests/e2e.rs
+cargo test
+"""
+
+[tasks.test-wado]
+description = "Run Wado module tests"
+run = "cargo run -p wado-cli -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado"
+
+[tasks.test-cov]
+description = "Run tests with coverage"
+run = "cargo llvm-cov --all-features --workspace"
+
+[tasks.test-cov-html]
+description = "Run tests with coverage (HTML report)"
+run = """
+#!/usr/bin/env bash
+set -e
+cargo llvm-cov --all-features --workspace --html
+echo "Coverage report generated at target/llvm-cov/html/index.html"
+"""
+
+# =============================================================================
+# Format & Lint
+# =============================================================================
+
+[tasks.format]
+description = "Format Rust and Markdown files"
+run = """
+#!/usr/bin/env bash
+set -e
+cargo fmt --verbose --all
+dprint fmt
+"""
+
+[tasks.format-wado]
+description = "Format all Wado source files"
+run = """
+#!/usr/bin/env bash
+set -e
+cargo run --bin wado -- format -w \
+    $(grep -L '"compile_error"' wado-compiler/tests/fixtures/**/*.wado) \
+    $(find wado-compiler/lib example benchmark wasm-size -name '*.wado')
+"""
+
+[tasks.clippy]
+description = "Run clippy checks"
+run = "cargo clippy --all --all-features -- -D warnings"
+
+[tasks.clippy-fix]
+description = "Run clippy auto-fix"
+run = "cargo clippy --all --all-features --fix --allow-dirty --allow-staged"
+
+# =============================================================================
+# Golden Fixtures
+# =============================================================================
+
+[tasks.update-golden-fixtures]
+description = "Regenerate WIR golden fixtures"
+run = """
+#!/usr/bin/env bash
+set -e
+mkdir -p wado-compiler/tests/fixtures.golden
+rm -rf wado-compiler/tests/fixtures.golden/*.*
+cargo run --bin wado -- dump --wir -O2 \
+    -o 'wado-compiler/tests/fixtures.golden/{name}.wir.wado' \
+    wado-compiler/tests/fixtures/*.wado
 """
 
 [tasks.update-golden-format-fixtures]
 description = "Regenerate format fixture golden files (clean, TIR, lower, optimize, WIR, WAT)"
 file = "scripts/update-golden-format-fixtures.sh"
 
+# =============================================================================
+# Documentation
+# =============================================================================
+
 [tasks.doc-stdlib]
 description = "Generate stdlib cheatsheet docs (core + wasi)"
 run = """
+#!/usr/bin/env bash
 set -e
 cargo build --bin wado --quiet
 
@@ -70,3 +229,163 @@ cargo run --bin wado --quiet -- doc -f markdown --title "WASI Standard Library" 
 
 echo "Done."
 """
+
+# =============================================================================
+# Clean
+# =============================================================================
+
+[tasks.clean]
+description = "Clean all build artifacts"
+run = """
+#!/usr/bin/env bash
+cargo clean
+rm -f example/*.wat example/*.wasm
+mise run -C benchmark clean
+mise run -C wasm-size clean
+"""
+
+# =============================================================================
+# VS Code Extension
+# =============================================================================
+
+[tasks.install-wado-vscode-dev]
+description = "Install wado-vscode extension for development"
+run = """
+#!/usr/bin/env bash
+if [ -e ~/.vscode/extensions/wado-lang.wado-0.0.1 ]; then
+    echo "wado-vscode is already installed"
+else
+    cd wado-vscode && npm install && npm run compile
+    ln -s "$PWD" ~/.vscode/extensions/wado-lang.wado-0.0.1
+    echo "wado-vscode installed. Restart VS Code to activate."
+fi
+"""
+
+[tasks.clean-wado-vscode-dev]
+description = "Remove wado-vscode development symlink"
+run = """
+#!/usr/bin/env bash
+rm -f ~/.vscode/extensions/wado-lang.wado-0.0.1
+echo "wado-vscode symlink removed. Restart VS Code to deactivate."
+"""
+
+[tasks.test-wado-vscode]
+description = "Run wado-vscode tests"
+run = "cd wado-vscode && npm install && npm run test:unit && npm run test"
+
+[tasks.update-wado-vscode-grammar]
+description = "Regenerate wado-vscode syntax files from syntax.rs"
+run = """
+#!/usr/bin/env bash
+set -e
+cargo run --bin wado -- syntax --format tmLanguage -o wado-vscode/syntaxes/wado.tmLanguage.json
+cargo run --bin wado -- syntax --format language-config -o wado-vscode/language-configuration.json
+echo "Updated wado-vscode syntax files"
+"""
+
+[tasks.update-json-schema-files]
+description = "Download TextMate grammar and language-configuration JSON schemas"
+run = """
+#!/usr/bin/env bash
+set -e
+mkdir -p wado-cli/schemas
+echo "Downloading TextMate grammar schema..."
+curl -sL "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json" \
+    | sed 's|"$schema": "http://json-schema.org/schema#"|"$schema": "http://json-schema.org/draft-07/schema#"|g; s|"id":|"$id":|g' \
+    > wado-cli/schemas/tmlanguage.schema.json
+echo "Downloading VS Code language-configuration schema..."
+curl -sL "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/language-configuration.json" \
+    > wado-cli/schemas/language-configuration.schema.json
+echo "Updated JSON schema files in wado-cli/schemas/"
+"""
+
+# =============================================================================
+# Vendor & Stdlib
+# =============================================================================
+
+[tasks.sync-vendor]
+description = "Sync vendor submodules (wasmtime pinned to Cargo.lock, others to latest)"
+run = "scripts/sync-vendor.sh"
+
+[tasks.update-vendor]
+description = "Update all vendor submodules to latest remote"
+run = "git submodule update --remote vendor/wasm vendor/wasi vendor/wasmtime vendor/wasm-tools"
+
+[tasks.update-stdlib-wasi]
+description = "Regenerate wasi stdlib from WIT files"
+run = """
+#!/usr/bin/env bash
+set -e
+rm -rf wado-compiler/lib/wasi/
+mkdir -p wado-compiler/lib/wasi/
+cargo run -p wado-from-wit -- \
+    --wit-dir vendor/wasmtime/crates/wasi-http/src/p3/wit \
+    --output-dir wado-compiler/lib/wasi
+cargo run -p wado-from-wit -- \
+    --wit-dir vendor/wasmtime/crates/wasi/src/p3/wit \
+    --output-dir wado-compiler/lib/wasi
+"""
+
+[tasks.update-bundled]
+description = "Rebuild bundled libm Wasm module"
+run = """
+#!/usr/bin/env bash
+set -e
+cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release
+wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > wado-compiler/lib/builtins/wado-bundled-libm.wat
+"""
+
+# =============================================================================
+# Misc
+# =============================================================================
+
+[tasks.list-todo]
+description = "List E2E test fixtures marked with TODO: true"
+run = """
+grep -l '"TODO": true' wado-compiler/tests/fixtures/*.wado 2>/dev/null | \
+  sort
+"""
+
+# =============================================================================
+# Benchmarks & Wasm Size (delegate to subdirectory mise configs)
+# =============================================================================
+
+[tasks.benchmark-all]
+description = "Run all benchmarks"
+run = "mise run -C benchmark all"
+
+[tasks.benchmark-count-prime]
+description = "Run count_prime benchmark"
+run = "mise run -C benchmark count-prime"
+
+[tasks.benchmark-mandelbrot]
+description = "Run mandelbrot benchmark"
+run = "mise run -C benchmark mandelbrot"
+
+[tasks.benchmark-sieve]
+description = "Run sieve benchmark"
+run = "mise run -C benchmark sieve"
+
+[tasks.benchmark-zlib]
+description = "Run zlib benchmark"
+run = "mise run -C benchmark zlib"
+
+[tasks.benchmark-fts]
+description = "Run fts benchmark"
+run = "mise run -C benchmark fts"
+
+[tasks.benchmark-json-twitter]
+description = "Run json-twitter benchmark"
+run = "mise run -C benchmark json-twitter"
+
+[tasks.benchmark-json-canada]
+description = "Run json-canada benchmark"
+run = "mise run -C benchmark json-canada"
+
+[tasks.benchmark-json-catalog]
+description = "Run json-catalog benchmark"
+run = "mise run -C benchmark json-catalog"
+
+[tasks.report-wasm-size]
+description = "Build all languages and report Wasm sizes"
+run = "mise run -C wasm-size report-wasm-size"
