@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774014461610,
+  "lastUpdate": 1774019469668,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5054,6 +5054,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/313d252300098f0b76efff24bc0058c18afa80d7"
         },
         "date": 1774014461404,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22261,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "83153651cdce28a832a1730db95b77b1fd07d3df",
+          "message": "Merge pull request #628 from wado-lang/claude/organize-clippy-rules-Hdpz3\n\nRefactor: Extract clippy lint allowances to Cargo.toml",
+          "timestamp": "2026-03-21T00:08:42+09:00",
+          "tree_id": "82cec4f87ae8ce36e60b63c9c90fbdb6e40bfc98",
+          "url": "https://github.com/wado-lang/wado/commit/83153651cdce28a832a1730db95b77b1fd07d3df"
+        },
+        "date": 1774019469443,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
