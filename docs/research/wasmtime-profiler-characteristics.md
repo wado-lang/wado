@@ -12,23 +12,23 @@ benchmarks in the Wado project (wasmtime 42, component-model-async enabled).
 
 ### zlib (100KB x 10 iterations, compress + decompress)
 
-| Mode     | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 | Median | Overhead |
-|----------|-------|-------|-------|-------|-------|--------|----------|
-| none     | 360   | 362   | 363   | 361   | 387   | 362 ms | baseline |
-| guest    | 380   | 405   | 418   | 391   | 386   | 391 ms | +8.0%    |
-| jitdump  | 367   | 363   | 396   | 363   | 389   | 367 ms | +1.4%    |
-| perfmap  | 356   | 355   | 356   | 392   | 365   | 356 ms | -1.7%*  |
+| Mode    | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 | Median | Overhead |
+| ------- | ----- | ----- | ----- | ----- | ----- | ------ | -------- |
+| none    | 360   | 362   | 363   | 361   | 387   | 362 ms | baseline |
+| guest   | 380   | 405   | 418   | 391   | 386   | 391 ms | +8.0%    |
+| jitdump | 367   | 363   | 396   | 363   | 389   | 367 ms | +1.4%    |
+| perfmap | 356   | 355   | 356   | 392   | 365   | 356 ms | -1.7%*   |
 
 \* Within measurement noise — effectively zero overhead.
 
 ### json-twitter (631KB JSON, 100 statuses)
 
-| Mode     | Run 1  | Run 2  | Run 3  | Run 4  | Run 5  | Median  | Overhead |
-|----------|--------|--------|--------|--------|--------|---------|----------|
-| none     | 41.5   | 41.4   | 41.4   | 45.3   | 43.1   | 41.5 ms | baseline |
-| guest    | 47.9   | 43.4   | 44.3   | 42.4   | 42.6   | 43.4 ms | +4.6%    |
-| jitdump  | 41.8   | 41.8   | 44.6   | 41.5   | 41.5   | 41.8 ms | +0.7%    |
-| perfmap  | 42.7   | 41.1   | 41.4   | 42.7   | 44.6   | 42.7 ms | +2.9%    |
+| Mode    | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 | Median  | Overhead |
+| ------- | ----- | ----- | ----- | ----- | ----- | ------- | -------- |
+| none    | 41.5  | 41.4  | 41.4  | 45.3  | 43.1  | 41.5 ms | baseline |
+| guest   | 47.9  | 43.4  | 44.3  | 42.4  | 42.6  | 43.4 ms | +4.6%    |
+| jitdump | 41.8  | 41.8  | 44.6  | 41.5  | 41.5  | 41.8 ms | +0.7%    |
+| perfmap | 42.7  | 41.1  | 41.4  | 42.7  | 44.6  | 42.7 ms | +2.9%    |
 
 ## Profiler Characteristics
 
@@ -43,12 +43,14 @@ capture the Wasm call stack.
 `https://profiler.firefox.com/`.
 
 **Strengths:**
+
 - Cross-platform (works on Linux, macOS, Windows)
 - Self-contained — no external tools required
 - Configurable sampling interval (down to 1ms)
 - Output includes call stacks with function names
 
 **Weaknesses:**
+
 - **Does not work with component-model-async (CM-async):** In the current Wado
   runtime (wasmtime 42 with `component_model_async`, `component_model_async_builtins`,
   `component_model_async_stackful` enabled), the guest profiler consistently produces
@@ -73,6 +75,7 @@ with Linux `perf` via `perf inject --jit`.
 **Output:** Binary `jit-<pid>.dump` file in the current working directory.
 
 **Usage workflow:**
+
 ```sh
 perf record -k mono wado run --profile jitdump prog.wado
 perf inject --jit --input perf.data --output perf.jit.data
@@ -82,6 +85,7 @@ perf annotate --input perf.jit.data -s <function_name>
 ```
 
 **Strengths:**
+
 - Extremely low runtime overhead (~1%) — only writes symbol info at JIT time
 - Full system-level profiling (guest Wasm + host runtime + kernel)
 - Instruction-level precision when combined with `perf annotate`
@@ -89,6 +93,7 @@ perf annotate --input perf.jit.data -s <function_name>
 - Works correctly with CM-async
 
 **Weaknesses:**
+
 - Linux-only (requires `perf`)
 - Requires post-processing with `perf inject --jit`
 - Largest output files (~550-615 KB) because it includes JIT machine code
@@ -108,6 +113,7 @@ addresses to symbol names. This is the simplest integration with Linux `perf` �
 **Output:** Text file `/tmp/perf-<pid>.map` with format: `<address> <size> <name>`.
 
 **Usage workflow:**
+
 ```sh
 perf record -k mono wado run --profile perfmap prog.wado
 perf report --input perf.data
@@ -116,6 +122,7 @@ samply record wado run --profile perfmap prog.wado
 ```
 
 **Strengths:**
+
 - Effectively zero runtime overhead (within measurement noise)
 - Simpler workflow than jitdump — no `perf inject` step needed
 - Compatible with `samply` for Firefox Profiler visualization
@@ -123,6 +130,7 @@ samply record wado run --profile perfmap prog.wado
 - Small output files (~15-27 KB)
 
 **Weaknesses:**
+
 - Linux-only (requires `perf` or `samply`)
 - Function-level granularity only — no instruction-level annotation
 - Map files accumulate in `/tmp` and are not auto-cleaned
@@ -154,15 +162,15 @@ the same generic function (e.g., `deserialize` for `Status` vs `UserMention`).
 
 ### Data Granularity
 
-| Capability                    | PerfMap              | JitDump                        |
-|-------------------------------|----------------------|--------------------------------|
-| Function-level profiling      | Yes                  | Yes                            |
-| Which function is hot         | Yes                  | Yes                            |
-| Call graph (flat)             | Yes                  | Yes                            |
-| Call graph (with `--call-graph=dwarf`) | Host frames only | Host frames only       |
-| Instruction-level annotation  | **No**               | **Yes** (`perf annotate`)      |
-| Machine code disassembly      | **No**               | **Yes** (code embedded in dump)|
-| Source-line mapping (DWARF)   | No                   | No (no DEBUG_INFO records)     |
+| Capability                             | PerfMap          | JitDump                         |
+| -------------------------------------- | ---------------- | ------------------------------- |
+| Function-level profiling               | Yes              | Yes                             |
+| Which function is hot                  | Yes              | Yes                             |
+| Call graph (flat)                      | Yes              | Yes                             |
+| Call graph (with `--call-graph=dwarf`) | Host frames only | Host frames only                |
+| Instruction-level annotation           | **No**           | **Yes** (`perf annotate`)       |
+| Machine code disassembly               | **No**           | **Yes** (code embedded in dump) |
+| Source-line mapping (DWARF)            | No               | No (no DEBUG_INFO records)      |
 
 Key difference: JitDump embeds the actual x86-64 machine code for every JIT-compiled
 function. This enables `perf annotate` to disassemble the function and attribute
@@ -172,8 +180,8 @@ sample counts to individual instructions:
 perf annotate --input perf.jit.data -s inflate_raw_ex
 ```
 
-This tells you not just "inflate_raw_ex is hot" but *which loop or instruction
-within inflate_raw_ex* is the bottleneck.
+This tells you not just "inflate_raw_ex is hot" but _which loop or instruction
+within inflate_raw_ex_ is the bottleneck.
 
 PerfMap only maps address ranges to function names. `perf report` shows which function
 is hot, but cannot zoom in further.
@@ -186,43 +194,43 @@ is at the machine-code instruction level (jitdump) or function level (perfmap).
 
 For json-twitter (a real-world JSON parsing workload):
 
-| Category                    | Count | Example                                             |
-|-----------------------------|-------|------------------------------------------------------|
-| User Wasm functions         | 124   | `Status^Deserialize::deserialize<JsonDeserializer>` |
-| Internal Wasm (grow/realloc)| 2     | `grow_memory`, `realloc`                            |
-| Trampolines                 | 176   | `wasm_to_array_trampoline`, `native_to_wasm`        |
-| Wasmtime builtins           | 18    | `wasmtime_builtin_gc_alloc_raw`                     |
-| Component trampolines       | 48    | `component-trampolines[N]-array-call-*`             |
+| Category                     | Count | Example                                             |
+| ---------------------------- | ----- | --------------------------------------------------- |
+| User Wasm functions          | 124   | `Status^Deserialize::deserialize<JsonDeserializer>` |
+| Internal Wasm (grow/realloc) | 2     | `grow_memory`, `realloc`                            |
+| Trampolines                  | 176   | `wasm_to_array_trampoline`, `native_to_wasm`        |
+| Wasmtime builtins            | 18    | `wasmtime_builtin_gc_alloc_raw`                     |
+| Component trampolines        | 48    | `component-trampolines[N]-array-call-*`             |
 
 Function size distribution (user Wasm, json-twitter):
 
 ```
-  < 100 bytes:    17 functions
-  100-500 bytes:  33 functions
-  500-2KB:        35 functions
-  2KB-10KB:       36 functions
-  > 10KB:          3 functions (largest: 20.2 KB)
+< 100 bytes:    17 functions
+100-500 bytes:  33 functions
+500-2KB:        35 functions
+2KB-10KB:       36 functions
+> 10KB:          3 functions (largest: 20.2 KB)
 ```
 
 Both profilers cover all these categories equally.
 
 ### Workflow Complexity
 
-| Step                        | PerfMap                                    | JitDump                                    |
-|-----------------------------|--------------------------------------------|--------------------------------------------|
-| 1. Record                   | `perf record -k mono wado run --profile perfmap ...` | `perf record -k mono wado run --profile jitdump ...` |
-| 2. Post-process             | —                                          | `perf inject --jit -i perf.data -o perf.jit.data` |
-| 3. Report                   | `perf report`                              | `perf report -i perf.jit.data`            |
-| 4. Annotate (optional)      | N/A                                        | `perf annotate -i perf.jit.data -s func`  |
-| Alternative                 | `samply record wado run --profile perfmap ...` | —                                     |
-| Cleanup                     | `/tmp/perf-*.map` (small)                  | `jit-*.dump` in CWD (550-615 KB each)    |
+| Step                   | PerfMap                                              | JitDump                                              |
+| ---------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
+| 1. Record              | `perf record -k mono wado run --profile perfmap ...` | `perf record -k mono wado run --profile jitdump ...` |
+| 2. Post-process        | —                                                    | `perf inject --jit -i perf.data -o perf.jit.data`    |
+| 3. Report              | `perf report`                                        | `perf report -i perf.jit.data`                       |
+| 4. Annotate (optional) | N/A                                                  | `perf annotate -i perf.jit.data -s func`             |
+| Alternative            | `samply record wado run --profile perfmap ...`       | —                                                    |
+| Cleanup                | `/tmp/perf-*.map` (small)                            | `jit-*.dump` in CWD (550-615 KB each)                |
 
 ### Output Size
 
-| Benchmark     | PerfMap | JitDump | Ratio  |
-|---------------|---------|---------|--------|
-| zlib          | 15 KB   | 553 KB  | 37×    |
-| json-twitter  | 27 KB   | 615 KB  | 23×    |
+| Benchmark    | PerfMap | JitDump | Ratio |
+| ------------ | ------- | ------- | ----- |
+| zlib         | 15 KB   | 553 KB  | 37×   |
+| json-twitter | 27 KB   | 615 KB  | 23×   |
 
 JitDump files are 23-37× larger because they contain actual machine code bytes.
 
@@ -239,20 +247,22 @@ Is the guest profiler working? (CM-async disabled)
 Wado's compiler aggressively inlines functions (`#[inline]`, `#[inline(always)]`,
 and optimizer-driven inlining). This means the "hot function" in a profile is often
 a large inlined blob (e.g., `run` at 7.6 KB containing dozens of inlined callees).
-Function-level attribution (perfmap) would only tell you "run is hot" — not *which
-inlined callee* within `run` is the actual bottleneck.
+Function-level attribution (perfmap) would only tell you "run is hot" — not _which
+inlined callee_ within `run` is the actual bottleneck.
 
 JitDump solves this because `perf annotate` shows instruction-level sample attribution
 within the inlined function body. Even without DWARF debug info, you can identify
 hot loops and correlate instruction patterns back to specific Wado source operations.
 
 **When to use perfmap instead:**
+
 - Quick sanity checks where you only need "is this function hot at all?"
 - When using `samply` for Firefox Profiler visualization (samply reads perfmap but
   not jitdump)
 - When output file size matters (perfmap is 23-37× smaller)
 
 **Typical workflow:**
+
 ```sh
 # 1. Record with jitdump
 perf record -k mono wado run --profile jitdump prog.wado
@@ -279,5 +289,6 @@ execution mode used in Wado. The root cause:
 4. The epoch callback either never fires or fires when no Wasm frames are on the stack
 
 This means the guest profiler requires either:
+
 - Wasmtime-side fixes to support profiling in CM-async mode
 - A separate profiling approach that doesn't rely on epoch interruption
