@@ -2561,14 +2561,13 @@ impl Parser {
                 // This is a qualified name like Effect::function or namespace::Type
                 let method = self.consume_ident()?;
 
-                // Check for namespace::Type::method(...) pattern
+                // Check for namespace::Type::method(...) or namespace::Enum::Case pattern
                 // Only attempt if next tokens are :: followed by an identifier
                 if self.check(&TokenKind::ColonColon)
                     && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
                 {
-                    let ns_checkpoint = self.pos;
                     self.advance(); // consume ::
-                    let static_method = self.consume_ident()?;
+                    let third = self.consume_ident()?;
 
                     // Check for call: namespace::Type::method(...)
                     if self.check(&TokenKind::LParen) {
@@ -2581,15 +2580,19 @@ impl Parser {
                                 name: format!("{name}::{method}"),
                                 span: start_span,
                             }),
-                            method: static_method,
+                            method: third,
                             args,
                             has_trailing_comma,
                             span: start_span.merge(&end_span),
                         })));
                     }
 
-                    // Not a call, backtrack
-                    self.pos = ns_checkpoint;
+                    // Non-call: namespace::Enum::Case or other triple-qualified ident
+                    let qualified_name = format!("{name}::{method}::{third}");
+                    return Ok(Expr::Ident(IdentExpr {
+                        name: qualified_name,
+                        span: start_span,
+                    }));
                 }
 
                 let qualified_name = format!("{name}::{method}");

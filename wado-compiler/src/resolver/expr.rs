@@ -436,6 +436,78 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ident.span,
                 );
             }
+
+            // Check for namespace-qualified enum/variant/flags: ns::Type::Case
+            if let Some(ns_module) = self.symbols.lookup_namespace(prefix).cloned()
+                && let Some((type_name, case_name)) = suffix.split_once("::")
+            {
+                // Check enum case: ns::Color::Red
+                if let Some(module_enums) = self.all_enum_cases.get(&ns_module)
+                    && let Some(enum_info) = module_enums.get(type_name)
+                    && let Some(case_data) = enum_info.cases.iter().find(|c| c.name == case_name)
+                {
+                    let enum_type = self
+                        .type_table
+                        .borrow_mut()
+                        .make_enum(type_name.to_string(), ns_module);
+                    return TirExpr::new(
+                        TirExprKind::EnumConstruct {
+                            enum_type,
+                            case_index: case_data.index,
+                            case_name: case_data.name.clone(),
+                        },
+                        enum_type,
+                        ident.span,
+                    );
+                }
+
+                // Check variant case (unit payload): ns::Shape::Point
+                if let Some(module_variants) = self.all_variant_cases.get(&ns_module)
+                    && let Some(variant_info) = module_variants.get(type_name)
+                    && let Some((case_index, case_data)) = variant_info
+                        .cases
+                        .iter()
+                        .enumerate()
+                        .find(|(_, c)| c.name == case_name)
+                        .map(|(i, c)| (i, c.clone()))
+                {
+                    let payload_is_unit = matches!(
+                        self.type_table.borrow().get(case_data.payload),
+                        ResolvedType::Unit
+                    );
+                    if payload_is_unit {
+                        let variant_type = self
+                            .type_table
+                            .borrow_mut()
+                            .make_variant(type_name.to_string(), ns_module);
+                        return TirExpr::new(
+                            TirExprKind::VariantConstruct {
+                                variant_type,
+                                case_index: case_index as u32,
+                                case_name: case_data.name.clone(),
+                                payload: None,
+                            },
+                            variant_type,
+                            ident.span,
+                        );
+                    }
+                }
+
+                // Check flags member: ns::Perms::Read
+                if let Some(module_flags) = self.all_flags_cases.get(&ns_module)
+                    && let Some(flags_info) = module_flags.get(type_name)
+                    && let Some(member) = flags_info.members.iter().find(|m| m.name == case_name)
+                {
+                    return TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: u64::from(member.bitmask),
+                            repr: member.bitmask.to_string(),
+                        },
+                        flags_info.type_id,
+                        ident.span,
+                    );
+                }
+            }
         }
 
         // Check for global variables in current module
