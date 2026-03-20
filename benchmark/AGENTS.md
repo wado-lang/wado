@@ -37,7 +37,7 @@ View guest profiles at https://profiler.firefox.com/. See `README.md` for full d
 
 ## Updating Results
 
-After running benchmarks, update `README.md` with the new results. Use the `/benchmark` skill or run `make benchmark-all` and `make report-wasm-size`, then update the tables in `README.md` accordingly.
+After running benchmarks, update `README.md` with the new results. Use the `/benchmark` skill or run `mise run benchmark-all` and `mise run report-wasm-size`, then update the tables in `README.md` accordingly.
 
 ## Structure
 

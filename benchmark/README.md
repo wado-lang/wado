@@ -13,7 +13,7 @@ Computes the Mandelbrot fractal by counting total iterations across a 1024x768 g
 - **Grid**: 1024x768 pixels, max 256 iterations per pixel
 
 ```bash
-make benchmark-mandelbrot
+mise run benchmark-mandelbrot
 ```
 
 ### Prime Counting (`count_prime.*`)
@@ -25,7 +25,7 @@ Counts prime numbers up to 10,000,000 using trial division.
 - **Reference**: π(10,000,000) = 664,579 primes
 
 ```bash
-make benchmark-count-prime
+mise run benchmark-count-prime
 ```
 
 ### Sieve of Eratosthenes (`sieve.*`)
@@ -37,7 +37,7 @@ Counts prime numbers up to 10,000,000 using the sieve algorithm.
 - **Reference**: π(10,000,000) = 664,579 primes (same as count_prime)
 
 ```bash
-make benchmark-sieve
+mise run benchmark-sieve
 ```
 
 ### zlib Compression (`zlib/`)
@@ -49,7 +49,7 @@ Compresses and decompresses 100KB of patterned data (bytes `i % 256`) for 10 ite
 - **Comparison**: Wado (`core:zlib`, pure Wado) vs C zlib-1.3.1 (Wasm/wasmtime) vs zlib-rs (native Rust)
 
 ```bash
-make benchmark-zlib
+mise run benchmark-zlib
 ```
 
 ### Float-to-String (`fts.*`)
@@ -61,7 +61,7 @@ Converts 500,000 random f64 values (0.0–1.0) to decimal strings with 6 decimal
 - **Comparison**: C (`snprintf`), Rust (`write!`), Zig (`std.fmt`), Wado (pure Wado via template literal)
 
 ```bash
-make benchmark-fts
+mise run benchmark-fts
 ```
 
 ### JSON Parsing (`json_twitter/`, `json_canada/`, `json_catalog/`)
@@ -75,9 +75,9 @@ Parses real-world JSON datasets using typed deserialization (struct-based parsin
 Each benchmark reads the JSON file once, then deserializes it into typed structs. Compares Wado (`core:json` + `core:serde`, pure Wado compiled to Wasm) against Rust (`serde_json`, native).
 
 ```bash
-make benchmark-json-twitter
-make benchmark-json-canada
-make benchmark-json-catalog
+mise run benchmark-json-twitter
+mise run benchmark-json-canada
+mise run benchmark-json-catalog
 ```
 
 ## Prerequisites
@@ -93,17 +93,17 @@ To run all benchmarks, ensure you have the following tools installed:
 
 ```bash
 # Run all benchmarks at once
-make benchmark-all
+mise run benchmark-all
 
 # Or run individually
-make benchmark-mandelbrot
-make benchmark-count-prime
-make benchmark-sieve
-make benchmark-zlib
-make benchmark-fts
-make benchmark-json-twitter
-make benchmark-json-canada
-make benchmark-json-catalog
+mise run benchmark-mandelbrot
+mise run benchmark-count-prime
+mise run benchmark-sieve
+mise run benchmark-zlib
+mise run benchmark-fts
+mise run benchmark-json-twitter
+mise run benchmark-json-canada
+mise run benchmark-json-catalog
 ```
 
 ## Recent Results

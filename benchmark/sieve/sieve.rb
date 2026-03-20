@@ -4,7 +4,7 @@
 # Reference: π(10,000,000) = 664,579
 #
 # How to run:
-#   make benchmark-sieve
+#   mise run benchmark-sieve
 #
 # Or manually:
 #   ruby benchmark/sieve.rb

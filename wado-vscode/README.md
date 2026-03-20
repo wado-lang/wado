@@ -15,8 +15,8 @@ Language support for the [Wado programming language](https://github.com/wado-lan
 From the repository root:
 
 ```bash
-make install-wado-vscode-dev  # Install extension via symlink
-make clean-wado-vscode-dev    # Remove the symlink
+mise run install-wado-vscode-dev  # Install extension via symlink
+mise run clean-wado-vscode-dev    # Remove the symlink
 ```
 
 Then restart VS Code (Cmd+Q, then reopen).
@@ -43,7 +43,7 @@ npm run compile
 From the repository root:
 
 ```bash
-make test-wado-vscode  # Run all tests (unit + E2E)
+mise run test-wado-vscode  # Run all tests (unit + E2E)
 ```
 
 Or from `wado-vscode/`:
@@ -62,7 +62,7 @@ The TextMate grammar (`syntaxes/wado.tmLanguage.json`) and language configuratio
 To regenerate after language changes:
 
 ```bash
-make update-wado-vscode-grammar
+mise run update-wado-vscode-grammar
 ```
 
 This ensures both files stay in sync with the compiler's keyword and syntax definitions.
@@ -82,7 +82,7 @@ The syntax highlighting pipeline has multiple layers of validation:
 3. **JSON Schema Validation**
    - TextMate grammar validated against `tmlanguage.schema.json`
    - Language config validated against `language-configuration.schema.json`
-   - To update local schema files: `make update-json-schema-files`
+   - To update local schema files: `mise run update-json-schema-files`
 
 4. **Tokenization Tests** (`src/test/unit/tokenization.test.ts`)
    - Uses `vscode-textmate` to verify actual tokenization behavior
@@ -93,8 +93,8 @@ When adding new keywords or syntax:
 1. Add to lexer (`wado-compiler/src/lexer.rs`) and token (`token.rs`)
 2. Add to `SyntaxDefinition` (`wado-compiler/src/syntax.rs`)
 3. Run `cargo test -p wado-compiler syntax` to verify consistency
-4. Run `make update-wado-vscode-grammar` to regenerate
-5. Run `make test-wado-vscode` to verify tokenization
+4. Run `mise run update-wado-vscode-grammar` to regenerate
+5. Run `mise run test-wado-vscode` to verify tokenization
 
 ### Packaging
 

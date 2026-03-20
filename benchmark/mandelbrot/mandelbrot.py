@@ -4,7 +4,7 @@
 # Real-world use case: fractal rendering, GPU benchmarks
 #
 # How to run:
-#   make benchmark-mandelbrot
+#   mise run benchmark-mandelbrot
 #
 # Or manually:
 #   python3 benchmark/mandelbrot.py

@@ -3,7 +3,7 @@
 // Real-world use case: fractal rendering, GPU benchmarks
 //
 // How to run:
-//   make benchmark-mandelbrot
+//   mise run benchmark-mandelbrot
 //
 // Or manually:
 //   cc -O3 -ffp-contract=off -o benchmark/mandelbrot_c benchmark/mandelbrot.c

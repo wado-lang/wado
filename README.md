@@ -248,10 +248,20 @@ Show the generated WAT to an agent and ask it to spot inefficiencies. Review the
 
 ### Install Development Tools
 
-Use the provided Makefile task to set up everything automatically:
+This project uses [mise](https://mise.jdx.dev/) to manage dev tools. Install mise first:
 
 ```sh
-make on-task-started  # installs mise and all project tools
+curl -fsSL https://mise.run | sh
+# Then add to your shell profile:
+#   eval "$(~/.local/bin/mise activate bash)"  # for bash
+#   eval "$(~/.local/bin/mise activate zsh)"   # for zsh
+```
+
+Then install project tools:
+
+```sh
+mise trust                 # trust the mise.toml config (first time only)
+mise run on-task-started   # install all project tools
 ```
 
 See [mise.toml](mise.toml) for the list of managed tools.
@@ -279,9 +289,9 @@ There are E2E test fixtures in [wado-compiler/tests/fixtures/\*.wado](wado-compi
 The `wado-vscode/` directory contains a VS Code extension for syntax highlighting. It is not published to the marketplace, but you can install it locally for development:
 
 ```sh
-make install-wado-vscode-dev    # install extension to ~/.vscode via symlink
-make clean-wado-vscode-dev      # uninstall it from ~/.vscode
-make update-wado-vscode-grammar # regenerate syntax files after changing syntax.rs
+mise run install-wado-vscode-dev    # install extension to ~/.vscode via symlink
+mise run clean-wado-vscode-dev      # uninstall it from ~/.vscode
+mise run update-wado-vscode-grammar # regenerate syntax files after changing syntax.rs
 ```
 
 See [wado-vscode/README.md](wado-vscode/README.md) for more details.
@@ -289,7 +299,7 @@ See [wado-vscode/README.md](wado-vscode/README.md) for more details.
 ### On Your Task Done
 
 ```sh
-make on-task-done # format, clippy-fix, update-bundled, test
+mise run on-task-done # format, clippy-fix, update-bundled, test
 ```
 
 ## Authors

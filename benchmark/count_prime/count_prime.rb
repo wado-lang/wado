@@ -4,7 +4,7 @@
 # Reference: π(10,000,000) = 664,579
 #
 # How to run:
-#   make benchmark-count-prime
+#   mise run benchmark-count-prime
 #
 # Or manually:
 #   ruby benchmark/count_prime.rb

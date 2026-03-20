@@ -3,7 +3,7 @@
 // Reference: π(1,000,000) = 78,498
 //
 // How to run:
-//   make benchmark-count-prime
+//   mise run benchmark-count-prime
 //
 // Or manually:
 //   node benchmark/count_prime.js

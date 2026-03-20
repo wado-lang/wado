@@ -86,11 +86,11 @@ Three formatting strategies are tried in order:
 
 ## Safety: Always Commit Before Formatting
 
-**`make format-wado` is destructive.** The formatter is rule-based and discards information that is not encoded in the AST (e.g. semicolons inside inline blocks, specific whitespace). Running it on uncommitted changes can silently destroy work.
+**`mise run format-wado` is destructive.** The formatter is rule-based and discards information that is not encoded in the AST (e.g. semicolons inside inline blocks, specific whitespace). Running it on uncommitted changes can silently destroy work.
 
 Rules:
 
-1. **Always commit (or stash) before running `make format-wado`.**
+1. **Always commit (or stash) before running `mise run format-wado`.**
 2. After formatting, review the diff carefully.
 3. If the formatter has dropped meaningful information (e.g. a comment, a blank line that was intentional, or changed semantics), **reset the commit** (`git reset HEAD~1`) and fix the formatter first.
 
@@ -100,5 +100,5 @@ Rules:
 2. Run `cargo test -p wado-compiler -- format` to confirm failure.
 3. Implement the rule in `unparse.rs`.
 4. Run `mise run update-golden-format-fixtures` to regenerate golden files.
-5. Run `make format-wado` to apply the formatter to all Wado sources.
+5. Run `mise run format-wado` to apply the formatter to all Wado sources.
 6. Run `cargo test -p wado-compiler` to verify.

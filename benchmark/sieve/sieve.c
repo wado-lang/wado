@@ -3,7 +3,7 @@
 // Reference: π(10,000,000) = 664,579
 //
 // How to run:
-//   make benchmark-sieve
+//   mise run benchmark-sieve
 //
 // Or manually:
 //   clang -O3 -o benchmark/sieve_c benchmark/sieve.c

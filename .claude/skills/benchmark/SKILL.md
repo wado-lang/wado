@@ -10,7 +10,7 @@ Run all benchmarks and wasm size comparison, then update the README files.
 ## Prerequisites
 
 ```sh
-make on-task-started                                      # install mise and project tools
+mise run on-task-started                                      # install mise and project tools
 rustup target add wasm32-wasip1                           # for wasm-size Rust builds
 curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash  # for wasm-size Moonbit builds
 ```
@@ -36,8 +36,8 @@ mise trust wasm-size/mise.toml
 The first run may be slow due to cold compilation caches. Run at least twice and use the run with the most internally consistent numbers.
 
 ```sh
-make benchmark-all   # 1st run (warmup)
-make benchmark-all   # 2nd run (use these numbers)
+mise run benchmark-all   # 1st run (warmup)
+mise run benchmark-all   # 2nd run (use these numbers)
 ```
 
 Benchmarks compare Wado against C and JavaScript (plus Rust/Zig for fts, zlib-rs for zlib).
@@ -74,7 +74,7 @@ Update the "Recent Results" section:
 ### 5. Run wasm size report
 
 ```sh
-make report-wasm-size
+mise run report-wasm-size
 ```
 
 ### 6. Update wasm-size/README.md
@@ -85,5 +85,5 @@ Update the size tables with new values for all languages.
 
 - Benchmarks use mise-managed tool versions, not system versions.
 - Cloud VMs have noisy performance. Absolute times vary across runs but relative ratios are fairly stable. Choose the run with the most internally consistent numbers.
-- `make benchmark-all` runs: count-prime, mandelbrot, sieve, zlib, fts serially (MISE_JOBS=1).
-- `make report-wasm-size` builds all language targets with size-optimized flags and reports `.wasm` file sizes.
+- `mise run benchmark-all` runs: count-prime, mandelbrot, sieve, zlib, fts serially (MISE_JOBS=1).
+- `mise run report-wasm-size` builds all language targets with size-optimized flags and reports `.wasm` file sizes.
