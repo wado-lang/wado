@@ -50,7 +50,7 @@ fn precompute_modified_block(block: &TirBlock, cache: &mut ModifiedLocalsCache) 
     for stmt in &block.stmts {
         precompute_modified_stmt(stmt, &mut modified, cache);
     }
-    cache.insert(block as *const TirBlock, modified.clone());
+    cache.insert(std::ptr::from_ref::<TirBlock>(block), modified.clone());
     modified
 }
 
@@ -729,7 +729,7 @@ fn forward_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
 /// if the block isn't in the cache (should not happen in practice).
 fn lookup_modified(cache: &ModifiedLocalsCache, block: &TirBlock) -> IndexSet<u32> {
     cache
-        .get(&(block as *const TirBlock))
+        .get(&std::ptr::from_ref::<TirBlock>(block))
         .cloned()
         .unwrap_or_default()
 }
@@ -799,12 +799,16 @@ fn forward_in_stmt(
             }
             // Forward into branches with cloned state
             let mut then_known = known.clone();
-            changed |=
-                forward_in_block(then_block, &mut then_known, unsafe_locals, type_table, cache);
+            changed |= forward_in_block(
+                then_block,
+                &mut then_known,
+                unsafe_locals,
+                type_table,
+                cache,
+            );
             if let Some(eb) = else_block {
                 let mut else_known = known.clone();
-                changed |=
-                    forward_in_block(eb, &mut else_known, unsafe_locals, type_table, cache);
+                changed |= forward_in_block(eb, &mut else_known, unsafe_locals, type_table, cache);
             }
             // Only invalidate locals that were modified in branches
             known.invalidate_modified(&modified);
@@ -814,8 +818,7 @@ fn forward_in_stmt(
             let modified = lookup_modified(cache, body);
             known.invalidate_modified(&modified);
             let mut loop_known = known.clone();
-            let changed =
-                forward_in_block(body, &mut loop_known, unsafe_locals, type_table, cache);
+            let changed = forward_in_block(body, &mut loop_known, unsafe_locals, type_table, cache);
             known.invalidate_modified(&modified);
             changed
         }
@@ -834,19 +837,22 @@ fn forward_in_stmt(
             else_block,
             ..
         } => {
-            let mut changed =
-                forward_in_expr(scrutinee, known, unsafe_locals, type_table, cache);
+            let mut changed = forward_in_expr(scrutinee, known, unsafe_locals, type_table, cache);
             let mut modified = lookup_modified(cache, then_block);
             if let Some(eb) = else_block.as_ref() {
                 modified.extend(lookup_modified(cache, eb));
             }
             let mut then_known = known.clone();
-            changed |=
-                forward_in_block(then_block, &mut then_known, unsafe_locals, type_table, cache);
+            changed |= forward_in_block(
+                then_block,
+                &mut then_known,
+                unsafe_locals,
+                type_table,
+                cache,
+            );
             if let Some(eb) = else_block {
                 let mut else_known = known.clone();
-                changed |=
-                    forward_in_block(eb, &mut else_known, unsafe_locals, type_table, cache);
+                changed |= forward_in_block(eb, &mut else_known, unsafe_locals, type_table, cache);
             }
             known.invalidate_modified(&modified);
             changed
@@ -897,8 +903,7 @@ fn forward_in_expr(
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                changed |=
-                    forward_in_expr(&mut arg.expr, known, unsafe_locals, type_table, cache);
+                changed |= forward_in_expr(&mut arg.expr, known, unsafe_locals, type_table, cache);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
@@ -909,8 +914,7 @@ fn forward_in_expr(
         TirExprKind::MethodCall { receiver, args, .. } => {
             changed |= forward_in_expr(receiver, known, unsafe_locals, type_table, cache);
             for arg in args {
-                changed |=
-                    forward_in_expr(&mut arg.expr, known, unsafe_locals, type_table, cache);
+                changed |= forward_in_expr(&mut arg.expr, known, unsafe_locals, type_table, cache);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
@@ -960,8 +964,7 @@ fn forward_in_expr(
             );
             if let Some(eb) = else_branch {
                 let mut else_known = known.clone();
-                changed |=
-                    forward_in_block(eb, &mut else_known, unsafe_locals, type_table, cache);
+                changed |= forward_in_block(eb, &mut else_known, unsafe_locals, type_table, cache);
             }
             known.invalidate_modified(&modified);
         }
@@ -1031,12 +1034,16 @@ fn forward_in_expr(
             modified.extend(lookup_modified(cache, default));
             for arm in arms {
                 let mut arm_known = known.clone();
-                changed |=
-                    forward_in_block(arm, &mut arm_known, unsafe_locals, type_table, cache);
+                changed |= forward_in_block(arm, &mut arm_known, unsafe_locals, type_table, cache);
             }
             let mut default_known = known.clone();
-            changed |=
-                forward_in_block(default, &mut default_known, unsafe_locals, type_table, cache);
+            changed |= forward_in_block(
+                default,
+                &mut default_known,
+                unsafe_locals,
+                type_table,
+                cache,
+            );
             known.invalidate_modified(&modified);
         }
         // Leaf nodes
