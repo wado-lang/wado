@@ -511,9 +511,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 );
                             }
                         }
-                        UseItem::Wildcard => {
-                            // Wildcard import: module is loaded for side effects only,
-                            // no names to re-export
+                        UseItem::Wildcard | UseItem::Namespace { .. } => {
+                            // Wildcard/namespace import: no individual names to re-export
                         }
                     }
                 }
@@ -595,6 +594,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         UseItem::Wildcard => {
                             // Wildcard import: module is loaded for side effects only,
                             // no symbols to register
+                        }
+                        UseItem::Namespace { name } => {
+                            // Namespace import: register the alias → module source mapping
+                            self.symbols
+                                .register_namespace_import(name, module_source.clone());
                         }
                     }
                 }

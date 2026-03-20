@@ -663,6 +663,13 @@ impl Parser {
         let items = if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "_") {
             self.advance(); // consume `_`
             vec![UseItem::Wildcard]
+        }
+        // Check for namespace import: `use name from "..."` (ident followed by `from`)
+        else if matches!(self.peek_kind(), TokenKind::Ident(_))
+            && matches!(self.peek_nth(1).kind, TokenKind::From)
+        {
+            let name = self.consume_ident()?;
+            vec![UseItem::Namespace { name }]
         } else {
             // Parse items: `{...}`
             self.expect(&TokenKind::LBrace)?;
@@ -2551,8 +2558,40 @@ impl Parser {
                         span: start_span,
                     }));
                 }
-                // This is a qualified name like Effect::function
+                // This is a qualified name like Effect::function or namespace::Type
                 let method = self.consume_ident()?;
+
+                // Check for namespace::Type::method(...) pattern
+                // Only attempt if next tokens are :: followed by an identifier
+                if self.check(&TokenKind::ColonColon)
+                    && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+                {
+                    let ns_checkpoint = self.pos;
+                    self.advance(); // consume ::
+                    let static_method = self.consume_ident()?;
+
+                    // Check for call: namespace::Type::method(...)
+                    if self.check(&TokenKind::LParen) {
+                        self.advance(); // consume (
+                        let (args, has_trailing_comma) = self.parse_arg_list()?;
+                        let end_span = self.expect(&TokenKind::RParen)?.span;
+
+                        return Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+                            target_type: Type::Named(NamedType {
+                                name: format!("{name}::{method}"),
+                                span: start_span,
+                            }),
+                            method: static_method,
+                            args,
+                            has_trailing_comma,
+                            span: start_span.merge(&end_span),
+                        })));
+                    }
+
+                    // Not a call, backtrack
+                    self.pos = ns_checkpoint;
+                }
+
                 let qualified_name = format!("{name}::{method}");
                 return Ok(Expr::Ident(IdentExpr {
                     name: qualified_name,
@@ -4186,6 +4225,21 @@ mod tests {
             assert!(use_decl.attributes.is_some());
             let attrs = use_decl.attributes.as_ref().unwrap();
             assert_eq!(attrs.version, Some("0.3.0".to_string()));
+        } else {
+            panic!("expected use declaration");
+        }
+    }
+
+    #[test]
+    fn test_use_decl_namespace() {
+        let module = parse(r#"use utils from "./utils.wado";"#).unwrap();
+
+        if let Item::Use(use_decl) = &module.items[0] {
+            assert_eq!(use_decl.source, "./utils.wado");
+            assert_eq!(use_decl.items.len(), 1);
+            assert!(
+                matches!(&use_decl.items[0], UseItem::Namespace { name } if name == "utils")
+            );
         } else {
             panic!("expected use declaration");
         }

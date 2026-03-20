@@ -244,6 +244,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     self.type_table
                         .borrow_mut()
                         .make_resource(name.to_string(), resource_info.module_source.clone())
+                }
+                // Check for namespace-qualified type: "ns::TypeName"
+                else if let Some((ns, type_name)) = name.split_once("::")
+                    && let Some(ns_module) = self.symbols.lookup_namespace(ns).cloned()
+                {
+                    // Look up the type in the namespace module using all_* maps
+                    if let Some(module_structs) = self.all_struct_fields.get(&ns_module)
+                        && let Some(_struct_info) = module_structs.get(type_name)
+                    {
+                        self.type_table
+                            .borrow_mut()
+                            .make_struct(type_name.to_string(), ns_module)
+                    } else if let Some(module_variants) = self.all_variant_cases.get(&ns_module)
+                        && let Some(_variant_info) = module_variants.get(type_name)
+                    {
+                        self.type_table
+                            .borrow_mut()
+                            .make_variant(type_name.to_string(), ns_module)
+                    } else if let Some(module_enums) = self.all_enum_cases.get(&ns_module)
+                        && let Some(_enum_info) = module_enums.get(type_name)
+                    {
+                        self.type_table
+                            .borrow_mut()
+                            .make_enum(type_name.to_string(), ns_module)
+                    } else {
+                        TypeTable::UNKNOWN
+                    }
                 } else {
                     // Unknown type
                     TypeTable::UNKNOWN

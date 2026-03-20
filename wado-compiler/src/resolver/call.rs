@@ -453,6 +453,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
                     }
+                    // Namespace imports: `use helper from "./helper.wado"` → helper::foo()
+                    else if let Some(ns_module) =
+                        self.symbols.lookup_namespace(prefix).cloned()
+                    {
+                        (Some(ns_module), suffix.to_string(), true)
+                    }
                     // Effect operations and module namespace calls - pass through to codegen.
                     // This covers Stdout::write(), etc.
                     else {
