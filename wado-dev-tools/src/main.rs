@@ -78,7 +78,12 @@ fn main() {
                 .first()
                 .expect("usage: wado-dev-tools wasm2wat <file.wasm>");
             let wasm = std::fs::read(input).expect("failed to read input file");
-            let wat = wasmprinter::print_bytes(&wasm).expect("failed to print wasm");
+            let mut wat = String::new();
+            let mut config = wasmprinter::Config::new();
+            config.fold_instructions(true);
+            config
+                .print(&wasm, &mut wasmprinter::PrintFmtWrite(&mut wat))
+                .expect("failed to print wasm");
             print!("{wat}");
         }
     }
