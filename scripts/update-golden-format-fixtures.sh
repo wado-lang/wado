@@ -5,46 +5,31 @@ set -euo pipefail
 #   - Formatted (clean) version of each dirty fixture
 #   - Compiler phase outputs (TIR, lower, optimize, WIR, WAT) for compilable fixtures
 
-cargo build --bin wado --quiet
+cargo build --profile dev-optimized --bin wado --bin wado-dev-tools --quiet
 
 FIXTURES_DIR="wado-compiler/tests/format.fixtures"
 GOLDEN_DIR="wado-compiler/tests/format.fixtures.golden"
 mkdir -p "$GOLDEN_DIR"
 
-tmpfile=$(mktemp)
-trap 'rm -f "$tmpfile"' EXIT
+DUMP="cargo run --profile dev-optimized --bin wado-dev-tools --quiet --"
 
-# Run a dump command, writing to a temp file first.
-# Only overwrites the target if the command succeeds and produces non-empty output.
-run_dump() {
-  local target="$1"
-  shift
-  if "$@" > "$tmpfile" 2>/dev/null && [ -s "$tmpfile" ]; then
-    mv "$tmpfile" "$target"
-    tmpfile=$(mktemp)
-  else
-    echo "WARNING: failed to generate $target" >&2
-    exit 1
-  fi
-}
-
+# Generate formatted (clean) versions
 for f in "$FIXTURES_DIR"/*.dirty.wado; do
   name=$(basename "$f" .dirty.wado)
   clean="$GOLDEN_DIR/$name.clean.wado"
-
-  # Generate formatted (clean) version
   cp "$f" "$clean"
-  cargo run --bin wado --quiet -- format -w "$clean"
-
-  # Skip compiler phase outputs for no_prelude files
-  if grep -q '^#!\[no_prelude\]' "$f"; then continue; fi
-
-  # Generate compiler phase outputs
-  run_dump "$GOLDEN_DIR/$name.tir.wado"      cargo run --bin wado --quiet -- dump --tir "$f"
-  run_dump "$GOLDEN_DIR/$name.lower.wado"    cargo run --bin wado --quiet -- dump --tir-lowered "$f"
-  run_dump "$GOLDEN_DIR/$name.optimize.wado" cargo run --bin wado --quiet -- dump --tir -O2 "$f"
-  run_dump "$GOLDEN_DIR/$name.wir.wado"      cargo run --bin wado --quiet -- dump --wir -O2 "$f"
-  run_dump "$GOLDEN_DIR/$name.wat"           cargo run --bin wado --quiet -- compile --wat-to-stdout "$f"
+  cargo run --profile dev-optimized --bin wado --quiet -- format -w "$clean"
+  echo "  Generated $clean"
 done
+
+# Generate compiler phase outputs via golden-dump
+# --skip-empty handles no_prelude files that produce empty output
+IN="$FIXTURES_DIR/{name}.dirty.wado"
+
+$DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.tir.wado"      --phase tir         --skip-empty
+$DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.lower.wado"    --phase tir-lowered  --skip-empty
+$DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.optimize.wado" --phase tir         -O2 --skip-empty
+$DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.wir.wado"      --phase wir         -O2 --skip-empty
+$DUMP golden-dump --in "$IN" --out "$GOLDEN_DIR/{name}.wat"           --phase wat         -O2 --skip-empty
 
 echo "Golden format fixtures updated."

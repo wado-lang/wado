@@ -2,7 +2,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::sync::mpsc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use wado_compiler::OptLevel;
 
@@ -38,12 +38,15 @@ struct ReadItem {
 struct WriteItem {
     output_path: String,
     content: Result<String, String>,
+    compile_time: Duration,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     Wir,
     Tir,
+    TirLowered,
+    Wat,
 }
 
 pub fn run_pipeline(
@@ -51,14 +54,13 @@ pub fn run_pipeline(
     out_template: &str,
     phase: Phase,
     opt_level: OptLevel,
+    skip_empty: bool,
 ) {
     let start = Instant::now();
 
     let num_workers = std::thread::available_parallelism()
         .map(std::num::NonZero::get)
-        .unwrap_or(4)
-        .saturating_sub(2)
-        .max(2);
+        .unwrap_or(4);
 
     let in_tmpl = Template::parse(in_template);
     let out_tmpl = Template::parse(out_template);
@@ -140,17 +142,20 @@ pub fn run_pipeline(
 
                         let output_path =
                             format!("{}{}{}", out_tmpl_prefix, item.name, out_tmpl_suffix);
+                        let t0 = Instant::now();
                         let content = rt.block_on(compile_one(
                             &item.source,
                             &item.input_path,
                             phase,
                             opt_level,
                         ));
+                        let compile_time = t0.elapsed();
 
                         if tx
                             .send(WriteItem {
                                 output_path,
                                 content,
+                                compile_time,
                             })
                             .is_err()
                         {
@@ -166,12 +171,20 @@ pub fn run_pipeline(
 
     // Writer: runs on main thread
     let mut success_count = 0u32;
+    let mut total_compile_time = Duration::ZERO;
+    let mut max_compile_time = Duration::ZERO;
+    let mut max_compile_file = String::new();
 
     for item in write_rx {
         match item.content {
             Ok(content) => {
                 if content.is_empty() {
                     let _ = fs::remove_file(&item.output_path);
+                    if skip_empty {
+                        eprintln!("  Skipped {} (empty output)", item.output_path);
+                        skip_count += 1;
+                        continue;
+                    }
                     panic!(
                         "Golden fixture generation failed: Empty output for {} (skipping)\n\
                          If this test is expected to fail at compile time, add \
@@ -187,10 +200,20 @@ pub fn run_pipeline(
                 fs::write(&item.output_path, &content)
                     .unwrap_or_else(|e| panic!("Failed to write {}: {e}", item.output_path));
                 eprintln!("  Generated {}", item.output_path);
+                total_compile_time += item.compile_time;
+                if item.compile_time > max_compile_time {
+                    max_compile_time = item.compile_time;
+                    max_compile_file = item.output_path.clone();
+                }
                 success_count += 1;
             }
             Err(e) => {
                 let _ = fs::remove_file(&item.output_path);
+                if skip_empty {
+                    eprintln!("  Skipped {} ({e})", item.output_path);
+                    skip_count += 1;
+                    continue;
+                }
                 panic!(
                     "Golden fixture generation failed: {e}\n\
                      If this test is expected to fail at compile time, add \
@@ -207,8 +230,24 @@ pub fn run_pipeline(
     }
 
     let elapsed = start.elapsed().as_secs_f64();
+    let avg_compile = if success_count > 0 {
+        total_compile_time / success_count
+    } else {
+        Duration::ZERO
+    };
+    eprintln!();
+    eprintln!("  Files:        {success_count} generated, {skip_count} skipped, {total} total");
+    eprintln!("  Workers:      {num_workers}");
+    eprintln!("  Wall time:    {elapsed:.2}s");
     eprintln!(
-        "Generated {success_count} files ({skip_count} skipped, {total} total) in {elapsed:.2}s"
+        "  Compile time: {:.2}s total, {:.3}s avg",
+        total_compile_time.as_secs_f64(),
+        avg_compile.as_secs_f64(),
+    );
+    eprintln!(
+        "  Slowest:      {:.2}s ({})",
+        max_compile_time.as_secs_f64(),
+        max_compile_file,
     );
     assert_eq!(
         success_count as usize + skip_count as usize,
@@ -231,6 +270,26 @@ async fn compile_one(
     let host = FilesystemCompilerHost::silent(base_path);
 
     let target_world = extract_world_from_data_section(source);
+
+    if phase == Phase::Wat {
+        let options = wado_compiler::CompilerOptions {
+            opt_level,
+            target_world: target_world.clone(),
+            log_level: Some(wado_compiler::LogLevel::Off),
+            ..wado_compiler::CompilerOptions::default()
+        };
+        let result =
+            wado_compiler::compile_with_options(source, &host, Some(input_path), options)
+                .await
+                .map_err(|_| "compilation failed".to_string())?;
+        let mut config = wasmprinter::Config::new();
+        config.fold_instructions(true);
+        let mut wat = String::new();
+        config
+            .print(&result.wasm, &mut wasmprinter::PrintFmtWrite(&mut wat))
+            .map_err(|e| format!("WAT generation failed: {e}"))?;
+        return Ok(wat);
+    }
 
     let result = wado_compiler::dump_with_host_and_world(
         source,
@@ -287,6 +346,17 @@ async fn compile_one(
                 }
             }
         }
+        Phase::TirLowered => {
+            if let Some(ref lowered_modules) = result.lowered_tir_modules {
+                for (module_source, module) in lowered_modules {
+                    let path_str = module_source.to_string();
+                    writeln!(output, "// --- Module: {path_str} ---").unwrap();
+                    let unparsed = wado_compiler::unparse::unparse_tir(module);
+                    write!(output, "{unparsed}").unwrap();
+                }
+            }
+        }
+        Phase::Wat => unreachable!(),
     }
 
     Ok(String::from_utf8(output).unwrap())

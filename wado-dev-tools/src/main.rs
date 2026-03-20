@@ -11,6 +11,7 @@ fn main() {
     let mut out_template: Option<String> = None;
     let mut phase = pipeline::Phase::Wir;
     let mut opt_level = OptLevel::O2;
+    let mut skip_empty = false;
 
     while let Some(arg) = parser.next().expect("failed to parse args") {
         match arg {
@@ -25,7 +26,9 @@ fn main() {
                 phase = match val.as_str() {
                     "wir" => pipeline::Phase::Wir,
                     "tir" => pipeline::Phase::Tir,
-                    _ => panic!("unknown phase: {val} (expected wir or tir)"),
+                    "tir-lowered" => pipeline::Phase::TirLowered,
+                    "wat" => pipeline::Phase::Wat,
+                    _ => panic!("unknown phase: {val} (expected wir, tir, tir-lowered, or wat)"),
                 };
             }
             lexopt::Arg::Short('O') => {
@@ -38,6 +41,9 @@ fn main() {
                     "s" => OptLevel::Os,
                     _ => panic!("unknown optimization level: -O{val}"),
                 };
+            }
+            lexopt::Arg::Long("skip-empty") => {
+                skip_empty = true;
             }
             lexopt::Arg::Value(cmd) => {
                 let cmd = cmd.to_string_lossy();
@@ -53,5 +59,5 @@ fn main() {
     let in_template = in_template.expect("--in is required");
     let out_template = out_template.expect("--out is required");
 
-    pipeline::run_pipeline(&in_template, &out_template, phase, opt_level);
+    pipeline::run_pipeline(&in_template, &out_template, phase, opt_level, skip_empty);
 }
