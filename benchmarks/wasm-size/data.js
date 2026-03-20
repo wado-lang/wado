@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773973513653,
+  "lastUpdate": 1773977296644,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4664,6 +4664,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c0064093e8b5278193b7908af690ed0cf2e64201"
         },
         "date": 1773973513437,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22322,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "08cf27851e3a454649cc8341217f78592faefcca",
+          "message": "Merge pull request #618 from wado-lang/claude/wasmtime-profiler-research-8otaO\n\nDocument wasmtime profiler characteristics and jitdump workflow",
+          "timestamp": "2026-03-20T12:25:49+09:00",
+          "tree_id": "f07fc2794160e3f7c473ac950d9e677ea6e5974f",
+          "url": "https://github.com/wado-lang/wado/commit/08cf27851e3a454649cc8341217f78592faefcca"
+        },
+        "date": 1773977296428,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
