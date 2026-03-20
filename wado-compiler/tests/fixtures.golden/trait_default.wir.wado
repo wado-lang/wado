@@ -70,8 +70,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/trait_default_basic" = fn();
-
 type "functype/trait_default_calls_default" = fn();
 
 type "functype/trait_default_count" = fn();
@@ -155,11 +153,6 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-fn trait_default_basic() with Stdout {
-    "core:cli/println"(Person^Greet::greet(String { repr: array.new_data<u8>("Alice"), used: 5 }));
-    "core:cli/println"(Robot^Greet::greet(42));
-}
-
 fn trait_default_calls_default() with Stdout {
     let item: ref Item;
     let __local_2: ref Item;
@@ -229,7 +222,8 @@ fn trait_default_override() with Stdout {
 }
 
 fn run() with Stdout {
-    trait_default_basic();
+    "core:cli/println"(Person^Greet::greet(String { repr: array.new_data<u8>("Alice"), used: 5 }));
+    "core:cli/println"(Robot^Greet::greet(42));
     trait_default_calls_default();
     trait_default_count();
     trait_default_override();
@@ -242,7 +236,11 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    "core:cli/println"(Person^Greet::greet(String { repr: array.new_data<u8>("Alice"), used: 5 }));
+    "core:cli/println"(Robot^Greet::greet(42));
+    trait_default_calls_default();
+    trait_default_count();
+    trait_default_override();
     "wasi/task-return"(0);
 }
 

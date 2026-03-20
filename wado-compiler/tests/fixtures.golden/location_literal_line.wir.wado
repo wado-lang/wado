@@ -121,7 +121,20 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let __local_2: ref String;
+    let __local_3: ref Formatter;
+    let __local_5: ref String;
+    let __local_7: ref Formatter;
+    "core:cli/println"(__inline_i32__to_string_3: block -> ref String {
+        __local_2 = String { repr: builtin::array_new<u8>(12), used: 0 };
+        __local_3 = __inline_Formatter__new_1: block -> ref Formatter {
+            __local_5 = __local_2;
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+        };
+        __local_7 = __local_3;
+        i32::fmt_decimal(5, __local_7);
+        break __inline_i32__to_string_3: __local_2;
+    });
     "wasi/task-return"(0);
 }
 

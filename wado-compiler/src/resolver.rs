@@ -278,7 +278,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     sources.insert(local_name.clone(), source.clone());
                                 }
                             }
-                            ast::UseItem::Wildcard => {}
+                            ast::UseItem::Wildcard | ast::UseItem::Namespace { .. } => {}
                         }
                     }
                 }

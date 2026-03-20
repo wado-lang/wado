@@ -91,7 +91,15 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let c: ref "./variant_import_module.wado/Color";
+    c = "./variant_import_module.wado/Color" { 0 };
+    let __match_scrut_0: ref "./variant_import_module.wado/Color";
+    __match_scrut_0 = c;
+    if __match_scrut_0.discriminant == 0 {
+        "core:cli/println"(String { repr: array.new_data<u8>("red"), used: 3 });
+    } else {
+        "core:cli/println"(String { repr: array.new_data<u8>("not red"), used: 7 });
+    };
     "wasi/task-return"(0);
 }
 
@@ -130,13 +138,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l3: loop {
+            l4: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l3;
+                continue l4;
             };
         };
     };

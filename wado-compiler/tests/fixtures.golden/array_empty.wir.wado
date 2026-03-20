@@ -89,7 +89,12 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let __local_0: ref Array<i32>;
+    drop(__seq_lit: block -> ref Array<i32> {
+        __local_0 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
+        break __seq_lit: __local_0;
+    });
+    "core:cli/println"(String { repr: array.new_data<u8>("empty array ok"), used: 14 });
     "wasi/task-return"(0);
 }
 

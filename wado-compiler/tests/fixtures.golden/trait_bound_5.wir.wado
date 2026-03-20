@@ -52,8 +52,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/trait_bound_nested_wrapper" = fn();
-
 type "functype/trait_bound_option_eq_none" = fn();
 
 type "functype/trait_bound_option_propagation" = fn();
@@ -121,14 +119,6 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-fn trait_bound_nested_wrapper() with Stdout {
-    let w1: ref Wrapper<i32>;
-    let __sroa_w2_inner: ref Wrapper<i32>;
-    w1 = Wrapper<i32> { inner: 42 };
-    __sroa_w2_inner = w1;
-    "core:cli/println"(Wrapper<i32>^Describable::describe(__sroa_w2_inner.inner));
-}
-
 fn trait_bound_option_eq_none() with Stdout {
     let a: ref Option<i32>;
     let b: ref Option<i32>;
@@ -162,7 +152,11 @@ fn trait_bound_option_propagation() with Stdout {
 }
 
 fn run() with Stdout {
-    trait_bound_nested_wrapper();
+    let w1: ref Wrapper<i32>;
+    let __sroa_w2_inner: ref Wrapper<i32>;
+    w1 = Wrapper<i32> { inner: 42 };
+    __sroa_w2_inner = w1;
+    "core:cli/println"(Wrapper<i32>^Describable::describe(__sroa_w2_inner.inner));
     trait_bound_option_eq_none();
     trait_bound_option_propagation();
 }
@@ -174,7 +168,13 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let w1: ref Wrapper<i32>;
+    let __sroa_w2_inner: ref Wrapper<i32>;
+    w1 = Wrapper<i32> { inner: 42 };
+    __sroa_w2_inner = w1;
+    "core:cli/println"(Wrapper<i32>^Describable::describe(__sroa_w2_inner.inner));
+    trait_bound_option_eq_none();
+    trait_bound_option_propagation();
     "wasi/task-return"(0);
 }
 

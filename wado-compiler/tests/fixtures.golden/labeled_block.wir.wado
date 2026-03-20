@@ -67,8 +67,6 @@ type "functype/labeled_block_basic" = fn();
 
 type "functype/labeled_block_break_label" = fn();
 
-type "functype/labeled_block_expr_nested" = fn();
-
 type "functype/labeled_block_expr_simple" = fn();
 
 type "functype/labeled_block_expr_value" = fn();
@@ -279,10 +277,6 @@ condition: count == 1
         });
         unreachable;
     };
-    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
-}
-
-fn labeled_block_expr_nested() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
@@ -528,7 +522,7 @@ condition: result == 2
 fn run() with Stdout {
     labeled_block_basic();
     labeled_block_break_label();
-    labeled_block_expr_nested();
+    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
     labeled_block_expr_simple();
     labeled_block_expr_value();
     labeled_block_in_loop();
@@ -542,7 +536,13 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    labeled_block_basic();
+    labeled_block_break_label();
+    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
+    labeled_block_expr_simple();
+    labeled_block_expr_value();
+    labeled_block_in_loop();
+    labeled_block_nested();
     "wasi/task-return"(0);
 }
 

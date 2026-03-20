@@ -45,8 +45,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/const_fold_f32_comparison" = fn();
-
 type "functype/const_fold_int_basic" = fn();
 
 type "functype/const_fold_int_types" = fn();
@@ -121,10 +119,6 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 global mut __modules_initialized: bool = 0;
-
-fn const_fold_f32_comparison() with Stdout {
-    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
-}
 
 fn const_fold_int_basic() with Stdout {
     let __local_7: ref String;
@@ -348,7 +342,7 @@ fn run() with Stdout {
         __initialize_module();
         __modules_initialized = 1;
     };
-    const_fold_f32_comparison();
+    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
     const_fold_int_basic();
     const_fold_int_types();
 }
@@ -360,7 +354,16 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    __inline___initialize_modules_1: block {
+        if __modules_initialized {
+            break __inline___initialize_modules_1;
+        };
+        __initialize_module();
+        __modules_initialized = 1;
+    };
+    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
+    const_fold_int_basic();
+    const_fold_int_types();
     "wasi/task-return"(0);
 }
 
@@ -399,13 +402,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l3: loop {
+            l4: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l3;
+                continue l4;
             };
         };
     };
@@ -490,13 +493,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l9: loop {
+            l10: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l9;
+                continue l10;
             };
         };
     };
@@ -513,14 +516,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l13: loop {
+                l14: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l13;
+                    continue l14;
                 };
             };
         };
@@ -556,13 +559,13 @@ fn Array<u64>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l17: loop {
+            l18: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
                 i = i + 1;
-                continue l17;
+                continue l18;
             };
         };
     };
@@ -731,13 +734,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l32: loop {
+            l33: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l32;
+                continue l33;
             };
         };
     };

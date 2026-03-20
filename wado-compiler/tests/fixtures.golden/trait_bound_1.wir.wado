@@ -62,8 +62,6 @@ type "functype/trait_bound_array_of_ref" = fn();
 
 type "functype/trait_bound_bounded_impl_for_trait" = fn();
 
-type "functype/trait_bound_check" = fn();
-
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -200,16 +198,12 @@ fn trait_bound_bounded_impl_for_trait() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("a == a"), used: 6 });
 }
 
-fn trait_bound_check() with Stdout {
-    let __sroa___sroa_c_item_value: ref String;
-    __sroa___sroa_c_item_value = String { repr: array.new_data<u8>("hello"), used: 5 };
-    "core:cli/println"(__sroa___sroa_c_item_value);
-}
-
 fn run() with Stdout {
+    let __sroa___sroa_c_item_value: ref String;
     trait_bound_array_of_ref();
     trait_bound_bounded_impl_for_trait();
-    trait_bound_check();
+    __sroa___sroa_c_item_value = String { repr: array.new_data<u8>("hello"), used: 5 };
+    "core:cli/println"(__sroa___sroa_c_item_value);
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -219,7 +213,11 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let __sroa___sroa_c_item_value: ref String;
+    trait_bound_array_of_ref();
+    trait_bound_bounded_impl_for_trait();
+    __sroa___sroa_c_item_value = String { repr: array.new_data<u8>("hello"), used: 5 };
+    "core:cli/println"(__sroa___sroa_c_item_value);
     "wasi/task-return"(0);
 }
 

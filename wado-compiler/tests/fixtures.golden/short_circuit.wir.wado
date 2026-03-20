@@ -47,8 +47,6 @@ type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/side_effect" = fn(ref String, bool) -> bool;
-
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -119,17 +117,6 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-fn side_effect(msg, result) with Stdout {
-    let __local_2: ref String;
-    "core:cli/println"(__tmpl: block -> ref String {
-        __local_2 = String { repr: builtin::array_new<u8>(36), used: 0 };
-        String::append(__local_2, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
-        String::append(__local_2, msg);
-        break __tmpl: __local_2;
-    });
-    return result;
-}
-
 fn run() with Stdout {
     let __local_0: ref Array<i32>;
     let arr: ref Array<i32>;
@@ -138,19 +125,40 @@ fn run() with Stdout {
     let __local_6: ref Formatter;
     let __local_7: ref String;
     let __local_8: ref Formatter;
-    let __local_21: i32;
-    let __local_23: ref String;
-    let __local_25: ref Formatter;
-    let __local_28: ref String;
-    let __local_30: ref Formatter;
-    let __local_32: i32;
-    let __local_36: ref String;
-    let __local_38: ref Formatter;
-    let _licm_used_41: i32;
-    let _licm_repr_42: ref array<i32>;
+    let __local_10: ref String;
+    let __local_12: ref String;
+    let __local_13: ref String;
+    let __local_15: ref String;
+    let __local_16: ref String;
+    let __local_18: ref String;
+    let __local_19: ref String;
+    let __local_21: ref String;
+    let __local_33: i32;
+    let __local_35: ref String;
+    let __local_37: ref Formatter;
+    let __local_40: ref String;
+    let __local_42: ref Formatter;
+    let __local_44: i32;
+    let __local_48: ref String;
+    let __local_50: ref Formatter;
+    let __local_53: ref String;
+    let __local_55: ref String;
+    let __local_56: ref String;
+    let __local_58: ref String;
+    let _licm_used_59: i32;
+    let _licm_repr_60: ref array<i32>;
     "core:cli/println"(String { repr: array.new_data<u8>("=== Testing && ==="), used: 18 });
     if if 0 -> i32 {
-        side_effect(String { repr: array.new_data<u8>("should not print (&&)"), used: 21 }, 1);
+        __inline_side_effect_2: block -> bool {
+            __local_10 = String { repr: array.new_data<u8>("should not print (&&)"), used: 21 };
+            "core:cli/println"(__tmpl: block -> ref String {
+                __local_12 = String { repr: builtin::array_new<u8>(36), used: 0 };
+                String::append(__local_12, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                String::append(__local_12, __local_10);
+                break __tmpl: __local_12;
+            });
+            break __inline_side_effect_2: 1;
+        };
     } else {
         0;
     } {
@@ -159,7 +167,16 @@ fn run() with Stdout {
         "core:cli/println"(String { repr: array.new_data<u8>("branch not taken (correct)"), used: 26 });
     };
     if if 1 -> i32 {
-        side_effect(String { repr: array.new_data<u8>("should print (&&)"), used: 17 }, 1);
+        __inline_side_effect_3: block -> bool {
+            __local_13 = String { repr: array.new_data<u8>("should print (&&)"), used: 17 };
+            "core:cli/println"(__tmpl: block -> ref String {
+                __local_15 = String { repr: builtin::array_new<u8>(36), used: 0 };
+                String::append(__local_15, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                String::append(__local_15, __local_13);
+                break __tmpl: __local_15;
+            });
+            break __inline_side_effect_3: 1;
+        };
     } else {
         0;
     } {
@@ -170,14 +187,32 @@ fn run() with Stdout {
     if if 1 -> i32 {
         1;
     } else {
-        side_effect(String { repr: array.new_data<u8>("should not print (||)"), used: 21 }, 0);
+        __inline_side_effect_4: block -> bool {
+            __local_16 = String { repr: array.new_data<u8>("should not print (||)"), used: 21 };
+            "core:cli/println"(__tmpl: block -> ref String {
+                __local_18 = String { repr: builtin::array_new<u8>(36), used: 0 };
+                String::append(__local_18, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                String::append(__local_18, __local_16);
+                break __tmpl: __local_18;
+            });
+            break __inline_side_effect_4: 0;
+        };
     } {
         "core:cli/println"(String { repr: array.new_data<u8>("branch taken (correct)"), used: 22 });
     };
     if if 0 -> i32 {
         1;
     } else {
-        side_effect(String { repr: array.new_data<u8>("should print (||)"), used: 17 }, 1);
+        __inline_side_effect_5: block -> bool {
+            __local_19 = String { repr: array.new_data<u8>("should print (||)"), used: 17 };
+            "core:cli/println"(__tmpl: block -> ref String {
+                __local_21 = String { repr: builtin::array_new<u8>(36), used: 0 };
+                String::append(__local_21, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                String::append(__local_21, __local_19);
+                break __tmpl: __local_21;
+            });
+            break __inline_side_effect_5: 1;
+        };
     } {
         "core:cli/println"(String { repr: array.new_data<u8>("branch taken (correct)"), used: 22 });
     };
@@ -188,18 +223,18 @@ fn run() with Stdout {
         break __seq_lit: __local_0;
     };
     i = 0;
-    _licm_used_41 = 3;
-    _licm_repr_42 = arr.repr;
+    _licm_used_59 = 3;
+    _licm_repr_60 = arr.repr;
     b8: block {
         l9: loop {
-            if if i < _licm_used_41 -> i32 {
-                __inline_Array_i32__IndexValue__index_value_9: block -> i32 {
-                    __local_21 = i;
-                    if __local_21 >= _licm_used_41 {
+            if if i < _licm_used_59 -> i32 {
+                __inline_Array_i32__IndexValue__index_value_13: block -> i32 {
+                    __local_33 = i;
+                    if __local_33 >= _licm_used_59 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_i32__IndexValue__index_value_9: builtin::array_get<i32>(_licm_repr_42, __local_21);
+                    break __inline_Array_i32__IndexValue__index_value_13: builtin::array_get<i32>(_licm_repr_60, __local_33);
                 } < 100;
             } else {
                 0;
@@ -212,29 +247,29 @@ fn run() with Stdout {
                 String::append_char(__local_5, 114);
                 String::append_char(__local_5, 114);
                 String::append_char(__local_5, 91);
-                __local_6 = __inline_Formatter__new_11: block -> ref Formatter {
-                    __local_23 = __local_5;
-                    break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_23) };
+                __local_6 = __inline_Formatter__new_15: block -> ref Formatter {
+                    __local_35 = __local_5;
+                    break __inline_Formatter__new_15: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_35) };
                 };
-                __local_25 = __local_6;
-                i32::fmt_decimal(i, __local_25);
+                __local_37 = __local_6;
+                i32::fmt_decimal(i, __local_37);
                 String::append_char(__local_5, 93);
                 String::append_char(__local_5, 32);
                 String::append_char(__local_5, 61);
                 String::append_char(__local_5, 32);
-                __local_6 = __inline_Formatter__new_14: block -> ref Formatter {
-                    __local_28 = __local_5;
-                    break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
+                __local_6 = __inline_Formatter__new_18: block -> ref Formatter {
+                    __local_40 = __local_5;
+                    break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_40) };
                 };
-                __local_30 = __local_6;
-                i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_16: block -> i32 {
-                    __local_32 = i;
-                    if __local_32 >= _licm_used_41 {
+                __local_42 = __local_6;
+                i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_20: block -> i32 {
+                    __local_44 = i;
+                    if __local_44 >= _licm_used_59 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_i32__IndexValue__index_value_16: builtin::array_get<i32>(_licm_repr_42, __local_32);
-                }, __local_30);
+                    break __inline_Array_i32__IndexValue__index_value_20: builtin::array_get<i32>(_licm_repr_60, __local_44);
+                }, __local_42);
                 break __tmpl: __local_5;
             });
             i = i + 1;
@@ -244,12 +279,12 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(34), used: 0 };
         String::append(__local_7, String { repr: array.new_data<u8>("Loop ended at i = "), used: 18 });
-        __local_8 = __inline_Formatter__new_19: block -> ref Formatter {
-            __local_36 = __local_7;
-            break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_36) };
+        __local_8 = __inline_Formatter__new_23: block -> ref Formatter {
+            __local_48 = __local_7;
+            break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_48) };
         };
-        __local_38 = __local_8;
-        i32::fmt_decimal(i, __local_38);
+        __local_50 = __local_8;
+        i32::fmt_decimal(i, __local_50);
         break __tmpl: __local_7;
     });
     "core:cli/println"(String { repr: array.new_data<u8>("
@@ -257,7 +292,16 @@ fn run() with Stdout {
     if if 0 -> i32 {
         1;
     } else {
-        side_effect(String { repr: array.new_data<u8>("nested: should print"), used: 20 }, 1);
+        __inline_side_effect_26: block -> bool {
+            __local_53 = String { repr: array.new_data<u8>("nested: should print"), used: 20 };
+            "core:cli/println"(__tmpl: block -> ref String {
+                __local_55 = String { repr: builtin::array_new<u8>(36), used: 0 };
+                String::append(__local_55, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                String::append(__local_55, __local_53);
+                break __tmpl: __local_55;
+            });
+            break __inline_side_effect_26: 1;
+        };
     } {
         "core:cli/println"(String { repr: array.new_data<u8>("nested branch taken (correct)"), used: 29 });
     };
@@ -265,7 +309,16 @@ fn run() with Stdout {
         if 1 -> i32 {
             1;
         } else {
-            side_effect(String { repr: array.new_data<u8>("nested: should not print"), used: 24 }, 1);
+            __inline_side_effect_27: block -> bool {
+                __local_56 = String { repr: array.new_data<u8>("nested: should not print"), used: 24 };
+                "core:cli/println"(__tmpl: block -> ref String {
+                    __local_58 = String { repr: builtin::array_new<u8>(36), used: 0 };
+                    String::append(__local_58, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                    String::append(__local_58, __local_56);
+                    break __tmpl: __local_58;
+                });
+                break __inline_side_effect_27: 1;
+            };
         };
     } else {
         0;

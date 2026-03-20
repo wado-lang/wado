@@ -92,7 +92,22 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let poem: ref String;
+    let mixed: ref String;
+    let with_empty: ref String;
+    poem = String { repr: array.new_data<u8>("Roses are red,
+Violets are blue,
+Wado is great,
+And so are you!"), used: 63 };
+    "core:cli/println"(poem);
+    mixed = String { repr: array.new_data<u8>("Line with tab:	here
+Next line"), used: 29 };
+    "core:cli/println"(mixed);
+    with_empty = String { repr: array.new_data<u8>("First
+
+Third"), used: 12 };
+    "core:cli/println"(with_empty);
+    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
     "wasi/task-return"(0);
 }
 

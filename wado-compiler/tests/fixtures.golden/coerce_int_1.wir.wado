@@ -56,8 +56,6 @@ type "functype/coerce_int_literal_binary" = fn();
 
 type "functype/coerce_int_literal_binary_i128" = fn();
 
-type "functype/coerce_int_literal_bitwise" = fn();
-
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -528,15 +526,11 @@ fn coerce_int_literal_binary_i128() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
-fn coerce_int_literal_bitwise() with Stdout {
-    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
-}
-
 fn run() with Stdout {
     coerce_int_literal_args();
     coerce_int_literal_binary();
     coerce_int_literal_binary_i128();
-    coerce_int_literal_bitwise();
+    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -546,7 +540,10 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    coerce_int_literal_args();
+    coerce_int_literal_binary();
+    coerce_int_literal_binary_i128();
+    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
     "wasi/task-return"(0);
 }
 

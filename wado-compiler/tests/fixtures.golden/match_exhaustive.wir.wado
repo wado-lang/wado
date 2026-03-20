@@ -52,11 +52,7 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/match_exhaustive_enum_ok" = fn();
-
 type "functype/match_exhaustive_option_null_ok" = fn();
-
-type "functype/match_exhaustive_wildcard_ok" = fn();
 
 type "functype/run" = fn();
 
@@ -117,45 +113,6 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-fn match_exhaustive_enum_ok() with Stdout {
-    let __local_0: enum:Direction;
-    let __local_1: enum:Direction;
-    "core:cli/println"(__inline_dir_name_0: block -> ref String {
-        __local_0 = 0;
-        let __match_scrut_0: enum:Direction;
-        __match_scrut_0 = __local_0;
-        if __match_scrut_0 == 0 -> ref String {
-            String { repr: array.new_data<u8>("north"), used: 5 };
-        } else if __match_scrut_0 == 1 -> ref String {
-            String { repr: array.new_data<u8>("south"), used: 5 };
-        } else if __match_scrut_0 == 2 -> ref String {
-            String { repr: array.new_data<u8>("east"), used: 4 };
-        } else if __match_scrut_0 == 3 -> ref String {
-            String { repr: array.new_data<u8>("west"), used: 4 };
-        } else {
-            unreachable;
-        };
-        break __inline_dir_name_0;
-    });
-    "core:cli/println"(__inline_dir_name_1: block -> ref String {
-        __local_1 = 3;
-        let __match_scrut_1: enum:Direction;
-        __match_scrut_1 = __local_1;
-        if __match_scrut_1 == 0 -> ref String {
-            String { repr: array.new_data<u8>("north"), used: 5 };
-        } else if __match_scrut_1 == 1 -> ref String {
-            String { repr: array.new_data<u8>("south"), used: 5 };
-        } else if __match_scrut_1 == 2 -> ref String {
-            String { repr: array.new_data<u8>("east"), used: 4 };
-        } else if __match_scrut_1 == 3 -> ref String {
-            String { repr: array.new_data<u8>("west"), used: 4 };
-        } else {
-            unreachable;
-        };
-        break __inline_dir_name_1;
-    });
-}
-
 fn match_exhaustive_option_null_ok() with Stdout {
     let opt: ref Option<i32>;
     let __local_1: i32;
@@ -189,24 +146,55 @@ fn match_exhaustive_option_null_ok() with Stdout {
     });
 }
 
-fn match_exhaustive_wildcard_ok() with Stdout {
+fn run() with Stdout {
+    let __local_1: enum:Direction;
+    let __local_2: enum:Direction;
     let c: enum:Color;
     let name: ref String;
+    "core:cli/println"(__inline_dir_name_3: block -> ref String {
+        __local_1 = 0;
+        let __match_scrut_0: enum:Direction;
+        __match_scrut_0 = __local_1;
+        if __match_scrut_0 == 0 -> ref String {
+            String { repr: array.new_data<u8>("north"), used: 5 };
+        } else if __match_scrut_0 == 1 -> ref String {
+            String { repr: array.new_data<u8>("south"), used: 5 };
+        } else if __match_scrut_0 == 2 -> ref String {
+            String { repr: array.new_data<u8>("east"), used: 4 };
+        } else if __match_scrut_0 == 3 -> ref String {
+            String { repr: array.new_data<u8>("west"), used: 4 };
+        } else {
+            unreachable;
+        };
+        break __inline_dir_name_3;
+    });
+    "core:cli/println"(__inline_dir_name_4: block -> ref String {
+        __local_2 = 3;
+        let __match_scrut_1: enum:Direction;
+        __match_scrut_1 = __local_2;
+        if __match_scrut_1 == 0 -> ref String {
+            String { repr: array.new_data<u8>("north"), used: 5 };
+        } else if __match_scrut_1 == 1 -> ref String {
+            String { repr: array.new_data<u8>("south"), used: 5 };
+        } else if __match_scrut_1 == 2 -> ref String {
+            String { repr: array.new_data<u8>("east"), used: 4 };
+        } else if __match_scrut_1 == 3 -> ref String {
+            String { repr: array.new_data<u8>("west"), used: 4 };
+        } else {
+            unreachable;
+        };
+        break __inline_dir_name_4;
+    });
+    match_exhaustive_option_null_ok();
     c = 1;
-    let __match_scrut_0: enum:Color;
-    __match_scrut_0 = c;
-    name = if __match_scrut_0 == 0 -> ref String {
+    let __match_scrut_2: enum:Color;
+    __match_scrut_2 = c;
+    name = if __match_scrut_2 == 0 -> ref String {
         String { repr: array.new_data<u8>("red"), used: 3 };
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
     };
     "core:cli/println"(name);
-}
-
-fn run() with Stdout {
-    match_exhaustive_enum_ok();
-    match_exhaustive_option_null_ok();
-    match_exhaustive_wildcard_ok();
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -216,7 +204,54 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let __local_1: enum:Direction;
+    let __local_2: enum:Direction;
+    let c: enum:Color;
+    let name: ref String;
+    "core:cli/println"(__inline_dir_name_4: block -> ref String {
+        __local_1 = 0;
+        let __match_scrut_0: enum:Direction;
+        __match_scrut_0 = __local_1;
+        if __match_scrut_0 == 0 -> ref String {
+            String { repr: array.new_data<u8>("north"), used: 5 };
+        } else if __match_scrut_0 == 1 -> ref String {
+            String { repr: array.new_data<u8>("south"), used: 5 };
+        } else if __match_scrut_0 == 2 -> ref String {
+            String { repr: array.new_data<u8>("east"), used: 4 };
+        } else if __match_scrut_0 == 3 -> ref String {
+            String { repr: array.new_data<u8>("west"), used: 4 };
+        } else {
+            unreachable;
+        };
+        break __inline_dir_name_4;
+    });
+    "core:cli/println"(__inline_dir_name_5: block -> ref String {
+        __local_2 = 3;
+        let __match_scrut_1: enum:Direction;
+        __match_scrut_1 = __local_2;
+        if __match_scrut_1 == 0 -> ref String {
+            String { repr: array.new_data<u8>("north"), used: 5 };
+        } else if __match_scrut_1 == 1 -> ref String {
+            String { repr: array.new_data<u8>("south"), used: 5 };
+        } else if __match_scrut_1 == 2 -> ref String {
+            String { repr: array.new_data<u8>("east"), used: 4 };
+        } else if __match_scrut_1 == 3 -> ref String {
+            String { repr: array.new_data<u8>("west"), used: 4 };
+        } else {
+            unreachable;
+        };
+        break __inline_dir_name_5;
+    });
+    match_exhaustive_option_null_ok();
+    c = 1;
+    let __match_scrut_2: enum:Color;
+    __match_scrut_2 = c;
+    name = if __match_scrut_2 == 0 -> ref String {
+        String { repr: array.new_data<u8>("red"), used: 3 };
+    } else {
+        String { repr: array.new_data<u8>("other"), used: 5 };
+    };
+    "core:cli/println"(name);
     "wasi/task-return"(0);
 }
 
@@ -255,13 +290,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l13: loop {
+            l22: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l13;
+                continue l22;
             };
         };
     };
@@ -343,13 +378,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l19: loop {
+            l28: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l19;
+                continue l28;
             };
         };
     };
@@ -366,14 +401,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l23: loop {
+                l32: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l23;
+                    continue l32;
                 };
             };
         };
@@ -483,13 +518,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l35: loop {
+            l44: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l35;
+                continue l44;
             };
         };
     };

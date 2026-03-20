@@ -146,10 +146,24 @@ impl<'a> Unparser<'a> {
             self.output.push_str("pub ");
         }
 
-        // Check for wildcard import
+        // Check for wildcard or namespace import
         let is_wildcard = u.items.len() == 1 && matches!(u.items.first(), Some(UseItem::Wildcard));
+        let namespace_name = if u.items.len() == 1 {
+            match u.items.first() {
+                Some(UseItem::Namespace { name }) => Some(name.as_str()),
+                _ => None,
+            }
+        } else {
+            None
+        };
 
-        if is_wildcard {
+        if let Some(name) = namespace_name {
+            self.output.push_str("use ");
+            self.output.push_str(name);
+            self.output.push_str(" from \"");
+            self.output.push_str(&u.source);
+            self.output.push('"');
+        } else if is_wildcard {
             self.output.push_str("use _ from \"");
             self.output.push_str(&u.source);
             self.output.push('"');
@@ -217,6 +231,9 @@ impl<'a> Unparser<'a> {
             }
             UseItem::Wildcard => {
                 self.output.push('_');
+            }
+            UseItem::Namespace { name } => {
+                self.output.push_str(name);
             }
         }
     }

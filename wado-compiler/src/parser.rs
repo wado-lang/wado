@@ -663,6 +663,13 @@ impl Parser {
         let items = if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "_") {
             self.advance(); // consume `_`
             vec![UseItem::Wildcard]
+        }
+        // Check for namespace import: `use name from "..."` (ident followed by `from`)
+        else if matches!(self.peek_kind(), TokenKind::Ident(_))
+            && matches!(self.peek_nth(1).kind, TokenKind::From)
+        {
+            let name = self.consume_ident()?;
+            vec![UseItem::Namespace { name }]
         } else {
             // Parse items: `{...}`
             self.expect(&TokenKind::LBrace)?;
@@ -2551,9 +2558,15 @@ impl Parser {
                         span: start_span,
                     }));
                 }
-                // This is a qualified name like Effect::function
-                let method = self.consume_ident()?;
-                let qualified_name = format!("{name}::{method}");
+                // This is a qualified name like Effect::function or ns::Type::Case
+                // Consume a chain of ::ident segments
+                let mut qualified_name = format!("{name}::{}", self.consume_ident()?);
+                while self.check(&TokenKind::ColonColon)
+                    && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+                {
+                    self.advance(); // consume ::
+                    qualified_name = format!("{qualified_name}::{}", self.consume_ident()?);
+                }
                 return Ok(Expr::Ident(IdentExpr {
                     name: qualified_name,
                     span: start_span,
@@ -4186,6 +4199,19 @@ mod tests {
             assert!(use_decl.attributes.is_some());
             let attrs = use_decl.attributes.as_ref().unwrap();
             assert_eq!(attrs.version, Some("0.3.0".to_string()));
+        } else {
+            panic!("expected use declaration");
+        }
+    }
+
+    #[test]
+    fn test_use_decl_namespace() {
+        let module = parse(r#"use utils from "./utils.wado";"#).unwrap();
+
+        if let Item::Use(use_decl) = &module.items[0] {
+            assert_eq!(use_decl.source, "./utils.wado");
+            assert_eq!(use_decl.items.len(), 1);
+            assert!(matches!(&use_decl.items[0], UseItem::Namespace { name } if name == "utils"));
         } else {
             panic!("expected use declaration");
         }

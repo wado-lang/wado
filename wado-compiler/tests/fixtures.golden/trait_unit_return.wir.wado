@@ -55,8 +55,6 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/Message^Printable::print" = fn(ref String);
-
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
 import fn realloc from "mem/realloc";
@@ -73,7 +71,15 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout {
-    Message^Printable::print(String { repr: array.new_data<u8>("Hello, World!"), used: 13 });
+    let __local_3: ref String;
+    let __sroa_m_text: ref String;
+    __sroa_m_text = String { repr: array.new_data<u8>("Hello, World!"), used: 13 };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_3 = String { repr: builtin::array_new<u8>(25), used: 0 };
+        String::append(__local_3, String { repr: array.new_data<u8>("Message: "), used: 9 });
+        String::append(__local_3, __sroa_m_text);
+        break __tmpl: __local_3;
+    });
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -83,7 +89,15 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let __local_3: ref String;
+    let __sroa_m_text: ref String;
+    __sroa_m_text = String { repr: array.new_data<u8>("Hello, World!"), used: 13 };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_3 = String { repr: builtin::array_new<u8>(25), used: 0 };
+        String::append(__local_3, String { repr: array.new_data<u8>("Message: "), used: 9 });
+        String::append(__local_3, __sroa_m_text);
+        break __tmpl: __local_3;
+    });
     "wasi/task-return"(0);
 }
 
@@ -235,16 +249,6 @@ fn String::append(self, other) {
     };
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
-}
-
-fn Message^Printable::print(self) with Stdout {
-    let __local_1: ref String;
-    "core:cli/println"(__tmpl: block -> ref String {
-        __local_1 = String { repr: builtin::array_new<u8>(25), used: 0 };
-        String::append(__local_1, String { repr: array.new_data<u8>("Message: "), used: 9 });
-        String::append(__local_1, self);
-        break __tmpl: __local_1;
-    });
 }
 
 export fn __cm_export__run as "run"

@@ -96,7 +96,11 @@ fn __cm_adapter__Stderr_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    "core:cli/println"(String { repr: array.new_data<u8>("stdout effect"), used: 13 });
+    "core:cli/eprintln"(String { repr: array.new_data<u8>("stderr effect"), used: 13 });
+    "core:cli/println"(String { repr: array.new_data<u8>("both stdout"), used: 11 });
+    "core:cli/eprintln"(String { repr: array.new_data<u8>("both stderr"), used: 11 });
+    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
     "wasi/task-return"(0);
 }
 

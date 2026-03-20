@@ -86,8 +86,6 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/read_and_format" = fn(i32) -> ref String;
 
-type "functype/print_via" = fn(i32);
-
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
@@ -128,12 +126,6 @@ fn read_and_format(r) {
     };
 }
 
-fn print_via(r) with Stdout {
-    let s: ref String;
-    s = read_and_format(r);
-    "core:cli/println"(s);
-}
-
 fn run() with Stdout {
     let n: ref "core:internal/Box<i32>";
     let r_2: ref "core:internal/Box<i32>";
@@ -143,6 +135,7 @@ fn run() with Stdout {
     let r_6: ref "core:internal/Box<i32>";
     let r_7: ref "core:internal/Box<i32>";
     let r_8: ref "core:internal/Box<i32>";
+    let s: ref String;
     n = "core:internal/Box<i32>" { value: 0 };
     r_2 = n;
     r_3 = r_2;
@@ -155,7 +148,8 @@ fn run() with Stdout {
     r_7.value = r_7.value + 1;
     r_8 = r_6;
     r_8.value = r_8.value + 1;
-    print_via(n.value);
+    s = read_and_format(n.value);
+    "core:cli/println"(s);
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -165,7 +159,29 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let n: ref "core:internal/Box<i32>";
+    let r_2: ref "core:internal/Box<i32>";
+    let r_3: ref "core:internal/Box<i32>";
+    let r_4: ref "core:internal/Box<i32>";
+    let r_5: ref "core:internal/Box<i32>";
+    let r_6: ref "core:internal/Box<i32>";
+    let r_7: ref "core:internal/Box<i32>";
+    let r_8: ref "core:internal/Box<i32>";
+    let s: ref String;
+    n = "core:internal/Box<i32>" { value: 0 };
+    r_2 = n;
+    r_3 = r_2;
+    r_4 = r_3;
+    r_4.value = r_4.value + 1;
+    r_5 = r_3;
+    r_5.value = r_5.value + 1;
+    r_6 = r_2;
+    r_7 = r_6;
+    r_7.value = r_7.value + 1;
+    r_8 = r_6;
+    r_8.value = r_8.value + 1;
+    s = read_and_format(n.value);
+    "core:cli/println"(s);
     "wasi/task-return"(0);
 }
 

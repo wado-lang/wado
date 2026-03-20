@@ -61,10 +61,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/trait_bound_method_on_type_param_value" = fn();
-
-type "functype/trait_bound_multi_satisfied" = fn();
-
 type "functype/trait_bound_nested_generic" = fn();
 
 type "functype/run" = fn();
@@ -144,35 +140,6 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-fn trait_bound_method_on_type_param_value() with Stdout {
-    let __local_0: ref Point;
-    "core:cli/println"(__inline_show_Point__0: block -> ref String {
-        __local_0 = Point { x: 1, y: 2 };
-        break __inline_show_Point__0: Point^Describe::describe(__local_0);
-    });
-    "core:cli/println"(i32^Describe::describe(42));
-}
-
-fn trait_bound_multi_satisfied() with Stdout {
-    let __local_2: ref String;
-    let __sroa_w_item: ref Button;
-    __sroa_w_item = Button { label: String { repr: array.new_data<u8>("OK"), used: 2 } };
-    "core:cli/println"(Button^Drawable::draw(__sroa_w_item.label));
-    "core:cli/println"(__tmpl: block -> ref String {
-        __local_2 = String { repr: builtin::array_new<u8>(24), used: 0 };
-        String::append_char(__local_2, 99);
-        String::append_char(__local_2, 108);
-        String::append_char(__local_2, 105);
-        String::append_char(__local_2, 99);
-        String::append_char(__local_2, 107);
-        String::append_char(__local_2, 101);
-        String::append_char(__local_2, 100);
-        String::append_char(__local_2, 32);
-        String::append(__local_2, __sroa_w_item.label);
-        break __tmpl: __local_2;
-    });
-}
-
 fn trait_bound_nested_generic() with Stdout {
     let __local_0: ref Array<Array<i32>>;
     let __local_1: ref Array<i32>;
@@ -210,8 +177,29 @@ fn trait_bound_nested_generic() with Stdout {
 }
 
 fn run() with Stdout {
-    trait_bound_method_on_type_param_value();
-    trait_bound_multi_satisfied();
+    let __local_1: ref Point;
+    let __local_5: ref String;
+    let __sroa_w_item: ref Button;
+    "core:cli/println"(__inline_show_Point__3: block -> ref String {
+        __local_1 = Point { x: 1, y: 2 };
+        break __inline_show_Point__3: Point^Describe::describe(__local_1);
+    });
+    "core:cli/println"(i32^Describe::describe(42));
+    __sroa_w_item = Button { label: String { repr: array.new_data<u8>("OK"), used: 2 } };
+    "core:cli/println"(Button^Drawable::draw(__sroa_w_item.label));
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_5 = String { repr: builtin::array_new<u8>(24), used: 0 };
+        String::append_char(__local_5, 99);
+        String::append_char(__local_5, 108);
+        String::append_char(__local_5, 105);
+        String::append_char(__local_5, 99);
+        String::append_char(__local_5, 107);
+        String::append_char(__local_5, 101);
+        String::append_char(__local_5, 100);
+        String::append_char(__local_5, 32);
+        String::append(__local_5, __sroa_w_item.label);
+        break __tmpl: __local_5;
+    });
     trait_bound_nested_generic();
 }
 
@@ -222,7 +210,30 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let __local_1: ref Point;
+    let __local_5: ref String;
+    let __sroa_w_item: ref Button;
+    "core:cli/println"(__inline_show_Point__4: block -> ref String {
+        __local_1 = Point { x: 1, y: 2 };
+        break __inline_show_Point__4: Point^Describe::describe(__local_1);
+    });
+    "core:cli/println"(i32^Describe::describe(42));
+    __sroa_w_item = Button { label: String { repr: array.new_data<u8>("OK"), used: 2 } };
+    "core:cli/println"(Button^Drawable::draw(__sroa_w_item.label));
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_5 = String { repr: builtin::array_new<u8>(24), used: 0 };
+        String::append_char(__local_5, 99);
+        String::append_char(__local_5, 108);
+        String::append_char(__local_5, 105);
+        String::append_char(__local_5, 99);
+        String::append_char(__local_5, 107);
+        String::append_char(__local_5, 101);
+        String::append_char(__local_5, 100);
+        String::append_char(__local_5, 32);
+        String::append(__local_5, __sroa_w_item.label);
+        break __tmpl: __local_5;
+    });
+    trait_bound_nested_generic();
     "wasi/task-return"(0);
 }
 

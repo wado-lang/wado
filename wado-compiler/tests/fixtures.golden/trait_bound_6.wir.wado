@@ -38,8 +38,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/trait_bound_propagation" = fn();
-
 type "functype/trait_bound_ref_mut" = fn();
 
 type "functype/run" = fn();
@@ -101,10 +99,6 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-fn trait_bound_propagation() with Stdout {
-    "core:cli/println"(String { repr: array.new_data<u8>("equal"), used: 5 });
-}
-
 fn trait_bound_ref_mut() with Stdout {
     let __local_1: ref String;
     let __local_2: ref Formatter;
@@ -123,7 +117,7 @@ fn trait_bound_ref_mut() with Stdout {
 }
 
 fn run() with Stdout {
-    trait_bound_propagation();
+    "core:cli/println"(String { repr: array.new_data<u8>("equal"), used: 5 });
     trait_bound_ref_mut();
 }
 
@@ -134,7 +128,8 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    "core:cli/println"(String { repr: array.new_data<u8>("equal"), used: 5 });
+    trait_bound_ref_mut();
     "wasi/task-return"(0);
 }
 
