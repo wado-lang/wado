@@ -45,8 +45,6 @@ type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/trait_bound_method_on_type_param_chain" = fn();
 
-type "functype/trait_bound_method_on_type_param_multi" = fn();
-
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -153,15 +151,11 @@ fn trait_bound_method_on_type_param_chain() with Stdout {
     });
 }
 
-fn trait_bound_method_on_type_param_multi() with Stdout {
+fn run() with Stdout {
     let p: ref Player;
+    trait_bound_method_on_type_param_chain();
     p = Player { player_name: String { repr: array.new_data<u8>("Alice"), used: 5 }, player_score: 100 };
     "core:cli/println"(describe<Player>(p));
-}
-
-fn run() with Stdout {
-    trait_bound_method_on_type_param_chain();
-    trait_bound_method_on_type_param_multi();
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -171,7 +165,10 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let p: ref Player;
+    trait_bound_method_on_type_param_chain();
+    p = Player { player_name: String { repr: array.new_data<u8>("Alice"), used: 5 }, player_score: 100 };
+    "core:cli/println"(describe<Player>(p));
     "wasi/task-return"(0);
 }
 

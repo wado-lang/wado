@@ -25,12 +25,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/option_construct_none" = fn();
-
-type "functype/option_construct_null" = fn();
-
-type "functype/option_construct_some_string" = fn();
-
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -72,22 +66,10 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-fn option_construct_none() with Stdout {
-    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
-}
-
-fn option_construct_null() with Stdout {
-    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
-}
-
-fn option_construct_some_string() with Stdout {
-    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
-}
-
 fn run() with Stdout {
-    option_construct_none();
-    option_construct_null();
-    option_construct_some_string();
+    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
+    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
+    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -97,7 +79,9 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
+    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
+    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
     "wasi/task-return"(0);
 }
 

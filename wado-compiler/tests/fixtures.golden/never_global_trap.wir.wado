@@ -80,7 +80,14 @@ fn run() with Stdout {
 }
 
 fn __cm_export__run() {
-    run();
+    __inline___initialize_modules_1: block {
+        if __modules_initialized {
+            break __inline___initialize_modules_1;
+        };
+        "core:internal/panic"(String { repr: array.new_data<u8>("global boom"), used: 11 });
+        unreachable;
+        __modules_initialized = 1;
+    };
     "wasi/task-return"(0);
 }
 
@@ -89,13 +96,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l2: loop {
+            l3: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l2;
+                continue l3;
             };
         };
     };

@@ -80,7 +80,10 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let msg: ref String;
+    "core:cli/println"(String { repr: array.new_data<u8>("multiply ok"), used: 11 });
+    msg = String { repr: array.new_data<u8>("hello from lib"), used: 14 };
+    "core:cli/println"(msg);
     "wasi/task-return"(0);
 }
 

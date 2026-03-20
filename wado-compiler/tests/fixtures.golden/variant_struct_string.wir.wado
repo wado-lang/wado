@@ -103,7 +103,27 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let s: ref String;
+    let __local_3: ref String;
+    let __sroa_opts_align: ref "./variant_struct_string_module.wado/Align";
+    __sroa_opts_align = "./variant_struct_string_module.wado/Align" { 1 };
+    s = value_copy String(__inline_format_str_4: block -> ref String {
+        __local_3 = String { repr: array.new_data<u8>("hello"), used: 5 };
+        break __inline_format_str_4: __local_3;
+        let __match_scrut_0: ref "./variant_struct_string_module.wado/Align";
+        __match_scrut_0 = __sroa_opts_align;
+        if __match_scrut_0.discriminant == 0 -> ref String {
+            __local_3;
+        } else if __match_scrut_0.discriminant == 1 -> ref String {
+            __local_3;
+        } else if __match_scrut_0.discriminant == 2 -> ref String {
+            __local_3;
+        } else {
+            unreachable;
+        };
+        break __inline_format_str_4;
+    });
+    "core:cli/println"(s);
     "wasi/task-return"(0);
 }
 
@@ -142,13 +162,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l5: loop {
+            l8: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l5;
+                continue l8;
             };
         };
     };

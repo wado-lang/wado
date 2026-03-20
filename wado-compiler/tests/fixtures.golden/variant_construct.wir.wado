@@ -83,8 +83,6 @@ type "functype/return_result_array" = fn() -> ref Result<Array<i32>,String>;
 
 type "functype/variant_construct_literal_coercion" = fn();
 
-type "functype/variant_construct_simple" = fn();
-
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -589,13 +587,9 @@ condition: opt_arr matches { Some(a) && a.len() == 2 }
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
-fn variant_construct_simple() with Stdout {
-    "core:cli/println"(String { repr: array.new_data<u8>("variant construction works"), used: 26 });
-}
-
 fn run() with Stdout {
     variant_construct_literal_coercion();
-    variant_construct_simple();
+    "core:cli/println"(String { repr: array.new_data<u8>("variant construction works"), used: 26 });
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -605,7 +599,8 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    variant_construct_literal_coercion();
+    "core:cli/println"(String { repr: array.new_data<u8>("variant construction works"), used: 26 });
     "wasi/task-return"(0);
 }
 

@@ -73,7 +73,14 @@ fn __cm_adapter__Stdin_read_via_stream() {
 }
 
 fn __cm_export__run() {
-    run();
+    let stdin_stream: i32;
+    let subtask: i32;
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
+    multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1] = __cm_adapter__Stdin_read_via_stream();
+    stdin_stream = __sroa___pattern_temp_0_0;
+    subtask = __cm_adapter__Stdout_write_via_stream(stdin_stream);
+    "core:internal/wait_for_subtask"(subtask);
     "wasi/task-return"(0);
 }
 

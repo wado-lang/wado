@@ -44,14 +44,6 @@ type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
-type "functype/./sub/location_submodule_helper.wado/show_file" = fn();
-
-type "functype/./sub/location_submodule_helper.wado/show_line" = fn();
-
-type "functype/./sub/location_submodule_helper.wado/show_function" = fn();
-
-type "functype/./sub/location_submodule_helper.wado/show_data" = fn();
-
 type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:cli/println" = fn(ref String);
@@ -106,10 +98,24 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout {
-    "./sub/location_submodule_helper.wado/show_file"();
-    "./sub/location_submodule_helper.wado/show_line"();
-    "./sub/location_submodule_helper.wado/show_function"();
-    "./sub/location_submodule_helper.wado/show_data"();
+    let __local_2: ref String;
+    let __local_3: ref Formatter;
+    let __local_5: ref String;
+    let __local_7: ref Formatter;
+    "core:cli/println"(String { repr: array.new_data<u8>("./sub/location_submodule_helper.wado"), used: 36 });
+    "core:cli/println"(__inline_i32__to_string_4: block -> ref String {
+        __local_2 = String { repr: builtin::array_new<u8>(12), used: 0 };
+        __local_3 = __inline_Formatter__new_1: block -> ref Formatter {
+            __local_5 = __local_2;
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+        };
+        __local_7 = __local_3;
+        i32::fmt_decimal(9, __local_7);
+        break __inline_i32__to_string_4: __local_2;
+    });
+    "core:cli/println"(String { repr: array.new_data<u8>("show_function"), used: 13 });
+    "core:cli/println"(String { repr: array.new_data<u8>("SUBMODULE_DATA_MARKER
+"), used: 22 });
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -119,38 +125,25 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
-    "wasi/task-return"(0);
-}
-
-fn "./sub/location_submodule_helper.wado/show_file"() with Stdout {  // from ./sub/location_submodule_helper.wado
+    let __local_2: ref String;
+    let __local_3: ref Formatter;
+    let __local_5: ref String;
+    let __local_7: ref Formatter;
     "core:cli/println"(String { repr: array.new_data<u8>("./sub/location_submodule_helper.wado"), used: 36 });
-}
-
-fn "./sub/location_submodule_helper.wado/show_line"() with Stdout {  // from ./sub/location_submodule_helper.wado
-    let __local_1: ref String;
-    let __local_2: ref Formatter;
-    let __local_4: ref String;
-    let __local_6: ref Formatter;
-    "core:cli/println"(__inline_i32__to_string_0: block -> ref String {
-        __local_1 = String { repr: builtin::array_new<u8>(12), used: 0 };
-        __local_2 = __inline_Formatter__new_1: block -> ref Formatter {
-            __local_4 = __local_1;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
+    "core:cli/println"(__inline_i32__to_string_5: block -> ref String {
+        __local_2 = String { repr: builtin::array_new<u8>(12), used: 0 };
+        __local_3 = __inline_Formatter__new_1: block -> ref Formatter {
+            __local_5 = __local_2;
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         };
-        __local_6 = __local_2;
-        i32::fmt_decimal(9, __local_6);
-        break __inline_i32__to_string_0: __local_1;
+        __local_7 = __local_3;
+        i32::fmt_decimal(9, __local_7);
+        break __inline_i32__to_string_5: __local_2;
     });
-}
-
-fn "./sub/location_submodule_helper.wado/show_function"() with Stdout {  // from ./sub/location_submodule_helper.wado
     "core:cli/println"(String { repr: array.new_data<u8>("show_function"), used: 13 });
-}
-
-fn "./sub/location_submodule_helper.wado/show_data"() with Stdout {  // from ./sub/location_submodule_helper.wado
     "core:cli/println"(String { repr: array.new_data<u8>("SUBMODULE_DATA_MARKER
 "), used: 22 });
+    "wasi/task-return"(0);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli

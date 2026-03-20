@@ -81,8 +81,6 @@ type "functype/apply_padding" = fn(ref String, ref FormatSpec) -> ref String;
 
 type "functype/match_variant_loop" = fn();
 
-type "functype/match_variant_side_effect" = fn();
-
 type "functype/match_variant_simple" = fn();
 
 type "functype/run" = fn();
@@ -288,23 +286,6 @@ fn match_variant_loop() with Stdout {
     "core:cli/println"(apply_padding(String { repr: array.new_data<u8>("test"), used: 4 }, right));
 }
 
-fn match_variant_side_effect() with Stdout {
-    let dir: ref Direction;
-    dir = Direction { 1 };
-    let __match_scrut_0: ref Direction;
-    __match_scrut_0 = dir;
-    if __match_scrut_0.discriminant == 0 {
-        "core:cli/println"(String { repr: array.new_data<u8>("go left"), used: 7 });
-    } else if __match_scrut_0.discriminant == 1 {
-        "core:cli/println"(String { repr: array.new_data<u8>("go center"), used: 9 });
-    } else if __match_scrut_0.discriminant == 2 {
-        "core:cli/println"(String { repr: array.new_data<u8>("go right"), used: 8 });
-    } else {
-        unreachable;
-    };
-    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
-}
-
 fn match_variant_simple() with Stdout {
     let circle: ref Shape;
     let point: ref Shape;
@@ -371,6 +352,7 @@ fn match_variant_simple() with Stdout {
 }
 
 fn run() with Stdout {
+    let dir: ref Direction;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -379,7 +361,19 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     match_variant_loop();
-    match_variant_side_effect();
+    dir = Direction { 1 };
+    let __match_scrut_0: ref Direction;
+    __match_scrut_0 = dir;
+    if __match_scrut_0.discriminant == 0 {
+        "core:cli/println"(String { repr: array.new_data<u8>("go left"), used: 7 });
+    } else if __match_scrut_0.discriminant == 1 {
+        "core:cli/println"(String { repr: array.new_data<u8>("go center"), used: 9 });
+    } else if __match_scrut_0.discriminant == 2 {
+        "core:cli/println"(String { repr: array.new_data<u8>("go right"), used: 8 });
+    } else {
+        unreachable;
+    };
+    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
     match_variant_simple();
 }
 
@@ -390,7 +384,29 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let dir: ref Direction;
+    __inline___initialize_modules_1: block {
+        if __modules_initialized {
+            break __inline___initialize_modules_1;
+        };
+        __initialize_module();
+        __modules_initialized = 1;
+    };
+    match_variant_loop();
+    dir = Direction { 1 };
+    let __match_scrut_0: ref Direction;
+    __match_scrut_0 = dir;
+    if __match_scrut_0.discriminant == 0 {
+        "core:cli/println"(String { repr: array.new_data<u8>("go left"), used: 7 });
+    } else if __match_scrut_0.discriminant == 1 {
+        "core:cli/println"(String { repr: array.new_data<u8>("go center"), used: 9 });
+    } else if __match_scrut_0.discriminant == 2 {
+        "core:cli/println"(String { repr: array.new_data<u8>("go right"), used: 8 });
+    } else {
+        unreachable;
+    };
+    "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
+    match_variant_simple();
     "wasi/task-return"(0);
 }
 
@@ -429,13 +445,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l27: loop {
+            l31: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l27;
+                continue l31;
             };
         };
     };
@@ -581,39 +597,39 @@ fn unrounded_div(u, d) {
 }
 
 fn pow10_coarse(i) {
-    b34: block {
-        b35: block {
-            b36: block {
-                b37: block {
-                    b38: block {
-                        b39: block {
-                            b40: block {
-                                b41: block {
-                                    b42: block {
-                                        b43: block {
-                                            b44: block {
-                                                b45: block {
-                                                    b46: block {
-                                                        b47: block {
-                                                            b48: block {
-                                                                b49: block {
-                                                                    b50: block {
-                                                                        b51: block {
-                                                                            b52: block {
-                                                                                b53: block {
-                                                                                    b54: block {
-                                                                                        b55: block {
-                                                                                            b56: block {
-                                                                                                b57: block {
-                                                                                                    b58: block {
-                                                                                                        b59: block {
-                                                                                                            b60: block {
-                                                                                                                b61: block {
+    b38: block {
+        b39: block {
+            b40: block {
+                b41: block {
+                    b42: block {
+                        b43: block {
+                            b44: block {
+                                b45: block {
+                                    b46: block {
+                                        b47: block {
+                                            b48: block {
+                                                b49: block {
+                                                    b50: block {
+                                                        b51: block {
+                                                            b52: block {
+                                                                b53: block {
+                                                                    b54: block {
+                                                                        b55: block {
+                                                                            b56: block {
+                                                                                b57: block {
+                                                                                    b58: block {
+                                                                                        b59: block {
+                                                                                            b60: block {
+                                                                                                b61: block {
+                                                                                                    b62: block {
+                                                                                                        b63: block {
+                                                                                                            b64: block {
+                                                                                                                b65: block {
                                                                                                                     br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26] default=0;
                                                                                                                 };
                                                                                                                 "core:internal/unreachable"();
                                                                                                                 unreachable;
-                                                                                                                break b34;
+                                                                                                                break b38;
                                                                                                             };
                                                                                                             return -9202643304706469457_i64; -2331608335343510137_i64;
                                                                                                         };
@@ -670,118 +686,118 @@ fn pow10_coarse(i) {
 }
 
 fn pow10_fine(i) {
-    return b62: block -> u64 {
-        b63: block {
-            b64: block {
-                b65: block {
-                    b66: block {
-                        b67: block {
-                            b68: block {
-                                b69: block {
-                                    b70: block {
-                                        b71: block {
-                                            b72: block {
-                                                b73: block {
-                                                    b74: block {
-                                                        b75: block {
-                                                            b76: block {
-                                                                b77: block {
-                                                                    b78: block {
-                                                                        b79: block {
-                                                                            b80: block {
-                                                                                b81: block {
-                                                                                    b82: block {
-                                                                                        b83: block {
-                                                                                            b84: block {
-                                                                                                b85: block {
-                                                                                                    b86: block {
-                                                                                                        b87: block {
-                                                                                                            b88: block {
-                                                                                                                b89: block {
-                                                                                                                    b90: block {
+    return b66: block -> u64 {
+        b67: block {
+            b68: block {
+                b69: block {
+                    b70: block {
+                        b71: block {
+                            b72: block {
+                                b73: block {
+                                    b74: block {
+                                        b75: block {
+                                            b76: block {
+                                                b77: block {
+                                                    b78: block {
+                                                        b79: block {
+                                                            b80: block {
+                                                                b81: block {
+                                                                    b82: block {
+                                                                        b83: block {
+                                                                            b84: block {
+                                                                                b85: block {
+                                                                                    b86: block {
+                                                                                        b87: block {
+                                                                                            b88: block {
+                                                                                                b89: block {
+                                                                                                    b90: block {
+                                                                                                        b91: block {
+                                                                                                            b92: block {
+                                                                                                                b93: block {
+                                                                                                                    b94: block {
                                                                                                                         br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27] default=0;
                                                                                                                     };
                                                                                                                     "core:internal/unreachable"();
                                                                                                                     unreachable;
-                                                                                                                    break b62;
+                                                                                                                    break b66;
                                                                                                                 };
                                                                                                                 -9223372036854775808_i64;
-                                                                                                                break b62;
+                                                                                                                break b66;
                                                                                                             };
                                                                                                             -6917529027641081856_i64;
-                                                                                                            break b62;
+                                                                                                            break b66;
                                                                                                         };
                                                                                                         -4035225266123964416_i64;
-                                                                                                        break b62;
+                                                                                                        break b66;
                                                                                                     };
                                                                                                     -432345564227567616_i64;
-                                                                                                    break b62;
+                                                                                                    break b66;
                                                                                                 };
                                                                                                 -7187745005283311616_i64;
-                                                                                                break b62;
+                                                                                                break b66;
                                                                                             };
                                                                                             -4372995238176751616_i64;
-                                                                                            break b62;
+                                                                                            break b66;
                                                                                         };
                                                                                         -854558029293551616_i64;
-                                                                                        break b62;
+                                                                                        break b66;
                                                                                     };
                                                                                     -7451627795949551616_i64;
-                                                                                    break b62;
+                                                                                    break b66;
                                                                                 };
                                                                                 -4702848726509551616_i64;
-                                                                                break b62;
+                                                                                break b66;
                                                                             };
                                                                             -1266874889709551616_i64;
-                                                                            break b62;
+                                                                            break b66;
                                                                         };
                                                                         -7709325833709551616_i64;
-                                                                        break b62;
+                                                                        break b66;
                                                                     };
                                                                     -5024971273709551616_i64;
-                                                                    break b62;
+                                                                    break b66;
                                                                 };
                                                                 -1669528073709551616_i64;
-                                                                break b62;
+                                                                break b66;
                                                             };
                                                             -7960984073709551616_i64;
-                                                            break b62;
+                                                            break b66;
                                                         };
                                                         -5339544073709551616_i64;
-                                                        break b62;
+                                                        break b66;
                                                     };
                                                     -2062744073709551616_i64;
-                                                    break b62;
+                                                    break b66;
                                                 };
                                                 -8206744073709551616_i64;
-                                                break b62;
+                                                break b66;
                                             };
                                             -5646744073709551616_i64;
-                                            break b62;
+                                            break b66;
                                         };
                                         -2446744073709551616_i64;
-                                        break b62;
+                                        break b66;
                                     };
                                     -8446744073709551616_i64;
-                                    break b62;
+                                    break b66;
                                 };
                                 -5946744073709551616_i64;
-                                break b62;
+                                break b66;
                             };
                             -2821744073709551616_i64;
-                            break b62;
+                            break b66;
                         };
                         -8681119073709551616_i64;
-                        break b62;
+                        break b66;
                     };
                     -6239712823709551616_i64;
-                    break b62;
+                    break b66;
                 };
                 -3187955011209551616_i64;
-                break b62;
+                break b66;
             };
             -8910000909647051616_i64;
-            break b62;
+            break b66;
         };
         -6525815118631426616_i64;
     };
@@ -1145,17 +1161,17 @@ fn write_digits_at(buf, offset, val, nd) {
     v = val;
     idx = (offset + nd) - 1;
     _licm_repr_9 = buf.repr;
-    b111: block {
-        l112: loop {
+    b115: block {
+        l116: loop {
             if (idx >= offset) == 0 {
-                break b111;
+                break b115;
             };
             index = idx;
             value = 48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255);
             builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
-            continue l112;
+            continue l116;
         };
     };
 }
@@ -1240,14 +1256,14 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         trailing_9 = (precision - leading_zeros) - digits_to_output;
         trim_d_10 = d;
         skip_11 = nd - digits_to_output;
-        b119: block {
-            l120: loop {
+        b123: block {
+            l124: loop {
                 if (skip_11 > 0) == 0 {
-                    break b119;
+                    break b123;
                 };
                 trim_d_10 = trim_d_10 /u 10_i64;
                 skip_11 = skip_11 - 1;
-                continue l120;
+                continue l124;
             };
         };
         digit_offset = buf.used;
@@ -1270,14 +1286,14 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
             output_nd = decimal_pos + precision;
             trim_d_16 = d;
             skip_17 = nd - output_nd;
-            b125: block {
-                l126: loop {
+            b129: block {
+                l130: loop {
                     if (skip_17 > 0) == 0 {
-                        break b125;
+                        break b129;
                     };
                     trim_d_16 = trim_d_16 /u 10_i64;
                     skip_17 = skip_17 - 1;
-                    continue l126;
+                    continue l130;
                 };
             };
             total = output_nd + 1;
@@ -1388,13 +1404,13 @@ fn Array<u64>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l138: loop {
+            l142: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
                 i = i + 1;
-                continue l138;
+                continue l142;
             };
         };
     };
@@ -1693,10 +1709,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_8 = content_len - 1;
         _licm_buf_29 = self.buf;
         _licm_repr_33 = _licm_buf_29.repr;
-        b171: block {
-            l172: loop {
+        b175: block {
+            l176: loop {
                 if (i_8 >= 0) == 0 {
-                    break b171;
+                    break b175;
                 };
                 index_14 = (start_pos + left_pad) + i_8;
                 value_15 = __inline_String__get_byte_2: block -> u8 {
@@ -1705,7 +1721,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l172;
+                continue l176;
             };
         };
         __for_1: block {
@@ -1713,14 +1729,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_30 = self.buf;
             _licm_repr_34 = _licm_buf_30.repr;
             block {
-                l175: loop {
+                l179: loop {
                     if (j_9 < left_pad) == 0 {
                         break __for_1;
                     };
                     index_19 = start_pos + j_9;
                     builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                     j_9 = j_9 + 1;
-                    continue l175;
+                    continue l179;
                 };
             };
         };
@@ -1730,10 +1746,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_10 = content_len - 1;
         _licm_buf_31 = self.buf;
         _licm_repr_35 = _licm_buf_31.repr;
-        b177: block {
-            l178: loop {
+        b181: block {
+            l182: loop {
                 if (i_10 >= 0) == 0 {
-                    break b177;
+                    break b181;
                 };
                 index_22 = (start_pos + padding) + i_10;
                 value_23 = __inline_String__get_byte_5: block -> u8 {
@@ -1742,7 +1758,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
-                continue l178;
+                continue l182;
             };
         };
         __for_2: block {
@@ -1750,14 +1766,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_32 = self.buf;
             _licm_repr_36 = _licm_buf_32.repr;
             block {
-                l181: loop {
+                l185: loop {
                     if (j_11 < padding) == 0 {
                         break __for_2;
                     };
                     index_27 = start_pos + j_11;
                     builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                     j_11 = j_11 + 1;
-                    continue l181;
+                    continue l185;
                 };
             };
         };

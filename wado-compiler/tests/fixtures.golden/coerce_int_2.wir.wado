@@ -39,10 +39,6 @@ type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/coerce_int_literal_bitwise_i128" = fn();
 
-type "functype/coerce_int_literal_chained_comparison" = fn();
-
-type "functype/coerce_int_literal_comparison" = fn();
-
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -371,18 +367,10 @@ fn coerce_int_literal_bitwise_i128() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
-fn coerce_int_literal_chained_comparison() with Stdout {
-    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
-}
-
-fn coerce_int_literal_comparison() with Stdout {
-    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
-}
-
 fn run() with Stdout {
     coerce_int_literal_bitwise_i128();
-    coerce_int_literal_chained_comparison();
-    coerce_int_literal_comparison();
+    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -392,7 +380,9 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    coerce_int_literal_bitwise_i128();
+    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
     "wasi/task-return"(0);
 }
 

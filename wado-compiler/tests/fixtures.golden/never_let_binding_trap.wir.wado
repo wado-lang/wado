@@ -72,7 +72,8 @@ fn run() with Stdout {
 }
 
 fn __cm_export__run() {
-    run();
+    "core:internal/panic"(String { repr: array.new_data<u8>("boom"), used: 4 });
+    unreachable;
     "wasi/task-return"(0);
 }
 
