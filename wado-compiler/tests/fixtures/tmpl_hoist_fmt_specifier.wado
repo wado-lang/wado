@@ -1,0 +1,43 @@
+// Formatter hoisting: format specifiers with constant parameters.
+// When a template uses `{x:0.6f}`, `{x:x}`, `{x:#x}`, etc., the Formatter
+// struct literal has constant fields and should be hoisted before the loop.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Fixed-point: f64 with precision
+    let mut total = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let x = i as f64 / 3.0;
+        let s = `{x:0.6f}`;
+        total += s.len();
+    }
+    println(`fixed={total}`);
+
+    // Hex: i32 lowercase
+    let mut total2 = 0;
+    for let mut i = 0; i < 16; i += 1 {
+        let s = `{i:x}`;
+        total2 += s.len();
+    }
+    println(`hex={total2}`);
+
+    // Hex: i32 with alternate prefix (#x → "0x...")
+    let mut total3 = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let s = `{i:#x}`;
+        total3 += s.len();
+    }
+    println(`hex_alt={total3}`);
+
+    // Precision: f64 with 2-digit precision
+    let mut total4 = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let x = i as f64 * 3.14;
+        let s = `{x:0.2f}`;
+        total4 += s.len();
+    }
+    println(`prec2={total4}`);
+}
+
+__DATA__
+{"stdout": "fixed=40\nhex=16\nhex_alt=15\nprec2=21\n", "wir_expect:O2": ["__fmt_buf_", ".indent = 0"]}

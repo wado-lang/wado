@@ -768,104 +768,67 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
     })
 }
 
-/// Check if a `__tmpl` block contains a Formatter struct literal that can be hoisted.
+/// Collect all Formatter struct literals in a `__tmpl` block that can be hoisted.
 ///
-/// After String buffer hoisting, the block looks like:
-/// ```text
-///     __tmpl_buf.used = 0;
-///     __local_N = Formatter { fill: 32, ..., buf: ref.as_non_null(__tmpl_buf) };
-///     ...
-/// ```
-///
-/// We detect the Formatter assignment and extract it for hoisting.
-fn extract_fmt_candidate(
+/// Detects three patterns:
+///   1. Assign: `__local_N = Formatter { ... }`
+///   2. Let:    `let mut __f = Formatter { ... }`
+///   3. LabeledBlock (inlined Formatter::new):
+///      `let __f = label: { let buf = &mut __tmpl_buf; break: Formatter { ..., buf } }`
+///      or `__local_N = label: { ... break: Formatter { ... } }`
+fn extract_fmt_candidates(
     block: &TirBlock,
     hoisted_buf_index: u32,
     type_table: &std::cell::RefCell<TypeTable>,
-) -> Option<FmtCandidate> {
+) -> Vec<FmtCandidate> {
     let type_table = type_table.borrow();
-    // Scan statements (skip first = String reset, skip last = break)
+    let mut candidates = Vec::new();
+
     for (i, stmt) in block.stmts.iter().enumerate() {
         if i == 0 || i == block.stmts.len() - 1 {
             continue;
         }
 
-        // Extract local index and struct literal from two possible patterns:
-        //   1. Assign: __local_N = Formatter { ... }
-        //   2. Let:    let mut __f: Formatter = Formatter { ... }
-        let (fmt_local_index, struct_name, fields, struct_type, value_type_id, value_span) =
-            match &stmt.kind {
-                TirStmtKind::Expr(expr) => {
-                    let TirExprKind::Assign { target, value } = &expr.kind else {
-                        continue;
-                    };
-                    let TirExprKind::Local {
-                        index: fmt_local_index,
-                        ..
-                    } = &target.kind
-                    else {
-                        continue;
-                    };
-                    let TirExprKind::StructLiteral {
-                        struct_name,
-                        fields,
-                        struct_type,
-                        ..
-                    } = &value.kind
-                    else {
-                        continue;
-                    };
-                    (
-                        *fmt_local_index,
-                        struct_name,
-                        fields,
-                        struct_type,
-                        value.type_id,
-                        value.span,
-                    )
-                }
-                TirStmtKind::Let {
-                    local_index, value, ..
-                } => {
-                    let TirExprKind::StructLiteral {
-                        struct_name,
-                        fields,
-                        struct_type,
-                        ..
-                    } = &value.kind
-                    else {
-                        continue;
-                    };
-                    (
-                        *local_index,
-                        struct_name,
-                        fields,
-                        struct_type,
-                        value.type_id,
-                        value.span,
-                    )
-                }
-                _ => continue,
-            };
+        // Try to extract (local_index, value_expr) from the statement
+        let (fmt_local_index, value_expr): (u32, &TirExpr) = match &stmt.kind {
+            TirStmtKind::Expr(expr) => {
+                let TirExprKind::Assign { target, value } = &expr.kind else {
+                    continue;
+                };
+                let TirExprKind::Local { index, .. } = &target.kind else {
+                    continue;
+                };
+                (*index, value)
+            }
+            TirStmtKind::Let {
+                local_index, value, ..
+            } => (*local_index, value),
+            _ => continue,
+        };
+
+        // Try to extract Formatter fields from the value expression
+        let Some(extracted) =
+            extract_formatter_fields(value_expr, hoisted_buf_index)
+        else {
+            continue;
+        };
+
+        let (struct_name, fields, struct_type, value_type_id, value_span) = extracted;
 
         if struct_name != "Formatter" {
             continue;
         }
 
-        // Verify `buf` field references the hoisted String buffer
-        let buf_field = fields.iter().find(|f| f.name == "buf")?;
-        if !buf_field_references_local(&buf_field.value, hoisted_buf_index) {
-            continue;
-        }
-
         // Find the `indent` field index
-        let indent_field = fields.iter().find(|f| f.name == "indent")?;
+        let Some(indent_field) = fields.iter().find(|f| f.name == "indent") else {
+            continue;
+        };
         let indent_field_index = indent_field.field_index;
 
         // Verify all non-buf fields are constant (literals)
         let all_const = fields.iter().all(|f| {
             if f.name == "buf" {
-                return true; // buf is a ref to hoisted String, handled separately
+                return true;
             }
             is_constant_expr(&f.value)
         });
@@ -873,30 +836,197 @@ fn extract_fmt_candidate(
             continue;
         }
 
-        // Verify the Formatter type is a struct (not a primitive)
+        // Verify the Formatter type is a struct
         let resolved = type_table.get(value_type_id);
         if !matches!(resolved, crate::tir::ResolvedType::Struct { .. }) {
             continue;
         }
 
-        return Some(FmtCandidate {
+        // Build init_value with buf pointing to hoisted buffer
+        let init_fields: Vec<_> = fields
+            .iter()
+            .map(|f| {
+                if f.name == "buf" {
+                    // Normalize buf to &mut __tmpl_buf
+                    crate::tir::TirStructField {
+                        name: f.name.clone(),
+                        value: TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::MutRef,
+                                expr: Box::new(TirExpr::new(
+                                    TirExprKind::Local {
+                                        index: hoisted_buf_index,
+                                        name: format!("__tmpl_buf_{hoisted_buf_index}"),
+                                    },
+                                    f.value.type_id,
+                                    value_span,
+                                )),
+                            },
+                            f.value.type_id,
+                            value_span,
+                        ),
+                        field_index: f.field_index,
+                    }
+                } else {
+                    f.clone()
+                }
+            })
+            .collect();
+
+        candidates.push(FmtCandidate {
             stmt_index: i,
             fmt_local_index,
             init_value: TirExpr::new(
                 TirExprKind::StructLiteral {
-                    struct_type: *struct_type,
-                    struct_name: struct_name.clone(),
-                    fields: fields.clone(),
+                    struct_type,
+                    struct_name: struct_name.to_string(),
+                    fields: init_fields,
                 },
                 value_type_id,
                 value_span,
             ),
-            formatter_type: *struct_type,
+            formatter_type: struct_type,
             indent_field_index,
             span: value_span,
         });
     }
-    None
+    candidates
+}
+
+/// Extract Formatter struct literal fields from a value expression.
+///
+/// Handles:
+///   - Direct `StructLiteral { ... }` where buf references hoisted buffer
+///   - `LabeledBlock { let buf = ...; break: StructLiteral { ..., buf } }`
+///     where the intermediate `buf` local traces back to the hoisted buffer
+fn extract_formatter_fields<'a>(
+    value: &'a TirExpr,
+    hoisted_buf_index: u32,
+) -> Option<(&'a str, &'a [crate::tir::TirStructField], TypeId, TypeId, Span)> {
+    match &value.kind {
+        TirExprKind::StructLiteral {
+            struct_name,
+            fields,
+            struct_type,
+        } => {
+            let buf_field = fields.iter().find(|f| f.name == "buf")?;
+            if !buf_field_references_local(&buf_field.value, hoisted_buf_index) {
+                return None;
+            }
+            Some((struct_name, fields, *struct_type, value.type_id, value.span))
+        }
+        TirExprKind::LabeledBlock { block, .. } => {
+            // Pattern: { let buf = &mut __tmpl_buf; break label: Formatter { ..., buf } }
+            // or: { __local = __tmpl_buf; break: Formatter { ..., buf: ref.as_non_null(__local) } }
+            let break_stmt = block.stmts.last()?;
+            let break_value = match &break_stmt.kind {
+                TirStmtKind::Break {
+                    value: Some(v), ..
+                } => v,
+                _ => return None,
+            };
+            let TirExprKind::StructLiteral {
+                struct_name,
+                fields,
+                struct_type,
+            } = &break_value.kind
+            else {
+                return None;
+            };
+
+            // Check if buf traces to hoisted buffer (directly or via intermediate local)
+            let buf_field = fields.iter().find(|f| f.name == "buf")?;
+            if buf_field_references_local(&buf_field.value, hoisted_buf_index) {
+                return Some((
+                    struct_name,
+                    fields,
+                    *struct_type,
+                    value.type_id,
+                    value.span,
+                ));
+            }
+
+            // Trace through intermediate local in the block
+            let buf_inner_local = extract_local_from_ref(&buf_field.value)?;
+            for stmt in &block.stmts {
+                match &stmt.kind {
+                    TirStmtKind::Let {
+                        local_index,
+                        value: let_value,
+                        ..
+                    } if *local_index == buf_inner_local => {
+                        if references_local(let_value, hoisted_buf_index) {
+                            return Some((
+                                struct_name,
+                                fields,
+                                *struct_type,
+                                value.type_id,
+                                value.span,
+                            ));
+                        }
+                    }
+                    TirStmtKind::Expr(expr) => {
+                        if let TirExprKind::Assign { target, value: av } = &expr.kind {
+                            if let TirExprKind::Local { index, .. } = &target.kind {
+                                if *index == buf_inner_local
+                                    && references_local(av, hoisted_buf_index)
+                                {
+                                    return Some((
+                                        struct_name,
+                                        fields,
+                                        *struct_type,
+                                        value.type_id,
+                                        value.span,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Extract the local index from a reference expression.
+/// Handles `&mut Local(N)`, `Local(N)`, and `ref.as_non_null(Local(N))`.
+fn extract_local_from_ref(expr: &TirExpr) -> Option<u32> {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => Some(*index),
+        TirExprKind::Unary {
+            op: TirUnaryOp::MutRef,
+            expr: inner,
+        }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr: inner,
+        } => match &inner.kind {
+            TirExprKind::Local { index, .. } => Some(*index),
+            _ => None,
+        },
+        TirExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => {
+            args.first().and_then(|a| match &a.expr.kind {
+                TirExprKind::Local { index, .. } => Some(*index),
+                _ => None,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Check if an expression references a specific local (possibly through &mut).
+fn references_local(expr: &TirExpr, local_index: u32) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => *index == local_index,
+        TirExprKind::Unary {
+            op: TirUnaryOp::MutRef,
+            expr: inner,
+        } => references_local(inner, local_index),
+        _ => false,
+    }
 }
 
 /// Check if a `buf` field expression references the given local (the hoisted String buffer).
@@ -1026,16 +1156,15 @@ fn transform_tmpl_block(
         rename_local_in_stmt(stmt, old_index, buf_local_index, &buf_local_name);
     }
 
-    // Phase 2: Try to hoist the Formatter struct literal as well.
-    // After the String rename above, the block now contains:
-    //   __tmpl_buf_N.used = 0;
-    //   __local_M = Formatter { ..., buf: ref.as_non_null(__tmpl_buf_N) };
-    //   ...
-    // We detect the Formatter and hoist it to avoid a GC struct.new every iteration.
-    if let Some(fmt_candidate) = extract_fmt_candidate(block, buf_local_index, type_table) {
-        transform_fmt_in_tmpl_block(
+    // Phase 2: Hoist Formatter struct literals as well.
+    // After the String rename above, the block may contain one or more Formatter
+    // creations (direct struct literals or inlined Formatter::new LabeledBlocks).
+    // Each distinct Formatter is hoisted to its own local before the loop.
+    let fmt_candidates = extract_fmt_candidates(block, buf_local_index, type_table);
+    if !fmt_candidates.is_empty() {
+        transform_fmts_in_tmpl_block(
             block,
-            &fmt_candidate,
+            &fmt_candidates,
             hoist_stmts,
             local_count,
             local_types,
@@ -1043,87 +1172,138 @@ fn transform_tmpl_block(
     }
 }
 
-/// Hoist a Formatter struct literal out of a `__tmpl` block.
+/// Hoist Formatter struct literals out of a `__tmpl` block.
 ///
-/// Replaces the Formatter struct literal assignment with an `indent` field reset,
-/// and prepends a hoisted Formatter allocation before the loop.
-fn transform_fmt_in_tmpl_block(
+/// Each candidate gets its own hoisted local. Replaces the struct literal with an
+/// `indent` field reset, and renames all references to the hoisted local.
+///
+/// Processes candidates in reverse order so that stmt_index values remain valid
+/// as we replace statements.
+fn transform_fmts_in_tmpl_block(
     block: &mut TirBlock,
-    fmt_candidate: &FmtCandidate,
+    candidates: &[FmtCandidate],
     hoist_stmts: &mut Vec<TirStmt>,
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
 ) {
-    let span = fmt_candidate.span;
-    let formatter_type = fmt_candidate.formatter_type;
+    // Sort by stmt_index ascending to compute rename ranges
+    let mut sorted_candidates: Vec<_> = candidates.iter().collect();
+    sorted_candidates.sort_by_key(|c| c.stmt_index);
 
-    // Allocate a new local for the hoisted Formatter
-    let fmt_local_index = *local_count;
-    *local_count += 1;
-    local_types.push(formatter_type);
+    // Build a mapping from each candidate to its hoisted local and rename range.
+    // When multiple candidates share the same fmt_local_index, each one's rename
+    // range extends from its stmt_index to the next candidate's stmt_index (exclusive)
+    // that shares the same local. For the last candidate with a given local, the
+    // range extends to the end of the block.
+    struct HoistInfo {
+        hoisted_index: u32,
+        hoisted_name: String,
+        stmt_index: usize,
+        rename_start: usize,
+        rename_end: usize, // exclusive
+        old_fmt_index: u32,
+        formatter_type: TypeId,
+        indent_field_index: u32,
+        init_value: TirExpr,
+        span: Span,
+    }
+    let block_len = block.stmts.len();
+    let mut hoist_infos = Vec::new();
 
-    let fmt_local_name = format!("__fmt_buf_{fmt_local_index}");
+    for (pos, candidate) in sorted_candidates.iter().enumerate() {
+        let fmt_local_index = *local_count;
+        *local_count += 1;
+        local_types.push(candidate.formatter_type);
 
-    // Hoist statement: let mut __fmt_buf_N = Formatter { fill: ..., buf: ... };
-    hoist_stmts.push(TirStmt::new(
-        TirStmtKind::Let {
-            name: fmt_local_name.clone(),
-            local_index: fmt_local_index,
-            is_mut: true,
-            is_reactive: false,
-            type_id: formatter_type,
-            value: fmt_candidate.init_value.clone(),
-            skip_value_copy: false,
-        },
-        span,
-    ));
+        // Find the next candidate that shares the same fmt_local_index
+        let rename_end = sorted_candidates[pos + 1..]
+            .iter()
+            .find(|c| c.fmt_local_index == candidate.fmt_local_index)
+            .map(|c| c.stmt_index)
+            .unwrap_or(block_len);
 
-    // Replace the Formatter struct literal with an indent field reset:
-    //   __fmt_buf_N.indent = 0;
-    //
-    // IMPORTANT: Do NOT remove this indent reset! Format functions (especially
-    // pretty-print with `:#?`) may modify the `indent` field during formatting.
-    // Without this reset, the indent value would accumulate across loop iterations,
-    // causing incorrect indentation in subsequent iterations.
-    let indent_reset_stmt = TirStmt::new(
-        TirStmtKind::Expr(TirExpr::new(
-            TirExprKind::Assign {
-                target: Box::new(TirExpr::new(
-                    TirExprKind::FieldAccess {
-                        expr: Box::new(TirExpr::new(
-                            TirExprKind::Local {
-                                index: fmt_local_index,
-                                name: fmt_local_name.clone(),
-                            },
-                            formatter_type,
-                            span,
-                        )),
-                        field_index: fmt_candidate.indent_field_index,
-                        field_name: "indent".to_string(),
-                    },
-                    TypeTable::I32,
-                    span,
-                )),
-                value: Box::new(TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: 0,
-                        repr: "0".to_string(),
-                    },
-                    TypeTable::I32,
-                    span,
-                )),
+        hoist_infos.push(HoistInfo {
+            hoisted_index: fmt_local_index,
+            hoisted_name: format!("__fmt_buf_{fmt_local_index}"),
+            stmt_index: candidate.stmt_index,
+            rename_start: candidate.stmt_index,
+            rename_end,
+            old_fmt_index: candidate.fmt_local_index,
+            formatter_type: candidate.formatter_type,
+            indent_field_index: candidate.indent_field_index,
+            init_value: candidate.init_value.clone(),
+            span: candidate.span,
+        });
+    }
+
+    for info in &hoist_infos {
+        // Hoist statement: let mut __fmt_buf_N = Formatter { fill: ..., buf: ... };
+        hoist_stmts.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: info.hoisted_name.clone(),
+                local_index: info.hoisted_index,
+                is_mut: true,
+                is_reactive: false,
+                type_id: info.formatter_type,
+                value: info.init_value.clone(),
+                skip_value_copy: false,
             },
-            TypeTable::UNIT,
-            span,
-        )),
-        span,
-    );
-    block.stmts[fmt_candidate.stmt_index] = indent_reset_stmt;
+            info.span,
+        ));
 
-    // Rename all references from the old Formatter local to the hoisted one
-    let old_fmt_index = fmt_candidate.fmt_local_index;
-    for stmt in &mut block.stmts {
-        rename_local_in_stmt(stmt, old_fmt_index, fmt_local_index, &fmt_local_name);
+        // Replace the Formatter struct literal with an indent field reset:
+        //   __fmt_buf_N.indent = 0;
+        //
+        // IMPORTANT: Do NOT remove this indent = 0 reset! Format functions
+        // (especially pretty-print with `:#?`) may modify the `indent` field
+        // during formatting. Without this reset, the indent value would
+        // accumulate across loop iterations, causing incorrect indentation.
+        let indent_reset_stmt = TirStmt::new(
+            TirStmtKind::Expr(TirExpr::new(
+                TirExprKind::Assign {
+                    target: Box::new(TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::Local {
+                                    index: info.hoisted_index,
+                                    name: info.hoisted_name.clone(),
+                                },
+                                info.formatter_type,
+                                info.span,
+                            )),
+                            field_index: info.indent_field_index,
+                            field_name: "indent".to_string(),
+                        },
+                        TypeTable::I32,
+                        info.span,
+                    )),
+                    value: Box::new(TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: 0,
+                            repr: "0".to_string(),
+                        },
+                        TypeTable::I32,
+                        info.span,
+                    )),
+                },
+                TypeTable::UNIT,
+                info.span,
+            )),
+            info.span,
+        );
+        block.stmts[info.stmt_index] = indent_reset_stmt;
+
+        // Rename references from the old Formatter local to the hoisted one,
+        // only within [rename_start, rename_end) to avoid clobbering other
+        // candidates that share the same original local.
+        for stmt in &mut block.stmts[info.rename_start..info.rename_end] {
+            rename_local_in_stmt(
+                stmt,
+                info.old_fmt_index,
+                info.hoisted_index,
+                &info.hoisted_name,
+            );
+        }
     }
 }
 

@@ -1,0 +1,38 @@
+// Formatter hoisting: multiple default Formatters in a single template.
+// When a template has `{a},{b}`, two Formatter::new calls are generated.
+// Since both have identical parameters (width=-1, precision=-1), the optimizer
+// should hoist a single Formatter and reuse it for all default interpolations.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Two default i32 interpolations
+    let mut total = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let x = i * 10;
+        let s = `{i},{x}`;
+        total += s.len();
+    }
+    println(`total={total}`);
+
+    // Three default interpolations: i32, i32, f64
+    let mut total2 = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        let a = i;
+        let b = i * 2;
+        let c = i as f64 * 0.5;
+        let s = `{a}-{b}-{c}`;
+        total2 += s.len();
+    }
+    println(`total2={total2}`);
+
+    // Four default interpolations with surrounding text
+    let mut total3 = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        let s = `[{i},{i},{i},{i}]`;
+        total3 += s.len();
+    }
+    println(`total3={total3}`);
+}
+
+__DATA__
+{"stdout": "total=19\ntotal2=17\ntotal3=27\n", "wir_expect:O2": ["__fmt_buf_", ".indent = 0"]}

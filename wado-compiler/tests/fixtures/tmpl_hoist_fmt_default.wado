@@ -1,0 +1,35 @@
+// Formatter hoisting: default Formatter (no format specifier).
+// When a template string uses `{x}` (default Display), the Formatter is created
+// via Formatter::new (inlined as a LabeledBlock). The optimizer should hoist it
+// before the loop, replacing the per-iteration struct.new with a field reset.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Single default interpolation: i32
+    let mut total = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let s = `{i}`;
+        total += s.len();
+    }
+    println(`total={total}`);
+
+    // Single default interpolation: f64
+    let mut total2 = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let x = i as f64 * 1.1;
+        let s = `{x}`;
+        total2 += s.len();
+    }
+    println(`total2={total2}`);
+
+    // Default interpolation with surrounding text
+    let mut total3 = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let s = `v={i}!`;
+        total3 += s.len();
+    }
+    println(`total3={total3}`);
+}
+
+__DATA__
+{"stdout": "total=5\ntotal2=28\ntotal3=20\n", "wir_expect:O2": ["__fmt_buf_", ".indent = 0"]}
