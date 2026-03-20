@@ -499,7 +499,7 @@ fn analyze_expr(
                     let callee_module = if original_callee_module.is_entry_point() {
                         current_module.clone()
                     } else {
-                        original_callee_module.clone()
+                        original_callee_module
                     };
                     if let Some(sep_pos) = func_name.find("::") {
                         let prefix = &func_name[..sep_pos];
@@ -511,7 +511,7 @@ fn analyze_expr(
                                 (prefix, None)
                             };
                         FunctionId::Method(MethodName::new(
-                            callee_module.clone(),
+                            callee_module,
                             struct_name.to_string(),
                             trait_name.map(String::from),
                             method_name.to_string(),
@@ -559,7 +559,7 @@ fn analyze_expr(
                 if let Some(effect_name) = original_callee_module.effect_name() {
                     analysis
                         .effect_calls
-                        .insert((effect_name, func_name.clone()));
+                        .insert((effect_name, func_name));
                 }
             }
 
@@ -596,7 +596,7 @@ fn analyze_expr(
                 // are placed in the module that uses them.
                 let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
                     func.module_source.clone(),
-                    func_name.clone(),
+                    func_name,
                     base_name,
                 ));
                 analysis.callees.insert(callee_id);
@@ -628,9 +628,9 @@ fn analyze_expr(
 
                 // Extract method name and trait name from method_info
                 let (method_name, trait_name) = if let Some(info) = func.method_info.clone() {
-                    (info.method_name.clone(), info.trait_name.clone())
+                    (info.method_name.clone(), info.trait_name)
                 } else {
-                    (func_name.clone(), None)
+                    (func_name, None)
                 };
 
                 // If the receiver was a newtype (e.g., flags type), also mark
@@ -681,7 +681,7 @@ fn analyze_expr(
                                 func.module_source.clone(),
                                 info.struct_name.clone(),
                                 info.trait_name.clone(),
-                                info.method_name.clone(),
+                                info.method_name,
                             ));
                             analysis.callees.insert(original_method_id);
                         }
@@ -695,9 +695,9 @@ fn analyze_expr(
                         // Regular struct method call - use FunctionId::Method
                         let method_id = FunctionId::Method(MethodName::new(
                             module_source.clone(),
-                            name.clone(),
-                            trait_name.clone(),
-                            method_name.clone(),
+                            name,
+                            trait_name,
+                            method_name,
                         ));
                         analysis.callees.insert(method_id);
 
@@ -705,14 +705,14 @@ fn analyze_expr(
                         // since trait impls may live in a different module than the type
                         // (e.g., `impl Display for String` is in format.wado, not string.wado)
                         let func_module = func.module_source.clone();
-                        if func_module != module_source.clone()
+                        if func_module != module_source
                             && let Some(info) = func.method_info.clone()
                         {
                             let alt_method_id = FunctionId::Method(MethodName::new(
                                 func_module,
                                 info.struct_name.clone(),
                                 info.trait_name.clone(),
-                                info.method_name.clone(),
+                                info.method_name,
                             ));
                             analysis.callees.insert(alt_method_id);
                         }
@@ -728,8 +728,8 @@ fn analyze_expr(
                         let method_id = FunctionId::Method(MethodName::new(
                             ModuleSource::primitive(),
                             prim_name,
-                            trait_name.clone(),
-                            method_name.clone(),
+                            trait_name,
+                            method_name,
                         ));
                         analysis.callees.insert(method_id);
                     }
@@ -769,10 +769,10 @@ fn analyze_expr(
                     } => {
                         // Enum method call (user-defined or auto-derived trait impls)
                         let method_id = FunctionId::Method(MethodName::new(
-                            module_source.clone(),
-                            name.clone(),
-                            trait_name.clone(),
-                            method_name.clone(),
+                            module_source,
+                            name,
+                            trait_name,
+                            method_name,
                         ));
                         analysis.callees.insert(method_id);
                     }
@@ -781,7 +781,7 @@ fn analyze_expr(
                         // Record as effect call so it's tracked in used_wasi_functions
                         analysis
                             .effect_calls
-                            .insert((name.clone(), method_name.clone()));
+                            .insert((name, method_name));
                     }
                     ResolvedType::Variant {
                         name,
@@ -790,10 +790,10 @@ fn analyze_expr(
                     } => {
                         // Variant method call (e.g., Shape^Inspect::inspect)
                         let method_id = FunctionId::Method(MethodName::new(
-                            module_source.clone(),
-                            name.clone(),
-                            trait_name.clone(),
-                            method_name.clone(),
+                            module_source,
+                            name,
+                            trait_name,
+                            method_name,
                         ));
                         analysis.callees.insert(method_id);
                     }
@@ -808,8 +808,8 @@ fn analyze_expr(
                         let method_id = FunctionId::Method(MethodName::new(
                             current_module.clone(),
                             mangled_struct,
-                            trait_name.clone(),
-                            method_name.clone(),
+                            trait_name,
+                            method_name,
                         ));
                         analysis.callees.insert(method_id);
                     }
@@ -827,8 +827,8 @@ fn analyze_expr(
                         let method_id = FunctionId::Method(MethodName::new(
                             current_module.clone(),
                             mangled_struct,
-                            trait_name.clone(),
-                            method_name.clone(),
+                            trait_name,
+                            method_name,
                         ));
                         analysis.callees.insert(method_id);
                     }
@@ -844,8 +844,8 @@ fn analyze_expr(
                         let method_id = FunctionId::Method(MethodName::new(
                             current_module.clone(),
                             mangled_struct,
-                            trait_name.clone(),
-                            method_name.clone(),
+                            trait_name,
+                            method_name,
                         ));
                         analysis.callees.insert(method_id);
                     }

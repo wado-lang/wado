@@ -1143,7 +1143,7 @@ fn try_inline_call_expr(
     // Create a labeled block expression that produces the return value
     let inlined_expr = TirExpr::new(
         TirExprKind::LabeledBlock {
-            label: label.clone(),
+            label: label,
             block: TirBlock::new(block_stmts, expr.span),
             result_type: candidate.return_type,
         },
@@ -1308,7 +1308,7 @@ fn try_inline_method_call_expr(
     // Create a labeled block expression that produces the return value
     let inlined_expr = TirExpr::new(
         TirExprKind::LabeledBlock {
-            label: label.clone(),
+            label: label,
             block: TirBlock::new(block_stmts, expr.span),
             result_type: candidate.return_type,
         },

@@ -903,7 +903,7 @@ impl WasiRegistry {
         // Register in effect -> func map
         let qualified_name = format!("{effect_name}::{method_name}");
         self.effect_to_func
-            .insert(qualified_name.clone(), func_info.clone());
+            .insert(qualified_name, func_info.clone());
 
         // Register in interface -> functions map
         self.interfaces

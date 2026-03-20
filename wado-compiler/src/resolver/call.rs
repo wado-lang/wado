@@ -39,7 +39,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let local_type_id = local.type_id;
                     let fn_return_type = return_type;
                     // Clone fn_params to avoid borrow conflict
-                    let fn_params = fn_params.clone();
+                    let fn_params = fn_params;
 
                     // Resolve arguments with coercion awareness based on closure param types
                     let args: Vec<TirExpr> = call
@@ -100,7 +100,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             {
                 // This is calling a function stored in a field!
                 let fn_return_type = return_type;
-                let fn_params = fn_params.clone();
+                let fn_params = fn_params;
 
                 // Resolve arguments with coercion awareness based on function param types
                 let args: Vec<TirExpr> = call

@@ -513,7 +513,7 @@ fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::w
         fq.clone(),
         WirTypeDef::Struct(WirStructType {
             name: WirName {
-                display: box_name.clone(),
+                display: box_name,
                 fq,
             },
             fields: vec![WirField {
@@ -1222,7 +1222,7 @@ fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
         fq.clone(),
         WirTypeDef::Struct(WirStructType {
             name: WirName {
-                display: mangled.clone(),
+                display: mangled,
                 fq,
             },
             fields: vec![
@@ -1241,7 +1241,7 @@ fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
                 },
             ],
             meta: WirMeta {
-                module_source: Some(module_source.clone()),
+                module_source: Some(module_source),
                 ..WirMeta::default()
             },
             generic_origin: Some(WirGenericOrigin {

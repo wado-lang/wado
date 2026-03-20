@@ -1035,7 +1035,7 @@ fn method_name_for_type(
                 .map(|t| tt_ref.mangle_type_name(*t))
                 .collect();
             LocalMethodName::new(
-                name.clone(),
+                name,
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             )

@@ -1204,7 +1204,7 @@ impl Monomorphizer {
 
         // Create the monomorphized struct
         let concrete = TirStruct {
-            name: mangled_name.clone(),
+            name: mangled_name,
             is_pub: generic.is_pub,
             type_params: vec![], // Concrete struct has no type params
             monomorph_info: Some(MonomorphInfo {
@@ -1526,7 +1526,7 @@ impl Monomorphizer {
                 // Check if this is a call to a generic function with explicit type args
                 if !type_args.is_empty() && generic_functions.contains_key(&qualified_func_name) {
                     let key = InstantiationKey {
-                        name: qualified_func_name.clone(),
+                        name: qualified_func_name,
                         type_args: type_args.clone(),
                         method_info: func.method_info.clone(),
                     };
@@ -1623,7 +1623,7 @@ impl Monomorphizer {
                         let trait_name_opt = method_func
                             .method_info
                             .clone()
-                            .and_then(|info| info.trait_name.clone());
+                            .and_then(|info| info.trait_name);
                         let mut names_to_try: Vec<(String, Option<String>)> = vec![(
                             MethodName::format_local(&struct_name, None, &method_name),
                             None,
@@ -1704,7 +1704,7 @@ impl Monomorphizer {
                                             combined_type_args.extend(type_args.iter().copied());
 
                                             let method_info = LocalMethodName::new(
-                                                base_struct.clone(),
+                                                base_struct,
                                                 tn.clone(),
                                                 method_name.clone(),
                                             );
@@ -2689,7 +2689,7 @@ impl Monomorphizer {
                                     is_blanket: false,
                                 });
                                 *call_func = FunctionRef {
-                                    module_source: module_source.clone(),
+                                    module_source: module_source,
                                     name: new_func_name,
                                     monomorph_info,
                                     method_info: Some(new_info),
@@ -2844,8 +2844,8 @@ impl Monomorphizer {
                                 } else {
                                     // Potential blanket impl method — mark for blanket instantiation
                                     Some(MonomorphInfo {
-                                        generic_name: old_func_name.clone(),
-                                        type_args: type_args.clone(),
+                                        generic_name: old_func_name,
+                                        type_args: type_args,
                                         is_blanket: true,
                                     })
                                 };
@@ -2897,7 +2897,7 @@ impl Monomorphizer {
                             // belongs to the module where the generic was defined, not the
                             // module that triggered monomorphization.
                             *method_func = FunctionRef {
-                                module_source: module_source.clone(),
+                                module_source: module_source,
                                 name: new_func_name,
                                 monomorph_info,
                                 method_info: Some(new_info),
@@ -3427,7 +3427,7 @@ impl Monomorphizer {
                 // If this is a generic call, rewrite to monomorphized name
                 if !type_args.is_empty() {
                     let key = InstantiationKey {
-                        name: qualified_func_name.clone(),
+                        name: qualified_func_name,
                         type_args: type_args.clone(),
                         method_info: original_method_info.clone(),
                     };
@@ -3526,7 +3526,7 @@ impl Monomorphizer {
                     let trait_name_opt = method_func
                         .method_info
                         .clone()
-                        .and_then(|info| info.trait_name.clone());
+                        .and_then(|info| info.trait_name);
                     let mut names_to_try = vec![(
                         MethodName::format_local(&struct_name, None, &method_name),
                         None::<String>,
@@ -3660,7 +3660,7 @@ impl Monomorphizer {
                     // Also try regular method format
                     possible_keys.push(InstantiationKey {
                         name: MethodName::format_local(&base_struct, None, &method_name),
-                        type_args: impl_type_args.clone(),
+                        type_args: impl_type_args,
                         method_info: None,
                     });
 

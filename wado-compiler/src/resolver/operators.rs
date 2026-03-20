@@ -127,7 +127,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     };
                     {
                         let receiver = self.adjust_receiver_for_self_kind(
-                            left.clone(),
+                            left,
                             trait_info.self_kind,
                             binary.span,
                         );
@@ -140,7 +140,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let arg_ref = TirExpr::new(
                             TirExprKind::Unary {
                                 op: TirUnaryOp::Ref,
-                                expr: Box::new(right.clone()),
+                                expr: Box::new(right),
                             },
                             arg_ref_type,
                             binary.span,
@@ -161,7 +161,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(
                                         struct_name.clone(),
-                                        Some(trait_info.trait_name.clone()),
+                                        Some(trait_info.trait_name),
                                         "eq".to_string(),
                                     )),
                                     is_cm_adapter: false,
@@ -215,7 +215,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     };
                     {
                         let receiver = self.adjust_receiver_for_self_kind(
-                            left.clone(),
+                            left,
                             trait_info.self_kind,
                             binary.span,
                         );
@@ -228,7 +228,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let arg_ref = TirExpr::new(
                             TirExprKind::Unary {
                                 op: TirUnaryOp::Ref,
-                                expr: Box::new(right.clone()),
+                                expr: Box::new(right),
                             },
                             arg_ref_type,
                             binary.span,
@@ -256,7 +256,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(
                                         struct_name.clone(),
-                                        Some(trait_info.trait_name.clone()),
+                                        Some(trait_info.trait_name),
                                         "cmp".to_string(),
                                     )),
                                     is_cm_adapter: false,
@@ -366,7 +366,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some(trait_info) = trait_info_opt {
                     // Adjust receiver for self kind (&self)
                     let receiver = self.adjust_receiver_for_self_kind(
-                        left.clone(),
+                        left,
                         trait_info.self_kind,
                         binary.span,
                     );
@@ -380,7 +380,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let arg_ref = TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::Ref,
-                            expr: Box::new(right.clone()),
+                            expr: Box::new(right),
                         },
                         arg_ref_type,
                         binary.span,
@@ -459,7 +459,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some(trait_info) = trait_info_opt {
                     // Adjust receiver for self kind (&self)
                     let receiver = self.adjust_receiver_for_self_kind(
-                        left.clone(),
+                        left,
                         trait_info.self_kind,
                         binary.span,
                     );
@@ -486,7 +486,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 is_cm_adapter: false,
                             },
                             type_args: vec![],
-                            args: vec![CallArg::new(right.clone(), false)], // Pass rhs directly (u32)
+                            args: vec![CallArg::new(right, false)], // Pass rhs directly (u32)
                         },
                         trait_info.output_type,
                         binary.span,
@@ -729,7 +729,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some((trait_info, impl_name)) = neg_info {
                     // Adjust receiver for self kind (&self)
                     let receiver = self.adjust_receiver_for_self_kind(
-                        expr.clone(),
+                        expr,
                         trait_info.self_kind,
                         unary.span,
                     );
@@ -793,7 +793,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some((trait_info, impl_name)) = bitnot_info {
                     // Adjust receiver for self kind (&self)
                     let receiver = self.adjust_receiver_for_self_kind(
-                        expr.clone(),
+                        expr,
                         trait_info.self_kind,
                         unary.span,
                     );
@@ -1013,8 +1013,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     name: mangled_method_name,
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(
-                                        lookup_name.clone(),
-                                        Some(trait_info.trait_name.clone()),
+                                        lookup_name,
+                                        Some(trait_info.trait_name),
                                         "index_assign".to_string(),
                                     )),
                                     is_cm_adapter: false,
@@ -1075,7 +1075,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     TirExprKind::GlobalVarSet {
                         module_source: module_source.clone(),
                         name: name.clone(),
-                        value: Box::new(value.clone()),
+                        value: Box::new(value),
                     },
                     TypeTable::UNIT,
                     assign.span,
@@ -1120,7 +1120,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         TirExpr::new(
             TirExprKind::Assign {
                 target: Box::new(target),
-                value: Box::new(value.clone()),
+                value: Box::new(value),
             },
             TypeTable::UNIT,
             assign.span,

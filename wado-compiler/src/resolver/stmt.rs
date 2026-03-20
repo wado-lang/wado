@@ -111,7 +111,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let target_resolved = self.type_table.borrow().get(target_type).clone();
                     if let ResolvedType::Tuple(expected_elem_types) = target_resolved {
                         // let t: [i32, String] = [1, "hello"] - check element types
-                        let expected_elem_types = expected_elem_types.clone();
+                        let expected_elem_types = expected_elem_types;
                         let elements: Vec<TirExpr> = tuple_lit
                             .elements
                             .iter()
@@ -168,7 +168,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         ..
                     } = target_resolved
                     {
-                        let name = name.clone();
+                        let name = name;
                         let struct_type = target_type;
 
                         let struct_field_types: Vec<(String, TypeId)> = self

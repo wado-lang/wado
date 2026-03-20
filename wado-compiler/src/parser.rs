@@ -2601,7 +2601,7 @@ impl Parser {
             TokenKind::NumberLit(repr) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::Number(repr.clone()),
+                    value: Literal::Number(repr),
                     span: start_span,
                 }))
             }

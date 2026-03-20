@@ -100,7 +100,7 @@ fn generate_variant_from(
         TirExprKind::VariantConstruct {
             variant_type,
             case_index,
-            case_name: case_name.clone(),
+            case_name: case_name,
             payload: Some(Box::new(local_ref(0, "value", from_type))),
         },
         variant_type,

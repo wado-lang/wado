@@ -407,7 +407,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Third pass: resolve functions
-        let mut tir_module = TirModule::new(module_source.clone());
+        let mut tir_module = TirModule::new(module_source);
 
         for item in &module.items {
             match item {

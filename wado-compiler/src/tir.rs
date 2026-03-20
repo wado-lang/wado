@@ -232,8 +232,8 @@ impl SubstitutionContext {
                     .map(|&a| self.substitute(a, type_table))
                     .collect();
                 type_table.intern(ResolvedType::GenericResource {
-                    name: name.clone(),
-                    module_source: module_source.clone(),
+                    name: name,
+                    module_source: module_source,
                     type_args: new_args,
                 })
             }

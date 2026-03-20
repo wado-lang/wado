@@ -262,7 +262,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             );
 
                             let method_info =
-                                LocalMethodName::new(name.clone(), None, method_name.to_string());
+                                LocalMethodName::new(name, None, method_name.to_string());
                             let mangled_func_name = method_info.to_mangled_name();
 
                             return Some(TirExpr::new(
@@ -507,7 +507,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let new_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
-                    module_source: impl_module_source.clone(),
+                    module_source: impl_module_source,
                     name: new_mangled_name,
                     monomorph_info: if type_arg_ids.is_empty() {
                         None
@@ -638,7 +638,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
             let build_method_info = LocalMethodName::new(
                 builder_base_name.clone(),
-                Some(trait_name.clone()),
+                Some(trait_name),
                 "build".to_string(),
             );
             let build_monomorph = if type_arg_ids.is_empty() {
@@ -722,7 +722,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let trait_name = seq_info.trait_name.clone();
         let builder_type = seq_info.builder_type;
         let output_type = seq_info.output_type;
-        let impl_module_source = seq_info.impl_module_source.clone();
+        let impl_module_source = seq_info.impl_module_source;
         let builder_base_name = self
             .struct_name_for_type(builder_type)
             .unwrap_or_else(|| base_name.clone());
@@ -890,7 +890,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
         let build_method_info = LocalMethodName::new(
             builder_base_name.clone(),
-            Some(trait_name.clone()),
+            Some(trait_name),
             "build".to_string(),
         )
         .with_struct_type_args(&type_arg_names);
@@ -898,7 +898,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             TirExprKind::MethodCall {
                 receiver: Box::new(builder_local_final),
                 func: FunctionRef {
-                    module_source: impl_module_source.clone(),
+                    module_source: impl_module_source,
                     name: build_mangled_name,
                     monomorph_info: if type_arg_ids.is_empty() {
                         None
