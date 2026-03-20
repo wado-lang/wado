@@ -823,16 +823,11 @@ use { foo as bar } from "./mod.wado";     // rename
 pub use { foo, bar } from "./internal.wado";   // re-export
 ```
 
-Namespace imports make all pub symbols from the source module available without prefix:
+Namespace imports make all pub symbols from the source module directly available:
 
 ```wado
 use geo from "./geo.wado";
-
-// All pub symbols are accessible as if individually imported
-let p = Point::new(1, 2);     // static method
-let c = Color::Red;            // enum case
-let s = Shape::Circle(3.14);   // variant construction
-let d: f64 = distance(p);      // function call
+let p = geo::Point::new(1, 2);  // access via ns:: prefix
 ```
 
 ## Effects
