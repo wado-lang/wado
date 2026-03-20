@@ -20,6 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
 
       - uses: jdx/mise-action@v3
         with:
@@ -84,9 +86,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
       - uses: rui314/setup-mold@v1
 
-      - run: cargo test --locked --all -- --skip fixture_test_
+      - run: cargo test --locked --profile dev-optimized --all -- --skip fixture_test_
 
   test-e2e-o0:
     name: Test (E2E O0)
@@ -96,6 +101,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
       - uses: rui314/setup-mold@v1
 
       - run: cargo test --locked --profile dev-optimized -p wado-compiler --test e2e -- fixture_test_o0
@@ -108,6 +116,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
       - uses: rui314/setup-mold@v1
 
       - run: cargo test --locked --profile dev-optimized -p wado-compiler --test e2e -- fixture_test_o1
@@ -120,6 +131,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
       - uses: rui314/setup-mold@v1
 
       - run: cargo test --locked --profile dev-optimized -p wado-compiler --test e2e -- fixture_test_o3
@@ -132,6 +146,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
       - uses: rui314/setup-mold@v1
 
       - run: cargo test --locked --profile dev-optimized -p wado-compiler --test e2e -- fixture_test_os
@@ -144,6 +161,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
       - uses: rui314/setup-mold@v1
 
       - uses: jdx/mise-action@v3
