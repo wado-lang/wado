@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774049415299,
+  "lastUpdate": 1774051054501,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5249,6 +5249,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e3a7f71773e07bfd432577fa1a9642b2daba66c1"
         },
         "date": 1774049415076,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22261,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "766d9b09b2ef8313abf06976f70eef98b730ea91",
+          "message": "Merge pull request #633 from wado-lang/claude/ci-cache-job-sharing-38Ehc\n\nOptimize Rust cache sharing across CI workflows",
+          "timestamp": "2026-03-21T08:55:11+09:00",
+          "tree_id": "b034a7214e5b71ca8ab5452c427d0deee78d3605",
+          "url": "https://github.com/wado-lang/wado/commit/766d9b09b2ef8313abf06976f70eef98b730ea91"
+        },
+        "date": 1774051054306,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
