@@ -204,6 +204,11 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             return Ok(());
         }
 
+        // Skip CM adapter functions - they are boundary code with special effect semantics
+        if func.is_cm_adapter {
+            return Ok(());
+        }
+
         // Set current context
         self.current_effects = func.effects.iter().cloned().collect();
         self.current_stores = func.stores.iter().cloned().collect();
@@ -331,7 +336,23 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                 for arg in args {
                     self.check_expr(arg)?;
                 }
-                // TODO: Check closure effects when we have effect types on closures
+                // Check effects from the callee's function type
+                if self.mode == CheckMode::EffectsOnly
+                    && let Some(tt) = &self.type_table
+                {
+                    let tt = tt.borrow();
+                    if let ResolvedType::Function { effects, .. } = tt.get(callee.type_id) {
+                        for effect in effects {
+                            if !self.current_effects.contains(effect) {
+                                self.logger.error(EffectError {
+                                    callee: "(indirect call)".to_string(),
+                                    missing_effect: effect.name().to_string(),
+                                    span: expr.span,
+                                })?;
+                            }
+                        }
+                    }
+                }
             }
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 self.check_expr(functor)?;
@@ -578,7 +599,17 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             && let Some(tt) = &self.type_table
         {
             let tt = tt.borrow();
-            for (param, arg) in callee_func.params.iter().zip(args.iter()) {
+            // For method calls, args doesn't include the receiver (self), but params does.
+            // Skip the self parameter when the function is a method.
+            let params_iter: Box<dyn Iterator<Item = _>> = if callee_func.is_method()
+                && !callee_func.params.is_empty()
+                && callee_func.params[0].name == "self"
+            {
+                Box::new(callee_func.params.iter().skip(1))
+            } else {
+                Box::new(callee_func.params.iter())
+            };
+            for (param, arg) in params_iter.zip(args.iter()) {
                 if let ResolvedType::Function {
                     effects: formal_effects,
                     ..

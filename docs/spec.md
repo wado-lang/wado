@@ -3761,8 +3761,9 @@ fn map<T, U, effect E>(arr: Array<T>, f: fn(T) -> U with E) -> Array<U> with E {
 Effect parameters:
 
 - Are declared with the `effect` keyword in generic parameter lists
+- At most one effect parameter is allowed per function
 - Do not participate in monomorphization (effects are erased at runtime)
-- Are inferred from the effects of function-typed arguments at each call site
+- Are inferred from the effects of function-typed arguments at each call site; when multiple function-typed arguments reference the same effect parameter, `E` resolves to the union of all their effects
 - Can coexist with type parameters: `<T, effect E>`
 - Test functions implicitly have all effects
 

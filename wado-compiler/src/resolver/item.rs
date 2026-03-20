@@ -310,12 +310,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Set effect params in scope (for resolving effect names in function types)
         let old_effect_params = std::mem::take(&mut self.current_effect_params);
-        self.current_effect_params = func
-            .type_params
-            .iter()
-            .filter(|p| p.is_effect)
-            .map(|p| p.name.clone())
-            .collect();
+        let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
+        if effect_params.len() > 1 {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
+                message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
+                span: effect_params[1].span,
+            });
+        }
+        self.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
 
         // Store type parameters for generic functions (for call site substitution)
         let has_real_type_params = func.type_params.iter().any(|p| !p.is_effect);
@@ -619,6 +621,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // contains the caller's bounds. We should use those as base and add method-level bounds.
         self.trait_ctx.type_param_bounds = old_type_param_bounds.clone();
 
+        // Set effect params in scope (for resolving effect names in function types)
+        let old_effect_params = std::mem::take(&mut self.current_effect_params);
+        let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
+        if effect_params.len() > 1 {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
+                message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
+                span: effect_params[1].span,
+            });
+        }
+        self.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
+
         // Then, collect method-level type params
         let offset = self.trait_ctx.type_params.len();
         for (index, param) in func.type_params.iter().enumerate() {
@@ -736,9 +749,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .collect()
         };
 
+        // Resolve effects while effect params are still in scope
+        let effects = self.resolve_effects(&func.effects);
+
         // Restore previous type params scope and bounds
         self.trait_ctx.type_params = old_type_params;
         self.trait_ctx.type_param_bounds = old_type_param_bounds;
+        self.current_effect_params = old_effect_params;
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {
@@ -770,7 +787,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }),
             params,
             return_type,
-            effects: self.resolve_effects(&func.effects),
+            effects,
             stores: func.stores.clone(),
             body,
             span: func.span,

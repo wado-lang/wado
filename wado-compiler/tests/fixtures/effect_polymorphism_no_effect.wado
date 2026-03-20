@@ -1,0 +1,23 @@
+// Test: effect-polymorphic function called with a pure (no effects) closure
+
+fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
+    return f(x);
+}
+
+fn wrapper<effect E>(f: fn() with E) with E {
+    f();
+}
+
+export fn run() {
+    // E resolves to empty (no effects)
+    let result = apply(|x: i32| x * 2, 21);
+    assert result == 42;
+
+    // wrapper with pure closure
+    wrapper(|| {
+        assert 1 + 1 == 2;
+    });
+}
+
+__DATA__
+{"stdout": ""}

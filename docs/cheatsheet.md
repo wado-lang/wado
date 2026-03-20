@@ -837,7 +837,7 @@ fn for_each(items: Array<i32>, f: fn(i32) with Stdout) with Stdout {
     for let item of items { f(item); }
 }
 
-// Generic effects — polymorphic over effects
+// Generic effects — polymorphic over effects (one effect param per function)
 fn wrapper<effect E>(f: fn() with E) with E {
     f();
 }
@@ -853,6 +853,16 @@ let y = apply(|n: i32| {                     // E = Stdout
     println(`{n}`);
     return n * 2;
 }, 21);
+
+// E resolves to the union of effects from all function-typed arguments
+fn run_both<effect E>(f: fn() with E, g: fn() with E) with E {
+    f();
+    g();
+}
+run_both(
+    || { println("stdout"); },    // Stdout
+    || { eprintln("stderr"); },   // Stderr
+);  // E = Stdout + Stderr
 ```
 
 ## Reference Storage

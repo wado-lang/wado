@@ -1,0 +1,16 @@
+// Test: indirect call should check effects from the function type
+// Calling a closure that requires Stdout without having Stdout should fail
+
+use { Stdout } from "core:cli";
+
+// This function receives a fn with Stdout effect but doesn't declare Stdout
+fn pure_caller(f: fn() with Stdout) {
+    f();  // ERROR: f requires Stdout but pure_caller has no effects
+}
+
+export fn run() with Stdout {
+    pure_caller(|| { });
+}
+
+__DATA__
+{"compile_error": "missing effect"}

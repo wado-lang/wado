@@ -1,0 +1,21 @@
+// Test: effect polymorphism on methods
+
+use { println, Stdout } from "core:cli";
+
+struct Runner {}
+
+impl Runner {
+    fn run_with<effect E>(&self, f: fn() with E) with E {
+        f();
+    }
+}
+
+export fn run() with Stdout {
+    let r = Runner {};
+    r.run_with(|| {
+        println("method effect poly");
+    });
+}
+
+__DATA__
+{"stdout": "method effect poly\n"}
