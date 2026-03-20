@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774047908131,
+  "lastUpdate": 1774049415299,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5210,6 +5210,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/da46dbc856314aa5100792ed104c51016b005bfa"
         },
         "date": 1774047907911,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22261,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e3a7f71773e07bfd432577fa1a9642b2daba66c1",
+          "message": "Merge pull request #632 from wado-lang/claude/optimize-ci-wado-compiler-HXryQ\n\nUse dev-optimized profile for E2E tests in CI",
+          "timestamp": "2026-03-21T08:27:56+09:00",
+          "tree_id": "47622213e5aa9b873e732b52e4fce932499865dd",
+          "url": "https://github.com/wado-lang/wado/commit/e3a7f71773e07bfd432577fa1a9642b2daba66c1"
+        },
+        "date": 1774049415076,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
