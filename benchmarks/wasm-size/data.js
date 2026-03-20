@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773986442495,
+  "lastUpdate": 1773989411229,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4781,6 +4781,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/378b941344d7638fa82e8e9fdb667094f7c0f597"
         },
         "date": 1773986442297,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22350,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4f90040add4f8a97b80d942917f8429bf481bf11",
+          "message": "Merge pull request #621 from wado-lang/claude/implement-namespace-import-BKdg6\n\nAdd namespace import support to use declarations",
+          "timestamp": "2026-03-20T15:47:41+09:00",
+          "tree_id": "78f9bfe185a7bc821cd2007d54eb2ada5b33efd3",
+          "url": "https://github.com/wado-lang/wado/commit/4f90040add4f8a97b80d942917f8429bf481bf11"
+        },
+        "date": 1773989411007,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
