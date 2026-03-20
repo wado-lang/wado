@@ -13,7 +13,8 @@ use crate::ast::{
     IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
     MatchExpr, MethodCallExpr, Module, Newtype, Pattern, ReturnStmt, StaticMethodCallExpr, Stmt,
     StructDecl, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, UnaryExpr, UnaryOp, WhileStmt,
+    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp,
+    UseItem, WhileStmt,
 };
 use crate::unparse::unparse_expr_simple;
 
@@ -28,26 +29,107 @@ struct DesugarContext {
     /// - `outer_label`: target for unlabeled break
     /// - `body_label`: target for unlabeled continue (to skip to update)
     for_loop_labels: Vec<(String, String)>,
+    /// Namespace import names (e.g., "shapes" from `use shapes from "..."`)
+    namespace_names: Vec<String>,
 }
 
 /// Desugar a module, transforming high-level constructs to simpler forms.
 pub fn desugar_module(module: &Module) -> Module {
+    let namespace_names: Vec<String> = module
+        .items
+        .iter()
+        .filter_map(|item| {
+            if let Item::Use(u) = item {
+                u.items.iter().find_map(|ui| {
+                    if let UseItem::Namespace { name } = ui {
+                        Some(name.clone())
+                    } else {
+                        None
+                    }
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
     let mut ctx = DesugarContext {
         assert_counter: 0,
         loop_counter: 0,
         for_loop_labels: Vec::new(),
+        namespace_names,
+    };
+    let items: Vec<Item> = module
+        .items
+        .iter()
+        .map(|item| desugar_item(item, &mut ctx))
+        .collect();
+    let items = if ctx.namespace_names.is_empty() {
+        items
+    } else {
+        items
+            .into_iter()
+            .map(|item| strip_ns_from_item(item, &ctx))
+            .collect()
     };
     Module::with_metadata(
-        module
-            .items
-            .iter()
-            .map(|item| desugar_item(item, &mut ctx))
-            .collect(),
+        items,
         module.inner_attributes().to_vec(),
         module.shebang().map(String::from),
         module.data_section().map(String::from),
         module.include_paths().clone(),
     )
+}
+
+fn strip_namespace_prefix<'a>(name: &'a str, namespace_names: &[String]) -> &'a str {
+    for ns in namespace_names {
+        if let Some(rest) = name.strip_prefix(ns.as_str()) {
+            if let Some(rest) = rest.strip_prefix("::") {
+                return rest;
+            }
+        }
+    }
+    name
+}
+
+fn desugar_type(ty: &Type, ctx: &DesugarContext) -> Type {
+    if ctx.namespace_names.is_empty() {
+        return ty.clone();
+    }
+    match ty {
+        Type::Named(n) => {
+            let stripped = strip_namespace_prefix(&n.name, &ctx.namespace_names);
+            if stripped.len() == n.name.len() {
+                Type::Named(n.clone())
+            } else {
+                Type::Named(crate::ast::NamedType {
+                    name: stripped.to_string(),
+                    span: n.span,
+                })
+            }
+        }
+        Type::Generic(g) => {
+            let stripped = strip_namespace_prefix(&g.name, &ctx.namespace_names);
+            Type::Generic(crate::ast::GenericType {
+                name: if stripped.len() == g.name.len() {
+                    g.name.clone()
+                } else {
+                    stripped.to_string()
+                },
+                args: g.args.iter().map(|a| desugar_type(a, ctx)).collect(),
+                span: g.span,
+            })
+        }
+        Type::Tuple(types) => Type::Tuple(types.iter().map(|t| desugar_type(t, ctx)).collect()),
+        Type::Reference(inner) => Type::Reference(Box::new(desugar_type(inner, ctx))),
+        Type::MutReference(inner) => Type::MutReference(Box::new(desugar_type(inner, ctx))),
+        Type::Function(f) => Type::Function(Box::new(crate::ast::FunctionType {
+            params: f.params.iter().map(|p| desugar_type(p, ctx)).collect(),
+            return_type: desugar_type(&f.return_type, ctx),
+            effects: f.effects.clone(),
+            stores: f.stores.clone(),
+        })),
+        Type::NamespacedGeneric(_) => ty.clone(),
+    }
 }
 
 fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
@@ -391,6 +473,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     assert_counter: 0,
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
+                    namespace_names: Vec::new(),
                 };
                 Expr::Block(Box::new(desugar_block(b, &mut temp_ctx)))
             }
@@ -408,6 +491,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     assert_counter: 0,
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
+                    namespace_names: Vec::new(),
                 };
                 Expr::If(Box::new(IfExpr {
                     condition: desugar_condition(&i.condition),
@@ -481,6 +565,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     assert_counter: 0,
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
+                    namespace_names: Vec::new(),
                 };
                 Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
                     label: lb.label.clone(),
@@ -1270,5 +1355,375 @@ mod tests {
             }
             _ => panic!("expected binary (and)"),
         }
+    }
+}
+
+fn strip_ns_from_item(item: Item, ctx: &DesugarContext) -> Item {
+    match item {
+        Item::Function(f) => Item::Function(strip_ns_from_function(f, ctx)),
+        Item::Impl(mut i) => {
+            i.ty = desugar_type(&i.ty, ctx);
+            if let Some(ref t) = i.trait_type {
+                i.trait_type = Some(desugar_type(t, ctx));
+            }
+            i.methods = i
+                .methods
+                .into_iter()
+                .map(|f| strip_ns_from_function(f, ctx))
+                .collect();
+            Item::Impl(i)
+        }
+        Item::Trait(mut t) => {
+            t.methods = t
+                .methods
+                .into_iter()
+                .map(|f| strip_ns_from_function(f, ctx))
+                .collect();
+            Item::Trait(t)
+        }
+        Item::Test(mut t) => {
+            t.body = strip_ns_from_block(t.body, ctx);
+            Item::Test(t)
+        }
+        Item::Global(mut g) => {
+            g.initializer = strip_ns_from_expr(g.initializer, ctx);
+            Item::Global(g)
+        }
+        other => other,
+    }
+}
+
+fn strip_ns_from_function(mut f: Function, ctx: &DesugarContext) -> Function {
+    for param in &mut f.params {
+        param.ty = desugar_type(&param.ty, ctx);
+    }
+    if let Some(ref ret) = f.return_type {
+        f.return_type = Some(desugar_type(ret, ctx));
+    }
+    if let Some(body) = f.body {
+        f.body = Some(strip_ns_from_block(body, ctx));
+    }
+    f
+}
+
+fn strip_ns_from_block(mut block: Block, ctx: &DesugarContext) -> Block {
+    block.stmts = block
+        .stmts
+        .into_iter()
+        .map(|s| strip_ns_from_stmt(s, ctx))
+        .collect();
+    block
+}
+
+fn strip_ns_from_stmt(stmt: Stmt, ctx: &DesugarContext) -> Stmt {
+    match stmt {
+        Stmt::Let(mut l) => {
+            l.ty = l.ty.as_ref().map(|t| desugar_type(t, ctx));
+            l.value = l.value.map(|e| strip_ns_from_expr(e, ctx));
+            l.pattern = strip_ns_from_pattern(l.pattern, ctx);
+            Stmt::Let(l)
+        }
+        Stmt::Expr(mut e) => {
+            e.expr = strip_ns_from_expr(e.expr, ctx);
+            Stmt::Expr(e)
+        }
+        Stmt::Return(mut r) => {
+            r.value = r.value.map(|e| strip_ns_from_expr(e, ctx));
+            Stmt::Return(r)
+        }
+        Stmt::If(mut i) => {
+            i.condition = strip_ns_from_condition(i.condition, ctx);
+            i.then_block = strip_ns_from_block(i.then_block, ctx);
+            i.else_block = i.else_block.map(|b| strip_ns_from_block(b, ctx));
+            Stmt::If(i)
+        }
+        Stmt::While(mut w) => {
+            w.condition = strip_ns_from_condition(w.condition, ctx);
+            w.body = strip_ns_from_block(w.body, ctx);
+            Stmt::While(w)
+        }
+        Stmt::For(mut f) => {
+            f.init = f.init.map(|s| Box::new(strip_ns_from_stmt(*s, ctx)));
+            f.condition = f.condition.map(|c| strip_ns_from_condition(c, ctx));
+            f.update = f.update.map(|e| strip_ns_from_expr(e, ctx));
+            f.body = strip_ns_from_block(f.body, ctx);
+            Stmt::For(f)
+        }
+        Stmt::ForOf(mut f) => {
+            f.iterable = strip_ns_from_expr(f.iterable, ctx);
+            f.body = strip_ns_from_block(f.body, ctx);
+            f.binding = strip_ns_from_pattern(f.binding, ctx);
+            Stmt::ForOf(f)
+        }
+        Stmt::Loop(mut l) => {
+            l.body = strip_ns_from_block(l.body, ctx);
+            Stmt::Loop(l)
+        }
+        Stmt::LabeledBlock(mut l) => {
+            l.block = strip_ns_from_block(l.block, ctx);
+            Stmt::LabeledBlock(l)
+        }
+        Stmt::Match(mut m) => {
+            m.expr = strip_ns_from_expr(m.expr, ctx);
+            m.arms = m
+                .arms
+                .into_iter()
+                .map(|mut arm| {
+                    arm.pattern = strip_ns_from_pattern(arm.pattern, ctx);
+                    arm.body = strip_ns_from_expr(arm.body, ctx);
+                    arm.guard = arm.guard.map(|g| strip_ns_from_expr(g, ctx));
+                    arm
+                })
+                .collect();
+            Stmt::Match(m)
+        }
+        Stmt::Assert(mut a) => {
+            a.condition = strip_ns_from_expr(a.condition, ctx);
+            a.message = a.message.map(|e| strip_ns_from_expr(e, ctx));
+            Stmt::Assert(a)
+        }
+        Stmt::TaskReturn(mut t) => {
+            t.value = strip_ns_from_expr(t.value, ctx);
+            Stmt::TaskReturn(t)
+        }
+        Stmt::Break(_) | Stmt::Continue(_) => stmt,
+    }
+}
+
+fn strip_ns_from_condition(cond: Condition, ctx: &DesugarContext) -> Condition {
+    match cond {
+        Condition::Expr(e) => Condition::Expr(strip_ns_from_expr(e, ctx)),
+        Condition::LetChain { elements, span } => Condition::LetChain {
+            elements: elements
+                .into_iter()
+                .map(|e| match e {
+                    ConditionElement::Let {
+                        pattern,
+                        expr,
+                        span,
+                    } => ConditionElement::Let {
+                        pattern: strip_ns_from_pattern(pattern, ctx),
+                        expr: strip_ns_from_expr(expr, ctx),
+                        span,
+                    },
+                    ConditionElement::Expr(expr) => {
+                        ConditionElement::Expr(strip_ns_from_expr(expr, ctx))
+                    }
+                })
+                .collect(),
+            span,
+        },
+    }
+}
+
+fn strip_ns_from_pattern(pattern: Pattern, ctx: &DesugarContext) -> Pattern {
+    match pattern {
+        Pattern::Variant {
+            variant_name,
+            bindings,
+            span,
+        } => {
+            let stripped = strip_namespace_prefix(&variant_name, &ctx.namespace_names);
+            Pattern::Variant {
+                variant_name: if stripped.len() == variant_name.len() {
+                    variant_name
+                } else {
+                    stripped.to_string()
+                },
+                bindings: bindings
+                    .into_iter()
+                    .map(|p| strip_ns_from_pattern(p, ctx))
+                    .collect(),
+                span,
+            }
+        }
+        Pattern::Struct {
+            type_name,
+            fields,
+            has_rest,
+            span,
+        } => {
+            let stripped_type = type_name.as_ref().map(|n| {
+                let s = strip_namespace_prefix(n, &ctx.namespace_names);
+                if s.len() == n.len() {
+                    n.clone()
+                } else {
+                    s.to_string()
+                }
+            });
+            Pattern::Struct {
+                type_name: stripped_type,
+                fields: fields
+                    .into_iter()
+                    .map(|mut f| {
+                        f.pattern = strip_ns_from_pattern(f.pattern, ctx);
+                        f
+                    })
+                    .collect(),
+                has_rest,
+                span,
+            }
+        }
+        Pattern::Tuple(patterns) => Pattern::Tuple(
+            patterns
+                .into_iter()
+                .map(|p| strip_ns_from_pattern(p, ctx))
+                .collect(),
+        ),
+        _ => pattern,
+    }
+}
+
+fn strip_ns_from_expr(expr: Expr, ctx: &DesugarContext) -> Expr {
+    match expr {
+        Expr::Ident(mut i) => {
+            let stripped = strip_namespace_prefix(&i.name, &ctx.namespace_names);
+            if stripped.len() != i.name.len() {
+                i.name = stripped.to_string();
+            }
+            Expr::Ident(i)
+        }
+        Expr::Binary(mut b) => {
+            b.left = strip_ns_from_expr(b.left, ctx);
+            b.right = strip_ns_from_expr(b.right, ctx);
+            Expr::Binary(b)
+        }
+        Expr::Unary(mut u) => {
+            u.expr = strip_ns_from_expr(u.expr, ctx);
+            Expr::Unary(u)
+        }
+        Expr::Assign(mut a) => {
+            a.target = strip_ns_from_expr(a.target, ctx);
+            a.value = strip_ns_from_expr(a.value, ctx);
+            Expr::Assign(a)
+        }
+        Expr::Call(mut c) => {
+            c.callee = strip_ns_from_expr(c.callee, ctx);
+            c.args = c
+                .args
+                .into_iter()
+                .map(|a| strip_ns_from_expr(a, ctx))
+                .collect();
+            Expr::Call(c)
+        }
+        Expr::MethodCall(mut m) => {
+            m.receiver = strip_ns_from_expr(m.receiver, ctx);
+            m.args = m
+                .args
+                .into_iter()
+                .map(|a| strip_ns_from_expr(a, ctx))
+                .collect();
+            Expr::MethodCall(m)
+        }
+        Expr::StaticMethodCall(mut s) => {
+            s.target_type = desugar_type(&s.target_type, ctx);
+            s.args = s
+                .args
+                .into_iter()
+                .map(|a| strip_ns_from_expr(a, ctx))
+                .collect();
+            Expr::StaticMethodCall(s)
+        }
+        Expr::FieldAccess(mut f) => {
+            f.expr = strip_ns_from_expr(f.expr, ctx);
+            Expr::FieldAccess(f)
+        }
+        Expr::Index(mut i) => {
+            i.expr = strip_ns_from_expr(i.expr, ctx);
+            i.index = strip_ns_from_expr(i.index, ctx);
+            Expr::Index(i)
+        }
+        Expr::Block(mut b) => {
+            *b = strip_ns_from_block(*b, ctx);
+            Expr::Block(b)
+        }
+        Expr::If(mut i) => {
+            i.condition = strip_ns_from_condition(i.condition, ctx);
+            i.then_block = strip_ns_from_block(i.then_block, ctx);
+            i.else_block = i.else_block.map(|b| strip_ns_from_block(b, ctx));
+            Expr::If(i)
+        }
+        Expr::Match(mut m) => {
+            m.expr = strip_ns_from_expr(m.expr, ctx);
+            m.arms = m
+                .arms
+                .into_iter()
+                .map(|mut arm| {
+                    arm.pattern = strip_ns_from_pattern(arm.pattern, ctx);
+                    arm.body = strip_ns_from_expr(arm.body, ctx);
+                    arm.guard = arm.guard.map(|g| strip_ns_from_expr(g, ctx));
+                    arm
+                })
+                .collect();
+            Expr::Match(m)
+        }
+        Expr::Matches(mut m) => {
+            m.expr = strip_ns_from_expr(m.expr, ctx);
+            m.pattern = strip_ns_from_pattern(m.pattern, ctx);
+            m.guard = m.guard.map(|g| strip_ns_from_expr(g, ctx));
+            Expr::Matches(m)
+        }
+        Expr::Closure(mut c) => {
+            for p in &mut c.params {
+                p.ty = p.ty.as_ref().map(|t| desugar_type(t, ctx));
+            }
+            c.body = strip_ns_from_expr(c.body, ctx);
+            Expr::Closure(c)
+        }
+        Expr::TemplateString(mut t) => {
+            t.parts = t
+                .parts
+                .into_iter()
+                .map(|part| match part {
+                    TemplatePart::Interpolation { expr, format } => {
+                        TemplatePart::Interpolation {
+                            expr: Box::new(strip_ns_from_expr(*expr, ctx)),
+                            format,
+                        }
+                    }
+                    other => other,
+                })
+                .collect();
+            Expr::TemplateString(t)
+        }
+        Expr::Cast(mut c) => {
+            c.expr = strip_ns_from_expr(c.expr, ctx);
+            c.target_type = desugar_type(&c.target_type, ctx);
+            Expr::Cast(c)
+        }
+        Expr::StructLiteral(mut s) => {
+            if let Some(ref name) = s.name {
+                let stripped = strip_namespace_prefix(name, &ctx.namespace_names);
+                if stripped.len() != name.len() {
+                    s.name = Some(stripped.to_string());
+                }
+            }
+            s.fields = s
+                .fields
+                .into_iter()
+                .map(|mut f| {
+                    f.value = strip_ns_from_expr(f.value, ctx);
+                    f
+                })
+                .collect();
+            Expr::StructLiteral(s)
+        }
+        Expr::TupleLiteral(mut t) => {
+            t.elements = t
+                .elements
+                .into_iter()
+                .map(|e| strip_ns_from_expr(e, ctx))
+                .collect();
+            Expr::TupleLiteral(t)
+        }
+        Expr::LabeledBlock(mut l) => {
+            l.block = strip_ns_from_block(l.block, ctx);
+            Expr::LabeledBlock(l)
+        }
+        Expr::TryOp(mut t) => {
+            t.expr = strip_ns_from_expr(t.expr, ctx);
+            Expr::TryOp(t)
+        }
+        Expr::Literal(_) | Expr::CompoundAssign(_) | Expr::ComparisonChain(_) => expr,
     }
 }

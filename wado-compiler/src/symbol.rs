@@ -255,8 +255,6 @@ pub struct SymbolTable {
     reexports: IndexMap<ModuleSource, IndexMap<String, ReExportTarget>>,
     /// Imported symbols in the current module (name → symbol id)
     imports: IndexMap<String, SymbolId>,
-    /// Namespace imports in the current module (alias → module source)
-    namespace_imports: IndexMap<String, ModuleSource>,
     /// Current scope stack for local variables (innermost scope last)
     scopes: Vec<IndexMap<String, SymbolId>>,
 }
@@ -311,18 +309,6 @@ impl SymbolTable {
     /// Clear all registered imports (when moving to a new module)
     pub fn clear_imports(&mut self) {
         self.imports.clear();
-        self.namespace_imports.clear();
-    }
-
-    /// Register a namespace import (alias → module source)
-    pub fn register_namespace_import(&mut self, name: &str, module_source: ModuleSource) {
-        self.namespace_imports
-            .insert(name.to_string(), module_source);
-    }
-
-    /// Look up a namespace import by alias name
-    pub fn lookup_namespace(&self, name: &str) -> Option<&ModuleSource> {
-        self.namespace_imports.get(name)
     }
 
     /// Register a re-export in a module

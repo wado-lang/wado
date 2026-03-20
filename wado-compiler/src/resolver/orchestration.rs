@@ -541,9 +541,16 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     }
                                 }
                             }
-                            crate::ast::UseItem::Wildcard
-                            | crate::ast::UseItem::Namespace { .. } => {
-                                // Wildcard/namespace import: no individual function names to collect
+                            crate::ast::UseItem::Namespace { .. } => {
+                                // Namespace import: all symbols from source module are available
+                                let source =
+                                    crate::name::resolve_import(module_source, &use_decl.source);
+                                for sym in symbols.get_module_symbols(&source) {
+                                    imported_functions.insert(sym.name.clone());
+                                }
+                            }
+                            crate::ast::UseItem::Wildcard => {
+                                // Wildcard import: no individual function names to collect
                             }
                         }
                     }
