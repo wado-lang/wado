@@ -90,7 +90,16 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let s: ref String;
+    let __local_1: ref String;
+    s = __tmpl: block -> ref String {
+        __local_1 = String { repr: builtin::array_new<u8>(22), used: 0 };
+        String::append(__local_1, String { repr: array.new_data<u8>("data: "), used: 6 });
+        String::append(__local_1, String { repr: array.new_data<u8>("{\"stdout_contains\": [\"data: \", \"TEMPLATE_MARKER\"]}
+"), used: 51 });
+        break __tmpl: __local_1;
+    };
+    "core:cli/println"(s);
     "wasi/task-return"(0);
 }
 

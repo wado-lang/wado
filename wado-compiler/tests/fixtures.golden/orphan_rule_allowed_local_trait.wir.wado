@@ -131,7 +131,28 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let s: ref String;
+    let __local_3: ref String;
+    let __local_4: ref String;
+    s = String { repr: array.new_data<u8>("hello"), used: 5 };
+    "core:cli/println"(i32^Describable::describe(42));
+    "core:cli/println"(__inline_String_Describable__describe_3: block -> ref String {
+        __local_3 = s;
+        __tmpl: block -> ref String {
+            __local_4 = String { repr: builtin::array_new<u8>(24), used: 0 };
+            String::append_char(__local_4, 115);
+            String::append_char(__local_4, 116);
+            String::append_char(__local_4, 114);
+            String::append_char(__local_4, 105);
+            String::append_char(__local_4, 110);
+            String::append_char(__local_4, 103);
+            String::append_char(__local_4, 58);
+            String::append_char(__local_4, 32);
+            String::append(__local_4, __local_3);
+            break __tmpl: __local_4;
+        };
+        break __inline_String_Describable__describe_3;
+    });
     "wasi/task-return"(0);
 }
 

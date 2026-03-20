@@ -86,7 +86,16 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    if __inline_IntBox_Container__has_items_3: block -> bool {
+        __fused___inline_IntBox_Container__get_first_0: block {
+            drop(42);
+            break __inline_IntBox_Container__has_items_3: 1;
+            break __fused___inline_IntBox_Container__get_first_0;
+        };
+        break __inline_IntBox_Container__has_items_3: 0;
+    } {
+        "core:cli/println"(String { repr: array.new_data<u8>("has items"), used: 9 });
+    };
     "wasi/task-return"(0);
 }
 
@@ -125,13 +134,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l3: loop {
+            l4: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l3;
+                continue l4;
             };
         };
     };

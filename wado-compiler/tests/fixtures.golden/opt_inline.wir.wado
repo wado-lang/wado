@@ -52,11 +52,7 @@ type "functype/opt_inline_attr" = fn();
 
 type "functype/opt_inline_multireturn" = fn();
 
-type "functype/opt_inline_nested" = fn();
-
 type "functype/opt_inline_recursive" = fn();
-
-type "functype/opt_inline_simple" = fn();
 
 type "functype/run" = fn();
 
@@ -305,9 +301,6 @@ condition: b == 5
     };
 }
 
-fn opt_inline_nested() with Stdout {
-}
-
 fn opt_inline_recursive() with Stdout {
     let result: i32;
     let __cond: bool;
@@ -360,16 +353,11 @@ condition: result == 120
     };
 }
 
-fn opt_inline_simple() with Stdout {
-}
-
 fn run() with Stdout {
     opt_inline_array();
     opt_inline_attr();
     opt_inline_multireturn();
-    opt_inline_nested();
     opt_inline_recursive();
-    opt_inline_simple();
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -379,7 +367,10 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    opt_inline_array();
+    opt_inline_attr();
+    opt_inline_multireturn();
+    opt_inline_recursive();
     "wasi/task-return"(0);
 }
 

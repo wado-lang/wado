@@ -34,10 +34,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/make_printer" = fn() -> ref struct;
-
-type "functype/caller" = fn(ref struct);
-
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -81,23 +77,15 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-fn make_printer() with Stdout {
-    return "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_0") };
-}
-
-fn caller(f) with Stdout {
-    let __indirect_call_0: ref "canonical/CanonicalClosure_0";
-    __indirect_call_0 = ref.cast "canonical/CanonicalClosure_0"(f);
-    call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
-}
-
 fn run() with Stdout {
     let f: ref struct;
-    f = make_printer();
+    f = "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_0") };
     let __indirect_call_0: ref "canonical/CanonicalClosure_0";
     __indirect_call_0 = ref.cast "canonical/CanonicalClosure_0"(f);
     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
-    caller(f);
+    let __indirect_call_1: ref "canonical/CanonicalClosure_0";
+    __indirect_call_1 = ref.cast "canonical/CanonicalClosure_0"(f);
+    call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env);
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -107,7 +95,14 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let f: ref struct;
+    f = "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_0") };
+    let __indirect_call_0: ref "canonical/CanonicalClosure_0";
+    __indirect_call_0 = ref.cast "canonical/CanonicalClosure_0"(f);
+    call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
+    let __indirect_call_1: ref "canonical/CanonicalClosure_0";
+    __indirect_call_1 = ref.cast "canonical/CanonicalClosure_0"(f);
+    call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env);
     "wasi/task-return"(0);
 }
 
