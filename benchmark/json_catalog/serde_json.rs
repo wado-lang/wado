@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // Rust serde_json benchmark for citm_catalog.json
 // Comparison baseline for Wado's core:json deserialization.
 //
@@ -5,7 +6,7 @@
 // License: MIT
 
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::time::Instant;
 
 #[derive(Deserialize)]
@@ -72,25 +73,25 @@ struct Performance {
 #[derive(Deserialize)]
 struct CitmCatalog {
     #[serde(rename = "areaNames")]
-    area_names: HashMap<String, String>,
+    area_names: BTreeMap<String, String>,
     #[serde(rename = "audienceSubCategoryNames")]
-    audience_sub_category_names: HashMap<String, String>,
+    audience_sub_category_names: BTreeMap<String, String>,
     #[serde(rename = "blockNames")]
-    block_names: HashMap<String, String>,
-    events: HashMap<String, Event>,
+    block_names: BTreeMap<String, String>,
+    events: BTreeMap<String, Event>,
     performances: Vec<Performance>,
     #[serde(rename = "seatCategoryNames")]
-    seat_category_names: HashMap<String, String>,
+    seat_category_names: BTreeMap<String, String>,
     #[serde(rename = "subTopicNames")]
-    sub_topic_names: HashMap<String, String>,
+    sub_topic_names: BTreeMap<String, String>,
     #[serde(rename = "subjectNames")]
-    subject_names: HashMap<String, String>,
+    subject_names: BTreeMap<String, String>,
     #[serde(rename = "topicNames")]
-    topic_names: HashMap<String, String>,
+    topic_names: BTreeMap<String, String>,
     #[serde(rename = "topicSubTopics")]
-    topic_sub_topics: HashMap<String, Vec<i64>>,
+    topic_sub_topics: BTreeMap<String, Vec<i64>>,
     #[serde(rename = "venueNames")]
-    venue_names: HashMap<String, String>,
+    venue_names: BTreeMap<String, String>,
 }
 
 fn main() {

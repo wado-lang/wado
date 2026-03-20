@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // Rust serde_json benchmark for twitter.json
 // Comparison baseline for Wado's core:json deserialization.
 //
