@@ -1,5 +1,5 @@
 [workspace]
-members = ["wado-compiler", "wado-cli", "wado-from-wit", "wado-bundled-libm", "wado-manifest"]
+members = ["wado-compiler", "wado-cli", "wado-from-wit", "wado-bundled-libm", "wado-manifest", "wado-dev-tools"]
 resolver = "3" # v3 resolver
 
 [workspace.package]
@@ -45,6 +45,12 @@ crc32fast = { version = "1" }
 adler = { version = "1" }
 toml = { version = "0.8", default-features = false, features = ["parse", "display"] }
 libc = { version = "0.2" }
+
+[profile.dev-optimized]
+inherits = "dev"
+
+[profile.dev-optimized.package.wado-compiler]
+opt-level = 1
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
