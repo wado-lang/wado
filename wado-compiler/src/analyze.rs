@@ -11,8 +11,8 @@ use crate::logger::{Bail, Logger};
 use crate::name::{ModuleSource, resolve_import, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
-    ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
-    WorldExportSymbol, WorldImportSymbol, WorldSymbol,
+    ResourceSymbol, StructSymbol, Symbol, SymbolId, SymbolKind, SymbolTable, TraitSymbol,
+    VariantSymbol, WorldExportSymbol, WorldImportSymbol, WorldSymbol,
 };
 use crate::token::Span;
 
@@ -511,9 +511,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 );
                             }
                         }
-                        UseItem::Wildcard => {
-                            // Wildcard import: module is loaded for side effects only,
-                            // no names to re-export
+                        UseItem::Wildcard | UseItem::Namespace { .. } => {
+                            // Wildcard/namespace import: no individual names to re-export
                         }
                     }
                 }
@@ -595,6 +594,19 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         UseItem::Wildcard => {
                             // Wildcard import: module is loaded for side effects only,
                             // no symbols to register
+                        }
+                        UseItem::Namespace { .. } => {
+                            // Namespace import: register all pub symbols from source module
+                            // The desugar phase has already stripped ns:: prefixes from idents
+                            let symbols: Vec<(String, SymbolId)> = self
+                                .symbols
+                                .get_module_symbols(&module_source)
+                                .into_iter()
+                                .map(|s| (s.name.clone(), s.id))
+                                .collect();
+                            for (sym_name, sym_id) in symbols {
+                                self.symbols.register_import(&sym_name, sym_id);
+                            }
                         }
                     }
                 }

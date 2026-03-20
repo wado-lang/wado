@@ -541,8 +541,16 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     }
                                 }
                             }
+                            crate::ast::UseItem::Namespace { .. } => {
+                                // Namespace import: all symbols from source module are available
+                                let source =
+                                    crate::name::resolve_import(module_source, &use_decl.source);
+                                for sym in symbols.get_module_symbols(&source) {
+                                    imported_functions.insert(sym.name.clone());
+                                }
+                            }
                             crate::ast::UseItem::Wildcard => {
-                                // Wildcard import: no function names to collect
+                                // Wildcard import: no individual function names to collect
                             }
                         }
                     }
@@ -685,7 +693,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 original_names.insert(local_name.clone(), name.clone());
                             }
                         }
-                        ast::UseItem::EffectFunctions { .. } | ast::UseItem::Wildcard => {}
+                        ast::UseItem::EffectFunctions { .. }
+                        | ast::UseItem::Wildcard
+                        | ast::UseItem::Namespace { .. } => {}
                     }
                 }
             }
