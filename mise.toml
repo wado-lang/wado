@@ -8,8 +8,8 @@
 # dprint - fast code formatter
 dprint = "latest"
 
-# WebAssembly toolchain for parsing, printing, and validating Wasm
-# "github:bytecodealliance/wasm-tools" = "latest"
+# wasm-tools - Wasm printing (WAT), validation, and component tooling (used by update-bundled)
+"github:bytecodealliance/wasm-tools" = "latest"
 
 # WebAssembly runtime with WASI P3 support (matches Cargo.toml wasmtime = "42")
 wasmtime = "42"
@@ -29,21 +29,12 @@ verbose = false
 RUSTFLAGS = {value = "-D warnings", default = true}
 
 [tasks.on-task-started]
-description = "Set up development environment (install mise and project tools)"
+description = "Install project development tools"
 run = """
 #!/usr/bin/env bash
-if ! command -v mise >/dev/null 2>&1; then
-    curl -fsSL https://mise.run | sh
-    echo ""
-    echo "mise installed. Please restart your shell or run:"
-    echo "  echo 'eval \"$(~/.local/bin/mise activate bash)\"' >> ~/.bashrc  # for bash"
-    echo "  echo 'eval \"$(~/.local/bin/mise activate zsh)\"' >> ~/.zshrc   # for zsh"
-    echo ""
-    echo "Then run 'mise run on-task-started' again to install project tools."
-else
-    mise install
-    mise install github:cli/cli@latest 2>&1 || true
-fi
+set -xe -o pipefail
+mise install
+mise install github:cli/cli@latest 2>&1 || true
 """
 
 [tasks.on-task-done]
@@ -255,7 +246,7 @@ description = "Rebuild bundled libm Wasm module"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release
+CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release --manifest-path wado-bundled-libm/Cargo.toml
 wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > wado-compiler/lib/builtins/wado-bundled-libm.wat
 """
 

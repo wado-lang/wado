@@ -248,10 +248,20 @@ Show the generated WAT to an agent and ask it to spot inefficiencies. Review the
 
 ### Install Development Tools
 
-Use the provided mise task to set up everything automatically:
+This project uses [mise](https://mise.jdx.dev/) to manage dev tools. Install mise first:
 
 ```sh
-mise run on-task-started  # installs mise and all project tools
+curl -fsSL https://mise.run | sh
+# Then add to your shell profile:
+#   eval "$(~/.local/bin/mise activate bash)"  # for bash
+#   eval "$(~/.local/bin/mise activate zsh)"   # for zsh
+```
+
+Then install project tools:
+
+```sh
+mise trust                 # trust the mise.toml config (first time only)
+mise run on-task-started   # install all project tools
 ```
 
 See [mise.toml](mise.toml) for the list of managed tools.

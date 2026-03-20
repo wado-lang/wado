@@ -301,9 +301,18 @@ See [docs/WEP.md] for details and existing WEPs.
 
 ### Tool Management
 
-This project uses `mise` to manage dev tools. Project tasks are defined in `mise.toml`. Run `mise tasks ls` to list available tasks.
+This project uses [mise](https://mise.jdx.dev/) to manage dev tools. Project tasks are defined in `mise.toml`. Run `mise tasks ls` to list available tasks.
 
-Run `mise run on-task-started` to install mise and all required development tools automatically.
+Install mise first if you don't have it:
+
+```sh
+curl -fsSL https://mise.run | sh
+# Then add to your shell profile:
+#   eval "$(~/.local/bin/mise activate bash)"  # for bash
+#   eval "$(~/.local/bin/mise activate zsh)"   # for zsh
+```
+
+Then run `mise run on-task-started` to install all required development tools.
 
 ### Development Tasks
 
@@ -332,10 +341,9 @@ wado compile --log-level debug file.wado # all messages including phase spans
 Run the following to set up your development environment:
 
 ```sh
-mise run on-task-started  # install mise and project tools
+mise trust                 # trust the mise.toml config (first time only)
+mise run on-task-started   # install project tools
 ```
-
-If this is your first time running mise in this repository, you may need to trust the configuration file by tunning `mise trust`.
 
 ### When Completing a Task
 
@@ -346,4 +354,4 @@ When you have completed a task, make sure everything is up-to-date and tested:
   - docs/cheatsheet.md
   - docs/compiler.md
   - docs/optimizer.md
-- Run `mise run on-task-done` to format, clippy-fix, update golden fixtures, regenerate stdlib docs, and test. It will take 10+ minutes.
+- Run `mise run on-task-done` to format, clippy-fix, update golden fixtures, regenerate stdlib docs, and test. It will take 15+ minutes.
