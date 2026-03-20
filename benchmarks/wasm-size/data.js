@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773997189253,
+  "lastUpdate": 1773999396598,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4898,6 +4898,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d13823df8bfa9853c56f34fbd929e6cb545d151b"
         },
         "date": 1773997189161,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22261,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5078d22cfb4ceb6ae3577aac5b76efeea73e8999",
+          "message": "Merge pull request #622 from wado-lang/claude/migrate-makefile-to-mise-6idT0\n\nMigrate from Makefile to mise tasks",
+          "timestamp": "2026-03-20T18:34:05+09:00",
+          "tree_id": "c85d4d4a9093a12310a62c243a7eeea0de5c4f8a",
+          "url": "https://github.com/wado-lang/wado/commit/5078d22cfb4ceb6ae3577aac5b76efeea73e8999"
+        },
+        "date": 1773999396374,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
