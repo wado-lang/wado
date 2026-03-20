@@ -1,0 +1,16 @@
+// Test: multiple effect parameters should be a compile error
+// Only one effect parameter per function is allowed
+
+use { println, Stdout } from "core:cli";
+
+fn combine<effect E1, effect E2>(f: fn() with E1, g: fn() with E2) with E1, E2 {
+    f();
+    g();
+}
+
+export fn run() with Stdout {
+    combine(|| { println("a"); }, || { println("b"); });
+}
+
+__DATA__
+{"compile_error": "multiple effect parameters"}

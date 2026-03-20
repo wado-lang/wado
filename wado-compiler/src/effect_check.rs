@@ -336,7 +336,25 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                 for arg in args {
                     self.check_expr(arg)?;
                 }
-                // TODO: Check closure effects when we have effect types on closures
+                // Check effects from the callee's function type
+                if self.mode == CheckMode::EffectsOnly {
+                    if let Some(tt) = &self.type_table {
+                        let tt = tt.borrow();
+                        if let ResolvedType::Function { effects, .. } =
+                            tt.get(callee.type_id)
+                        {
+                            for effect in effects {
+                                if !self.current_effects.contains(effect) {
+                                    self.logger.error(EffectError {
+                                        callee: "(indirect call)".to_string(),
+                                        missing_effect: effect.name().to_string(),
+                                        span: expr.span,
+                                    })?;
+                                }
+                            }
+                        }
+                    }
+                }
             }
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 self.check_expr(functor)?;

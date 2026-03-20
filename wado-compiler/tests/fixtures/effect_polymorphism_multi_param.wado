@@ -1,39 +1,39 @@
-// Test: multiple distinct effect parameters
-// A function with two independent effect params resolved from different arguments
+// Test: single effect parameter resolved from multiple closures with different effects
+// E gets the union of effects from all function-typed arguments
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 
-fn combine<effect E1, effect E2>(f: fn() with E1, g: fn() with E2) with E1, E2 {
+fn combine<effect E>(f: fn() with E, g: fn() with E) with E {
     f();
     g();
 }
 
-fn transform<T, effect E1, effect E2>(
-    f: fn(T) -> T with E1,
-    g: fn(T) -> T with E2,
+fn transform<T, effect E>(
+    f: fn(T) -> T with E,
+    g: fn(T) -> T with E,
     x: T,
-) -> T with E1, E2 {
+) -> T with E {
     let y = f(x);
     return g(y);
 }
 
 export fn run() with Stdout, Stderr {
-    // E1 = Stdout, E2 = Stderr
+    // E = Stdout + Stderr (union from both closures)
     combine(
         || { println("from f"); },
         || { eprintln("from g"); },
     );
 
-    // E1 = Stdout, E2 = (none)
+    // E = Stdout (from first closure; second has no effects)
     combine(
         || { println("effectful"); },
         || { },
     );
 
-    // E1 = (none), E2 = (none)
+    // E = (none)
     combine(|| { }, || { });
 
-    // transform with mixed effects
+    // transform with mixed effects: E = Stdout + Stderr
     let result = transform(
         |x: i32| {
             println(`step1: {x}`);
