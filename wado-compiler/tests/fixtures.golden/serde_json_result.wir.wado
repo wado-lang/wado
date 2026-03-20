@@ -333,7 +333,7 @@ fn __test_0_result_serialize_ok() {
     let __local_15: ref String;
     json_r = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Ok { discriminant: 0, payload_0: 42 });
     if ref.test Result<String,SerializeError>::Ok(json_r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(json_r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"Ok\":42}"), used: 9 });
         if __cond == 0 {
@@ -387,7 +387,7 @@ fn __test_1_result_serialize_err() {
     let __local_15: ref String;
     json_r = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("not found"), used: 9 } });
     if ref.test Result<String,SerializeError>::Ok(json_r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(json_r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"Err\":\"not found\"}"), used: 19 });
         if __cond == 0 {
@@ -519,7 +519,7 @@ fn __test_3_result_roundtrip_err() {
         if ref.test Result<Result<i32,String>,DeserializeError>::Ok(parsed_r) {
             parsed = ref.cast Result<Result<i32,String>,DeserializeError>::Ok(parsed_r).payload_0;
             if ref.test Result<i32,String>::Err(parsed) {
-                e = value_copy String(ref.cast Result<i32,String>::Err(parsed).payload_0);
+                e = ref.cast Result<i32,String>::Err(parsed).payload_0;
                 __v0 = e;
                 __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("fail"), used: 4 });
                 if __cond == 0 {
