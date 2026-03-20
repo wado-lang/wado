@@ -960,9 +960,12 @@ impl<'a> WirEmitter<'a> {
                         let src_name = format!("__copy_arr_src_{}_{}", type_id.index(), field_idx);
                         let dst_name = format!("__copy_arr_dst_{}_{}", type_id.index(), field_idx);
                         let len_name = format!("__copy_arr_len_{}_{}", type_id.index(), field_idx);
+                        let loop_idx_name =
+                            format!("__copy_arr_i_{}_{}", type_id.index(), field_idx);
                         locals.push((src_name, ValType::Ref(arr_ref)));
                         locals.push((dst_name, ValType::Ref(arr_ref)));
                         locals.push((len_name, ValType::I32));
+                        locals.push((loop_idx_name, ValType::I32));
                     }
                 }
             }
@@ -2344,16 +2347,50 @@ impl<'a> WirEmitter<'a> {
                         f.instruction(&Instruction::LocalGet(len_local));
                         f.instruction(&Instruction::ArrayNewDefault(arr_wasm_idx));
                         f.instruction(&Instruction::LocalSet(dst_local));
-                        // Copy elements: array.copy dst 0 src 0 len
-                        f.instruction(&Instruction::LocalGet(dst_local));
+                        // Copy elements using a JIT-compiled loop instead of array.copy.
+                        // Wasm array.copy is implemented as a slow libcall in wasmtime
+                        // (~3μs/element), while a JIT-compiled loop runs at ~1ns/element.
+                        let loop_idx_name =
+                            format!("__copy_arr_i_{}_{}", type_id.index(), field.index);
+                        let loop_idx_local = self.resolve_local(&loop_idx_name);
+                        // i = 0
                         f.instruction(&Instruction::I32Const(0));
-                        f.instruction(&Instruction::LocalGet(src_local));
-                        f.instruction(&Instruction::I32Const(0));
+                        f.instruction(&Instruction::LocalSet(loop_idx_local));
+                        // block { loop {
+                        f.instruction(&Instruction::Block(BlockType::Empty));
+                        f.instruction(&Instruction::Loop(BlockType::Empty));
+                        // if i >= len: break
+                        f.instruction(&Instruction::LocalGet(loop_idx_local));
                         f.instruction(&Instruction::LocalGet(len_local));
-                        f.instruction(&Instruction::ArrayCopy {
-                            array_type_index_dst: arr_wasm_idx,
-                            array_type_index_src: arr_wasm_idx,
-                        });
+                        f.instruction(&Instruction::I32GeS);
+                        f.instruction(&Instruction::BrIf(1)); // break out of block
+                        // dst[i] = src[i]
+                        f.instruction(&Instruction::LocalGet(dst_local));
+                        f.instruction(&Instruction::LocalGet(loop_idx_local));
+                        f.instruction(&Instruction::LocalGet(src_local));
+                        f.instruction(&Instruction::LocalGet(loop_idx_local));
+                        match self.is_array_packed(arr_wir_idx) {
+                            Some(true) => {
+                                f.instruction(&Instruction::ArrayGetS(arr_wasm_idx));
+                            }
+                            Some(false) => {
+                                f.instruction(&Instruction::ArrayGetU(arr_wasm_idx));
+                            }
+                            None => {
+                                f.instruction(&Instruction::ArrayGet(arr_wasm_idx));
+                            }
+                        }
+                        f.instruction(&Instruction::ArraySet(arr_wasm_idx));
+                        // i += 1
+                        f.instruction(&Instruction::LocalGet(loop_idx_local));
+                        f.instruction(&Instruction::I32Const(1));
+                        f.instruction(&Instruction::I32Add);
+                        f.instruction(&Instruction::LocalSet(loop_idx_local));
+                        // continue loop
+                        f.instruction(&Instruction::Br(0));
+                        // } }
+                        f.instruction(&Instruction::End); // end loop
+                        f.instruction(&Instruction::End); // end block
                         // Push the new array on stack (for struct.new)
                         f.instruction(&Instruction::LocalGet(dst_local));
                     } else {
