@@ -103,30 +103,42 @@ fn analyze_copy_binding(stmt: &TirStmt) -> Option<CopyBinding> {
     })
 }
 
-/// Collect usage information for all locals in a function body.
-fn collect_local_usage(body: &TirBlock) -> IndexMap<u32, LocalUsage> {
-    let mut usage: IndexMap<u32, LocalUsage> = IndexMap::default();
-    collect_usage_in_block(body, &mut usage, false);
-    usage
+/// Combined analysis: collect both copy bindings and local usage in a single tree walk.
+struct AnalysisResult {
+    bindings: Vec<CopyBinding>,
+    usage: IndexMap<u32, LocalUsage>,
 }
 
-fn collect_usage_in_block(block: &TirBlock, usage: &mut IndexMap<u32, LocalUsage>, in_loop: bool) {
+fn analyze_function_body(body: &TirBlock) -> AnalysisResult {
+    let mut result = AnalysisResult {
+        bindings: Vec::new(),
+        usage: IndexMap::default(),
+    };
+    analyze_block(body, &mut result, false);
+    result
+}
+
+fn analyze_block(block: &TirBlock, result: &mut AnalysisResult, in_loop: bool) {
     for stmt in &block.stmts {
-        collect_usage_in_stmt(stmt, usage, in_loop);
+        // Check for copy bindings at statement level
+        if let Some(binding) = analyze_copy_binding(stmt) {
+            result.bindings.push(binding);
+        }
+        analyze_stmt(stmt, result, in_loop);
     }
 }
 
-fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, in_loop: bool) {
+fn analyze_stmt(stmt: &TirStmt, result: &mut AnalysisResult, in_loop: bool) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } => {
-            collect_usage_in_expr(value, usage, in_loop, false);
+            analyze_expr(value, result, in_loop, false);
         }
         TirStmtKind::Expr(expr) => {
-            collect_usage_in_expr(expr, usage, in_loop, false);
+            analyze_expr(expr, result, in_loop, false);
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                collect_usage_in_expr(v, usage, in_loop, false);
+                analyze_expr(v, result, in_loop, false);
             }
         }
         TirStmtKind::If {
@@ -134,17 +146,17 @@ fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, 
             then_block,
             else_block,
         } => {
-            collect_usage_in_expr(condition, usage, in_loop, false);
-            collect_usage_in_block(then_block, usage, in_loop);
+            analyze_expr(condition, result, in_loop, false);
+            analyze_block(then_block, result, in_loop);
             if let Some(eb) = else_block {
-                collect_usage_in_block(eb, usage, in_loop);
+                analyze_block(eb, result, in_loop);
             }
         }
         TirStmtKind::Loop { body } => {
-            collect_usage_in_block(body, usage, true);
+            analyze_block(body, result, true);
         }
         TirStmtKind::LabeledBlock { block, .. } => {
-            collect_usage_in_block(block, usage, in_loop);
+            analyze_block(block, result, in_loop);
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -152,20 +164,20 @@ fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, 
             else_block,
             ..
         } => {
-            collect_usage_in_expr(scrutinee, usage, in_loop, false);
-            collect_usage_in_block(then_block, usage, in_loop);
+            analyze_expr(scrutinee, result, in_loop, false);
+            analyze_block(then_block, result, in_loop);
             if let Some(eb) = else_block {
-                collect_usage_in_block(eb, usage, in_loop);
+                analyze_block(eb, result, in_loop);
             }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                collect_usage_in_expr(v, usage, in_loop, false);
+                analyze_expr(v, result, in_loop, false);
             }
         }
         TirStmtKind::Continue => {}
         TirStmtKind::LetDestructure { value, .. } => {
-            collect_usage_in_expr(value, usage, in_loop, false);
+            analyze_expr(value, result, in_loop, false);
         }
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -173,134 +185,130 @@ fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, 
     }
 }
 
-fn collect_usage_in_expr(
-    expr: &TirExpr,
-    usage: &mut IndexMap<u32, LocalUsage>,
-    in_loop: bool,
-    in_condition: bool,
-) {
+fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, in_loop: bool, in_condition: bool) {
     match &expr.kind {
         TirExprKind::Local { index, .. } => {
-            let entry = usage.entry(*index).or_default();
+            let entry = result.usage.entry(*index).or_default();
             entry.read_count += 1;
             if in_loop && in_condition {
                 entry.in_loop_condition = true;
             }
         }
         TirExprKind::Assign { target, value } => {
-            // Check if target is a local being assigned
             if let TirExprKind::Local { index, .. } = &target.kind {
-                usage.entry(*index).or_default().is_assigned = true;
+                result.usage.entry(*index).or_default().is_assigned = true;
             }
-            collect_usage_in_expr(target, usage, in_loop, in_condition);
-            collect_usage_in_expr(value, usage, in_loop, in_condition);
+            analyze_expr(target, result, in_loop, in_condition);
+            analyze_expr(value, result, in_loop, in_condition);
         }
         TirExprKind::Unary { op, expr: inner } => {
-            // Check for address-taken
             if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
                 && let TirExprKind::Local { index, .. } = &inner.kind
             {
-                usage.entry(*index).or_default().address_taken = true;
+                result.usage.entry(*index).or_default().address_taken = true;
             }
-            collect_usage_in_expr(inner, usage, in_loop, in_condition);
+            analyze_expr(inner, result, in_loop, in_condition);
         }
         TirExprKind::Binary { left, right, .. } => {
-            collect_usage_in_expr(left, usage, in_loop, in_condition);
-            collect_usage_in_expr(right, usage, in_loop, in_condition);
+            analyze_expr(left, result, in_loop, in_condition);
+            analyze_expr(right, result, in_loop, in_condition);
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                collect_usage_in_expr(&arg.expr, usage, in_loop, in_condition);
+                analyze_expr(&arg.expr, result, in_loop, in_condition);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                collect_usage_in_expr(arg, usage, in_loop, in_condition);
+                analyze_expr(arg, result, in_loop, in_condition);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            collect_usage_in_expr(receiver, usage, in_loop, in_condition);
+            analyze_expr(receiver, result, in_loop, in_condition);
             for arg in args {
-                collect_usage_in_expr(&arg.expr, usage, in_loop, in_condition);
+                analyze_expr(&arg.expr, result, in_loop, in_condition);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            collect_usage_in_expr(callee, usage, in_loop, in_condition);
+            analyze_expr(callee, result, in_loop, in_condition);
             for arg in args {
-                collect_usage_in_expr(arg, usage, in_loop, in_condition);
+                analyze_expr(arg, result, in_loop, in_condition);
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_usage_in_expr(functor, usage, in_loop, in_condition);
+            analyze_expr(functor, result, in_loop, in_condition);
         }
         TirExprKind::FieldAccess { expr: inner, .. } => {
-            collect_usage_in_expr(inner, usage, in_loop, in_condition);
+            analyze_expr(inner, result, in_loop, in_condition);
         }
         TirExprKind::Index {
             expr: inner, index, ..
         } => {
-            collect_usage_in_expr(inner, usage, in_loop, in_condition);
-            collect_usage_in_expr(index, usage, in_loop, in_condition);
+            analyze_expr(inner, result, in_loop, in_condition);
+            analyze_expr(index, result, in_loop, in_condition);
         }
         TirExprKind::Cast { expr: inner, .. } => {
-            collect_usage_in_expr(inner, usage, in_loop, in_condition);
+            analyze_expr(inner, result, in_loop, in_condition);
         }
         TirExprKind::Block(block) => {
-            collect_usage_in_block(block, usage, in_loop);
+            analyze_block(block, result, in_loop);
         }
         TirExprKind::LabeledBlock { block, .. } => {
-            collect_usage_in_block(block, usage, in_loop);
+            analyze_block(block, result, in_loop);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            collect_usage_in_expr(condition, usage, in_loop, in_condition);
-            collect_usage_in_block(then_branch, usage, in_loop);
+            analyze_expr(condition, result, in_loop, in_condition);
+            analyze_block(then_branch, result, in_loop);
             if let Some(eb) = else_branch {
-                collect_usage_in_block(eb, usage, in_loop);
+                analyze_block(eb, result, in_loop);
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                collect_usage_in_expr(&field.value, usage, in_loop, in_condition);
+                analyze_expr(&field.value, result, in_loop, in_condition);
             }
         }
         TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
-                collect_usage_in_expr(elem, usage, in_loop, in_condition);
+                analyze_expr(elem, result, in_loop, in_condition);
             }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
-                collect_usage_in_expr(payload_expr, usage, in_loop, in_condition);
+                analyze_expr(payload_expr, result, in_loop, in_condition);
             }
         }
         TirExprKind::Closure { body, captures, .. } => {
-            // Mark all captured variables as captured
             for capture in captures {
-                usage.entry(capture.outer_index).or_default().is_captured = true;
+                result
+                    .usage
+                    .entry(capture.outer_index)
+                    .or_default()
+                    .is_captured = true;
             }
-            collect_usage_in_expr(body, usage, in_loop, in_condition);
+            analyze_expr(body, result, in_loop, in_condition);
         }
         TirExprKind::Match { expr: inner, arms } => {
-            collect_usage_in_expr(inner, usage, in_loop, in_condition);
+            analyze_expr(inner, result, in_loop, in_condition);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    collect_usage_in_expr(guard, usage, in_loop, in_condition);
+                    analyze_expr(guard, result, in_loop, in_condition);
                 }
-                collect_usage_in_expr(&arm.body, usage, in_loop, in_condition);
+                analyze_expr(&arm.body, result, in_loop, in_condition);
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            collect_usage_in_expr(value, usage, in_loop, in_condition);
+            analyze_expr(value, result, in_loop, in_condition);
         }
         TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            collect_usage_in_expr(expr, usage, in_loop, in_condition);
+            analyze_expr(expr, result, in_loop, in_condition);
         }
         TirExprKind::VariantPayload { expr, .. } => {
-            collect_usage_in_expr(expr, usage, in_loop, in_condition);
+            analyze_expr(expr, result, in_loop, in_condition);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -308,11 +316,11 @@ fn collect_usage_in_expr(
             default,
             ..
         } => {
-            collect_usage_in_expr(scrutinee, usage, in_loop, in_condition);
+            analyze_expr(scrutinee, result, in_loop, in_condition);
             for arm in arms {
-                collect_usage_in_block(arm, usage, in_loop);
+                analyze_block(arm, result, in_loop);
             }
-            collect_usage_in_block(default, usage, in_loop);
+            analyze_block(default, result, in_loop);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
@@ -432,25 +440,39 @@ fn can_propagate_copy(
     }
 }
 
-/// Substitute local references in a block.
-/// Replaces uses of locals in `substitutions` with the corresponding source expression.
-fn substitute_in_block(block: &mut TirBlock, substitutions: &IndexMap<u32, CopySource>) {
+/// Combined substitute and remove: replaces local references and removes dead Let stmts in a single walk.
+fn apply_in_block(
+    block: &mut TirBlock,
+    substitutions: &IndexMap<u32, CopySource>,
+    dead_locals: &IndexSet<u32>,
+) {
+    block.stmts.retain(|stmt| {
+        if let TirStmtKind::Let { local_index, .. } = &stmt.kind {
+            !dead_locals.contains(local_index)
+        } else {
+            true
+        }
+    });
     for stmt in &mut block.stmts {
-        substitute_in_stmt(stmt, substitutions);
+        apply_in_stmt(stmt, substitutions, dead_locals);
     }
 }
 
-fn substitute_in_stmt(stmt: &mut TirStmt, substitutions: &IndexMap<u32, CopySource>) {
+fn apply_in_stmt(
+    stmt: &mut TirStmt,
+    substitutions: &IndexMap<u32, CopySource>,
+    dead_locals: &IndexSet<u32>,
+) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => {
-            substitute_in_expr(value, substitutions);
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+            apply_in_expr(value, substitutions, dead_locals);
         }
         TirStmtKind::Expr(expr) => {
-            substitute_in_expr(expr, substitutions);
+            apply_in_expr(expr, substitutions, dead_locals);
         }
-        TirStmtKind::Return { value } => {
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                substitute_in_expr(v, substitutions);
+                apply_in_expr(v, substitutions, dead_locals);
             }
         }
         TirStmtKind::If {
@@ -458,17 +480,14 @@ fn substitute_in_stmt(stmt: &mut TirStmt, substitutions: &IndexMap<u32, CopySour
             then_block,
             else_block,
         } => {
-            substitute_in_expr(condition, substitutions);
-            substitute_in_block(then_block, substitutions);
+            apply_in_expr(condition, substitutions, dead_locals);
+            apply_in_block(then_block, substitutions, dead_locals);
             if let Some(eb) = else_block {
-                substitute_in_block(eb, substitutions);
+                apply_in_block(eb, substitutions, dead_locals);
             }
         }
-        TirStmtKind::Loop { body } => {
-            substitute_in_block(body, substitutions);
-        }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            substitute_in_block(block, substitutions);
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            apply_in_block(body, substitutions, dead_locals);
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -476,33 +495,27 @@ fn substitute_in_stmt(stmt: &mut TirStmt, substitutions: &IndexMap<u32, CopySour
             else_block,
             ..
         } => {
-            substitute_in_expr(scrutinee, substitutions);
-            substitute_in_block(then_block, substitutions);
+            apply_in_expr(scrutinee, substitutions, dead_locals);
+            apply_in_block(then_block, substitutions, dead_locals);
             if let Some(eb) = else_block {
-                substitute_in_block(eb, substitutions);
-            }
-        }
-        TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                substitute_in_expr(v, substitutions);
+                apply_in_block(eb, substitutions, dead_locals);
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetDestructure { value, .. } => {
-            substitute_in_expr(value, substitutions);
-        }
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
 
-fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySource>) {
-    // Check if this is a local that needs substitution
+fn apply_in_expr(
+    expr: &mut TirExpr,
+    substitutions: &IndexMap<u32, CopySource>,
+    dead_locals: &IndexSet<u32>,
+) {
     if let TirExprKind::Local { index, .. } = &expr.kind
         && let Some(source) = substitutions.get(index)
     {
-        // Replace with the source expression
         expr.kind = match source {
             CopySource::Local {
                 index: src_idx,
@@ -525,505 +538,100 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
         return;
     }
 
-    // Recurse into child expressions
     match &mut expr.kind {
-        TirExprKind::Local { .. } => {
-            // Already handled above
-        }
+        TirExprKind::Local { .. } => {}
         TirExprKind::Binary { left, right, .. } => {
-            substitute_in_expr(left, substitutions);
-            substitute_in_expr(right, substitutions);
+            apply_in_expr(left, substitutions, dead_locals);
+            apply_in_expr(right, substitutions, dead_locals);
         }
-        TirExprKind::Unary { expr: inner, .. } => {
-            substitute_in_expr(inner, substitutions);
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. } => {
+            apply_in_expr(inner, substitutions, dead_locals);
         }
         TirExprKind::Assign { target, value } => {
-            substitute_in_expr(target, substitutions);
-            substitute_in_expr(value, substitutions);
-        }
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                substitute_in_expr(&mut arg.expr, substitutions);
-            }
-        }
-        TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                substitute_in_expr(arg, substitutions);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            substitute_in_expr(receiver, substitutions);
-            for arg in args {
-                substitute_in_expr(&mut arg.expr, substitutions);
-            }
-        }
-        TirExprKind::IndirectCall { callee, args, .. } => {
-            substitute_in_expr(callee, substitutions);
-            for arg in args {
-                substitute_in_expr(arg, substitutions);
-            }
-        }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
-            substitute_in_expr(functor, substitutions);
-        }
-        TirExprKind::FieldAccess { expr: inner, .. } => {
-            substitute_in_expr(inner, substitutions);
+            apply_in_expr(target, substitutions, dead_locals);
+            apply_in_expr(value, substitutions, dead_locals);
         }
         TirExprKind::Index {
             expr: inner, index, ..
         } => {
-            substitute_in_expr(inner, substitutions);
-            substitute_in_expr(index, substitutions);
-        }
-        TirExprKind::Cast { expr: inner, .. } => {
-            substitute_in_expr(inner, substitutions);
-        }
-        TirExprKind::Block(block) => {
-            substitute_in_block(block, substitutions);
-        }
-        TirExprKind::LabeledBlock { block, .. } => {
-            substitute_in_block(block, substitutions);
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            substitute_in_expr(condition, substitutions);
-            substitute_in_block(then_branch, substitutions);
-            if let Some(eb) = else_branch {
-                substitute_in_block(eb, substitutions);
-            }
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                substitute_in_expr(&mut field.value, substitutions);
-            }
-        }
-        TirExprKind::TupleLiteral { elements, .. } => {
-            for elem in elements {
-                substitute_in_expr(elem, substitutions);
-            }
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                substitute_in_expr(payload_expr, substitutions);
-            }
-        }
-        TirExprKind::Closure { body, .. } => {
-            substitute_in_expr(body, substitutions);
-        }
-        TirExprKind::Match { expr: inner, arms } => {
-            substitute_in_expr(inner, substitutions);
-            for arm in arms {
-                if let Some(guard) = &mut arm.guard {
-                    substitute_in_expr(guard, substitutions);
-                }
-                substitute_in_expr(&mut arm.body, substitutions);
-            }
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            substitute_in_expr(value, substitutions);
-        }
-        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            substitute_in_expr(expr, substitutions);
-        }
-        TirExprKind::VariantPayload { expr, .. } => {
-            substitute_in_expr(expr, substitutions);
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            substitute_in_expr(scrutinee, substitutions);
-            for arm in arms {
-                substitute_in_block(arm, substitutions);
-            }
-            substitute_in_block(default, substitutions);
-        }
-        // Leaf nodes
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-    }
-}
-
-/// Collect copy bindings from statements.
-fn collect_copy_bindings(stmts: &[TirStmt], bindings: &mut Vec<CopyBinding>) {
-    for stmt in stmts {
-        if let Some(binding) = analyze_copy_binding(stmt) {
-            bindings.push(binding);
-        }
-        collect_copy_bindings_in_stmt(stmt, bindings);
-    }
-}
-
-fn collect_copy_bindings_in_stmt(stmt: &TirStmt, bindings: &mut Vec<CopyBinding>) {
-    match &stmt.kind {
-        TirStmtKind::Let { value, .. } => {
-            collect_copy_bindings_in_expr(value, bindings);
-        }
-        TirStmtKind::Expr(expr) => {
-            collect_copy_bindings_in_expr(expr, bindings);
-        }
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                collect_copy_bindings_in_expr(v, bindings);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            collect_copy_bindings_in_expr(condition, bindings);
-            collect_copy_bindings(&then_block.stmts, bindings);
-            if let Some(eb) = else_block {
-                collect_copy_bindings(&eb.stmts, bindings);
-            }
-        }
-        TirStmtKind::Loop { body } => {
-            collect_copy_bindings(&body.stmts, bindings);
-        }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            collect_copy_bindings(&block.stmts, bindings);
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_copy_bindings_in_expr(scrutinee, bindings);
-            collect_copy_bindings(&then_block.stmts, bindings);
-            if let Some(eb) = else_block {
-                collect_copy_bindings(&eb.stmts, bindings);
-            }
-        }
-        TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                collect_copy_bindings_in_expr(v, bindings);
-            }
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::LetDestructure { value, .. } => {
-            collect_copy_bindings_in_expr(value, bindings);
-        }
-        TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-    }
-}
-
-fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>) {
-    match &expr.kind {
-        TirExprKind::Block(block) => {
-            collect_copy_bindings(&block.stmts, bindings);
-        }
-        TirExprKind::LabeledBlock { block, .. } => {
-            collect_copy_bindings(&block.stmts, bindings);
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_copy_bindings_in_expr(condition, bindings);
-            collect_copy_bindings(&then_branch.stmts, bindings);
-            if let Some(eb) = else_branch {
-                collect_copy_bindings(&eb.stmts, bindings);
-            }
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            collect_copy_bindings_in_expr(left, bindings);
-            collect_copy_bindings_in_expr(right, bindings);
-        }
-        TirExprKind::Unary { expr: inner, .. } => {
-            collect_copy_bindings_in_expr(inner, bindings);
+            apply_in_expr(inner, substitutions, dead_locals);
+            apply_in_expr(index, substitutions, dead_locals);
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                collect_copy_bindings_in_expr(&arg.expr, bindings);
+                apply_in_expr(&mut arg.expr, substitutions, dead_locals);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                collect_copy_bindings_in_expr(arg, bindings);
+                apply_in_expr(arg, substitutions, dead_locals);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            collect_copy_bindings_in_expr(receiver, bindings);
+            apply_in_expr(receiver, substitutions, dead_locals);
             for arg in args {
-                collect_copy_bindings_in_expr(&arg.expr, bindings);
+                apply_in_expr(&mut arg.expr, substitutions, dead_locals);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            collect_copy_bindings_in_expr(callee, bindings);
+            apply_in_expr(callee, substitutions, dead_locals);
             for arg in args {
-                collect_copy_bindings_in_expr(arg, bindings);
+                apply_in_expr(arg, substitutions, dead_locals);
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_copy_bindings_in_expr(functor, bindings);
+            apply_in_expr(functor, substitutions, dead_locals);
         }
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::Index { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. } => {
-            collect_copy_bindings_in_expr(inner, bindings);
-        }
-        TirExprKind::Assign { target, value } => {
-            collect_copy_bindings_in_expr(target, bindings);
-            collect_copy_bindings_in_expr(value, bindings);
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_copy_bindings_in_expr(&field.value, bindings);
-            }
-        }
-        TirExprKind::TupleLiteral { elements, .. } => {
-            for elem in elements {
-                collect_copy_bindings_in_expr(elem, bindings);
-            }
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                collect_copy_bindings_in_expr(payload_expr, bindings);
-            }
-        }
-        TirExprKind::Closure { body, .. } => {
-            collect_copy_bindings_in_expr(body, bindings);
-        }
-        TirExprKind::Match { expr: inner, arms } => {
-            collect_copy_bindings_in_expr(inner, bindings);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_copy_bindings_in_expr(guard, bindings);
-                }
-                collect_copy_bindings_in_expr(&arm.body, bindings);
-            }
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            collect_copy_bindings_in_expr(value, bindings);
-        }
-        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            collect_copy_bindings_in_expr(expr, bindings);
-        }
-        TirExprKind::VariantPayload { expr, .. } => {
-            collect_copy_bindings_in_expr(expr, bindings);
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_copy_bindings_in_expr(scrutinee, bindings);
-            for arm in arms {
-                collect_copy_bindings(&arm.stmts, bindings);
-            }
-            collect_copy_bindings(&default.stmts, bindings);
-        }
-        // Leaf nodes
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
-        }
-    }
-}
-
-/// Remove dead copy bindings from statements.
-fn remove_copy_bindings(stmts: &mut Vec<TirStmt>, dead_locals: &IndexSet<u32>) {
-    stmts.retain(|stmt| {
-        if let TirStmtKind::Let { local_index, .. } = &stmt.kind {
-            !dead_locals.contains(local_index)
-        } else {
-            true
-        }
-    });
-
-    for stmt in stmts {
-        remove_copy_bindings_in_stmt(stmt, dead_locals);
-    }
-}
-
-fn remove_copy_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &IndexSet<u32>) {
-    match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => {
-            remove_copy_bindings_in_expr(value, dead_locals);
-        }
-        TirStmtKind::Expr(expr) => {
-            remove_copy_bindings_in_expr(expr, dead_locals);
-        }
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                remove_copy_bindings_in_expr(v, dead_locals);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            remove_copy_bindings_in_expr(condition, dead_locals);
-            remove_copy_bindings(&mut then_block.stmts, dead_locals);
-            if let Some(eb) = else_block {
-                remove_copy_bindings(&mut eb.stmts, dead_locals);
-            }
-        }
-        TirStmtKind::Loop { body } => {
-            remove_copy_bindings(&mut body.stmts, dead_locals);
-        }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            remove_copy_bindings(&mut block.stmts, dead_locals);
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            remove_copy_bindings_in_expr(scrutinee, dead_locals);
-            remove_copy_bindings(&mut then_block.stmts, dead_locals);
-            if let Some(eb) = else_block {
-                remove_copy_bindings(&mut eb.stmts, dead_locals);
-            }
-        }
-        TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                remove_copy_bindings_in_expr(v, dead_locals);
-            }
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::LetDestructure { value, .. } => {
-            remove_copy_bindings_in_expr(value, dead_locals);
-        }
-        TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-    }
-}
-
-fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>) {
-    match &mut expr.kind {
-        TirExprKind::Block(block) => {
-            remove_copy_bindings(&mut block.stmts, dead_locals);
-        }
-        TirExprKind::LabeledBlock { block, .. } => {
-            remove_copy_bindings(&mut block.stmts, dead_locals);
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            apply_in_block(block, substitutions, dead_locals);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            remove_copy_bindings_in_expr(condition, dead_locals);
-            remove_copy_bindings(&mut then_branch.stmts, dead_locals);
+            apply_in_expr(condition, substitutions, dead_locals);
+            apply_in_block(then_branch, substitutions, dead_locals);
             if let Some(eb) = else_branch {
-                remove_copy_bindings(&mut eb.stmts, dead_locals);
+                apply_in_block(eb, substitutions, dead_locals);
             }
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            remove_copy_bindings_in_expr(left, dead_locals);
-            remove_copy_bindings_in_expr(right, dead_locals);
-        }
-        TirExprKind::Unary { expr: inner, .. } => {
-            remove_copy_bindings_in_expr(inner, dead_locals);
-        }
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                remove_copy_bindings_in_expr(&mut arg.expr, dead_locals);
-            }
-        }
-        TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                remove_copy_bindings_in_expr(arg, dead_locals);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            remove_copy_bindings_in_expr(receiver, dead_locals);
-            for arg in args {
-                remove_copy_bindings_in_expr(&mut arg.expr, dead_locals);
-            }
-        }
-        TirExprKind::IndirectCall { callee, args, .. } => {
-            remove_copy_bindings_in_expr(callee, dead_locals);
-            for arg in args {
-                remove_copy_bindings_in_expr(arg, dead_locals);
-            }
-        }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
-            remove_copy_bindings_in_expr(functor, dead_locals);
-        }
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::Index { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. } => {
-            remove_copy_bindings_in_expr(inner, dead_locals);
-        }
-        TirExprKind::Assign { target, value } => {
-            remove_copy_bindings_in_expr(target, dead_locals);
-            remove_copy_bindings_in_expr(value, dead_locals);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                remove_copy_bindings_in_expr(&mut field.value, dead_locals);
+                apply_in_expr(&mut field.value, substitutions, dead_locals);
             }
         }
         TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
-                remove_copy_bindings_in_expr(elem, dead_locals);
+                apply_in_expr(elem, substitutions, dead_locals);
             }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                remove_copy_bindings_in_expr(payload_expr, dead_locals);
+            if let Some(p) = payload {
+                apply_in_expr(p, substitutions, dead_locals);
             }
         }
         TirExprKind::Closure { body, .. } => {
-            remove_copy_bindings_in_expr(body, dead_locals);
+            apply_in_expr(body, substitutions, dead_locals);
         }
         TirExprKind::Match { expr: inner, arms } => {
-            remove_copy_bindings_in_expr(inner, dead_locals);
+            apply_in_expr(inner, substitutions, dead_locals);
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
-                    remove_copy_bindings_in_expr(guard, dead_locals);
+                    apply_in_expr(guard, substitutions, dead_locals);
                 }
-                remove_copy_bindings_in_expr(&mut arm.body, dead_locals);
+                apply_in_expr(&mut arm.body, substitutions, dead_locals);
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            remove_copy_bindings_in_expr(value, dead_locals);
+            apply_in_expr(value, substitutions, dead_locals);
         }
-        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            remove_copy_bindings_in_expr(expr, dead_locals);
-        }
-        TirExprKind::VariantPayload { expr, .. } => {
-            remove_copy_bindings_in_expr(expr, dead_locals);
+        TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. } => {
+            apply_in_expr(expr, substitutions, dead_locals);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -1031,11 +639,11 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
             default,
             ..
         } => {
-            remove_copy_bindings_in_expr(scrutinee, dead_locals);
+            apply_in_expr(scrutinee, substitutions, dead_locals);
             for arm in arms {
-                remove_copy_bindings(&mut arm.stmts, dead_locals);
+                apply_in_block(arm, substitutions, dead_locals);
             }
-            remove_copy_bindings(&mut default.stmts, dead_locals);
+            apply_in_block(default, substitutions, dead_locals);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
@@ -1046,7 +654,6 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Local { .. }
         | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
@@ -1058,7 +665,7 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
 }
 
 /// Eliminate trivial copy bindings in a function.
-/// Batches non-conflicting substitutions to reduce TIR walk count from O(4K) to O(4) per iteration.
+/// Uses merged analysis (1 walk) and merged substitute+remove (1 walk) per iteration.
 fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
     let Some(body) = &mut func.body else {
         return false;
@@ -1067,31 +674,25 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
     let mut ever_changed = false;
 
     loop {
-        // Step 1: Collect all copy bindings (single walk)
-        let mut copy_bindings: Vec<CopyBinding> = Vec::new();
-        collect_copy_bindings(&body.stmts, &mut copy_bindings);
+        // Step 1: Collect copy bindings and usage info in a single walk
+        let analysis = analyze_function_body(body);
 
-        if copy_bindings.is_empty() {
+        if analysis.bindings.is_empty() {
             break;
         }
 
-        // Step 2: Collect usage information (single walk)
-        let usage = collect_local_usage(body);
-
-        // Step 3: Find all eliminable bindings
-        let eliminable: Vec<CopyBinding> = copy_bindings
+        // Step 2: Find all eliminable bindings
+        let eliminable: Vec<CopyBinding> = analysis
+            .bindings
             .into_iter()
-            .filter(|b| can_propagate_copy(b, &usage, type_table))
+            .filter(|b| can_propagate_copy(b, &analysis.usage, type_table))
             .collect();
 
         if eliminable.is_empty() {
             break;
         }
 
-        // Step 4: Build non-conflicting batch.
-        // A binding can be batched if its source local is not a target of another eliminable
-        // binding. This prevents interference when two bindings form a chain
-        // (e.g., `let a = 5; let x = a`).
+        // Step 3: Build non-conflicting batch.
         let target_set: IndexSet<u32> = eliminable.iter().map(|b| b.target_local).collect();
 
         let mut substitutions: IndexMap<u32, CopySource> = IndexMap::default();
@@ -1110,19 +711,14 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
         }
 
         if substitutions.is_empty() {
-            // All bindings conflict with each other -- cannot make progress
             break;
         }
 
-        // Step 5: Apply all substitutions in a single walk
+        // Step 4: Apply substitutions and remove dead bindings in a single walk
         let dead_locals: IndexSet<u32> = substitutions.keys().copied().collect();
-        substitute_in_block(body, &substitutions);
-
-        // Step 6: Remove all dead bindings in a single walk
-        remove_copy_bindings(&mut body.stmts, &dead_locals);
+        apply_in_block(body, &substitutions, &dead_locals);
         ever_changed = true;
 
-        // If no bindings were deferred, we're done
         if !has_deferred {
             break;
         }

@@ -22,11 +22,215 @@
 //! invalidated (selective invalidation), allowing known values for unmodified
 //! locals to survive through assert branches and similar patterns.
 
+use std::collections::HashMap;
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::project::Project;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };
+
+/// Precomputed modified-locals cache, keyed by block raw pointer.
+///
+/// Built in a single O(n) bottom-up pass before the forward traversal,
+/// replacing the previous O(n²) approach where `collect_modified_locals`
+/// was called inline at every control-flow node (re-walking subtrees).
+type ModifiedLocalsCache = HashMap<*const TirBlock, IndexSet<u32>>;
+
+/// Precompute modified locals for all blocks in a single bottom-up pass.
+fn precompute_all_modified_locals(body: &TirBlock) -> ModifiedLocalsCache {
+    let mut cache = ModifiedLocalsCache::new();
+    precompute_modified_block(body, &mut cache);
+    cache
+}
+
+/// Returns the modified set for this block, also inserting it into the cache.
+fn precompute_modified_block(block: &TirBlock, cache: &mut ModifiedLocalsCache) -> IndexSet<u32> {
+    let mut modified = IndexSet::default();
+    for stmt in &block.stmts {
+        precompute_modified_stmt(stmt, &mut modified, cache);
+    }
+    cache.insert(block as *const TirBlock, modified.clone());
+    modified
+}
+
+fn precompute_modified_stmt(
+    stmt: &TirStmt,
+    modified: &mut IndexSet<u32>,
+    cache: &mut ModifiedLocalsCache,
+) {
+    match &stmt.kind {
+        TirStmtKind::Let { value, .. } => precompute_modified_expr(value, modified, cache),
+        TirStmtKind::Expr(expr) => precompute_modified_expr(expr, modified, cache),
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                precompute_modified_expr(v, modified, cache);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            precompute_modified_expr(condition, modified, cache);
+            modified.extend(precompute_modified_block(then_block, cache));
+            if let Some(eb) = else_block {
+                modified.extend(precompute_modified_block(eb, cache));
+            }
+        }
+        TirStmtKind::Loop { body } => {
+            modified.extend(precompute_modified_block(body, cache));
+        }
+        TirStmtKind::LabeledBlock { block, .. } => {
+            modified.extend(precompute_modified_block(block, cache));
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            precompute_modified_expr(scrutinee, modified, cache);
+            modified.extend(precompute_modified_block(then_block, cache));
+            if let Some(eb) = else_block {
+                modified.extend(precompute_modified_block(eb, cache));
+            }
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                precompute_modified_expr(v, modified, cache);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::LetDestructure { value, .. } => {
+            precompute_modified_expr(value, modified, cache);
+        }
+        TirStmtKind::TaskReturn { .. } => {}
+    }
+}
+
+fn precompute_modified_expr(
+    expr: &TirExpr,
+    modified: &mut IndexSet<u32>,
+    cache: &mut ModifiedLocalsCache,
+) {
+    match &expr.kind {
+        TirExprKind::Assign { target, value } => {
+            if let TirExprKind::Local { index, .. } = &target.kind {
+                modified.insert(*index);
+            }
+            if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind
+                && let TirExprKind::Local { index, .. } = &inner.kind
+            {
+                modified.insert(*index);
+            }
+            precompute_modified_expr(value, modified, cache);
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            precompute_modified_expr(left, modified, cache);
+            precompute_modified_expr(right, modified, cache);
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. } => {
+            precompute_modified_expr(inner, modified, cache);
+        }
+        TirExprKind::Index {
+            expr: inner, index, ..
+        } => {
+            precompute_modified_expr(inner, modified, cache);
+            precompute_modified_expr(index, modified, cache);
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                precompute_modified_expr(&arg.expr, modified, cache);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                precompute_modified_expr(arg, modified, cache);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            precompute_modified_expr(receiver, modified, cache);
+            for arg in args {
+                precompute_modified_expr(&arg.expr, modified, cache);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args, .. } => {
+            precompute_modified_expr(callee, modified, cache);
+            for arg in args {
+                precompute_modified_expr(arg, modified, cache);
+            }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            precompute_modified_expr(functor, modified, cache);
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            modified.extend(precompute_modified_block(block, cache));
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            precompute_modified_expr(condition, modified, cache);
+            modified.extend(precompute_modified_block(then_branch, cache));
+            if let Some(eb) = else_branch {
+                modified.extend(precompute_modified_block(eb, cache));
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                precompute_modified_expr(&field.value, modified, cache);
+            }
+        }
+        TirExprKind::TupleLiteral { elements, .. } => {
+            for elem in elements {
+                precompute_modified_expr(elem, modified, cache);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                precompute_modified_expr(p, modified, cache);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            precompute_modified_expr(body, modified, cache);
+        }
+        TirExprKind::Match { expr: inner, arms } => {
+            precompute_modified_expr(inner, modified, cache);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    precompute_modified_expr(guard, modified, cache);
+                }
+                precompute_modified_expr(&arm.body, modified, cache);
+            }
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            precompute_modified_expr(value, modified, cache);
+        }
+        TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. } => {
+            precompute_modified_expr(expr, modified, cache);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            precompute_modified_expr(scrutinee, modified, cache);
+            for arm in arms {
+                modified.extend(precompute_modified_block(arm, cache));
+            }
+            modified.extend(precompute_modified_block(default, cache));
+        }
+        // Leaf nodes
+        _ => {}
+    }
+}
 
 /// A forwardable value: a scalar literal.
 /// We only forward literals (not locals) to avoid complications with
@@ -503,16 +707,31 @@ pub fn forward_stores_to_loads(project: &mut Project) -> bool {
 }
 
 fn forward_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
-    let Some(body) = &mut func.body else {
+    let Some(body) = func.body.as_ref() else {
         return false;
     };
 
     // Phase 1: Collect unsafe locals (address taken, captured, etc.)
     let unsafe_locals = collect_unsafe_locals(body);
 
-    // Phase 2: Forward known values
+    // Phase 2: Precompute modified locals for all blocks in a single O(n) pass.
+    // This replaces the previous O(n²) approach where collect_modified_locals
+    // was called inline at every control-flow node during forwarding.
+    let cache = precompute_all_modified_locals(body);
+
+    // Phase 3: Forward known values using cached modified-locals lookups
+    let body = func.body.as_mut().unwrap();
     let mut known = KnownValues::default();
-    forward_in_block(body, &mut known, &unsafe_locals, type_table)
+    forward_in_block(body, &mut known, &unsafe_locals, type_table, &cache)
+}
+
+/// Look up precomputed modified locals for a block. Falls back to empty set
+/// if the block isn't in the cache (should not happen in practice).
+fn lookup_modified(cache: &ModifiedLocalsCache, block: &TirBlock) -> IndexSet<u32> {
+    cache
+        .get(&(block as *const TirBlock))
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn forward_in_block(
@@ -520,10 +739,11 @@ fn forward_in_block(
     known: &mut KnownValues,
     unsafe_locals: &IndexSet<u32>,
     type_table: &TypeTable,
+    cache: &ModifiedLocalsCache,
 ) -> bool {
     let mut changed = false;
     for stmt in &mut block.stmts {
-        changed |= forward_in_stmt(stmt, known, unsafe_locals, type_table);
+        changed |= forward_in_stmt(stmt, known, unsafe_locals, type_table, cache);
     }
     changed
 }
@@ -533,6 +753,7 @@ fn forward_in_stmt(
     known: &mut KnownValues,
     unsafe_locals: &IndexSet<u32>,
     type_table: &TypeTable,
+    cache: &ModifiedLocalsCache,
 ) -> bool {
     match &mut stmt.kind {
         TirStmtKind::Let {
@@ -541,7 +762,7 @@ fn forward_in_stmt(
             let local_index = *local_index;
 
             // First, forward loads in the initializer expression
-            let changed = forward_in_expr(value, known, unsafe_locals, type_table);
+            let changed = forward_in_expr(value, known, unsafe_locals, type_table, cache);
 
             // Then record known values from this let binding
             if !unsafe_locals.contains(&local_index)
@@ -553,14 +774,14 @@ fn forward_in_stmt(
             changed
         }
         TirStmtKind::Expr(expr) => {
-            let changed = forward_in_expr(expr, known, unsafe_locals, type_table);
+            let changed = forward_in_expr(expr, known, unsafe_locals, type_table, cache);
             // Check for assignments that update known values
             update_known_from_assign(expr, known, unsafe_locals);
             changed
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                forward_in_expr(v, known, unsafe_locals, type_table)
+                forward_in_expr(v, known, unsafe_locals, type_table, cache)
             } else {
                 false
             }
@@ -570,36 +791,39 @@ fn forward_in_stmt(
             then_block,
             else_block,
         } => {
-            let mut changed = forward_in_expr(condition, known, unsafe_locals, type_table);
-            // Collect locals modified in branches
-            let mut modified = collect_modified_locals(then_block);
+            let mut changed = forward_in_expr(condition, known, unsafe_locals, type_table, cache);
+            // Look up precomputed modified locals instead of re-scanning
+            let mut modified = lookup_modified(cache, then_block);
             if let Some(eb) = else_block.as_ref() {
-                modified.extend(collect_modified_locals(eb));
+                modified.extend(lookup_modified(cache, eb));
             }
             // Forward into branches with cloned state
             let mut then_known = known.clone();
-            changed |= forward_in_block(then_block, &mut then_known, unsafe_locals, type_table);
+            changed |=
+                forward_in_block(then_block, &mut then_known, unsafe_locals, type_table, cache);
             if let Some(eb) = else_block {
                 let mut else_known = known.clone();
-                changed |= forward_in_block(eb, &mut else_known, unsafe_locals, type_table);
+                changed |=
+                    forward_in_block(eb, &mut else_known, unsafe_locals, type_table, cache);
             }
             // Only invalidate locals that were modified in branches
             known.invalidate_modified(&modified);
             changed
         }
         TirStmtKind::Loop { body } => {
-            let modified = collect_modified_locals(body);
+            let modified = lookup_modified(cache, body);
             known.invalidate_modified(&modified);
             let mut loop_known = known.clone();
-            let changed = forward_in_block(body, &mut loop_known, unsafe_locals, type_table);
+            let changed =
+                forward_in_block(body, &mut loop_known, unsafe_locals, type_table, cache);
             known.invalidate_modified(&modified);
             changed
         }
         TirStmtKind::LabeledBlock { block, .. } => {
             // Labeled blocks can `break` early, so we can't trust the final
             // known state for locals modified inside the block.
-            let modified = collect_modified_locals(block);
-            let changed = forward_in_block(block, known, unsafe_locals, type_table);
+            let modified = lookup_modified(cache, block);
+            let changed = forward_in_block(block, known, unsafe_locals, type_table, cache);
             // Invalidate only locals that were modified in the block
             known.invalidate_modified(&modified);
             changed
@@ -610,30 +834,33 @@ fn forward_in_stmt(
             else_block,
             ..
         } => {
-            let mut changed = forward_in_expr(scrutinee, known, unsafe_locals, type_table);
-            let mut modified = collect_modified_locals(then_block);
+            let mut changed =
+                forward_in_expr(scrutinee, known, unsafe_locals, type_table, cache);
+            let mut modified = lookup_modified(cache, then_block);
             if let Some(eb) = else_block.as_ref() {
-                modified.extend(collect_modified_locals(eb));
+                modified.extend(lookup_modified(cache, eb));
             }
             let mut then_known = known.clone();
-            changed |= forward_in_block(then_block, &mut then_known, unsafe_locals, type_table);
+            changed |=
+                forward_in_block(then_block, &mut then_known, unsafe_locals, type_table, cache);
             if let Some(eb) = else_block {
                 let mut else_known = known.clone();
-                changed |= forward_in_block(eb, &mut else_known, unsafe_locals, type_table);
+                changed |=
+                    forward_in_block(eb, &mut else_known, unsafe_locals, type_table, cache);
             }
             known.invalidate_modified(&modified);
             changed
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                forward_in_expr(v, known, unsafe_locals, type_table)
+                forward_in_expr(v, known, unsafe_locals, type_table, cache)
             } else {
                 false
             }
         }
         TirStmtKind::Continue => false,
         TirStmtKind::LetDestructure { value, .. } => {
-            forward_in_expr(value, known, unsafe_locals, type_table)
+            forward_in_expr(value, known, unsafe_locals, type_table, cache)
         }
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -647,6 +874,7 @@ fn forward_in_expr(
     known: &mut KnownValues,
     unsafe_locals: &IndexSet<u32>,
     type_table: &TypeTable,
+    cache: &ModifiedLocalsCache,
 ) -> bool {
     let mut changed = false;
 
@@ -656,58 +884,60 @@ fn forward_in_expr(
     // Recurse into sub-expressions
     match &mut expr.kind {
         TirExprKind::Binary { left, right, .. } => {
-            changed |= forward_in_expr(left, known, unsafe_locals, type_table);
-            changed |= forward_in_expr(right, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(left, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(right, known, unsafe_locals, type_table, cache);
         }
         TirExprKind::Unary { expr: inner, .. } => {
-            changed |= forward_in_expr(inner, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(inner, known, unsafe_locals, type_table, cache);
         }
         TirExprKind::Assign { target, value } => {
-            changed |= forward_in_expr(value, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(value, known, unsafe_locals, type_table, cache);
             // Update known state from this assignment
             update_known_from_target(target, value, known, unsafe_locals);
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                changed |= forward_in_expr(&mut arg.expr, known, unsafe_locals, type_table);
+                changed |=
+                    forward_in_expr(&mut arg.expr, known, unsafe_locals, type_table, cache);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                changed |= forward_in_expr(arg, known, unsafe_locals, type_table);
+                changed |= forward_in_expr(arg, known, unsafe_locals, type_table, cache);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            changed |= forward_in_expr(receiver, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(receiver, known, unsafe_locals, type_table, cache);
             for arg in args {
-                changed |= forward_in_expr(&mut arg.expr, known, unsafe_locals, type_table);
+                changed |=
+                    forward_in_expr(&mut arg.expr, known, unsafe_locals, type_table, cache);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            changed |= forward_in_expr(callee, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(callee, known, unsafe_locals, type_table, cache);
             for arg in args {
-                changed |= forward_in_expr(arg, known, unsafe_locals, type_table);
+                changed |= forward_in_expr(arg, known, unsafe_locals, type_table, cache);
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            changed |= forward_in_expr(functor, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(functor, known, unsafe_locals, type_table, cache);
         }
         TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
-            changed |= forward_in_expr(inner, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(inner, known, unsafe_locals, type_table, cache);
         }
         TirExprKind::Index {
             expr: inner, index, ..
         } => {
-            changed |= forward_in_expr(inner, known, unsafe_locals, type_table);
-            changed |= forward_in_expr(index, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(inner, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(index, known, unsafe_locals, type_table, cache);
         }
         TirExprKind::Block(block) => {
-            changed |= forward_in_block(block, known, unsafe_locals, type_table);
+            changed |= forward_in_block(block, known, unsafe_locals, type_table, cache);
         }
         TirExprKind::LabeledBlock { block, .. } => {
             // Labeled blocks in expression position can also break early
-            let modified = collect_modified_locals(block);
-            changed |= forward_in_block(block, known, unsafe_locals, type_table);
+            let modified = lookup_modified(cache, block);
+            changed |= forward_in_block(block, known, unsafe_locals, type_table, cache);
             known.invalidate_modified(&modified);
         }
         TirExprKind::If {
@@ -715,39 +945,47 @@ fn forward_in_expr(
             then_branch,
             else_branch,
         } => {
-            changed |= forward_in_expr(condition, known, unsafe_locals, type_table);
-            let mut modified = collect_modified_locals(then_branch);
+            changed |= forward_in_expr(condition, known, unsafe_locals, type_table, cache);
+            let mut modified = lookup_modified(cache, then_branch);
             if let Some(eb) = else_branch.as_ref() {
-                modified.extend(collect_modified_locals(eb));
+                modified.extend(lookup_modified(cache, eb));
             }
             let mut then_known = known.clone();
-            changed |= forward_in_block(then_branch, &mut then_known, unsafe_locals, type_table);
+            changed |= forward_in_block(
+                then_branch,
+                &mut then_known,
+                unsafe_locals,
+                type_table,
+                cache,
+            );
             if let Some(eb) = else_branch {
                 let mut else_known = known.clone();
-                changed |= forward_in_block(eb, &mut else_known, unsafe_locals, type_table);
+                changed |=
+                    forward_in_block(eb, &mut else_known, unsafe_locals, type_table, cache);
             }
             known.invalidate_modified(&modified);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                changed |= forward_in_expr(&mut field.value, known, unsafe_locals, type_table);
+                changed |=
+                    forward_in_expr(&mut field.value, known, unsafe_locals, type_table, cache);
             }
         }
         TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
-                changed |= forward_in_expr(elem, known, unsafe_locals, type_table);
+                changed |= forward_in_expr(elem, known, unsafe_locals, type_table, cache);
             }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                changed |= forward_in_expr(p, known, unsafe_locals, type_table);
+                changed |= forward_in_expr(p, known, unsafe_locals, type_table, cache);
             }
         }
         TirExprKind::Closure { .. } => {
             // Don't propagate into closures
         }
         TirExprKind::Match { expr: inner, arms } => {
-            changed |= forward_in_expr(inner, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(inner, known, unsafe_locals, type_table, cache);
             let mut modified = IndexSet::default();
             for arm in arms.iter() {
                 if let Some(guard) = &arm.guard {
@@ -758,20 +996,26 @@ fn forward_in_expr(
             for arm in arms {
                 let mut arm_known = known.clone();
                 if let Some(guard) = &mut arm.guard {
-                    changed |= forward_in_expr(guard, &mut arm_known, unsafe_locals, type_table);
+                    changed |=
+                        forward_in_expr(guard, &mut arm_known, unsafe_locals, type_table, cache);
                 }
-                changed |=
-                    forward_in_expr(&mut arm.body, &mut arm_known, unsafe_locals, type_table);
+                changed |= forward_in_expr(
+                    &mut arm.body,
+                    &mut arm_known,
+                    unsafe_locals,
+                    type_table,
+                    cache,
+                );
             }
             known.invalidate_modified(&modified);
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            changed |= forward_in_expr(value, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(value, known, unsafe_locals, type_table, cache);
         }
         TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
-            changed |= forward_in_expr(expr, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(expr, known, unsafe_locals, type_table, cache);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -779,18 +1023,20 @@ fn forward_in_expr(
             default,
             ..
         } => {
-            changed |= forward_in_expr(scrutinee, known, unsafe_locals, type_table);
+            changed |= forward_in_expr(scrutinee, known, unsafe_locals, type_table, cache);
             let mut modified = IndexSet::default();
             for arm in arms.iter() {
-                modified.extend(collect_modified_locals(arm));
+                modified.extend(lookup_modified(cache, arm));
             }
-            modified.extend(collect_modified_locals(default));
+            modified.extend(lookup_modified(cache, default));
             for arm in arms {
                 let mut arm_known = known.clone();
-                changed |= forward_in_block(arm, &mut arm_known, unsafe_locals, type_table);
+                changed |=
+                    forward_in_block(arm, &mut arm_known, unsafe_locals, type_table, cache);
             }
             let mut default_known = known.clone();
-            changed |= forward_in_block(default, &mut default_known, unsafe_locals, type_table);
+            changed |=
+                forward_in_block(default, &mut default_known, unsafe_locals, type_table, cache);
             known.invalidate_modified(&modified);
         }
         // Leaf nodes

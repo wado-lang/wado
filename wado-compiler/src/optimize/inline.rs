@@ -192,36 +192,78 @@ fn is_inline_eligible(
 
 /// Detect recursive functions using call graph analysis
 fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> IndexSet<String> {
-    let mut recursive = IndexSet::default();
-
-    // Build a simple call graph: function name -> called function names
-    let mut call_graph: IndexMap<String, IndexSet<String>> = IndexMap::default();
+    // Phase 1: Build name→index mapping (one String allocation per function)
+    let mut name_to_idx: IndexMap<String, usize> = IndexMap::default();
+    let mut idx_to_name: Vec<String> = Vec::new();
 
     for module in modules.values() {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
-            let callees = collect_callees_from_function(&func);
-            call_graph.insert(func.name.clone(), callees);
+            let name = func.name.clone();
+            if !name_to_idx.contains_key(&name) {
+                let idx = idx_to_name.len();
+                idx_to_name.push(name.clone());
+                name_to_idx.insert(name, idx);
+            }
         }
     }
 
-    // Find functions that can reach themselves
-    for func_name in call_graph.keys() {
-        if can_reach(&call_graph, func_name, func_name, &mut IndexSet::default()) {
-            recursive.insert(func_name.clone());
+    let n = idx_to_name.len();
+    // Phase 2: Build call graph using indices (no String allocations in inner loop)
+    let mut call_graph: Vec<Vec<usize>> = vec![Vec::new(); n];
+
+    for module in modules.values() {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if let Some(caller_idx) = name_to_idx.get(&func.name) {
+                let mut callee_names: IndexSet<String> = IndexSet::default();
+                if let Some(body) = &func.body {
+                    collect_callees_from_block(body, &mut callee_names);
+                }
+                let callees: Vec<usize> = callee_names
+                    .iter()
+                    .filter_map(|name| name_to_idx.get(name).copied())
+                    .collect();
+                call_graph[*caller_idx] = callees;
+            }
+        }
+    }
+
+    // Phase 3: Find functions that can reach themselves using index-based DFS
+    let mut recursive = IndexSet::default();
+    let mut visited = vec![false; n];
+
+    for func_idx in 0..n {
+        visited.fill(false);
+        if can_reach_idx(&call_graph, func_idx, func_idx, &mut visited) {
+            recursive.insert(idx_to_name[func_idx].clone());
         }
     }
 
     recursive
 }
 
-/// Collect all function names called from a function
-fn collect_callees_from_function(func: &TirFunction) -> IndexSet<String> {
-    let mut callees = IndexSet::default();
-    if let Some(body) = &func.body {
-        collect_callees_from_block(body, &mut callees);
+fn can_reach_idx(
+    call_graph: &[Vec<usize>],
+    start: usize,
+    target: usize,
+    visited: &mut [bool],
+) -> bool {
+    if visited[start] {
+        return false;
     }
-    callees
+    visited[start] = true;
+
+    for &callee in &call_graph[start] {
+        if callee == target {
+            return true;
+        }
+        if can_reach_idx(call_graph, callee, target, visited) {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn collect_callees_from_block(block: &TirBlock, callees: &mut IndexSet<String>) {
@@ -416,31 +458,6 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
             unreachable!("TemplateString should be expanded before this phase")
         }
     }
-}
-
-/// Check if `start` can reach `target` in the call graph
-fn can_reach(
-    call_graph: &IndexMap<String, IndexSet<String>>,
-    start: &str,
-    target: &str,
-    visited: &mut IndexSet<String>,
-) -> bool {
-    if !visited.insert(start.to_string()) {
-        return false; // Already visited
-    }
-
-    if let Some(callees) = call_graph.get(start) {
-        for callee in callees {
-            if callee == target {
-                return true;
-            }
-            if can_reach(call_graph, callee, target, visited) {
-                return true;
-            }
-        }
-    }
-
-    false
 }
 
 /// Inline eligible functions at their call sites
