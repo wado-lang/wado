@@ -418,7 +418,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
         if let Some(ref else_block) = if_stmt.else_block {
             // Process else with the pre-branch state
-            self.possibly_uninit = uninit_before.clone();
+            self.possibly_uninit = uninit_before;
             self.bind_block(else_block)?;
             let uninit_after_else = self.possibly_uninit.clone();
             // After if-else: a var is possibly-uninit if uninit in either branch (union)
@@ -728,7 +728,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         }
 
         if let Some(ref else_block) = if_expr.else_block {
-            self.possibly_uninit = uninit_before.clone();
+            self.possibly_uninit = uninit_before;
             self.bind_block(else_block)?;
             let uninit_after_else = self.possibly_uninit.clone();
             self.possibly_uninit = uninit_after_then;

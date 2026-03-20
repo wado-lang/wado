@@ -435,8 +435,8 @@ fn register_single_function(
 
     let wir_func = WirFunction {
         name: WirName {
-            display: mangled_name.clone(),
-            fq: fq.clone(),
+            display: mangled_name,
+            fq,
         },
         type_id,
         param_names,

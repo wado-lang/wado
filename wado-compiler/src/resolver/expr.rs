@@ -773,8 +773,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.type_table
                     .borrow_mut()
                     .intern(ResolvedType::GenericResource {
-                        name: name.clone(),
-                        module_source: module_source.clone(),
+                        name,
+                        module_source,
                         type_args: new_args,
                     })
             }
@@ -832,7 +832,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Handle tuple indexing: t[0] is equivalent to t.0
         if let ResolvedType::Tuple(elements) = base_type {
-            let elements = elements.clone();
+            let elements = elements;
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
                 value: ast::Literal::Number(repr),
@@ -906,11 +906,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if let Some(trait_info) = index_trait_info {
                 // Generate: *expr.index(index_expr)
                 // First, create the method call to .index(index_expr)
-                let receiver = self.adjust_receiver_for_self_kind(
-                    expr.clone(),
-                    trait_info.self_kind,
-                    index.span,
-                );
+                let receiver =
+                    self.adjust_receiver_for_self_kind(expr, trait_info.self_kind, index.span);
 
                 let mangled_method_name =
                     MethodName::format_local(&lookup_name, Some(&trait_info.trait_name), "index");
@@ -929,7 +926,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             name: mangled_method_name,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
-                                lookup_name.clone(),
+                                lookup_name,
                                 Some(trait_info.trait_name.clone()),
                                 "index".to_string(),
                             )),
@@ -961,11 +958,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 });
             if let Some(trait_info) = index_value_info {
                 // Generate: expr.index_value(index_expr)
-                let receiver = self.adjust_receiver_for_self_kind(
-                    expr.clone(),
-                    trait_info.self_kind,
-                    index.span,
-                );
+                let receiver =
+                    self.adjust_receiver_for_self_kind(expr, trait_info.self_kind, index.span);
 
                 let mangled_method_name = MethodName::format_local(
                     &lookup_name,
@@ -982,7 +976,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             name: mangled_method_name,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
-                                lookup_name.clone(),
+                                lookup_name,
                                 Some(trait_info.trait_name.clone()),
                                 "index_value".to_string(),
                             )),
@@ -2059,7 +2053,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             let struct_type = self.type_table.borrow_mut().make_generic_instance(
                 struct_name.clone(),
-                struct_module_source.clone(),
+                struct_module_source,
                 type_args.clone(),
             );
             // Build mangled name with type arguments
@@ -2073,7 +2067,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_type = self
                 .type_table
                 .borrow_mut()
-                .make_struct(struct_name.clone(), struct_module_source.clone());
+                .make_struct(struct_name.clone(), struct_module_source);
             (struct_type, struct_name, fields)
         };
 

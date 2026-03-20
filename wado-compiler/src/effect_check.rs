@@ -663,7 +663,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
     /// Get the effects for a function
     fn get_function_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
         if let Some(func) = self.find_function(func_ref) {
-            func.effects.clone()
+            func.effects
         } else {
             Vec::new()
         }

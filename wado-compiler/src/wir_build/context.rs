@@ -252,10 +252,7 @@ impl<'a> WirContext<'a> {
         self.imports.push(WirImport {
             module,
             field,
-            desc: WirImportDesc::Func {
-                type_id,
-                name: name.clone(),
-            },
+            desc: WirImportDesc::Func { type_id, name },
         });
         self.import_func_map.insert(fq.clone(), func_id.clone());
         self.func_map.insert(fq, func_id.clone());
@@ -348,7 +345,7 @@ impl<'a> WirContext<'a> {
         fn_params.extend(param_wirs.iter().cloned());
 
         let fn_type_fq = format!("functype/$canonical_closure_fn_{id}");
-        let fn_type_id = self.register_func_type(fn_type_fq, fn_params, result_wirs.clone());
+        let fn_type_id = self.register_func_type(fn_type_fq, fn_params, result_wirs);
 
         // Create canonical closure struct: { env: (ref null struct), func: (ref $fn_type) }
         let struct_fq = format!("canonical//CanonicalClosure_{id}");
@@ -412,7 +409,7 @@ impl<'a> WirContext<'a> {
         let type_id = self.register_func_type(type_fq, params, results);
         let wir_name = WirName {
             display: name.clone(),
-            fq: key.clone(),
+            fq: key,
         };
         let func_id = self.register_import_func("wasi".to_string(), name, type_id, wir_name);
         self.needed_canonicals.insert(intrinsic, func_id.clone());

@@ -2593,7 +2593,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         struct_name.clone(),
-                        Some(index_mut_info.trait_name.clone()),
+                        Some(index_mut_info.trait_name),
                         "index_mut".to_string(),
                     )),
                     is_cm_adapter: false,

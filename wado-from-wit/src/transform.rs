@@ -49,7 +49,7 @@ impl<'a> Transformer<'a> {
         *self.current_interface.borrow_mut() = Some(iface_id);
         self.pending_imports.borrow_mut().clear();
 
-        let mut module = WadoModule::new(iface_name.clone(), version.clone());
+        let mut module = WadoModule::new(iface_name.clone(), version);
 
         // Transform types
         for (_, type_id) in &iface.types {
@@ -82,7 +82,7 @@ impl<'a> Transformer<'a> {
             module.effects.push(WadoEffect {
                 name: to_upper_camel_case(&iface_name),
                 doc_comment: iface.docs.contents.clone(),
-                wasi_interface: wasi_interface.clone(),
+                wasi_interface,
                 functions,
             });
         }

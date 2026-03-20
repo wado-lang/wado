@@ -1034,12 +1034,8 @@ fn method_name_for_type(
                 .iter()
                 .map(|t| tt_ref.mangle_type_name(*t))
                 .collect();
-            LocalMethodName::new(
-                name.clone(),
-                Some(trait_name.to_string()),
-                method_name.to_string(),
-            )
-            .with_struct_type_args(&arg_names)
+            LocalMethodName::new(name, Some(trait_name.to_string()), method_name.to_string())
+                .with_struct_type_args(&arg_names)
         }
         _ => {
             let name = tt_ref.mangle_type_name(type_id);

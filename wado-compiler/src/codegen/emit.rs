@@ -462,7 +462,7 @@ impl<'a> WirEmitter<'a> {
                 },
             });
         }
-        self.variant_case_types.insert(wir_idx, case_types.clone());
+        self.variant_case_types.insert(wir_idx, case_types);
 
         // Register field maps for variant case structs
         for (&case_wir_idx, &(variant_wir_idx, case_idx)) in &self.wir.variant_case_info {

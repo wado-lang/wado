@@ -3492,7 +3492,7 @@ impl ClosureLowerer {
                 method_name: format!("{}{}", info.full_method_name(), functor_suffix),
                 method_type_args: Vec::new(), // Type args are now in method_name
                 is_type_param_receiver: info.is_type_param_receiver,
-                cm_name: info.cm_name.clone(),
+                cm_name: info.cm_name,
             }
         });
 

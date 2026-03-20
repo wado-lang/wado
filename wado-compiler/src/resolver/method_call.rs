@@ -314,7 +314,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 expected_type,
             )
         } else {
-            type_args.clone()
+            type_args
         };
 
         if !method_type_args.is_empty() {
@@ -347,12 +347,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|t| self.type_table.borrow().mangle_type_name(*t))
                     .collect();
                 let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                (
-                    mangled,
-                    name.clone(),
-                    type_arg_names,
-                    Some(type_args.clone()),
-                )
+                (mangled, name, type_arg_names, Some(type_args))
             }
             _ => {
                 let name = self
@@ -824,7 +819,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 name,
                                 module_source,
                                 ..
-                            } => (name.clone(), module_source.clone(), name.clone(), vec![]),
+                            } => (name.clone(), module_source, name, vec![]),
                             ResolvedType::GenericInstance {
                                 name,
                                 module_source,
@@ -835,12 +830,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .map(|t| self.type_table.borrow().mangle_type_name(*t))
                                     .collect();
                                 let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                                (
-                                    name.clone(),
-                                    module_source.clone(),
-                                    mangled,
-                                    type_args.clone(),
-                                )
+                                (name, module_source, mangled, type_args)
                             }
                             ResolvedType::Newtype {
                                 base_type: inner_base,
@@ -854,12 +844,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                             module_source,
                                             ..
                                         } => {
-                                            break (
-                                                name.clone(),
-                                                module_source.clone(),
-                                                name.clone(),
-                                                vec![],
-                                            );
+                                            break (name.clone(), module_source, name, vec![]);
                                         }
                                         ResolvedType::Newtype {
                                             base_type: next, ..
@@ -867,7 +852,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         _ => {
                                             break (
                                                 newtype_name.clone(),
-                                                newtype_module.clone(),
+                                                newtype_module,
                                                 newtype_name,
                                                 vec![],
                                             );
