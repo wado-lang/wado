@@ -362,7 +362,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // E.g., `loc.describe()` where `loc: Location`, `impl Describable for Point` →
         // use "Point" so the call resolves to "Point^Describable::describe".
         if let Some(impl_name) = trait_impl_struct_name {
-            receiver_struct_name = impl_name.clone();
+            receiver_struct_name.clone_from(&impl_name);
             base_struct_name = impl_name;
         }
 

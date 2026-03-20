@@ -60,7 +60,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let resolved = self.resolve_expr(expr, ctx, None);
                     let format_spec = format.as_ref().map(|f| parse_format_spec(&f.spec));
                     parts.push(TirTemplatePart::Interpolation {
-                        expr: resolved,
+                        expr: Box::new(resolved),
                         format_spec,
                     });
                 }

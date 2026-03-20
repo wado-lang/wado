@@ -457,7 +457,7 @@ fn build_template_block(
                         span,
                     );
                     // Deref if needed (&String → String)
-                    let derefed = deref_to_inner(resolved, string_type, span);
+                    let derefed = deref_to_inner(*resolved, string_type, span);
                     let append_call = TirExpr::new(
                         TirExprKind::MethodCall {
                             receiver: Box::new(buf_ref),
@@ -589,7 +589,7 @@ fn build_template_block(
                         // {:#?} → InspectAlt::inspect_alt
                         let call_stmts = trait_fmt_call(
                             resolved.type_id,
-                            resolved,
+                            *resolved,
                             fmt_mut_ref,
                             "InspectAlt",
                             "inspect_alt",
@@ -601,7 +601,7 @@ fn build_template_block(
                         // {:?} → Inspect::inspect
                         let call_stmts = trait_fmt_call(
                             resolved.type_id,
-                            resolved,
+                            *resolved,
                             fmt_mut_ref,
                             "Inspect",
                             "inspect",
@@ -614,7 +614,7 @@ fn build_template_block(
                     // Display/DisplayAlt/Binary/BinaryAlt/etc.
                     let call_stmts = trait_fmt_call(
                         inner_type,
-                        resolved,
+                        *resolved,
                         fmt_mut_ref,
                         trait_name,
                         method_name,

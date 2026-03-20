@@ -323,7 +323,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Set current module source for struct type creation
         self.current_module_source = module_source.clone();
         // Store current module items for local function parameter lookup
-        self.current_module_items = module.items.clone();
+        self.current_module_items.clone_from(&module.items);
         // Clear trait lookup caches (current_module_items changed)
         self.indexing_trait_cache.clear();
         // Build effect source map from imports

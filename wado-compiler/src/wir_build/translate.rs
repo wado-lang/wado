@@ -2440,7 +2440,7 @@ impl FunctionTranslator<'_, '_> {
         let base_name = self.resolve_newtype_to_base_struct_name(struct_name)?;
         // Build a new method name with the base type's struct name
         let mut resolved_info = method_info.clone();
-        resolved_info.struct_name = base_name.clone();
+        resolved_info.struct_name.clone_from(&base_name);
         resolved_info.base_struct_name = base_name;
         let mangled = resolved_info.to_mangled_name();
         let fq = format!("{module_source}/{mangled}");

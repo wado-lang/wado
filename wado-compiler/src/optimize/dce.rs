@@ -254,7 +254,7 @@ pub fn analyze_project(project: &mut Project) {
     }
 
     // Apply results to project
-    project.reachable_functions = reachable.clone();
+    project.reachable_functions.clone_from(&reachable);
     project.used_wasi_functions = used_wasi_functions;
 
     // Filter string literals in each module to only include strings from reachable functions

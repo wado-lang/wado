@@ -776,7 +776,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
         for arm in &match_expr.arms {
             // Process each arm from the pre-match state
-            self.possibly_uninit = uninit_before.clone();
+            self.possibly_uninit.clone_from(&uninit_before);
 
             self.enter_scope();
             self.bind_pattern(&arm.pattern, arm.span)?;
