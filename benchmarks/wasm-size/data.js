@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774008221063,
+  "lastUpdate": 1774013471109,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4976,6 +4976,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/243628f14678b8151554d56cabce4087704259be"
         },
         "date": 1774008220845,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22261,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5611772b0b778f66313c17f4b92c4a6f6ce75739",
+          "message": "Merge pull request #626 from wado-lang/claude/optimize-wado-compiler-MXG1p\n\nRemove redundant clones throughout codebase",
+          "timestamp": "2026-03-20T22:28:33+09:00",
+          "tree_id": "adf920b50db1143c431c23be138a8462d98f60a0",
+          "url": "https://github.com/wado-lang/wado/commit/5611772b0b778f66313c17f4b92c4a6f6ce75739"
+        },
+        "date": 1774013470881,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
