@@ -2558,44 +2558,15 @@ impl Parser {
                         span: start_span,
                     }));
                 }
-                // This is a qualified name like Effect::function or namespace::Type
-                let method = self.consume_ident()?;
-
-                // Check for namespace::Type::method(...) or namespace::Enum::Case pattern
-                // Only attempt if next tokens are :: followed by an identifier
-                if self.check(&TokenKind::ColonColon)
+                // This is a qualified name like Effect::function or ns::Type::Case
+                // Consume a chain of ::ident segments
+                let mut qualified_name = format!("{name}::{}", self.consume_ident()?);
+                while self.check(&TokenKind::ColonColon)
                     && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
                 {
                     self.advance(); // consume ::
-                    let third = self.consume_ident()?;
-
-                    // Check for call: namespace::Type::method(...)
-                    if self.check(&TokenKind::LParen) {
-                        self.advance(); // consume (
-                        let (args, has_trailing_comma) = self.parse_arg_list()?;
-                        let end_span = self.expect(&TokenKind::RParen)?.span;
-
-                        return Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
-                            target_type: Type::Named(NamedType {
-                                name: format!("{name}::{method}"),
-                                span: start_span,
-                            }),
-                            method: third,
-                            args,
-                            has_trailing_comma,
-                            span: start_span.merge(&end_span),
-                        })));
-                    }
-
-                    // Non-call: namespace::Enum::Case or other triple-qualified ident
-                    let qualified_name = format!("{name}::{method}::{third}");
-                    return Ok(Expr::Ident(IdentExpr {
-                        name: qualified_name,
-                        span: start_span,
-                    }));
+                    qualified_name = format!("{qualified_name}::{}", self.consume_ident()?);
                 }
-
-                let qualified_name = format!("{name}::{method}");
                 return Ok(Expr::Ident(IdentExpr {
                     name: qualified_name,
                     span: start_span,
