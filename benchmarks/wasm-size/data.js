@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773989411229,
+  "lastUpdate": 1773993660619,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4825,6 +4825,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "hello_world",
             "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22350,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "075d56b97e0ffdca19a446c14e7375d107e6eefa",
+          "message": "Merge pull request #623 from wado-lang/claude/review-inline-effect-suppression-FFBoW\n\nInline function calls in __cm_export__run and remove unused functions",
+          "timestamp": "2026-03-20T16:58:31+09:00",
+          "tree_id": "61cc2fa2045bb7562243b438597576330fb84ba8",
+          "url": "https://github.com/wado-lang/wado/commit/075d56b97e0ffdca19a446c14e7375d107e6eefa"
+        },
+        "date": 1773993660403,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
             "unit": "bytes"
           },
           {
