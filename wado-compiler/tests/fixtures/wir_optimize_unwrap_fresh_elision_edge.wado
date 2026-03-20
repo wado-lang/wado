@@ -1,0 +1,85 @@
+// Edge-case tests for unwrap fresh-value elision.
+//
+// Covers scenarios where naive elision would be incorrect or where
+// the optimization should still apply in non-trivial patterns.
+
+use { println } from "core:cli";
+
+struct Data {
+    x: i32,
+    y: i32,
+    name: String,
+}
+
+fn make_data(x: i32) -> Option<Data> {
+    return Option::<Data>::Some(Data { x, y: x * 2, name: `data-{x}` });
+}
+
+fn make_result(x: i32) -> Result<Data, String> {
+    return Result::<Data, String>::Ok(Data { x, y: x * 10, name: `res-{x}` });
+}
+
+fn make_nested(x: i32) -> Option<Option<Data>> {
+    return Option::<Option<Data>>::Some(
+        Option::<Data>::Some(Data { x, y: x * 3, name: `nested-{x}` }),
+    );
+}
+
+export fn run() with Stdout {
+    // Case 1: Mutation after unwrap — copy is NOT needed because
+    // the unwrapped value is fresh and assigned to a unique local.
+    let mut d1 = make_data(1).unwrap();
+    d1.x = 99;
+    assert d1.x == 99;
+    assert d1.y == 2;
+
+    // Case 2: Unwrap inside a loop — each iteration gets a fresh value.
+    for let mut i = 0; i < 3; i += 1 {
+        let d = make_data(i).unwrap();
+        assert d.x == i;
+        assert d.y == i * 2;
+    }
+
+    // Case 3: Multiple unwraps from different calls — all fresh.
+    let a = make_data(10).unwrap();
+    let b = make_data(20).unwrap();
+    assert a.x == 10;
+    assert b.x == 20;
+    // Verify no cross-contamination.
+    assert a.name == "data-10";
+    assert b.name == "data-20";
+
+    // Case 4: Nested Option — outer unwrap then inner unwrap.
+    let inner_opt = make_nested(5).unwrap();
+    let d4 = inner_opt.unwrap();
+    assert d4.x == 5;
+    assert d4.y == 15;
+
+    // Case 5: Unwrap Result, then use fields in a complex expression.
+    let d5 = make_result(7).unwrap();
+    let sum = d5.x + d5.y;
+    assert sum == 77;
+    assert d5.name == "res-7";
+
+    // Case 6: Unwrap and immediately pass fields to a function.
+    let d6 = make_data(3).unwrap();
+    assert check_data(&d6);
+
+    // Case 7: Unwrap into a destructured binding.
+    let { x, y, name } = make_data(42).unwrap();
+    assert x == 42;
+    assert y == 84;
+    assert name == "data-42";
+
+    println("edge-ok");
+}
+
+fn check_data(d: &Data) -> bool {
+    return d.x == 3 && d.y == 6;
+}
+
+__DATA__
+{
+    "stdout": "edge-ok\n",
+    "wir_not_expect:O2": ["value_copy Data("]
+}

@@ -441,7 +441,7 @@ fn __test_0_tuple_serialize__i32__string__bool_() {
     t = "tuple/[i32, String, bool]" { 0: 42, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 };
     r = "core/json/to_string<Tuple<i32,String,bool>>"(t);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("[42,\"hello\",true]"), used: 17 });
         if __cond == 0 {
@@ -616,7 +616,7 @@ fn __test_2_pair_tuple_serialize() {
     pair = "tuple/[f64, f64]" { 0: 3.14, 1: 2.72 };
     r = "core/json/to_string<Tuple<f64,f64>>"(pair);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("[3.14,2.72]"), used: 11 });
         if __cond == 0 {

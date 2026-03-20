@@ -2832,7 +2832,7 @@ condition: json == `\\{\"Err\":\"not found\"\\}`
         if ref.test Result<Result<i32,String>,DeserializeError>::Ok(parsed_r) {
             result = ref.cast Result<Result<i32,String>,DeserializeError>::Ok(parsed_r).payload_0;
             if ref.test Result<i32,String>::Err(result) {
-                msg = value_copy String(ref.cast Result<i32,String>::Err(result).payload_0);
+                msg = ref.cast Result<i32,String>::Err(result).payload_0;
                 __v0_8 = msg;
                 __cond_9 = String^Eq::eq(__v0_8, String { repr: array.new_data<u8>("not found"), used: 9 });
                 if __cond_9 == 0 {
@@ -3412,7 +3412,7 @@ fn __test_11_all_enum_variants_roundtrip() {
                     break __inline_Array_Direction__IndexValue__index_value_15: builtin::array_get<i32>(_licm_repr_48, __local_36);
                 });
                 if ref.test Result<String,SerializeError>::Ok(json_r) {
-                    json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
+                    json = ref.cast Result<String,SerializeError>::Ok(json_r).payload_0;
                     __v0 = json;
                     __cond = String^Eq::eq(__v0, __tmpl: block -> ref String {
                         __local_9 = String { repr: builtin::array_new<u8>(18), used: 0 };
@@ -3948,7 +3948,7 @@ fn __test_16_string_with_special_chars_roundtrip() {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         parsed_r = "core/json/from_string<String>"(json);
         if ref.test Result<String,DeserializeError>::Ok(parsed_r) {
-            p = value_copy String(ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0);
+            p = ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0;
             __v0 = p;
             __v1 = v;
             __cond = String^Eq::eq(__v0, __v1);
@@ -4032,7 +4032,7 @@ fn __test_17_string_with_backslash_roundtrip() {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         parsed_r = "core/json/from_string<String>"(json);
         if ref.test Result<String,DeserializeError>::Ok(parsed_r) {
-            p = value_copy String(ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0);
+            p = ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0;
             __v0 = p;
             __v1 = v;
             __cond = String^Eq::eq(__v0, __v1);
@@ -4117,7 +4117,7 @@ line2line3	tab"), used: 21 };
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         parsed_r = "core/json/from_string<String>"(json);
         if ref.test Result<String,DeserializeError>::Ok(parsed_r) {
-            p = value_copy String(ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0);
+            p = ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0;
             __v0 = p;
             __v1 = v;
             __cond = String^Eq::eq(__v0, __v1);
@@ -8116,7 +8116,7 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_8 = TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(sd.de);
                             __local_13 = __local_8;
                             if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(__local_13) {
-                                __local_9 = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(__local_13).payload_0);
+                                __local_9 = ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(__local_13).payload_0;
                                 settings = __local_9;
                                 seen = seen | 1;
                             } else {
@@ -8641,7 +8641,7 @@ fn Shape^Deserialize::deserialize<JsonDeserializer>(d) {
     __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Shape"), used: 5 }, 3);
     __pattern_temp_0 = __va_r;
     if ref.test Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0) {
-        va = value_copy "core:json/JsonVariantAccess"(ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0);
+        va = ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0;
         __disc_r = Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("JSON does not encode discriminants"), used: 34 }, offset: -1_i64 } };
         if ref.test Result<i32,DeserializeError>::Ok(__disc_r) {
             __disc = ref.cast Result<i32,DeserializeError>::Ok(__disc_r).payload_0;
@@ -8803,7 +8803,7 @@ fn Inner^Deserialize::deserialize<JsonDeserializer>(d) {
                             };
                             __local_17 = __local_11;
                             if ref.test Result<String,DeserializeError>::Ok(__local_17) {
-                                __local_12 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_17).payload_0);
+                                __local_12 = ref.cast Result<String,DeserializeError>::Ok(__local_17).payload_0;
                                 label = __local_12;
                                 seen = seen | 2;
                             } else {
@@ -9010,7 +9010,7 @@ fn Direction^Deserialize::deserialize<JsonDeserializer>(d) {
     __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Direction"), used: 9 }, 4);
     __pattern_temp_0 = __va_r;
     if ref.test Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0) {
-        va = value_copy "core:json/JsonVariantAccess"(ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0);
+        va = ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0;
         __disc_r = Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("JSON does not encode discriminants"), used: 34 }, offset: -1_i64 } };
         if ref.test Result<i32,DeserializeError>::Ok(__disc_r) {
             __disc = ref.cast Result<i32,DeserializeError>::Ok(__disc_r).payload_0;
@@ -10139,7 +10139,7 @@ fn Outer^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_9 = Inner^Deserialize::deserialize<JsonDeserializer>(sd.de);
                             __local_16 = __local_9;
                             if ref.test Result<Inner,DeserializeError>::Ok(__local_16) {
-                                __local_10 = value_copy Inner(ref.cast Result<Inner,DeserializeError>::Ok(__local_16).payload_0);
+                                __local_10 = ref.cast Result<Inner,DeserializeError>::Ok(__local_16).payload_0;
                                 inner = __local_10;
                                 seen = seen | 1;
                             } else {
@@ -10282,7 +10282,7 @@ fn FullStruct^Deserialize::deserialize<JsonDeserializer>(d) {
                             };
                             __local_31 = __local_14;
                             if ref.test Result<String,DeserializeError>::Ok(__local_31) {
-                                __local_15 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_31).payload_0);
+                                __local_15 = ref.cast Result<String,DeserializeError>::Ok(__local_31).payload_0;
                                 name = __local_15;
                                 seen = seen | 1;
                             } else {
@@ -10331,7 +10331,7 @@ fn FullStruct^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_22 = Array<String>^Deserialize::deserialize<JsonDeserializer>(sd.de);
                             __local_35 = __local_22;
                             if ref.test Result<Array<String>,DeserializeError>::Ok(__local_35) {
-                                __local_23 = value_copy Array<String>(ref.cast Result<Array<String>,DeserializeError>::Ok(__local_35).payload_0);
+                                __local_23 = ref.cast Result<Array<String>,DeserializeError>::Ok(__local_35).payload_0;
                                 tags = __local_23;
                                 seen = seen | 16;
                             } else {
@@ -10341,7 +10341,7 @@ fn FullStruct^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_24 = Option<String>^Deserialize::deserialize<JsonDeserializer>(sd.de);
                             __local_36 = __local_24;
                             if ref.test Result<Option<String>,DeserializeError>::Ok(__local_36) {
-                                __local_25 = value_copy Option<String>(ref.cast Result<Option<String>,DeserializeError>::Ok(__local_36).payload_0);
+                                __local_25 = ref.cast Result<Option<String>,DeserializeError>::Ok(__local_36).payload_0;
                                 address = __local_25;
                                 seen = seen | 32;
                             } else {
@@ -10351,7 +10351,7 @@ fn FullStruct^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_26 = Option<i32>^Deserialize::deserialize<JsonDeserializer>(sd.de);
                             __local_37 = __local_26;
                             if ref.test Result<Option<i32>,DeserializeError>::Ok(__local_37) {
-                                __local_27 = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__local_37).payload_0);
+                                __local_27 = ref.cast Result<Option<i32>,DeserializeError>::Ok(__local_37).payload_0;
                                 rating = __local_27;
                                 seen = seen | 64;
                             } else {

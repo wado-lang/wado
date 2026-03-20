@@ -404,7 +404,7 @@ fn __test_0_variant_serialize_unit_case() {
     };
     r = "core/json/to_string<Shape>"(Shape { 1 });
     if ref.test Result<String,SerializeError>::Ok(r) {
-        json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        json = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = json;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("\"Point\""), used: 7 });
         if __cond == 0 {
@@ -468,7 +468,7 @@ fn __test_1_variant_serialize_payload_case() {
     };
     r = "core/json/to_string<Shape>"(Shape::Circle { discriminant: 0, payload_0: 5 });
     if ref.test Result<String,SerializeError>::Ok(r) {
-        json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        json = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = json;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"Circle\":5}"), used: 12 });
         if __cond == 0 {
@@ -2407,7 +2407,7 @@ fn Shape^Deserialize::deserialize<JsonDeserializer>(d) {
     __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Shape"), used: 5 }, 2);
     __pattern_temp_0 = __va_r;
     if ref.test Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0) {
-        va = value_copy "core:json/JsonVariantAccess"(ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0);
+        va = ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0;
         __disc_r = Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("JSON does not encode discriminants"), used: 34 }, offset: -1_i64 } };
         if ref.test Result<i32,DeserializeError>::Ok(__disc_r) {
             __disc = ref.cast Result<i32,DeserializeError>::Ok(__disc_r).payload_0;

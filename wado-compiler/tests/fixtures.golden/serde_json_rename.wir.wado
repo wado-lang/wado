@@ -359,7 +359,7 @@ fn __test_0_serialize_with_rename() {
     resp = ApiResponse { status_code: 200, response_data: String { repr: array.new_data<u8>("ok"), used: 2 } };
     r = "core/json/to_string<ApiResponse>"(resp);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"status_code\":200,\"data\":\"ok\"}"), used: 31 });
         if __cond == 0 {
@@ -1584,7 +1584,7 @@ fn ApiResponse^Deserialize::deserialize<JsonDeserializer>(d) {
                             };
                             __local_17 = __local_11;
                             if ref.test Result<String,DeserializeError>::Ok(__local_17) {
-                                __local_12 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_17).payload_0);
+                                __local_12 = ref.cast Result<String,DeserializeError>::Ok(__local_17).payload_0;
                                 response_data = __local_12;
                                 seen = seen | 2;
                             } else {

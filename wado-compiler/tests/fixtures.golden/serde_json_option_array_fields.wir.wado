@@ -493,7 +493,7 @@ fn __test_0_serialize_with_some_and_non_empty_array() {
     }) };
     r = "core/json/to_string<User>"(u);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"name\":\"Alice\",\"email\":\"alice@example.com\",\"scores\":[95,87,92]}"), used: 64 });
         if __cond == 0 {
@@ -553,7 +553,7 @@ fn __test_1_serialize_with_none_and_empty_array() {
     }) };
     r = "core/json/to_string<User>"(u);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"name\":\"Bob\",\"email\":null,\"scores\":[]}"), used: 39 });
         if __cond == 0 {
@@ -1916,7 +1916,7 @@ fn User^Deserialize::deserialize<JsonDeserializer>(d) {
                             };
                             __local_19 = __local_10;
                             if ref.test Result<String,DeserializeError>::Ok(__local_19) {
-                                __local_11 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_19).payload_0);
+                                __local_11 = ref.cast Result<String,DeserializeError>::Ok(__local_19).payload_0;
                                 name = __local_11;
                                 seen = seen | 1;
                             } else {
@@ -1926,7 +1926,7 @@ fn User^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_12 = Option<String>^Deserialize::deserialize<JsonDeserializer>(sd.de);
                             __local_20 = __local_12;
                             if ref.test Result<Option<String>,DeserializeError>::Ok(__local_20) {
-                                __local_13 = value_copy Option<String>(ref.cast Result<Option<String>,DeserializeError>::Ok(__local_20).payload_0);
+                                __local_13 = ref.cast Result<Option<String>,DeserializeError>::Ok(__local_20).payload_0;
                                 email = __local_13;
                                 seen = seen | 2;
                             } else {
@@ -1936,7 +1936,7 @@ fn User^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_14 = Array<i32>^Deserialize::deserialize<JsonDeserializer>(sd.de);
                             __local_21 = __local_14;
                             if ref.test Result<Array<i32>,DeserializeError>::Ok(__local_21) {
-                                __local_15 = value_copy Array<i32>(ref.cast Result<Array<i32>,DeserializeError>::Ok(__local_21).payload_0);
+                                __local_15 = ref.cast Result<Array<i32>,DeserializeError>::Ok(__local_21).payload_0;
                                 scores = __local_15;
                                 seen = seen | 4;
                             } else {

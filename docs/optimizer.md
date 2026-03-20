@@ -166,7 +166,7 @@ After parameter SROA, substitutes `StructGet(LocalGet(x), field)` with the inner
 
 ### Phase 5: Peephole and Multi-Field Struct Elimination
 
-- **Peephole** — constant folding, copy elision, multi-value struct elision at WIR level
+- **Peephole** — constant folding, copy elision (including cross-scope fresh value tracing for unwrap patterns), multi-value struct elision at WIR level
 - **Flatten seq assignments** — exposes multi-field struct locals for elimination
 - **Multi-field struct local elimination** — substitutes `StructGet(LocalGet(x), field_k)` with the corresponding field expression when all fields are accessed exactly once
 

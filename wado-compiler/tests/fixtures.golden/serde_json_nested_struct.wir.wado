@@ -446,7 +446,7 @@ fn __test_0_nested_struct_serialize() {
     line = Line { start_point: Point { x: 1, y: 2 }, end_point: Point { x: 3, y: 4 } };
     r = "core/json/to_string<Line>"(line);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"startPoint\":{\"x\":1,\"y\":2},\"endPoint\":{\"x\":3,\"y\":4}}"), used: 53 });
         if __cond == 0 {
@@ -2584,7 +2584,7 @@ fn Line^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_9 = Point^Deserialize::deserialize<JsonDeserializer>(sd.de);
                             __local_16 = __local_9;
                             if ref.test Result<Point,DeserializeError>::Ok(__local_16) {
-                                __local_10 = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(__local_16).payload_0);
+                                __local_10 = ref.cast Result<Point,DeserializeError>::Ok(__local_16).payload_0;
                                 start_point = __local_10;
                                 seen = seen | 1;
                             } else {
@@ -2594,7 +2594,7 @@ fn Line^Deserialize::deserialize<JsonDeserializer>(d) {
                             __local_11 = Point^Deserialize::deserialize<JsonDeserializer>(sd.de);
                             __local_17 = __local_11;
                             if ref.test Result<Point,DeserializeError>::Ok(__local_17) {
-                                __local_12 = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(__local_17).payload_0);
+                                __local_12 = ref.cast Result<Point,DeserializeError>::Ok(__local_17).payload_0;
                                 end_point = __local_12;
                                 seen = seen | 2;
                             } else {
