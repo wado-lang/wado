@@ -488,7 +488,8 @@ impl Monomorphizer {
         external_generic_structs: &IndexMap<String, TirStruct>,
         trait_method_locations: &IndexMap<String, ModuleSource>,
     ) -> TirModule {
-        self.trait_method_locations.clone_from(trait_method_locations);
+        self.trait_method_locations
+            .clone_from(trait_method_locations);
 
         // Phase 1: Collect all generic struct definitions
         // Include both local structs AND external generic structs from other modules
