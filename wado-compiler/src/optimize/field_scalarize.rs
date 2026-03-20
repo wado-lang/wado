@@ -674,7 +674,7 @@ fn mark_if_param_passed(
             }
         }
         TirExprKind::Unary {
-            op: TirUnaryOp::MutRef,
+            op: TirUnaryOp::MutRef | TirUnaryOp::Ref,
             expr: inner,
         } => {
             if let TirExprKind::Local { index, .. } = &inner.kind
@@ -1272,7 +1272,10 @@ fn replace_in_block(
                 // Calls inside the condition can modify scalarized fields (e.g.
                 // `if !self.expect_byte(b)` where expect_byte mutates self.pos).
                 // Insert write-back before the If and re-read after it.
-                let mut cond_sync: IndexSet<(u32, u32)> = IndexSet::default();
+                let mut cond_sync = SyncFields {
+                    write_back: IndexSet::default(),
+                    re_read: IndexSet::default(),
+                };
                 compute_sync_fields_in_expr(
                     condition,
                     candidates,
@@ -1281,7 +1284,10 @@ fn replace_in_block(
                     &mut cond_sync,
                 );
                 for c in candidates {
-                    if cond_sync.contains(&(c.local_index, c.field_index)) {
+                    if cond_sync
+                        .write_back
+                        .contains(&(c.local_index, c.field_index))
+                    {
                         new_stmts.push(make_write_back_stmt(c, span));
                     }
                 }
@@ -1292,7 +1298,7 @@ fn replace_in_block(
                 }
                 new_stmts.push(stmt);
                 for c in candidates {
-                    if cond_sync.contains(&(c.local_index, c.field_index)) {
+                    if cond_sync.re_read.contains(&(c.local_index, c.field_index)) {
                         new_stmts.push(make_re_read_stmt(c, span));
                     }
                 }
@@ -1305,7 +1311,10 @@ fn replace_in_block(
                 ..
             } => {
                 // Same as If: calls in the scrutinee can modify scalarized fields.
-                let mut scrut_sync: IndexSet<(u32, u32)> = IndexSet::default();
+                let mut scrut_sync = SyncFields {
+                    write_back: IndexSet::default(),
+                    re_read: IndexSet::default(),
+                };
                 compute_sync_fields_in_expr(
                     scrutinee,
                     candidates,
@@ -1314,7 +1323,10 @@ fn replace_in_block(
                     &mut scrut_sync,
                 );
                 for c in candidates {
-                    if scrut_sync.contains(&(c.local_index, c.field_index)) {
+                    if scrut_sync
+                        .write_back
+                        .contains(&(c.local_index, c.field_index))
+                    {
                         new_stmts.push(make_write_back_stmt(c, span));
                     }
                 }
@@ -1325,7 +1337,7 @@ fn replace_in_block(
                 }
                 new_stmts.push(stmt);
                 for c in candidates {
-                    if scrut_sync.contains(&(c.local_index, c.field_index)) {
+                    if scrut_sync.re_read.contains(&(c.local_index, c.field_index)) {
                         new_stmts.push(make_re_read_stmt(c, span));
                     }
                 }
@@ -1384,9 +1396,12 @@ fn replace_in_block(
         // based on what the callee functions actually access.
         let sync_fields = compute_sync_fields(&stmt, candidates, type_table, cache);
 
-        if !sync_fields.is_empty() {
+        if !sync_fields.write_back.is_empty() {
             for c in candidates {
-                if sync_fields.contains(&(c.local_index, c.field_index)) {
+                if sync_fields
+                    .write_back
+                    .contains(&(c.local_index, c.field_index))
+                {
                     new_stmts.push(make_write_back_stmt(c, span));
                 }
             }
@@ -1395,9 +1410,12 @@ fn replace_in_block(
         replace_in_stmt(&mut stmt, candidates);
         new_stmts.push(stmt);
 
-        if !sync_fields.is_empty() {
+        if !sync_fields.re_read.is_empty() {
             for c in candidates {
-                if sync_fields.contains(&(c.local_index, c.field_index)) {
+                if sync_fields
+                    .re_read
+                    .contains(&(c.local_index, c.field_index))
+                {
                     new_stmts.push(make_re_read_stmt(c, span));
                 }
             }
@@ -1405,6 +1423,15 @@ fn replace_in_block(
     }
 
     block.stmts = new_stmts;
+}
+
+/// Fields needing synchronization around function calls.
+/// `write_back` fields need scalar → struct write before the call.
+/// `re_read` fields need struct → scalar read after the call.
+/// Immutable ref args only need write-back (callee can't modify through `&T`).
+struct SyncFields {
+    write_back: IndexSet<(u32, u32)>,
+    re_read: IndexSet<(u32, u32)>,
 }
 
 /// Compute which (`local_index`, `field_index`) pairs need write-back/re-read
@@ -1415,8 +1442,11 @@ fn compute_sync_fields(
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
     cache: &FieldUsageCache,
-) -> IndexSet<(u32, u32)> {
-    let mut result = IndexSet::default();
+) -> SyncFields {
+    let mut result = SyncFields {
+        write_back: IndexSet::default(),
+        re_read: IndexSet::default(),
+    };
     compute_sync_fields_in_stmt(stmt, candidates, type_table, cache, &mut result);
     result
 }
@@ -1426,7 +1456,7 @@ fn compute_sync_fields_in_stmt(
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
     cache: &FieldUsageCache,
-    result: &mut IndexSet<(u32, u32)>,
+    result: &mut SyncFields,
 ) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } => {
@@ -1493,17 +1523,33 @@ fn compute_sync_fields_in_stmt(
     }
 }
 
+/// Check if an expression is an immutable ref to a local (`Unary{Ref, Local}`).
+/// Also returns true for bare locals with `Ref(T)` type (after `ref_elim`).
+fn is_immut_ref_arg(expr: &TirExpr, type_table: &TypeTable) -> bool {
+    match &expr.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            ..
+        } => true,
+        TirExprKind::Local { .. } => {
+            matches!(type_table.get(expr.type_id), ResolvedType::Ref(inner)
+                if !matches!(type_table.get(*inner), ResolvedType::MutRef(_)))
+        }
+        _ => false,
+    }
+}
+
 fn compute_sync_fields_in_expr(
     expr: &TirExpr,
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
     cache: &FieldUsageCache,
-    result: &mut IndexSet<(u32, u32)>,
+    result: &mut SyncFields,
 ) {
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
-            // Check each argument: if it's a scalarized local, determine which fields to sync
             for (arg_position, arg) in args.iter().enumerate() {
+                let immut_ref = is_immut_ref_arg(&arg.expr, type_table);
                 add_sync_fields_for_arg(
                     &arg.expr,
                     func,
@@ -1511,10 +1557,10 @@ fn compute_sync_fields_in_expr(
                     candidates,
                     type_table,
                     cache,
+                    immut_ref,
                     result,
                 );
             }
-            // Recurse into sub-expressions
             for arg in args {
                 compute_sync_fields_in_expr(&arg.expr, candidates, type_table, cache, result);
             }
@@ -1525,10 +1571,12 @@ fn compute_sync_fields_in_expr(
             args,
             ..
         } => {
-            // Receiver maps to param 0 (self)
-            add_sync_fields_for_arg(receiver, func, 0, candidates, type_table, cache, result);
-            // Additional args map to params 1, 2, ...
+            let immut_ref = is_immut_ref_arg(receiver, type_table);
+            add_sync_fields_for_arg(
+                receiver, func, 0, candidates, type_table, cache, immut_ref, result,
+            );
             for (arg_position, arg) in args.iter().enumerate() {
+                let immut_ref = is_immut_ref_arg(&arg.expr, type_table);
                 add_sync_fields_for_arg(
                     &arg.expr,
                     func,
@@ -1536,20 +1584,22 @@ fn compute_sync_fields_in_expr(
                     candidates,
                     type_table,
                     cache,
+                    immut_ref,
                     result,
                 );
             }
-            // Recurse
             compute_sync_fields_in_expr(receiver, candidates, type_table, cache, result);
             for arg in args {
                 compute_sync_fields_in_expr(&arg.expr, candidates, type_table, cache, result);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            // Indirect calls: can't resolve callee, conservative for all GC args
             for arg in args {
                 if let Some(local_idx) = extract_gc_local_index(arg, type_table) {
-                    add_all_fields_for_local(local_idx, candidates, result);
+                    add_all_fields_for_local(local_idx, candidates, &mut result.write_back);
+                    if !is_immut_ref_arg(arg, type_table) {
+                        add_all_fields_for_local(local_idx, candidates, &mut result.re_read);
+                    }
                 }
             }
             compute_sync_fields_in_expr(callee, candidates, type_table, cache, result);
@@ -1642,7 +1692,8 @@ fn add_sync_fields_for_arg(
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
     cache: &FieldUsageCache,
-    result: &mut IndexSet<(u32, u32)>,
+    is_immut_ref: bool,
+    result: &mut SyncFields,
 ) {
     let Some(local_idx) = extract_gc_local_index(arg_expr, type_table) else {
         return;
@@ -1654,6 +1705,16 @@ fn add_sync_fields_for_arg(
         return;
     }
 
+    // Helper: add fields to write_back and optionally re_read.
+    // Immutable ref args (`&T`) only need write-back — the callee cannot modify
+    // through an immutable reference, so re-read is unnecessary.
+    let mut add_field = |local_idx: u32, field_idx: u32| {
+        result.write_back.insert((local_idx, field_idx));
+        if !is_immut_ref {
+            result.re_read.insert((local_idx, field_idx));
+        }
+    };
+
     // Look up the callee's field usage in the cache (keyed by param position).
     let cache_key = (func_ref.module_source.clone(), func_ref.name.clone());
 
@@ -1664,27 +1725,32 @@ fn add_sync_fields_for_arg(
                     // Precise: only sync fields the callee accesses
                     for c in candidates {
                         if c.local_index == local_idx && field_set.contains(&c.field_index) {
-                            result.insert((c.local_index, c.field_index));
+                            add_field(c.local_index, c.field_index);
                         }
                     }
                 }
                 Some(None) => {
                     // Conservative: callee passes the struct further, all fields potentially touched
-                    add_all_fields_for_local(local_idx, candidates, result);
+                    for c in candidates {
+                        if c.local_index == local_idx {
+                            add_field(c.local_index, c.field_index);
+                        }
+                    }
                 }
                 None => {
                     // Param at this position is not struct-typed in callee, or not tracked.
                     // No fields need syncing (callee can't access fields of a non-struct param).
-                    // But if the callee has no entry for this position and the arg IS a
-                    // struct, it means the callee wasn't analyzed (no struct params) — safe
-                    // to skip since the callee doesn't treat it as a struct.
                 }
             }
         }
         None => {
             // Callee not in cache (external/imported function, no body, etc.)
             // Conservative: sync all fields.
-            add_all_fields_for_local(local_idx, candidates, result);
+            for c in candidates {
+                if c.local_index == local_idx {
+                    add_field(c.local_index, c.field_index);
+                }
+            }
         }
     }
 }
@@ -1700,7 +1766,7 @@ fn extract_gc_local_index(expr: &TirExpr, type_table: &TypeTable) -> Option<u32>
             }
         }
         TirExprKind::Unary {
-            op: TirUnaryOp::MutRef,
+            op: TirUnaryOp::MutRef | TirUnaryOp::Ref,
             expr: inner,
         } => {
             if let TirExprKind::Local { index, .. } = &inner.kind {

@@ -257,6 +257,10 @@ fn collect_modified_vars_in_block(
 /// can modify any of its fields (e.g., `String::grow` reassigns `self.repr`).
 /// This prevents LICM from hoisting field accesses on locals that may be mutated
 /// by function calls within the loop.
+///
+/// Exception: locals whose type is `Ref(T)` (immutable reference) are skipped.
+/// No function can modify the underlying struct through an immutable reference,
+/// so field accesses on such locals remain loop-invariant across calls.
 fn mark_gc_local_as_fully_modified(
     expr: &TirExpr,
     modified: &mut ModifiedVars,
@@ -265,6 +269,15 @@ fn mark_gc_local_as_fully_modified(
     if let TirExprKind::Local { index, .. } = &expr.kind
         && is_gc_heap_type(expr.type_id, type_table)
     {
+        // Immutable reference locals (`&T`) cannot be used by a callee to modify
+        // the underlying struct. Skip marking them as modified.
+        // Only skip `Ref(Struct/GenericInstance)` — not `Ref(MutRef(...))` which
+        // could allow modification through the inner mutable reference.
+        if let ResolvedType::Ref(inner) = type_table.get(expr.type_id)
+            && !matches!(type_table.get(*inner), ResolvedType::MutRef(_))
+        {
+            return;
+        }
         modified.insert_full(*index);
     }
 }

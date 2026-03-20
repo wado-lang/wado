@@ -25,12 +25,16 @@
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
+use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirStructField, TirUnaryOp,
-    TypeId, TypeTable,
+    FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirStructField,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
+
+/// Maps (`module_source`, `func_name`) → set of parameter indices that have `stores` declared.
+type StoresLookup = IndexMap<(ModuleSource, String), IndexSet<usize>>;
 
 /// Information about a struct/tuple local that may be decomposable.
 struct SroaCandidate {
@@ -48,21 +52,51 @@ struct SroaCandidate {
     struct_name: String,
 }
 
+/// Build a lookup table mapping (`module_source`, `func_name`) → set of stored param indices.
+fn build_stores_lookup(project: &Project) -> StoresLookup {
+    let mut lookup = StoresLookup::default();
+    for (module_source, module) in &project.tir_modules {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if func.stores.is_empty() {
+                continue;
+            }
+            let stored_indices: IndexSet<usize> = func
+                .params
+                .iter()
+                .enumerate()
+                .filter(|(_, param)| func.stores.iter().any(|s| s == &param.name))
+                .map(|(i, _)| i)
+                .collect();
+            if !stored_indices.is_empty() {
+                lookup.insert((module_source.clone(), func.name.clone()), stored_indices);
+            }
+        }
+    }
+    lookup
+}
+
 /// Apply SROA to all functions in the project.
 pub fn scalar_replace_aggregates(project: &mut Project) -> bool {
+    let stores_lookup = build_stores_lookup(project);
     let mut changed = false;
-    for module in project.tir_modules.values_mut() {
+    for (module_source, module) in &mut project.tir_modules {
         let type_table = module.type_table.borrow();
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
-            changed |= sroa_in_function(&mut func, &type_table);
+            changed |= sroa_in_function(&mut func, &type_table, &stores_lookup, module_source);
         }
     }
     changed
 }
 
 /// Apply SROA within a single function.
-fn sroa_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
+fn sroa_in_function(
+    func: &mut TirFunction,
+    type_table: &TypeTable,
+    stores_lookup: &StoresLookup,
+    current_module: &ModuleSource,
+) -> bool {
     let Some(body) = &mut func.body else {
         return false;
     };
@@ -79,7 +113,9 @@ fn sroa_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
     // Step 2b: For escaped candidates, check if all escapes are "soft" (reconstructible).
     // Soft escapes: used as call argument, returned, or used in struct/tuple literal.
     // Hard escapes: address taken, closure capture, bare local assignment, etc.
-    let soft_escaped = find_soft_escaped_locals(body, &candidates, &escaped);
+    // With stores-aware analysis: &candidate in call args to non-stores functions is soft.
+    let soft_escaped =
+        find_soft_escaped_locals(body, &candidates, &escaped, stores_lookup, current_module);
 
     // Filter candidates: non-escaped are "safe", soft-escaped are "reconstruct".
     let mut safe_set: IndexSet<u32> = IndexSet::default();
@@ -601,6 +637,8 @@ fn find_soft_escaped_locals(
     body: &TirBlock,
     candidates: &[SroaCandidate],
     escaped: &IndexSet<u32>,
+    stores_lookup: &StoresLookup,
+    current_module: &ModuleSource,
 ) -> IndexSet<u32> {
     // Only check candidates that actually escaped
     let escaped_candidates: IndexSet<u32> = candidates
@@ -614,7 +652,13 @@ fn find_soft_escaped_locals(
 
     // Check: does every non-field-access use of this candidate appear as a call arg or return?
     let mut hard_escaped = IndexSet::default();
-    check_soft_escape_in_block(body, &escaped_candidates, &mut hard_escaped);
+    check_soft_escape_in_block(
+        body,
+        &escaped_candidates,
+        &mut hard_escaped,
+        stores_lookup,
+        current_module,
+    );
 
     // Soft-escaped = escaped but NOT hard-escaped, AND has at least one field access
     let mut has_field_access = IndexSet::default();
@@ -743,9 +787,17 @@ fn check_soft_escape_in_block(
     block: &TirBlock,
     candidates: &IndexSet<u32>,
     hard_escaped: &mut IndexSet<u32>,
+    stores_lookup: &StoresLookup,
+    current_module: &ModuleSource,
 ) {
     for stmt in &block.stmts {
-        check_soft_escape_in_stmt(stmt, candidates, hard_escaped);
+        check_soft_escape_in_stmt(
+            stmt,
+            candidates,
+            hard_escaped,
+            stores_lookup,
+            current_module,
+        );
     }
 }
 
@@ -753,18 +805,21 @@ fn check_soft_escape_in_stmt(
     stmt: &TirStmt,
     candidates: &IndexSet<u32>,
     hard_escaped: &mut IndexSet<u32>,
+    stores_lookup: &StoresLookup,
+    current_module: &ModuleSource,
 ) {
+    let sl = stores_lookup;
+    let cm = current_module;
     match &stmt.kind {
         TirStmtKind::Let { value, .. } => {
-            check_soft_escape_in_expr(value, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(value, candidates, hard_escaped, false, sl, cm);
         }
         TirStmtKind::Expr(expr) => {
-            check_soft_escape_in_expr(expr, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(expr, candidates, hard_escaped, false, sl, cm);
         }
         TirStmtKind::Return { value } => {
-            // Return is a soft escape (reconstructible)
             if let Some(v) = value {
-                check_soft_escape_in_expr(v, candidates, hard_escaped, true);
+                check_soft_escape_in_expr(v, candidates, hard_escaped, true, sl, cm);
             }
         }
         TirStmtKind::If {
@@ -772,14 +827,14 @@ fn check_soft_escape_in_stmt(
             then_block,
             else_block,
         } => {
-            check_soft_escape_in_expr(condition, candidates, hard_escaped, false);
-            check_soft_escape_in_block(then_block, candidates, hard_escaped);
+            check_soft_escape_in_expr(condition, candidates, hard_escaped, false, sl, cm);
+            check_soft_escape_in_block(then_block, candidates, hard_escaped, sl, cm);
             if let Some(eb) = else_block {
-                check_soft_escape_in_block(eb, candidates, hard_escaped);
+                check_soft_escape_in_block(eb, candidates, hard_escaped, sl, cm);
             }
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            check_soft_escape_in_block(body, candidates, hard_escaped);
+            check_soft_escape_in_block(body, candidates, hard_escaped, sl, cm);
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -787,21 +842,20 @@ fn check_soft_escape_in_stmt(
             else_block,
             ..
         } => {
-            check_soft_escape_in_expr(scrutinee, candidates, hard_escaped, false);
-            check_soft_escape_in_block(then_block, candidates, hard_escaped);
+            check_soft_escape_in_expr(scrutinee, candidates, hard_escaped, false, sl, cm);
+            check_soft_escape_in_block(then_block, candidates, hard_escaped, sl, cm);
             if let Some(eb) = else_block {
-                check_soft_escape_in_block(eb, candidates, hard_escaped);
+                check_soft_escape_in_block(eb, candidates, hard_escaped, sl, cm);
             }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                // Break values go to labeled blocks — treat as soft escape for now
-                check_soft_escape_in_expr(v, candidates, hard_escaped, true);
+                check_soft_escape_in_expr(v, candidates, hard_escaped, true, sl, cm);
             }
         }
         TirStmtKind::Continue => {}
         TirStmtKind::LetDestructure { value, .. } => {
-            check_soft_escape_in_expr(value, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(value, candidates, hard_escaped, false, sl, cm);
         }
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -817,14 +871,18 @@ fn check_soft_escape_in_expr(
     candidates: &IndexSet<u32>,
     hard_escaped: &mut IndexSet<u32>,
     in_soft_context: bool,
+    stores_lookup: &StoresLookup,
+    current_module: &ModuleSource,
 ) {
+    let sl = stores_lookup;
+    let cm = current_module;
     match &expr.kind {
         // FieldAccess on candidate is always safe — skip
         TirExprKind::FieldAccess { expr: inner, .. } => {
             if is_candidate_local_ref(inner, candidates).is_some() {
                 return;
             }
-            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false, sl, cm);
         }
 
         // Assign to field of candidate is safe
@@ -832,12 +890,12 @@ fn check_soft_escape_in_expr(
             if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind
                 && is_candidate_local_ref(inner, candidates).is_some()
             {
-                check_soft_escape_in_expr(value, candidates, hard_escaped, false);
+                check_soft_escape_in_expr(value, candidates, hard_escaped, false, sl, cm);
                 return;
             }
             // Assign to the whole candidate (not a field) → hard escape
-            check_soft_escape_in_expr(target, candidates, hard_escaped, false);
-            check_soft_escape_in_expr(value, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(target, candidates, hard_escaped, false, sl, cm);
+            check_soft_escape_in_expr(value, candidates, hard_escaped, false, sl, cm);
         }
 
         // Bare Local in a soft context (return, call arg) → soft escape (OK)
@@ -848,7 +906,8 @@ fn check_soft_escape_in_expr(
             }
         }
 
-        // Address taken → always hard escape
+        // Address taken → hard escape unless in a non-stores call context
+        // (handled by Call/MethodCall arms below for &candidate args)
         TirExprKind::Unary { op, expr: inner } => {
             if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
                 && let TirExprKind::Local { index, .. } = &inner.kind
@@ -857,7 +916,7 @@ fn check_soft_escape_in_expr(
                 hard_escaped.insert(*index);
                 return;
             }
-            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false, sl, cm);
         }
 
         // Closure captures → hard escape
@@ -867,95 +926,120 @@ fn check_soft_escape_in_expr(
                     hard_escaped.insert(capture.outer_index);
                 }
             }
-            check_soft_escape_in_expr(body, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(body, candidates, hard_escaped, false, sl, cm);
         }
 
-        // Function call args are soft contexts
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                check_soft_escape_in_expr(&arg.expr, candidates, hard_escaped, true);
+        // Function call args: handle &candidate specially with stores analysis
+        TirExprKind::Call { func, args, .. } => {
+            for (i, arg) in args.iter().enumerate() {
+                if is_immut_ref_to_candidate(&arg.expr, candidates)
+                    && !callee_stores_param_at(func, i, cm, sl)
+                {
+                    // &candidate to non-stores callee → soft escape (skip hard marking)
+                    continue;
+                }
+                check_soft_escape_in_expr(&arg.expr, candidates, hard_escaped, true, sl, cm);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                check_soft_escape_in_expr(arg, candidates, hard_escaped, true);
+                check_soft_escape_in_expr(arg, candidates, hard_escaped, true, sl, cm);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            check_soft_escape_in_expr(receiver, candidates, hard_escaped, true);
-            for arg in args {
-                check_soft_escape_in_expr(&arg.expr, candidates, hard_escaped, true);
+        TirExprKind::MethodCall {
+            receiver,
+            func,
+            args,
+            ..
+        } => {
+            // Receiver is param 0
+            if is_immut_ref_to_candidate(receiver, candidates)
+                && !callee_stores_param_at(func, 0, cm, sl)
+            {
+                // &self on non-stores method → soft escape
+            } else {
+                check_soft_escape_in_expr(receiver, candidates, hard_escaped, true, sl, cm);
+            }
+            // Args are params 1..n
+            for (i, arg) in args.iter().enumerate() {
+                if is_immut_ref_to_candidate(&arg.expr, candidates)
+                    && !callee_stores_param_at(func, i + 1, cm, sl)
+                {
+                    continue;
+                }
+                check_soft_escape_in_expr(&arg.expr, candidates, hard_escaped, true, sl, cm);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            check_soft_escape_in_expr(callee, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(callee, candidates, hard_escaped, false, sl, cm);
             for arg in args {
-                check_soft_escape_in_expr(arg, candidates, hard_escaped, true);
+                // Unknown callee — conservative, use default recursion
+                check_soft_escape_in_expr(arg, candidates, hard_escaped, true, sl, cm);
             }
         }
 
         // Recurse into children
         TirExprKind::Binary { left, right, .. } => {
-            check_soft_escape_in_expr(left, candidates, hard_escaped, false);
-            check_soft_escape_in_expr(right, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(left, candidates, hard_escaped, false, sl, cm);
+            check_soft_escape_in_expr(right, candidates, hard_escaped, false, sl, cm);
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            check_soft_escape_in_expr(functor, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(functor, candidates, hard_escaped, false, sl, cm);
         }
         TirExprKind::Cast { expr: inner, .. } => {
-            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false, sl, cm);
         }
         TirExprKind::Index {
             expr: inner, index, ..
         } => {
-            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
-            check_soft_escape_in_expr(index, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false, sl, cm);
+            check_soft_escape_in_expr(index, candidates, hard_escaped, false, sl, cm);
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            check_soft_escape_in_block(block, candidates, hard_escaped);
+            check_soft_escape_in_block(block, candidates, hard_escaped, sl, cm);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            check_soft_escape_in_expr(condition, candidates, hard_escaped, false);
-            check_soft_escape_in_block(then_branch, candidates, hard_escaped);
+            check_soft_escape_in_expr(condition, candidates, hard_escaped, false, sl, cm);
+            check_soft_escape_in_block(then_branch, candidates, hard_escaped, sl, cm);
             if let Some(eb) = else_branch {
-                check_soft_escape_in_block(eb, candidates, hard_escaped);
+                check_soft_escape_in_block(eb, candidates, hard_escaped, sl, cm);
             }
         }
         TirExprKind::Match { expr: inner, arms } => {
-            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false, sl, cm);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    check_soft_escape_in_expr(guard, candidates, hard_escaped, false);
+                    check_soft_escape_in_expr(guard, candidates, hard_escaped, false, sl, cm);
                 }
-                check_soft_escape_in_expr(&arm.body, candidates, hard_escaped, false);
+                check_soft_escape_in_expr(&arm.body, candidates, hard_escaped, false, sl, cm);
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                check_soft_escape_in_expr(&field.value, candidates, hard_escaped, false);
+                check_soft_escape_in_expr(&field.value, candidates, hard_escaped, false, sl, cm);
             }
         }
         TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
-                check_soft_escape_in_expr(elem, candidates, hard_escaped, false);
+                check_soft_escape_in_expr(elem, candidates, hard_escaped, false, sl, cm);
             }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                check_soft_escape_in_expr(p, candidates, hard_escaped, false);
+                check_soft_escape_in_expr(p, candidates, hard_escaped, false, sl, cm);
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            check_soft_escape_in_expr(value, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(value, candidates, hard_escaped, false, sl, cm);
         }
         TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
-            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false, sl, cm);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -963,11 +1047,11 @@ fn check_soft_escape_in_expr(
             default,
             ..
         } => {
-            check_soft_escape_in_expr(scrutinee, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(scrutinee, candidates, hard_escaped, false, sl, cm);
             for arm in arms {
-                check_soft_escape_in_block(arm, candidates, hard_escaped);
+                check_soft_escape_in_block(arm, candidates, hard_escaped, sl, cm);
             }
-            check_soft_escape_in_block(default, candidates, hard_escaped);
+            check_soft_escape_in_block(default, candidates, hard_escaped, sl, cm);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
@@ -985,6 +1069,38 @@ fn check_soft_escape_in_expr(
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
+    }
+}
+
+/// Check if an expression is `&candidate` (immutable ref to a candidate local).
+fn is_immut_ref_to_candidate(expr: &TirExpr, candidates: &IndexSet<u32>) -> bool {
+    if let TirExprKind::Unary { op, expr: inner } = &expr.kind
+        && matches!(op, TirUnaryOp::Ref)
+        && let TirExprKind::Local { index, .. } = &inner.kind
+        && candidates.contains(index)
+    {
+        return true;
+    }
+    false
+}
+
+/// Check if a callee stores the parameter at the given index.
+/// Returns true (conservative) if the callee is unknown or declares `stores` for the param.
+fn callee_stores_param_at(
+    func_ref: &FunctionRef,
+    param_index: usize,
+    current_module: &ModuleSource,
+    stores_lookup: &StoresLookup,
+) -> bool {
+    let target_module = if func_ref.module_source.is_entry_point() {
+        current_module.clone()
+    } else {
+        func_ref.module_source.clone()
+    };
+    let key = (target_module, func_ref.name.clone());
+    match stores_lookup.get(&key) {
+        Some(stored_indices) => stored_indices.contains(&param_index as &usize),
+        None => false, // No stores declaration → param is not stored
     }
 }
 

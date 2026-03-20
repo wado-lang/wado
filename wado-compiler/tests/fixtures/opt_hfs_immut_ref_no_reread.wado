@@ -1,0 +1,45 @@
+// Optimization: HFS should skip re-read for immutable ref (&local) args.
+//
+// When &local is passed to a function, the callee cannot modify the struct
+// through an immutable reference. Write-back is needed (so callee reads
+// current scalar values), but re-read is not (scalars unchanged by call).
+//
+// This test verifies correctness: read_x(&c) sees the updated c.x value
+// after HFS scalarization. The &mut c usage outside the loop blocks SROA,
+// so HFS handles the hot field instead.
+
+struct Counter {
+    x: i32,
+    y: i32,
+}
+
+#[inline(never)]
+fn read_x(c: &Counter) -> i32 {
+    return c.x;
+}
+
+#[inline(never)]
+fn reset(c: &mut Counter) {
+    c.x = 0;
+    c.y = 0;
+}
+
+export fn run() {
+    let mut c = Counter { x: 0, y: 0 };
+    reset(&mut c);
+    let mut total = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        c.x += 1;
+        total += c.x;
+        total += c.x;
+        total += read_x(&c);
+    }
+    assert total == 45;
+    assert c.x == 5;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["c.x = _hfs_x"]
+}

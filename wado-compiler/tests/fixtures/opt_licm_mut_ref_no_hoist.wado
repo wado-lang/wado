@@ -1,0 +1,38 @@
+// Negative test: LICM must NOT hoist field accesses on mutable ref locals.
+//
+// When a local of type `&mut T` is passed to a function call inside a loop,
+// the callee CAN modify the underlying struct. Field accesses must remain
+// inside the loop.
+
+use { println } from "core:cli";
+
+struct Config {
+    threshold: i32,
+    scale: i32,
+}
+
+#[inline("never")]
+fn increment_scale(c: &mut Config) {
+    c.scale = c.scale + 1;
+}
+
+// Case: Mutable ref local passed to function — field access must NOT be hoisted.
+export fn run() with Stdout {
+    let mut config = Config { threshold: 100, scale: 2 };
+    let config_mut = &mut config;
+    let mut sum = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        increment_scale(config_mut);
+        // config_mut.threshold is technically invariant (only scale is modified),
+        // but the conservative analysis correctly marks &mut T locals as fully
+        // modified, so threshold stays inside the loop.
+        sum += config_mut.threshold * i;
+    }
+    println(`{sum}`);
+}
+
+__DATA__
+{
+    "stdout": "1000\n",
+    "wir_not_expect:O2": ["_licm_threshold"]
+}

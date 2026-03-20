@@ -1,0 +1,44 @@
+// Optimization: LICM should hoist field accesses on immutable ref locals.
+//
+// When a local of type `&T` (immutable reference) is passed to a function call
+// inside a loop, the callee cannot modify the underlying struct through an
+// immutable reference. Therefore, field accesses on the immutable ref local
+// are loop-invariant and can be hoisted.
+//
+// Currently, `mark_gc_local_as_fully_modified` marks ALL GC heap-type locals
+// (including `Ref(T)`) as fully modified on any call, preventing LICM.
+// With the improvement, `Ref(T)` locals are recognized as immutable and skipped.
+
+use { println } from "core:cli";
+
+struct Config {
+    threshold: i32,
+    scale: i32,
+}
+
+#[inline("never")]
+fn process(c: &Config) -> i32 {
+    return c.threshold + c.scale;
+}
+
+// Case 1: Immutable ref local passed to function — field access should be hoisted.
+export fn run() with Stdout {
+    let config = Config { threshold: 100, scale: 2 };
+    let config_ref = &config;
+    let mut sum = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let _ = process(config_ref);
+        // config_ref.threshold is loop-invariant because:
+        // 1. config_ref is &Config (immutable reference)
+        // 2. process() cannot modify through &Config
+        // 3. No other code in the loop modifies config
+        sum += config_ref.threshold * i;
+    }
+    println(`{sum}`);
+}
+
+__DATA__
+{
+    "stdout": "1000\n",
+    "wir_expect:O2": ["_licm_threshold"]
+}

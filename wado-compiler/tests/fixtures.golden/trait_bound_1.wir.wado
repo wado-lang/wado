@@ -192,20 +192,12 @@ fn trait_bound_array_of_ref() with Stdout {
 }
 
 fn trait_bound_bounded_impl_for_trait() with Stdout {
-    let a: ref Pair<i32>;
     let b: ref Pair<i32>;
-    a = Pair<i32> { first: 1, second: 2 };
     b = Pair<i32> { first: 1, second: 3 };
-    if Pair<i32>^Ord::cmp(a, b) == 0 {
+    if Pair<i32>^Ord::cmp(Pair<i32> { first: 1, second: 2 }, b) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("a < b"), used: 5 });
     };
-    if if a.first == a.first -> i32 {
-        a.second == a.second;
-    } else {
-        0;
-    } {
-        "core:cli/println"(String { repr: array.new_data<u8>("a == a"), used: 6 });
-    };
+    "core:cli/println"(String { repr: array.new_data<u8>("a == a"), used: 6 });
 }
 
 fn trait_bound_check() with Stdout {
@@ -266,13 +258,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l7: loop {
+            l5: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l7;
+                continue l5;
             };
         };
     };
@@ -389,13 +381,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l14: loop {
+            l12: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l14;
+                continue l12;
             };
         };
     };
@@ -412,14 +404,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l18: loop {
+                l16: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l18;
+                    continue l16;
                 };
             };
         };
@@ -570,13 +562,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l34: loop {
+            l32: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref "core:internal/Box<i32>">(new_repr, i, builtin::array_get<ref "core:internal/Box<i32>">(old_repr, i));
                 i = i + 1;
-                continue l34;
+                continue l32;
             };
         };
     };
@@ -590,13 +582,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l37: loop {
+            l35: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l37;
+                continue l35;
             };
         };
     };
