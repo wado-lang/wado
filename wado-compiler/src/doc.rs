@@ -811,7 +811,7 @@ fn collect_pub_use_names(module: &Module) -> IndexSet<String> {
                     UseItem::EffectFunctions { effect_name, .. } => {
                         names.insert(effect_name.clone());
                     }
-                    UseItem::Wildcard => {}
+                    UseItem::Wildcard | UseItem::Namespace { .. } => {}
                 }
             }
         }

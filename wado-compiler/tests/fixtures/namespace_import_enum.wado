@@ -1,0 +1,15 @@
+use { println } from "core:cli";
+use shapes from "./sub/ns_enum_helper.wado";
+
+export fn run() with Stdout {
+    let c = shapes::Color::Red;
+    let name = shapes::color_name(c);
+    println(name);
+    let s = shapes::Shape::Circle(3.14);
+    if let Circle(r) = s {
+        println(`circle r={r}`);
+    }
+}
+
+__DATA__
+{"stdout": "red\ncircle r=3.14\n"}
