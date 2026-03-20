@@ -8,6 +8,7 @@
 //! - Multi-value struct elision (`MultiValueStructNew` + `StructGet` → `MultiValueLocalBind`)
 
 use crate::wir::{WirInstr, WirTypeDef};
+use indexmap::IndexMap;
 
 /// Recursively optimize a list of instructions.
 ///
@@ -20,6 +21,9 @@ pub(super) fn run_peephole(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
     fold_constant_comparisons(instrs);
     elide_redundant_value_copies(instrs);
     elide_copy_used_only_for_field_reads(instrs);
+    // Cross-scope copy elision: traces LocalGet through parent scope definitions.
+    // Runs after the recursive peephole so nested blocks are already optimized.
+    elide_value_copies_cross_scope(instrs, &IndexMap::default());
     elide_multi_value_structs(instrs, types);
 }
 
@@ -210,6 +214,238 @@ fn elide_redundant_value_copies(instrs: &mut [WirInstr]) {
                 *value = expr;
             }
         }
+    }
+}
+
+/// Cross-scope value_copy elision.
+///
+/// Traces `LocalGet` references through definitions in parent scopes to
+/// detect fresh values. This handles the `Option::unwrap()` pattern where
+/// a StructNew is in a parent block and the value_copy is in a nested `if`:
+///
+/// ```text
+/// __local_88 = Data { x: 1, y: 2, ... };        // parent scope
+/// if ref.is_null(__local_88) == 0 {
+///     x = value_copy Data(ref.as_non_null(__local_88));  // nested scope — can elide!
+/// };
+/// ```
+fn elide_value_copies_cross_scope(
+    instrs: &mut [WirInstr],
+    parent_defs: &IndexMap<String, FreshDef>,
+) {
+    let mut defs = parent_defs.clone();
+
+    for i in 0..instrs.len() {
+        // Track local definitions: record only single-definition fresh values.
+        // Use is_fresh_via_defs to trace through LocalGet chains (e.g.,
+        // `__local_70 = opt2` where `opt2` is already known to be fresh).
+        if let WirInstr::LocalSet { name, value } = &instrs[i] {
+            if is_fresh_via_defs(value, &defs) {
+                defs.insert(name.clone(), FreshDef::Fresh);
+            } else {
+                defs.insert(name.clone(), FreshDef::NotFresh);
+            }
+        }
+
+        // Recurse into all nested instruction bodies (including inside LocalSet values).
+        // Pass remaining instructions so the safety check can verify the destination
+        // local is never mutated after this point.
+        let remaining_start = i + 1;
+        let (left, right) = instrs.split_at_mut(remaining_start);
+        elide_value_copies_in_instr(&mut left[i], right, &defs);
+    }
+}
+
+/// Recursively walk a single instruction, eliding value_copies and descending
+/// into nested blocks/ifs/seqs.
+fn elide_value_copies_in_instr(
+    instr: &mut WirInstr,
+    remaining: &[WirInstr],
+    defs: &IndexMap<String, FreshDef>,
+) {
+    match instr {
+        WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value } => {
+            // Check if the value is a value_copy that can be elided.
+            if let WirInstr::ValueCopy { expr, .. } = value.as_ref() {
+                if is_fresh_via_defs(expr, defs) {
+                    // Safety check: only elide if the destination local is never
+                    // mutated (no StructSet, no mutable call args, etc.).
+                    // Otherwise skipping the copy creates an alias that could be
+                    // corrupted by mutation.
+                    if remaining
+                        .iter()
+                        .all(|i| uses_of_var_are_reads_only(i, name))
+                    {
+                        let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
+                        if let WirInstr::ValueCopy { expr, .. } = old {
+                            *value = expr;
+                        }
+                        return;
+                    }
+                }
+            }
+            // Recurse into the value expression for nested blocks.
+            elide_value_copies_in_instr_inner(value.as_mut(), defs);
+        }
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+            elide_value_copies_cross_scope(body, defs);
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            ..
+        } => {
+            elide_value_copies_cross_scope(then_body, defs);
+            if let Some(eb) = else_body {
+                elide_value_copies_cross_scope(eb, defs);
+            }
+        }
+        WirInstr::Seq(body) => {
+            elide_value_copies_cross_scope(body, defs);
+        }
+        _ => {}
+    }
+}
+
+/// Like `elide_value_copies_in_instr` but without the remaining-slice context
+/// (for recursing into value expressions where we can't check use safety).
+fn elide_value_copies_in_instr_inner(
+    instr: &mut WirInstr,
+    defs: &IndexMap<String, FreshDef>,
+) {
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+            elide_value_copies_cross_scope(body, defs);
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            ..
+        } => {
+            elide_value_copies_cross_scope(then_body, defs);
+            if let Some(eb) = else_body {
+                elide_value_copies_cross_scope(eb, defs);
+            }
+        }
+        WirInstr::Seq(body) => {
+            elide_value_copies_cross_scope(body, defs);
+        }
+        _ => {}
+    }
+}
+
+#[derive(Clone, PartialEq)]
+enum FreshDef {
+    Fresh,
+    NotFresh,
+}
+
+/// Returns `true` if every use of `var_name` in `instr` is read-only:
+/// field reads (StructGet), null/discriminant checks, break values, or
+/// local copies. Mutation through the variable (StructSet, function calls
+/// with the variable as argument, etc.) returns false.
+fn uses_of_var_are_reads_only(instr: &WirInstr, var_name: &str) -> bool {
+    match instr {
+        // Field read: safe
+        WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. } => {
+            match value.as_ref() {
+                WirInstr::StructGet { expr, .. } if expr_roots_at_var(expr, var_name) => true,
+                WirInstr::ValueCopy { expr, .. } => {
+                    if let WirInstr::StructGet { expr: inner, .. } = expr.as_ref() {
+                        if expr_roots_at_var(inner, var_name) {
+                            return true;
+                        }
+                    }
+                    !instr_contains_local_get(value, var_name)
+                }
+                // LocalGet(var) stored into another local: creates alias but OK if read-only
+                WirInstr::LocalGet { name } if name == var_name => true,
+                // RefAsNonNull(LocalGet(var)) — extraction, safe
+                WirInstr::RefAsNonNull(inner)
+                    if matches!(inner.as_ref(), WirInstr::LocalGet { name } if name == var_name) =>
+                {
+                    true
+                }
+                _ => !instr_contains_local_get(value, var_name),
+            }
+        }
+        // Drop: safe
+        WirInstr::Drop(inner) => !instr_contains_local_get(inner, var_name),
+        // Recurse into blocks
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            body.iter().all(|i| uses_of_var_are_reads_only(i, var_name))
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            // Condition can reference var (e.g., ref.is_null check)
+            then_body
+                .iter()
+                .all(|i| uses_of_var_are_reads_only(i, var_name))
+                && else_body
+                    .as_ref()
+                    .map_or(true, |eb| {
+                        eb.iter().all(|i| uses_of_var_are_reads_only(i, var_name))
+                    })
+                && !instr_contains_local_get(condition, var_name)
+                    || condition_is_safe_use(condition, var_name)
+        }
+        // LocalGet: reading the variable is always safe.
+        WirInstr::LocalGet { name } if name == var_name => true,
+        // Br carrying a value: check if the value mentions var
+        WirInstr::Br { .. } => !instr_contains_local_get(instr, var_name),
+        // StructSet on the variable — mutation!
+        WirInstr::StructSet { expr, .. } => {
+            !matches!(expr.as_ref(), WirInstr::LocalGet { name } if name == var_name)
+                && !instr_contains_local_get(instr, var_name)
+        }
+        // Any other instruction: var must not appear
+        _ => !instr_contains_local_get(instr, var_name),
+    }
+}
+
+/// Check if a condition expression is a safe use of var (null check, discriminant test).
+fn condition_is_safe_use(cond: &WirInstr, var_name: &str) -> bool {
+    match cond {
+        // ref.is_null(local_get var) == 0 → null check
+        WirInstr::I32Eq(lhs, rhs)
+        | WirInstr::I32Ne(lhs, rhs) => {
+            let check_inner = |inner: &WirInstr| -> bool {
+                matches!(inner,
+                    WirInstr::RefIsNull(inner_inner)
+                    if matches!(inner_inner.as_ref(), WirInstr::LocalGet { name } if name == var_name)
+                ) || matches!(inner,
+                    WirInstr::RefTest { expr, .. }
+                    if matches!(expr.as_ref(), WirInstr::LocalGet { name } if name == var_name)
+                )
+            };
+            check_inner(lhs) || check_inner(rhs)
+                || (!instr_contains_local_get(lhs, var_name)
+                    && !instr_contains_local_get(rhs, var_name))
+        }
+        WirInstr::RefIsNull(inner) => {
+            matches!(inner.as_ref(), WirInstr::LocalGet { name } if name == var_name)
+                || !instr_contains_local_get(inner, var_name)
+        }
+        WirInstr::RefTest { expr, .. } => {
+            matches!(expr.as_ref(), WirInstr::LocalGet { name } if name == var_name)
+                || !instr_contains_local_get(expr, var_name)
+        }
+        _ => !instr_contains_local_get(cond, var_name),
+    }
+}
+
+/// Check if a WIR expression is fresh by tracing `LocalGet` through definitions.
+fn is_fresh_via_defs(instr: &WirInstr, defs: &IndexMap<String, FreshDef>) -> bool {
+    match instr {
+        WirInstr::LocalGet { name } => defs.get(name.as_str()) == Some(&FreshDef::Fresh),
+        WirInstr::RefAsNonNull(inner) => is_fresh_via_defs(inner, defs),
+        WirInstr::StructGet { expr, .. } => is_fresh_via_defs(expr, defs),
+        WirInstr::RefCast { expr, .. } => is_fresh_via_defs(expr, defs),
+        _ => is_fresh_wir_value(instr),
     }
 }
 

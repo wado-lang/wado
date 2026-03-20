@@ -406,7 +406,7 @@ fn __test_0_serialize_with_rename_all_snake_case() {
     c = Config { max_retries: 3, timeout_ms: 5000_i64, is_verbose: 1 };
     r = "core/json/to_string<Config>"(c);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"max_retries\":3,\"timeout_ms\":5000,\"is_verbose\":true}"), used: 53 });
         if __cond == 0 {

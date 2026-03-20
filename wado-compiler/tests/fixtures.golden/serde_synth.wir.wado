@@ -1122,7 +1122,7 @@ fn __test_4_synthesized_serialize_point() {
     p = Point { x: 1.5, y: 2.5 };
     r = "core/json/to_string<Point>"(p);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"x\":1.5,\"y\":2.5}"), used: 17 });
         if __cond == 0 {
@@ -1185,7 +1185,7 @@ fn __test_5_synthesized_serialize_user_with_snake_case____camelcase() {
     u = User { user_name: String { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1 };
     r = "core/json/to_string<User>"(u);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"userName\":\"Alice\",\"age\":30,\"active\":true}"), used: 43 });
         if __cond == 0 {
@@ -3424,7 +3424,7 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
                             };
                             __local_19 = __local_10;
                             if ref.test Result<String,DeserializeError>::Ok(__local_19) {
-                                __local_11 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_19).payload_0);
+                                __local_11 = ref.cast Result<String,DeserializeError>::Ok(__local_19).payload_0;
                                 host = __local_11;
                                 seen = seen | 1;
                             } else {
@@ -3541,7 +3541,7 @@ fn User^Deserialize::deserialize<JsonDeserializer>(d) {
                             };
                             __local_19 = __local_10;
                             if ref.test Result<String,DeserializeError>::Ok(__local_19) {
-                                __local_11 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__local_19).payload_0);
+                                __local_11 = ref.cast Result<String,DeserializeError>::Ok(__local_19).payload_0;
                                 user_name = __local_11;
                                 seen = seen | 1;
                             } else {

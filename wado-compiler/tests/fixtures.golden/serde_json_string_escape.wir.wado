@@ -236,7 +236,7 @@ fn __test_0_serialize_string_with_quotes() {
     s = String { repr: array.new_data<u8>("say \"hello\""), used: 11 };
     r = "core/json/to_string<String>"(s);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        json = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = json;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("\"say \\\"hello\\\"\""), used: 15 });
         if __cond == 0 {
@@ -295,7 +295,7 @@ fn __test_1_serialize_string_with_backslash() {
     s = String { repr: array.new_data<u8>("path\\to\\file"), used: 12 };
     r = "core/json/to_string<String>"(s);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        json = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = json;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("\"path\\\\to\\\\file\""), used: 16 });
         if __cond == 0 {
@@ -355,7 +355,7 @@ fn __test_2_serialize_string_with_newline() {
 line2"), used: 11 };
     r = "core/json/to_string<String>"(s);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        json = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = json;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("\"line1\\nline2\""), used: 14 });
         if __cond == 0 {
@@ -414,7 +414,7 @@ fn __test_3_serialize_string_with_tab() {
     s = String { repr: array.new_data<u8>("col1	col2"), used: 9 };
     r = "core/json/to_string<String>"(s);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        json = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = json;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("\"col1\\tcol2\""), used: 12 });
         if __cond == 0 {
@@ -471,7 +471,7 @@ fn __test_4_deserialize_string_with_unicode_escape() {
     let __local_14: ref String;
     r = "core/json/from_string<String>"(String { repr: array.new_data<u8>("\"\\u0041\""), used: 8 });
     if ref.test Result<String,DeserializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,DeserializeError>::Ok(r).payload_0);
+        s = ref.cast Result<String,DeserializeError>::Ok(r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("A"), used: 1 });
         if __cond == 0 {
@@ -535,7 +535,7 @@ newline"), used: 17 };
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         parsed_r = "core/json/from_string<String>"(json);
         if ref.test Result<String,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy String(ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0);
+            parsed = ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0;
             __v0 = parsed;
             __v1 = orig;
             __cond = String^Eq::eq(__v0, __v1);
@@ -620,7 +620,7 @@ fn __test_6_roundtrip_multibyte_utf8_string() {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         parsed_r = "core/json/from_string<String>"(json);
         if ref.test Result<String,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy String(ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0);
+            parsed = ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0;
             __v0 = parsed;
             __v1 = orig;
             __cond = String^Eq::eq(__v0, __v1);
@@ -748,7 +748,7 @@ condition: json == `\"\"`
         };
         parsed_r = "core/json/from_string<String>"(json);
         if ref.test Result<String,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy String(ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0);
+            parsed = ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0;
             __v0_7 = parsed;
             __cond_8 = String^Eq::eq(__v0_7, String { repr: builtin::array_new<u8>(0), used: 0 });
             if __cond_8 == 0 {

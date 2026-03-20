@@ -283,7 +283,7 @@ fn __test_0_enum_serialize_red() {
     c = 0;
     r = "core/json/to_string<Color>"(c);
     if ref.test Result<String,SerializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
+        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("\"Red\""), used: 5 });
         if __cond == 0 {
@@ -1090,7 +1090,7 @@ fn Color^Deserialize::deserialize<JsonDeserializer>(d) {
     __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Color"), used: 5 }, 3);
     __pattern_temp_0 = __va_r;
     if ref.test Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0) {
-        va = value_copy "core:json/JsonVariantAccess"(ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0);
+        va = ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0;
         __disc_r = Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("JSON does not encode discriminants"), used: 34 }, offset: -1_i64 } };
         if ref.test Result<i32,DeserializeError>::Ok(__disc_r) {
             __disc = ref.cast Result<i32,DeserializeError>::Ok(__disc_r).payload_0;

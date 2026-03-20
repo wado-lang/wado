@@ -1,0 +1,55 @@
+// Test that unwrap() on Option/Result does not produce value_copy
+// when the variant was freshly constructed.
+//
+// The core issue: unwrap is inlined into a pattern like:
+//   let temp = Some(data);       // fresh VariantConstruct
+//   let v = variant_payload(temp); // should be fresh (payload of fresh variant)
+// Without fresh_locals tracking in the WIR builder, variant_payload(temp) is not
+// recognized as fresh, producing a redundant value_copy.
+
+use { println } from "core:cli";
+
+struct Data {
+    x: i32,
+    y: i32,
+    name: String,
+}
+
+fn get_data() -> Option<Data> {
+    return Option::<Data>::Some(Data { x: 1, y: 2, name: "hello" });
+}
+
+fn get_result() -> Result<Data, String> {
+    return Result::<Data, String>::Ok(Data { x: 10, y: 20, name: "world" });
+}
+
+// Case 1: chained unwrap (fresh from function call)
+export fn run() with Stdout {
+    let d1 = get_data().unwrap();
+    assert d1.x == 1;
+
+    // Case 2: local variable unwrap (fresh from assignment)
+    let opt = get_data();
+    let d2 = opt.unwrap();
+    assert d2.x == 1;
+
+    // Case 3: Result unwrap
+    let d3 = get_result().unwrap();
+    assert d3.x == 10;
+
+    // Case 4: used after unwrap — first unwrap is fresh (no copy),
+    // second access must copy (source consumed)
+    let opt2 = get_data();
+    let d4 = opt2.unwrap();
+    assert d4.x == 1;
+    // opt2 is still usable for non-payload access
+    assert opt2 matches { Some(_) };
+
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": ["value_copy Data("]
+}
