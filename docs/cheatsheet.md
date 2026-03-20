@@ -823,6 +823,13 @@ use { foo as bar } from "./mod.wado";     // rename
 pub use { foo, bar } from "./internal.wado";   // re-export
 ```
 
+Namespace imports make all pub symbols from the source module directly available:
+
+```wado
+use geo from "./geo.wado";
+let p = geo::Point::new(1, 2);  // access via ns:: prefix
+```
+
 ## Effects
 
 See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).

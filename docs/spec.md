@@ -3052,6 +3052,20 @@ use utils from "./utils.wado";
 utils::helper_function();
 ```
 
+A namespace import makes all pub symbols from the source module available. At the source level, symbols are accessed with the `ns::` prefix. Internally, the compiler desugars the prefix away during the desugar phase and registers all pub symbols from the source module as named imports:
+
+```wado
+use geo from "./geo.wado";
+
+// Functions
+geo::distance(p1, p2);           // → distance(p1, p2)
+
+// Types (structs, enums, variants)
+let p: geo::Point = geo::Point::origin();   // → Point, Point::origin()
+let c = geo::Color::Red;                    // → Color::Red
+let s = geo::Shape::Circle(3.14);           // → Shape::Circle(3.14)
+```
+
 **Note:** Wado does not support `use * as name` or default imports.
 
 ### Import Rules

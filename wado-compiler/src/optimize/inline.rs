@@ -1,6 +1,6 @@
 //! Function inlining optimization for Wado TIR
 //!
-//! This module provides function inlining for small, pure functions.
+//! This module provides function inlining for small functions.
 //! It uses labeled block expressions for cleaner value handling.
 
 use crate::hashmap::IndexMap;
@@ -170,11 +170,6 @@ fn is_inline_eligible(
     // Don't inline functions that return Never (!)
     // These are error/abort paths that are never hot, so no performance benefit to inlining
     if matches!(type_table.get(func.return_type), ResolvedType::Never) {
-        return false;
-    }
-
-    // No effects (pure functions only)
-    if !func.effects.is_empty() {
         return false;
     }
 
@@ -2323,6 +2318,11 @@ fn remap_function_ref(func: &FunctionRef, source_module: &ModuleSource) -> Funct
     // Never remap builtin functions - they must keep their special path
     // Check both non-monomorphized and monomorphized builtins
     if func.builtin_name().is_some() || func.monomorphized_builtin_name().is_some() {
+        return func.clone();
+    }
+
+    // Never remap CM adapter functions - they always live in the entry-point module
+    if func.is_cm_adapter {
         return func.clone();
     }
 

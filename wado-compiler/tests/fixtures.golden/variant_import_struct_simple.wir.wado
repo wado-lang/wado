@@ -100,7 +100,11 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let opts: ref "./variant_import_struct_module.wado/Options";
+    let s1: ref String;
+    opts = "./variant_import_struct_module.wado/Options" { align: "./variant_import_struct_module.wado/Align" { 1 }, width: 0 };
+    s1 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, opts);
+    "core:cli/println"(s1);
     "wasi/task-return"(0);
 }
 

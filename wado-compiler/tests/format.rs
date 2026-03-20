@@ -377,6 +377,30 @@ fn test_format_wildcard_import_not_braces() {
 }
 
 #[test]
+fn test_format_namespace_import() {
+    let source = r#"use utils from "./utils.wado";
+
+fn run() {
+    let x = 1;
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains(r#"use utils from "./utils.wado";"#),
+        "namespace import should be preserved: {}",
+        formatted
+    );
+    assert!(
+        !formatted.contains("use {"),
+        "namespace import should NOT use braces: {}",
+        formatted
+    );
+    // Verify idempotency
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
 fn test_format_preserves_compound_assign() {
     let source = r#"
 fn run() {

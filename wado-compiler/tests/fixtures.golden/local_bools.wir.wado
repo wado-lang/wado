@@ -25,10 +25,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/local_bools" = fn();
-
-type "functype/local_bools_mut" = fn();
-
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -70,19 +66,11 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-fn local_bools() with Stdout {
+fn run() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("t is true"), used: 9 });
     "core:cli/println"(String { repr: array.new_data<u8>("f is false"), used: 10 });
-}
-
-fn local_bools_mut() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("flag is false"), used: 13 });
     "core:cli/println"(String { repr: array.new_data<u8>("flag is true"), used: 12 });
-}
-
-fn run() with Stdout {
-    local_bools();
-    local_bools_mut();
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -92,7 +80,10 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    "core:cli/println"(String { repr: array.new_data<u8>("t is true"), used: 9 });
+    "core:cli/println"(String { repr: array.new_data<u8>("f is false"), used: 10 });
+    "core:cli/println"(String { repr: array.new_data<u8>("flag is false"), used: 13 });
+    "core:cli/println"(String { repr: array.new_data<u8>("flag is true"), used: 12 });
     "wasi/task-return"(0);
 }
 

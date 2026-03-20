@@ -52,8 +52,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/ref_deref_assign_string" = fn();
-
 type "functype/ref_deref_assign_struct" = fn();
 
 type "functype/ref_deref_assign_variant" = fn();
@@ -149,17 +147,6 @@ fn maybe_read(r) {
         };
     };
     return String { repr: array.new_data<u8>("none"), used: 4 };
-}
-
-fn ref_deref_assign_string() with Stdout {
-    let greeting: ref String;
-    let __deref_val_2: ref String;
-    greeting = String { repr: array.new_data<u8>("hello"), used: 5 };
-    "core:cli/println"(greeting);
-    __deref_val_2 = String { repr: array.new_data<u8>("goodbye"), used: 7 };
-    greeting.repr = ref.as_non_null(__deref_val_2.repr);
-    greeting.used = 7;
-    "core:cli/println"(greeting);
 }
 
 fn ref_deref_assign_struct() with Stdout {
@@ -285,7 +272,14 @@ fn ref_deref_reassign() with Stdout {
 }
 
 fn run() with Stdout {
-    ref_deref_assign_string();
+    let greeting: ref String;
+    let __deref_val_2: ref String;
+    greeting = String { repr: array.new_data<u8>("hello"), used: 5 };
+    "core:cli/println"(greeting);
+    __deref_val_2 = String { repr: array.new_data<u8>("goodbye"), used: 7 };
+    greeting.repr = ref.as_non_null(__deref_val_2.repr);
+    greeting.used = 7;
+    "core:cli/println"(greeting);
     ref_deref_assign_struct();
     ref_deref_assign_variant();
     ref_deref_reassign();
@@ -298,7 +292,17 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 }
 
 fn __cm_export__run() {
-    run();
+    let greeting: ref String;
+    let __deref_val_2: ref String;
+    greeting = String { repr: array.new_data<u8>("hello"), used: 5 };
+    "core:cli/println"(greeting);
+    __deref_val_2 = String { repr: array.new_data<u8>("goodbye"), used: 7 };
+    greeting.repr = ref.as_non_null(__deref_val_2.repr);
+    greeting.used = 7;
+    "core:cli/println"(greeting);
+    ref_deref_assign_struct();
+    ref_deref_assign_variant();
+    ref_deref_reassign();
     "wasi/task-return"(0);
 }
 
