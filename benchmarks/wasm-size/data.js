@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774013471109,
+  "lastUpdate": 1774014461610,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5015,6 +5015,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5611772b0b778f66313c17f4b92c4a6f6ce75739"
         },
         "date": 1774013470881,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22261,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "313d252300098f0b76efff24bc0058c18afa80d7",
+          "message": "Merge pull request #627 from wado-lang/claude/optimize-golden-fixtures-gwp1b\n\nExtract bulk fixture generation into separate wado-dev-tools binary",
+          "timestamp": "2026-03-20T22:44:29+09:00",
+          "tree_id": "2c70d95c3c7efcf839be1493dc1eb4d0b36f2389",
+          "url": "https://github.com/wado-lang/wado/commit/313d252300098f0b76efff24bc0058c18afa80d7"
+        },
+        "date": 1774014461404,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
