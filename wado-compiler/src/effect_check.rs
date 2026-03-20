@@ -337,20 +337,18 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_expr(arg)?;
                 }
                 // Check effects from the callee's function type
-                if self.mode == CheckMode::EffectsOnly {
-                    if let Some(tt) = &self.type_table {
-                        let tt = tt.borrow();
-                        if let ResolvedType::Function { effects, .. } =
-                            tt.get(callee.type_id)
-                        {
-                            for effect in effects {
-                                if !self.current_effects.contains(effect) {
-                                    self.logger.error(EffectError {
-                                        callee: "(indirect call)".to_string(),
-                                        missing_effect: effect.name().to_string(),
-                                        span: expr.span,
-                                    })?;
-                                }
+                if self.mode == CheckMode::EffectsOnly
+                    && let Some(tt) = &self.type_table
+                {
+                    let tt = tt.borrow();
+                    if let ResolvedType::Function { effects, .. } = tt.get(callee.type_id) {
+                        for effect in effects {
+                            if !self.current_effects.contains(effect) {
+                                self.logger.error(EffectError {
+                                    callee: "(indirect call)".to_string(),
+                                    missing_effect: effect.name().to_string(),
+                                    span: expr.span,
+                                })?;
                             }
                         }
                     }
