@@ -84,12 +84,12 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 touch wado-compiler/tests/e2e.rs
-cargo test
+cargo test --profile dev-optimized
 """
 
 [tasks.test-wado]
 description = "Run Wado module tests"
-run = "cargo run -p wado-cli -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado"
+run = "cargo run --profile dev-optimized -p wado-cli -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado"
 
 [tasks.test-cov]
 description = "Run tests with coverage"
@@ -124,7 +124,7 @@ run = "cargo clippy --all --all-features -- -D warnings"
 
 [tasks.clippy-fix]
 description = "Run clippy auto-fix"
-run = "cargo clippy --all --all-features --fix --allow-dirty --allow-staged"
+run = "cargo clippy --all --all-features --profile dev-optimized --fix --allow-dirty --allow-staged"
 
 [tasks.update-golden-fixtures]
 description = "Regenerate WIR golden fixtures"
@@ -148,18 +148,18 @@ description = "Generate stdlib cheatsheet docs (core + wasi)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo build --bin wado --quiet
+cargo build --bin wado --profile dev-optimized --quiet
 
 CORE_MODULES="core:prelude core:cli core:collections core:base64 core:zlib"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets"
 
-cargo run --bin wado --quiet -- doc -f simple --title "Core Standard Library" \
+cargo run --bin wado --profile dev-optimized --quiet -- doc -f simple --title "Core Standard Library" \
   $CORE_MODULES > docs/cheatsheet-stdlib-core.md
-cargo run --bin wado --quiet -- doc -f simple --title "WASI Standard Library" \
+cargo run --bin wado --profile dev-optimized --quiet -- doc -f simple --title "WASI Standard Library" \
   $WASI_MODULES > docs/cheatsheet-stdlib-wasi.md
-cargo run --bin wado --quiet -- doc -f markdown --title "Core Standard Library" \
+cargo run --bin wado --profile dev-optimized --quiet -- doc -f markdown --title "Core Standard Library" \
   $CORE_MODULES > docs/stdlib-core.md
-cargo run --bin wado --quiet -- doc -f markdown --title "WASI Standard Library" \
+cargo run --bin wado --profile dev-optimized --quiet -- doc -f markdown --title "WASI Standard Library" \
   $WASI_MODULES > docs/stdlib-wasi.md
 """
 
