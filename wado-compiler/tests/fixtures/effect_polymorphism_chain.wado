@@ -1,0 +1,29 @@
+// Test: chaining effect-polymorphic functions
+// wrapper calls apply, both are effect-polymorphic
+
+use { println, Stdout } from "core:cli";
+
+fn wrapper<effect E>(f: fn() with E) with E {
+    f();
+}
+
+fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
+    return f(x);
+}
+
+// Chained: wrapper calls a closure that calls apply
+fn chained<effect E>(f: fn(i32) -> i32 with E) -> i32 with E {
+    let result = apply(f, 10);
+    return result;
+}
+
+export fn run() with Stdout {
+    let result = chained(|x: i32| {
+        println(`got {x}`);
+        return x + 1;
+    });
+    println(`result: {result}`);
+}
+
+__DATA__
+{"stdout": "got 10\nresult: 11\n"}
