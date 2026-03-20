@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774039247294,
+  "lastUpdate": 1774047568015,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5132,6 +5132,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8433bfee089a04ec1762c710ac80f13f2aa6b9d5"
         },
         "date": 1774039247196,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22261,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8d373a8340d704fc43a394aeb7de3edbb9281eab",
+          "message": "Merge pull request #630 from wado-lang/claude/integrate-wasm-tools-BMFPW\n\nIntegrate bundled libm update into CI pipeline",
+          "timestamp": "2026-03-21T07:57:02+09:00",
+          "tree_id": "70f377eea46bab78d5a4520ddf21a3598a6d06a2",
+          "url": "https://github.com/wado-lang/wado/commit/8d373a8340d704fc43a394aeb7de3edbb9281eab"
+        },
+        "date": 1774047567794,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
