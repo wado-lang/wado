@@ -2350,11 +2350,8 @@ impl<'a> WirEmitter<'a> {
                         // Copy elements using a JIT-compiled loop instead of array.copy.
                         // Wasm array.copy is implemented as a slow libcall in wasmtime
                         // (~3μs/element), while a JIT-compiled loop runs at ~1ns/element.
-                        let loop_idx_name = format!(
-                            "__copy_arr_i_{}_{}",
-                            type_id.index(),
-                            field.index
-                        );
+                        let loop_idx_name =
+                            format!("__copy_arr_i_{}_{}", type_id.index(), field.index);
                         let loop_idx_local = self.resolve_local(&loop_idx_name);
                         // i = 0
                         f.instruction(&Instruction::I32Const(0));
