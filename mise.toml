@@ -8,9 +8,6 @@
 # dprint - fast code formatter
 dprint = "latest"
 
-# wasm-tools - Wasm printing (WAT), validation, and component tooling (used by update-bundled)
-"github:bytecodealliance/wasm-tools" = "latest"
-
 # WebAssembly runtime with WASI P3 support (matches Cargo.toml wasmtime = "42")
 wasmtime = "42"
 
@@ -248,7 +245,7 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release --manifest-path wado-bundled-libm/Cargo.toml
-wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > wado-compiler/lib/builtins/wado-bundled-libm.wat
+cargo run --profile dev-optimized --bin wado-dev-tools -- wasm-print target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > wado-compiler/lib/builtins/wado-bundled-libm.wat
 """
 
 [tasks.list-todo]

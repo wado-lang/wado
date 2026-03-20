@@ -5,13 +5,20 @@ mod template;
 
 use wado_compiler::OptLevel;
 
+enum Command {
+    GoldenDump,
+    WasmPrint,
+}
+
 fn main() {
     let mut parser = lexopt::Parser::from_env();
+    let mut command: Option<Command> = None;
     let mut in_template: Option<String> = None;
     let mut out_template: Option<String> = None;
     let mut phase = pipeline::Phase::Wir;
     let mut opt_level = OptLevel::O2;
     let mut skip_empty = false;
+    let mut positional_args: Vec<String> = Vec::new();
 
     while let Some(arg) = parser.next().expect("failed to parse args") {
         match arg {
@@ -45,19 +52,34 @@ fn main() {
             lexopt::Arg::Long("skip-empty") => {
                 skip_empty = true;
             }
-            lexopt::Arg::Value(cmd) => {
-                let cmd = cmd.to_string_lossy();
-                match cmd.as_ref() {
-                    "golden-dump" => {}
+            lexopt::Arg::Value(val) if command.is_none() => {
+                let cmd = val.to_string_lossy();
+                command = Some(match cmd.as_ref() {
+                    "golden-dump" => Command::GoldenDump,
+                    "wasm-print" => Command::WasmPrint,
                     _ => panic!("unknown command: {cmd}"),
-                }
+                });
+            }
+            lexopt::Arg::Value(val) => {
+                positional_args.push(val.to_string_lossy().into_owned());
             }
             _ => panic!("unexpected argument: {arg:?}"),
         }
     }
 
-    let in_template = in_template.expect("--in is required");
-    let out_template = out_template.expect("--out is required");
-
-    pipeline::run_pipeline(&in_template, &out_template, phase, opt_level, skip_empty);
+    match command.expect("command is required (golden-dump, wasm-print)") {
+        Command::GoldenDump => {
+            let in_template = in_template.expect("--in is required");
+            let out_template = out_template.expect("--out is required");
+            pipeline::run_pipeline(&in_template, &out_template, phase, opt_level, skip_empty);
+        }
+        Command::WasmPrint => {
+            let input = positional_args
+                .first()
+                .expect("usage: wado-dev-tools wasm-print <file.wasm>");
+            let wasm = std::fs::read(input).expect("failed to read input file");
+            let wat = wasmprinter::print_bytes(&wasm).expect("failed to print wasm");
+            print!("{wat}");
+        }
+    }
 }
