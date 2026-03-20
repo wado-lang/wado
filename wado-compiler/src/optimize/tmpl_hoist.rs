@@ -773,7 +773,7 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
 /// Detects three patterns:
 ///   1. Assign: `__local_N = Formatter { ... }`
 ///   2. Let:    `let mut __f = Formatter { ... }`
-///   3. LabeledBlock (inlined Formatter::new):
+///   3. `LabeledBlock` (inlined `Formatter::new)`:
 ///      `let __f = label: { let buf = &mut __tmpl_buf; break: Formatter { ..., buf } }`
 ///      or `__local_N = label: { ... break: Formatter { ... } }`
 fn extract_fmt_candidates(
@@ -807,9 +807,7 @@ fn extract_fmt_candidates(
         };
 
         // Try to extract Formatter fields from the value expression
-        let Some(extracted) =
-            extract_formatter_fields(value_expr, hoisted_buf_index)
-        else {
+        let Some(extracted) = extract_formatter_fields(value_expr, hoisted_buf_index) else {
             continue;
         };
 
@@ -899,10 +897,10 @@ fn extract_fmt_candidates(
 ///   - Direct `StructLiteral { ... }` where buf references hoisted buffer
 ///   - `LabeledBlock { let buf = ...; break: StructLiteral { ..., buf } }`
 ///     where the intermediate `buf` local traces back to the hoisted buffer
-fn extract_formatter_fields<'a>(
-    value: &'a TirExpr,
+fn extract_formatter_fields(
+    value: &TirExpr,
     hoisted_buf_index: u32,
-) -> Option<(&'a str, &'a [crate::tir::TirStructField], TypeId, TypeId, Span)> {
+) -> Option<(&str, &[crate::tir::TirStructField], TypeId, TypeId, Span)> {
     match &value.kind {
         TirExprKind::StructLiteral {
             struct_name,
@@ -920,9 +918,7 @@ fn extract_formatter_fields<'a>(
             // or: { __local = __tmpl_buf; break: Formatter { ..., buf: ref.as_non_null(__local) } }
             let break_stmt = block.stmts.last()?;
             let break_value = match &break_stmt.kind {
-                TirStmtKind::Break {
-                    value: Some(v), ..
-                } => v,
+                TirStmtKind::Break { value: Some(v), .. } => v,
                 _ => return None,
             };
             let TirExprKind::StructLiteral {
@@ -937,13 +933,7 @@ fn extract_formatter_fields<'a>(
             // Check if buf traces to hoisted buffer (directly or via intermediate local)
             let buf_field = fields.iter().find(|f| f.name == "buf")?;
             if buf_field_references_local(&buf_field.value, hoisted_buf_index) {
-                return Some((
-                    struct_name,
-                    fields,
-                    *struct_type,
-                    value.type_id,
-                    value.span,
-                ));
+                return Some((struct_name, fields, *struct_type, value.type_id, value.span));
             }
 
             // Trace through intermediate local in the block
@@ -966,20 +956,18 @@ fn extract_formatter_fields<'a>(
                         }
                     }
                     TirStmtKind::Expr(expr) => {
-                        if let TirExprKind::Assign { target, value: av } = &expr.kind {
-                            if let TirExprKind::Local { index, .. } = &target.kind {
-                                if *index == buf_inner_local
-                                    && references_local(av, hoisted_buf_index)
-                                {
-                                    return Some((
-                                        struct_name,
-                                        fields,
-                                        *struct_type,
-                                        value.type_id,
-                                        value.span,
-                                    ));
-                                }
-                            }
+                        if let TirExprKind::Assign { target, value: av } = &expr.kind
+                            && let TirExprKind::Local { index, .. } = &target.kind
+                            && *index == buf_inner_local
+                            && references_local(av, hoisted_buf_index)
+                        {
+                            return Some((
+                                struct_name,
+                                fields,
+                                *struct_type,
+                                value.type_id,
+                                value.span,
+                            ));
                         }
                     }
                     _ => {}
@@ -997,11 +985,7 @@ fn extract_local_from_ref(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
         TirExprKind::Unary {
-            op: TirUnaryOp::MutRef,
-            expr: inner,
-        }
-        | TirExprKind::Unary {
-            op: TirUnaryOp::Ref,
+            op: TirUnaryOp::MutRef | TirUnaryOp::Ref,
             expr: inner,
         } => match &inner.kind {
             TirExprKind::Local { index, .. } => Some(*index),
@@ -1177,7 +1161,7 @@ fn transform_tmpl_block(
 /// Each candidate gets its own hoisted local. Replaces the struct literal with an
 /// `indent` field reset, and renames all references to the hoisted local.
 ///
-/// Processes candidates in reverse order so that stmt_index values remain valid
+/// Processes candidates in reverse order so that `stmt_index` values remain valid
 /// as we replace statements.
 fn transform_fmts_in_tmpl_block(
     block: &mut TirBlock,
