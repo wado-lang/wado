@@ -4211,9 +4211,7 @@ mod tests {
         if let Item::Use(use_decl) = &module.items[0] {
             assert_eq!(use_decl.source, "./utils.wado");
             assert_eq!(use_decl.items.len(), 1);
-            assert!(
-                matches!(&use_decl.items[0], UseItem::Namespace { name } if name == "utils")
-            );
+            assert!(matches!(&use_decl.items[0], UseItem::Namespace { name } if name == "utils"));
         } else {
             panic!("expected use declaration");
         }

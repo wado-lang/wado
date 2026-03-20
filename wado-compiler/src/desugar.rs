@@ -13,8 +13,8 @@ use crate::ast::{
     IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
     MatchExpr, MethodCallExpr, Module, Newtype, Pattern, ReturnStmt, StaticMethodCallExpr, Stmt,
     StructDecl, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp,
-    UseItem, WhileStmt,
+    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseItem,
+    WhileStmt,
 };
 use crate::unparse::unparse_expr_simple;
 
@@ -82,10 +82,10 @@ pub fn desugar_module(module: &Module) -> Module {
 
 fn strip_namespace_prefix<'a>(name: &'a str, namespace_names: &[String]) -> &'a str {
     for ns in namespace_names {
-        if let Some(rest) = name.strip_prefix(ns.as_str()) {
-            if let Some(rest) = rest.strip_prefix("::") {
-                return rest;
-            }
+        if let Some(rest) = name.strip_prefix(ns.as_str())
+            && let Some(rest) = rest.strip_prefix("::")
+        {
+            return rest;
         }
     }
     name
@@ -1675,12 +1675,10 @@ fn strip_ns_from_expr(expr: Expr, ctx: &DesugarContext) -> Expr {
                 .parts
                 .into_iter()
                 .map(|part| match part {
-                    TemplatePart::Interpolation { expr, format } => {
-                        TemplatePart::Interpolation {
-                            expr: Box::new(strip_ns_from_expr(*expr, ctx)),
-                            format,
-                        }
-                    }
+                    TemplatePart::Interpolation { expr, format } => TemplatePart::Interpolation {
+                        expr: Box::new(strip_ns_from_expr(*expr, ctx)),
+                        format,
+                    },
                     other => other,
                 })
                 .collect();
