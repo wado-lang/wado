@@ -578,7 +578,17 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             && let Some(tt) = &self.type_table
         {
             let tt = tt.borrow();
-            for (param, arg) in callee_func.params.iter().zip(args.iter()) {
+            // For method calls, args doesn't include the receiver (self), but params does.
+            // Skip the self parameter when the function is a method.
+            let params_iter: Box<dyn Iterator<Item = _>> = if callee_func.is_method()
+                && !callee_func.params.is_empty()
+                && callee_func.params[0].name == "self"
+            {
+                Box::new(callee_func.params.iter().skip(1))
+            } else {
+                Box::new(callee_func.params.iter())
+            };
+            for (param, arg) in params_iter.zip(args.iter()) {
                 if let ResolvedType::Function {
                     effects: formal_effects,
                     ..
