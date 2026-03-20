@@ -153,7 +153,7 @@ cargo run --bin wado -- compile -o file.wasm file.wado    # generates Wasm
 cargo run --bin wado -- compile -o file.wat file.wado     # generates WAT
 cargo run --bin wado -- compile --wat-to-stdout file.wado # outputs WAT to stdout
 cargo run --bin wado -- run file.wado                     # run CLI program using wasmtime
-cargo run --bin wado -- run --profile MODE file.wado      # run with profiling
+cargo run --bin wado -- run --profile jitdump file.wado   # run with jitdump profiling (see below)
 cargo run --bin wado -- serve file.wado                   # serve HTTP service using wasmtime
 ```
 
@@ -183,6 +183,19 @@ Use `wado serve` to run a Wado HTTP service (wasi:http/service world):
 wado serve file.wado                        # serve on 0.0.0.0:8080 (default)
 wado serve --addr 127.0.0.1:3000 file.wado  # serve on custom address
 ```
+
+### Profiling with JitDump
+
+Use `--profile jitdump` with Linux `perf` for instruction-level profiling. This is necessary because Wado aggressively inlines functions, making function-level profiling insufficient.
+
+```sh
+perf record -k mono wado run --profile jitdump file.wado
+perf inject --jit -i perf.data -o perf.jit.data
+perf report -i perf.jit.data                        # function-level
+perf annotate -i perf.jit.data -s <function_name>   # instruction-level
+```
+
+See `docs/research/wasmtime-profiler-characteristics.md` for detailed comparison of profiling modes.
 
 ### Dump Command
 
