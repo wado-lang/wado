@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773993660619,
+  "lastUpdate": 1773997189253,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4874,6 +4874,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22350,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d13823df8bfa9853c56f34fbd929e6cb545d151b",
+          "message": "Merge pull request #624 from wado-lang/claude/optimize-unwrap-performance-d2w2J\n\nOptimize cross-scope value_copy elision for unwrap patterns",
+          "timestamp": "2026-03-20T17:57:16+09:00",
+          "tree_id": "113247dfac7cd5f42ae8c3b8d700faf21a33fd1f",
+          "url": "https://github.com/wado-lang/wado/commit/d13823df8bfa9853c56f34fbd929e6cb545d151b"
+        },
+        "date": 1773997189161,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22261,
             "unit": "bytes"
           }
         ]
