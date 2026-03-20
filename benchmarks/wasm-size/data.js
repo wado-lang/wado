@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773983220870,
+  "lastUpdate": 1773986442495,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4757,6 +4757,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22322,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "378b941344d7638fa82e8e9fdb667094f7c0f597",
+          "message": "Merge pull request #620 from wado-lang/claude/profile-zlib-decompression-0gmoA\n\nReplace array.copy with JIT-compiled loop for better performance",
+          "timestamp": "2026-03-20T14:58:10+09:00",
+          "tree_id": "5da58d178bf79411058d94a3b47aa683c404001e",
+          "url": "https://github.com/wado-lang/wado/commit/378b941344d7638fa82e8e9fdb667094f7c0f597"
+        },
+        "date": 1773986442297,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22350,
             "unit": "bytes"
           }
         ]
