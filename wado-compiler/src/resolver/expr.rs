@@ -436,7 +436,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ident.span,
                 );
             }
-
         }
 
         // Check for global variables in current module

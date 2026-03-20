@@ -244,8 +244,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     self.type_table
                         .borrow_mut()
                         .make_resource(name.to_string(), resource_info.module_source.clone())
-                }
-                else {
+                } else {
                     // Unknown type
                     TypeTable::UNKNOWN
                 }
