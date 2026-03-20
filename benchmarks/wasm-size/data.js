@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773964350907,
+  "lastUpdate": 1773967554868,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4586,6 +4586,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1b18f647ae59956e0d631a9ae62d88dbd679c67a"
         },
         "date": 1773964350671,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0ea9a6979e6df37b57913cad6cdf12fed37528f2",
+          "message": "Merge pull request #616 from wado-lang/claude/optimize-benchmark-fts-JzJKu\n\nImplement Formatter struct hoisting optimization in template loops",
+          "timestamp": "2026-03-20T09:43:29+09:00",
+          "tree_id": "4a7cc6632c6795fa55729c0358a0630ace194f3b",
+          "url": "https://github.com/wado-lang/wado/commit/0ea9a6979e6df37b57913cad6cdf12fed37528f2"
+        },
+        "date": 1773967554654,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
