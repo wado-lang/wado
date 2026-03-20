@@ -1,0 +1,23 @@
+[package]
+name = "wado-dev-tools"
+version = "0.1.0"
+edition = "2024"
+description = "Developer tools for the Wado compiler project"
+license.workspace = true
+
+[[bin]]
+name = "wado-dev-tools"
+path = "src/main.rs"
+
+[dependencies]
+wado-compiler = { path = "../wado-compiler" }
+glob = { workspace = true }
+lexopt = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[lints]
+workspace = true

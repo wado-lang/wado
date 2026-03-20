@@ -1,6 +1,5 @@
 use std::fmt::Write as FmtWrite;
 use std::fs;
-use std::io::Write;
 use std::path::Path;
 use std::process;
 
@@ -27,9 +26,6 @@ pub struct DumpOptions {
     pub opt_level: OptLevel,
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
-    /// Output template for bulk generation, e.g., "path/to/{name}.lowered.wado"
-    /// {name} is replaced with the input file's basename without extension
-    pub output_template: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -49,7 +45,6 @@ enum Opt {
     OptLevel,
     InlineThreshold,
     OptIterations,
-    Output,
     Help,
 }
 
@@ -70,7 +65,6 @@ impl Opt {
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
-        Self::Output,
         Self::Help,
     ];
 
@@ -156,12 +150,6 @@ impl Opt {
             },
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
-            Self::Output => args::OptSpec {
-                long: Some("output"),
-                short: Some('o'),
-                value: Some("<template>"),
-                desc: "Output template for bulk file generation\n{name} is replaced with input filename (without extension)\nExample: -o 'out/{name}.wir.wado'",
-            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -224,14 +212,6 @@ fn format_usage() -> String {
     writeln!(buf, "  -O3          Aggressive optimizations").unwrap();
     writeln!(buf, "  -Os          Size optimizations (O2 + strip names)").unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Output:").unwrap();
-    write!(
-        buf,
-        "{}",
-        args::format_opts_help(&[Opt::Output], |o| o.spec())
-    )
-    .unwrap();
-    writeln!(buf).unwrap();
     writeln!(buf, "Other:").unwrap();
     write!(
         buf,
@@ -270,7 +250,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut opt_level = OptLevel::O2;
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
-    let mut output_template: Option<String> = None;
     let mut any_phase = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
@@ -350,11 +329,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                         &mut parser,
                     )?);
                 }
-                Opt::Output => {
-                    let template = args::require_value(&mut parser)
-                        .map_err(|_| CliExit::error("-o requires an output template"))?;
-                    output_template = Some(template.to_string_lossy().into_owned());
-                }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -388,18 +362,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         opt_level,
         inline_threshold,
         opt_iterations,
-        output_template,
     })
 }
 
 pub async fn run(opts: DumpOptions) {
-    // Bulk file output mode
-    if let Some(ref template) = opts.output_template {
-        run_bulk(&opts, template).await;
-        return;
-    }
-
-    // Normal stdout mode
     let multiple_files = opts.inputs.len() > 1;
 
     for input in &opts.inputs {
@@ -409,289 +375,6 @@ pub async fn run(opts: DumpOptions) {
 
         run_single(&opts, input).await;
     }
-}
-
-/// Stack size for compiler worker threads (16 MB).
-///
-/// The default tokio blocking thread stack (2 MB) is too small for the
-/// recursive optimizer passes; processing many fixtures causes
-/// stack overflow (SIGSEGV).
-const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
-
-/// Size of the alternate signal stack installed in each compiler thread (8 MB).
-///
-/// Without an alternate signal stack, a stack overflow in a spawned thread
-/// delivers SIGSEGV with no stack to run the signal handler on. The process
-/// then terminates silently — no panic message, no error output. Installing
-/// `sigaltstack` in each thread ensures the signal handler (and Rust's panic
-/// hook) can run even when the main stack is exhausted.
-#[cfg(unix)]
-const ALT_STACK_SIZE: usize = 8 * 1024 * 1024;
-
-/// Install an alternate signal stack for the current thread.
-///
-/// Must be called at the start of each spawned compiler thread so that
-/// SIGSEGV from stack overflow produces a proper panic message instead of
-/// silently killing the process.
-#[cfg(unix)]
-fn install_alt_stack() {
-    // Allocate and intentionally leak: the OS reclaims thread memory on exit.
-    let mem = vec![0u8; ALT_STACK_SIZE].into_boxed_slice();
-    let ptr = Box::into_raw(mem);
-    // SAFETY: ptr is a valid, exclusively-owned allocation of ALT_STACK_SIZE bytes.
-    unsafe {
-        let ss = libc::stack_t {
-            ss_sp: ptr.cast::<libc::c_void>(),
-            ss_flags: 0,
-            ss_size: ALT_STACK_SIZE,
-        };
-        libc::sigaltstack(&raw const ss, std::ptr::null_mut());
-    }
-}
-
-/// Spawn a closure on a dedicated thread with a large stack, returning a
-/// oneshot receiver for the result.
-fn spawn_with_large_stack<F, T>(f: F) -> tokio::sync::oneshot::Receiver<T>
-where
-    F: FnOnce() -> T + Send + 'static,
-    T: Send + 'static,
-{
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    std::thread::Builder::new()
-        .stack_size(COMPILER_STACK_SIZE)
-        .spawn(move || {
-            #[cfg(unix)]
-            install_alt_stack();
-            let _ = tx.send(f());
-        })
-        .expect("failed to spawn compiler thread");
-    rx
-}
-
-/// Bulk file output mode - writes each input to a file based on template (parallel)
-///
-/// Each compilation runs on its own large-stack OS thread with an **isolated**
-/// `current_thread` tokio runtime. This avoids the subtle hazard of multiple
-/// OS threads calling `handle.block_on()` on the same shared multi-thread
-/// runtime handle simultaneously. Concurrency is capped at `parallelism` to
-/// bound peak memory and avoid SIGSEGV under memory pressure.
-async fn run_bulk(opts: &DumpOptions, template: &str) {
-    let start = std::time::Instant::now();
-
-    // Each compilation uses ~16 MB stack + significant heap. Cap at half the
-    // available CPUs (minimum 2) so peak memory stays predictable even right
-    // after a heavyweight `cargo clippy` run.
-    let parallelism = std::thread::available_parallelism()
-        .map(std::num::NonZero::get)
-        .unwrap_or(4)
-        / 2;
-    let parallelism = parallelism.max(2);
-    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(parallelism));
-
-    let mut skip_count_early = 0u32;
-    let mut tasks: Vec<tokio::task::JoinHandle<Result<String, String>>> = Vec::new();
-
-    for input in &opts.inputs {
-        // Skip files with expected compilation failures: compile_error or TODO tests.
-        if let Ok(source) = fs::read_to_string(input) {
-            let data = source.find("\n__DATA__\n").map_or("", |p| &source[p..]);
-            if data.contains("\"TODO\"") || data.contains("\"compile_error\"") {
-                let name = Path::new(input)
-                    .file_stem()
-                    .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
-                let output_path = template.replace("{name}", name);
-                let _ = fs::remove_file(&output_path);
-                skip_count_early += 1;
-                continue;
-            }
-        }
-
-        let input = input.clone();
-        let template = template.to_owned();
-        let show_tir = opts.show_tir;
-        let show_wir = opts.show_wir;
-        let opt_level = opts.opt_level;
-        let inline_threshold = opts.inline_threshold;
-        let opt_iterations = opts.opt_iterations;
-        let sem = semaphore.clone();
-
-        tasks.push(tokio::spawn(async move {
-            // Acquire a permit to limit the number of concurrent compiler threads.
-            let _permit = sem.acquire().await.expect("semaphore closed");
-
-            let rx = spawn_with_large_stack(move || {
-                let path = Path::new(&input);
-                let name = path.file_stem().map_or_else(
-                    || "unknown".to_string(),
-                    |s| s.to_string_lossy().into_owned(),
-                );
-
-                let output_path = template.replace("{name}", &name);
-
-                // Ensure parent directory exists.
-                if let Some(parent) = Path::new(&output_path).parent()
-                    && !parent.as_os_str().is_empty()
-                    && let Err(e) = fs::create_dir_all(parent)
-                {
-                    return Err(format!(
-                        "Failed to create directory {}: {e}",
-                        parent.display()
-                    ));
-                }
-
-                // Build an isolated current_thread runtime for this compilation.
-                // Using a per-compilation runtime instead of block_on on the shared
-                // outer multi-thread handle keeps each compilation fully independent
-                // and avoids any subtle interaction between concurrent callers.
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("failed to build per-compilation tokio runtime");
-
-                match rt.block_on(generate_output_params(
-                    show_tir,
-                    show_wir,
-                    opt_level,
-                    inline_threshold,
-                    opt_iterations,
-                    &input,
-                )) {
-                    Ok(content) => {
-                        if content.is_empty() {
-                            let _ = fs::remove_file(&output_path);
-                            Err(format!("Empty output for {output_path} (skipping)"))
-                        } else {
-                            match fs::write(&output_path, content) {
-                                Ok(()) => Ok(output_path),
-                                Err(e) => Err(format!("Failed to write {output_path}: {e}")),
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        let _ = fs::remove_file(&output_path);
-                        Err(format!("Failed to generate {output_path}: {e}"))
-                    }
-                }
-            });
-
-            rx.await
-                .unwrap_or_else(|_| Err("compiler thread panicked".to_string()))
-        }));
-    }
-
-    let mut success_count = 0;
-
-    for task in tasks {
-        match task.await {
-            Ok(Ok(output_path)) => {
-                eprintln!("  Generated {output_path}");
-                success_count += 1;
-            }
-            Ok(Err(e)) => {
-                panic!(
-                    "Golden fixture generation failed: {e}\n\
-                     If this test is expected to fail at compile time, add \
-                     \"compile_error\" or \"TODO\" to its __DATA__ section."
-                );
-            }
-            Err(e) => {
-                panic!("Golden fixture generation task panicked: {e}");
-            }
-        }
-    }
-
-    let skip_count = skip_count_early;
-    let elapsed = start.elapsed().as_secs_f64();
-    eprintln!("Generated {success_count} files ({skip_count} skipped) in {elapsed:.2}s");
-}
-
-/// Generate output content for a single file, returning the content string.
-///
-/// Takes individual parameters instead of `&DumpOptions` so it can be called
-/// from `tokio::spawn` (which requires `'static` futures).
-async fn generate_output_params(
-    show_tir: bool,
-    show_wir: bool,
-    opt_level: OptLevel,
-    inline_threshold: Option<usize>,
-    opt_iterations: Option<u32>,
-    input: &str,
-) -> Result<String, String> {
-    let path = Path::new(input);
-
-    // Read source file
-    let source =
-        fs::read_to_string(path).map_err(|e| format!("Error reading '{}': {e}", path.display()))?;
-
-    // Get base path for relative imports
-    let base_path = path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
-    let host = FilesystemCompilerHost::new(base_path);
-
-    // Extract target world from __DATA__ section if present
-    let target_world = extract_world_from_data_section(&source);
-
-    // Dump using async API with target world
-    let result = wado_compiler::dump_with_host_and_world(
-        &source,
-        &host,
-        Some(input),
-        opt_level,
-        target_world.as_deref(),
-        inline_threshold,
-        opt_iterations,
-    )
-    .await
-    .map_err(|_bail| "compilation failed".to_string())?;
-
-    let mut output = Vec::new();
-
-    if show_wir {
-        if let Some(ref wir_module) = result.wir_module {
-            writeln!(output, "// Golden file: WIR with -O2 optimization").unwrap();
-            writeln!(output, "// Source: {input}").unwrap();
-            writeln!(output, "// Generated by: mise run update-golden-fixtures").unwrap();
-            writeln!(output).unwrap();
-
-            let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_module, Some(input));
-            write!(output, "{unparsed}").unwrap();
-        }
-    } else if show_tir {
-        if let Some(ref project) = result.optimized_project {
-            for (module_source, module) in &project.tir_modules {
-                if module_source.is_entry_point() {
-                    let source_path = input;
-
-                    writeln!(
-                        output,
-                        "// Golden file: Optimized TIR with -O2 optimization"
-                    )
-                    .unwrap();
-                    writeln!(output, "// Source: {source_path}").unwrap();
-                    writeln!(output, "// Generated by: mise run update-golden-fixtures").unwrap();
-                    writeln!(output).unwrap();
-
-                    let unparsed = wado_compiler::unparse::unparse_tir(module);
-                    // Strip __DATA__ section (same as original awk script)
-                    let content = if let Some(idx) = unparsed.find("\n__DATA__\n") {
-                        &unparsed[..=idx] // Include the newline before __DATA__
-                    } else if let Some(idx) = unparsed.find("__DATA__\n") {
-                        &unparsed[..idx]
-                    } else {
-                        &unparsed
-                    };
-                    write!(output, "{content}").unwrap();
-                    break;
-                }
-            }
-        }
-    } else {
-        return Err("Bulk output only supports --wir or --tir mode".to_string());
-    }
-
-    Ok(String::from_utf8(output).unwrap())
 }
 
 async fn run_single(opts: &DumpOptions, input: &str) {
