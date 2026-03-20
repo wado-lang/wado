@@ -412,7 +412,6 @@ impl<'a> Transformer<'a> {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     fn transform_type_def(
         &self,
         type_id: TypeId,
@@ -427,120 +426,113 @@ impl<'a> Transformer<'a> {
         };
 
         let wasi_attr = format!("{}#{}", wasi_interface, ty.name.as_ref().unwrap());
+        let doc_comment = ty.docs.contents.clone();
 
-        match &ty.kind {
-            TypeDefKind::Enum(e) => {
-                let variants = e
-                    .cases
-                    .iter()
-                    .map(|case| WadoEnumVariant {
-                        name: to_upper_camel_case(&case.name),
-                        doc_comment: case.docs.contents.clone(),
-                        wasi_attr: Some(case.name.clone()),
-                    })
-                    .collect();
+        let def = match &ty.kind {
+            TypeDefKind::Enum(e) => WadoTypeDef::Enum(Self::transform_enum(e, name, doc_comment, wasi_attr)),
+            TypeDefKind::Flags(f) => WadoTypeDef::Flags(Self::transform_flags(f, name, doc_comment, wasi_attr)),
+            TypeDefKind::Record(r) => WadoTypeDef::Struct(self.transform_record(r, name, doc_comment, wasi_attr)?),
+            TypeDefKind::Variant(v) => WadoTypeDef::Variant(self.transform_variant(v, name, doc_comment, wasi_attr)?),
+            TypeDefKind::Type(inner) => WadoTypeDef::Newtype(WadoNewtype {
+                name,
+                wasi_attr: Some(wasi_attr),
+                target: self.transform_type(*inner)?,
+            }),
+            TypeDefKind::Tuple(t) => WadoTypeDef::Newtype(WadoNewtype {
+                name,
+                wasi_attr: Some(wasi_attr),
+                target: WadoType::Tuple(
+                    t.types.iter().map(|ty| self.transform_type(*ty)).collect::<Result<Vec<_>>>()?,
+                ),
+            }),
+            TypeDefKind::List(inner) => WadoTypeDef::Newtype(WadoNewtype {
+                name,
+                wasi_attr: Some(wasi_attr),
+                target: WadoType::Array(Box::new(self.transform_type(*inner)?)),
+            }),
+            _ => return Ok(None),
+        };
+        Ok(Some(def))
+    }
 
-                Ok(Some(WadoTypeDef::Enum(WadoEnum {
-                    name,
-                    doc_comment: ty.docs.contents.clone(),
-                    wasi_attr: Some(wasi_attr),
-                    variants,
-                })))
-            }
-            TypeDefKind::Flags(f) => {
-                let flags = f
-                    .flags
-                    .iter()
-                    .map(|flag| WadoFlagMember {
-                        name: to_upper_camel_case(&flag.name),
-                        doc_comment: flag.docs.contents.clone(),
-                        wasi_attr: flag.name.clone(),
-                    })
-                    .collect();
+    fn transform_enum(
+        e: &wit_parser::Enum,
+        name: String,
+        doc_comment: Option<String>,
+        wasi_attr: String,
+    ) -> WadoEnum {
+        let variants = e
+            .cases
+            .iter()
+            .map(|case| WadoEnumVariant {
+                name: to_upper_camel_case(&case.name),
+                doc_comment: case.docs.contents.clone(),
+                wasi_attr: Some(case.name.clone()),
+            })
+            .collect();
+        WadoEnum { name, doc_comment, wasi_attr: Some(wasi_attr), variants }
+    }
 
-                Ok(Some(WadoTypeDef::Flags(WadoFlags {
-                    name,
-                    doc_comment: ty.docs.contents.clone(),
-                    wasi_attr: Some(wasi_attr),
-                    flags,
-                })))
-            }
-            TypeDefKind::Record(r) => {
-                let fields = r
-                    .fields
-                    .iter()
-                    .map(|field| {
-                        Ok(WadoField {
-                            name: to_snake_case(&field.name),
-                            ty: self.transform_type(field.ty)?,
-                            doc_comment: field.docs.contents.clone(),
-                            wasi_attr: field.name.clone(),
-                        })
-                    })
-                    .collect::<Result<Vec<_>>>()?;
+    fn transform_flags(
+        f: &wit_parser::Flags,
+        name: String,
+        doc_comment: Option<String>,
+        wasi_attr: String,
+    ) -> WadoFlags {
+        let flags = f
+            .flags
+            .iter()
+            .map(|flag| WadoFlagMember {
+                name: to_upper_camel_case(&flag.name),
+                doc_comment: flag.docs.contents.clone(),
+                wasi_attr: flag.name.clone(),
+            })
+            .collect();
+        WadoFlags { name, doc_comment, wasi_attr: Some(wasi_attr), flags }
+    }
 
-                Ok(Some(WadoTypeDef::Struct(WadoStruct {
-                    name,
-                    doc_comment: ty.docs.contents.clone(),
-                    wasi_attr: Some(wasi_attr),
-                    fields,
-                })))
-            }
-            TypeDefKind::Variant(v) => {
-                let cases = v
-                    .cases
-                    .iter()
-                    .map(|case| {
-                        Ok(WadoVariantCase {
-                            name: to_upper_camel_case(&case.name),
-                            payload: case.ty.map(|t| self.transform_type(t)).transpose()?,
-                            doc_comment: case.docs.contents.clone(),
-                            wasi_attr: Some(case.name.clone()),
-                        })
-                    })
-                    .collect::<Result<Vec<_>>>()?;
+    fn transform_record(
+        &self,
+        r: &wit_parser::Record,
+        name: String,
+        doc_comment: Option<String>,
+        wasi_attr: String,
+    ) -> Result<WadoStruct> {
+        let fields = r
+            .fields
+            .iter()
+            .map(|field| {
+                Ok(WadoField {
+                    name: to_snake_case(&field.name),
+                    ty: self.transform_type(field.ty)?,
+                    doc_comment: field.docs.contents.clone(),
+                    wasi_attr: field.name.clone(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(WadoStruct { name, doc_comment, wasi_attr: Some(wasi_attr), fields })
+    }
 
-                Ok(Some(WadoTypeDef::Variant(WadoVariant {
-                    name,
-                    doc_comment: ty.docs.contents.clone(),
-                    wasi_attr: Some(wasi_attr),
-                    cases,
-                })))
-            }
-            // Resources handled separately by transform_resource
-            TypeDefKind::Type(inner) => {
-                // Newtype (e.g., `type instant = u64;` in WIT)
-                let target = self.transform_type(*inner)?;
-                Ok(Some(WadoTypeDef::Newtype(WadoNewtype {
-                    name,
-                    wasi_attr: Some(wasi_attr),
-                    target,
-                })))
-            }
-            TypeDefKind::Tuple(t) => {
-                // Tuple newtype (e.g., `type ipv4-address = tuple<u8, u8, u8, u8>;`)
-                let types = t
-                    .types
-                    .iter()
-                    .map(|ty| self.transform_type(*ty))
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(Some(WadoTypeDef::Newtype(WadoNewtype {
-                    name,
-                    wasi_attr: Some(wasi_attr),
-                    target: WadoType::Tuple(types),
-                })))
-            }
-            TypeDefKind::List(inner) => {
-                // List newtype (e.g., `type field-value = list<u8>;` in WIT)
-                let element = self.transform_type(*inner)?;
-                Ok(Some(WadoTypeDef::Newtype(WadoNewtype {
-                    name,
-                    wasi_attr: Some(wasi_attr),
-                    target: WadoType::Array(Box::new(element)),
-                })))
-            }
-            _ => Ok(None),
-        }
+    fn transform_variant(
+        &self,
+        v: &wit_parser::Variant,
+        name: String,
+        doc_comment: Option<String>,
+        wasi_attr: String,
+    ) -> Result<WadoVariant> {
+        let cases = v
+            .cases
+            .iter()
+            .map(|case| {
+                Ok(WadoVariantCase {
+                    name: to_upper_camel_case(&case.name),
+                    payload: case.ty.map(|t| self.transform_type(t)).transpose()?,
+                    doc_comment: case.docs.contents.clone(),
+                    wasi_attr: Some(case.name.clone()),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(WadoVariant { name, doc_comment, wasi_attr: Some(wasi_attr), cases })
     }
 
     fn transform_resource(

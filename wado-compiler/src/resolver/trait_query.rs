@@ -567,6 +567,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// For example, when `Array<u8>` implements `IntoIterator`, registers:
     /// - (Array<u8>, "Item") → u8
     /// - (Array<u8>, "Iter") → `ArrayIter`<u8>
+    ///
     /// This enables the monomorphizer to resolve `I::Iter` → `ArrayIter<u8>` when `I = Array<u8>`.
     pub(super) fn register_assoc_types_for_concrete_type_and_trait(
         &mut self,

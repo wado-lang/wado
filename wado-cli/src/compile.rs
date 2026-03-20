@@ -72,7 +72,6 @@ pub struct CompileOptions {
 }
 
 #[derive(Clone, Copy)]
-#[allow(clippy::enum_variant_names)]
 enum Opt {
     Output,
     Format,

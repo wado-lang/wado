@@ -99,7 +99,6 @@ fn analyze_match_for_switch(
     }
 
     // Check density threshold
-    #[allow(clippy::cast_precision_loss)]
     let density = value_to_arm.len() as f64 / range as f64;
     if density < SWITCH_DENSITY_THRESHOLD {
         return None;
@@ -114,7 +113,6 @@ fn analyze_match_for_switch(
 }
 
 /// Convert a Match to a Switch expression using the analysis
-#[allow(clippy::cast_sign_loss)]
 fn match_to_switch(
     scrutinee: Box<TirExpr>,
     arms: &[TirMatchArm],
@@ -1469,7 +1467,6 @@ impl<'a> PatternLowerer<'a> {
     /// Lower a struct `IfLet` to let bindings + then block (unconditional).
     ///
     /// Struct patterns are always irrefutable, so the else branch is discarded.
-    #[allow(clippy::too_many_arguments)]
     /// Lower an `IfLet` with tuple/struct pattern containing literal sub-patterns.
     ///
     /// Converts `if let [a, 42] = pair { ... }` into:
@@ -1612,7 +1609,6 @@ impl<'a> PatternLowerer<'a> {
     /// To:
     ///   `let $temp = opt;
     ///    if VariantTest($temp, case) { let x = VariantPayload($temp); then } else { else }`
-    #[allow(clippy::too_many_arguments)]
     fn lower_if_pattern_option(
         &mut self,
         scrutinee: TirExpr,

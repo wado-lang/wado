@@ -286,7 +286,6 @@ fn decode_surrogate_pair(high: u16, low: u16) -> u32 {
 
 /// Parse an unsigned integer literal into a u128 value.
 /// Supports decimal, hex, binary, octal, and scientific notation (e.g., "1e10").
-#[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
 pub(super) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
     let clean = normalize_numeric_literal(repr);
 
@@ -318,7 +317,6 @@ pub(super) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
 /// Parse a signed integer literal into an i128 value.
 /// Supports decimal, hex, binary, octal, and scientific notation.
 /// For non-negative values, delegates to `parse_u128_literal` with an i128 range check.
-#[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
 pub(super) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
     let clean = normalize_numeric_literal(repr);
 
@@ -344,7 +342,6 @@ pub(super) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
 }
 
 /// Parse a float literal string into an f64 value.
-#[allow(clippy::cast_precision_loss)]
 pub(super) fn parse_float_literal(repr: &str) -> Result<f64, String> {
     let clean = normalize_numeric_literal(repr);
 
@@ -387,7 +384,6 @@ pub(super) fn is_float_only_literal(repr: &str) -> bool {
 }
 
 /// Unpack i128 into (low, high) pair for codegen.
-#[allow(clippy::cast_sign_loss)]
 pub(super) fn unpack_i128(value: i128) -> (u64, i64) {
     (value as u64, (value >> 64) as i64)
 }

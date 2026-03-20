@@ -73,12 +73,8 @@ pub fn run_pipeline(
     let mut skip_count = 0u32;
 
     for (name, path) in &files {
-        let source = match fs::read_to_string(path) {
-            Ok(s) => s,
-            Err(e) => {
-                panic!("Failed to read {}: {e}", path.display());
-            }
-        };
+        let source = fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
         if should_skip_file(&source) {
             let output_path = out_tmpl.output_path(name);
             let _ = fs::remove_file(&output_path);
@@ -169,7 +165,35 @@ pub fn run_pipeline(
     // Drop the original write_tx so writer sees EOF when all workers finish
     drop(write_tx);
 
-    // Writer: runs on main thread
+    let stats = collect_results(write_rx, skip_empty, skip_count);
+
+    reader.join().expect("reader thread panicked");
+    for w in workers {
+        w.join().expect("dump worker panicked");
+    }
+
+    assert_eq!(
+        stats.success_count as usize + stats.skip_count as usize,
+        total,
+        "Mismatch: {} + {} != {compile_count}", stats.success_count, stats.skip_count
+    );
+
+    print_stats(&stats, total, num_workers, start.elapsed());
+}
+
+struct PipelineStats {
+    success_count: u32,
+    skip_count: u32,
+    total_compile_time: Duration,
+    max_compile_time: Duration,
+    max_compile_file: String,
+}
+
+fn collect_results(
+    write_rx: mpsc::Receiver<WriteItem>,
+    skip_empty: bool,
+    mut skip_count: u32,
+) -> PipelineStats {
     let mut success_count = 0u32;
     let mut total_compile_time = Duration::ZERO;
     let mut max_compile_time = Duration::ZERO;
@@ -203,7 +227,7 @@ pub fn run_pipeline(
                 total_compile_time += item.compile_time;
                 if item.compile_time > max_compile_time {
                     max_compile_time = item.compile_time;
-                    max_compile_file = item.output_path.clone();
+                    max_compile_file.clone_from(&item.output_path);
                 }
                 success_count += 1;
             }
@@ -223,36 +247,28 @@ pub fn run_pipeline(
         }
     }
 
-    // Join threads
-    reader.join().expect("reader thread panicked");
-    for w in workers {
-        w.join().expect("dump worker panicked");
-    }
+    PipelineStats { success_count, skip_count, total_compile_time, max_compile_time, max_compile_file }
+}
 
-    let elapsed = start.elapsed().as_secs_f64();
-    let avg_compile = if success_count > 0 {
-        total_compile_time / success_count
+fn print_stats(stats: &PipelineStats, total: usize, num_workers: usize, elapsed: Duration) {
+    let avg_compile = if stats.success_count > 0 {
+        stats.total_compile_time / stats.success_count
     } else {
         Duration::ZERO
     };
     eprintln!();
-    eprintln!("  Files:        {success_count} generated, {skip_count} skipped, {total} total");
+    eprintln!("  Files:        {} generated, {} skipped, {total} total", stats.success_count, stats.skip_count);
     eprintln!("  Workers:      {num_workers}");
-    eprintln!("  Wall time:    {elapsed:.2}s");
+    eprintln!("  Wall time:    {:.2}s", elapsed.as_secs_f64());
     eprintln!(
         "  Compile time: {:.2}s total, {:.3}s avg",
-        total_compile_time.as_secs_f64(),
+        stats.total_compile_time.as_secs_f64(),
         avg_compile.as_secs_f64(),
     );
     eprintln!(
         "  Slowest:      {:.2}s ({})",
-        max_compile_time.as_secs_f64(),
-        max_compile_file,
-    );
-    assert_eq!(
-        success_count as usize + skip_count as usize,
-        total,
-        "Mismatch: {success_count} + {skip_count} != {compile_count}"
+        stats.max_compile_time.as_secs_f64(),
+        stats.max_compile_file,
     );
 }
 

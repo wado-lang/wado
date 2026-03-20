@@ -781,7 +781,7 @@ fn elide_multi_value_structs(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
         let inner = take_mv_inner(&mut instrs[set_idx]);
 
         result.push(WirInstr::MultiValueLocalBind {
-            instr: inner,
+            instr: Box::new(inner),
             locals,
         });
         i = j;
@@ -815,15 +815,14 @@ fn extract_mv_info(instr: &WirInstr) -> Option<(String, usize)> {
 ///
 /// Replaces the instruction in-place with `Nop`.
 /// Returns `Box<WirInstr>` to pass directly into `MultiValueLocalBind::instr`.
-#[allow(clippy::unnecessary_box_returns)]
-fn take_mv_inner(instr: &mut WirInstr) -> Box<WirInstr> {
+fn take_mv_inner(instr: &mut WirInstr) -> WirInstr {
     let WirInstr::LocalSet { value, .. } = std::mem::replace(instr, WirInstr::Nop) else {
         unreachable!()
     };
     let WirInstr::MultiValueStructNew { instr: inner, .. } = *value else {
         unreachable!()
     };
-    inner
+    *inner
 }
 
 /// Try to match a `LocalSet { name, value: StructGet { field: "N", expr: LocalGet(temp) } }`.

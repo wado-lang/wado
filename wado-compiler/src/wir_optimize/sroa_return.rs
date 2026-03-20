@@ -1339,15 +1339,13 @@ fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) {
     // Handle the fallthrough (last instruction) — if it's a StructNew without Br.
     // The `matches!` guard before `mem::replace` is intentional to avoid replacing
     // non-StructNew instructions with Nop.
-    #[allow(clippy::collapsible_if)]
     if let Some(last) = instrs.last_mut()
         && matches!(last, WirInstr::StructNew { .. })
+        && let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop)
     {
-        if let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop) {
-            *last = WirInstr::Return {
-                value: Some(Box::new(WirInstr::Seq(fields))),
-            };
-        }
+        *last = WirInstr::Return {
+            value: Some(Box::new(WirInstr::Seq(fields))),
+        };
     }
 }
 
@@ -1591,18 +1589,17 @@ fn rewrite_variant_struct_new_br_to_return(
     // Handle fallthrough.
     // The `matches!` guard before `mem::replace` is intentional to avoid replacing
     // non-StructNew instructions with Nop.
-    #[allow(clippy::collapsible_if)]
     if let Some(last) = instrs.last_mut() {
-        if matches!(last, WirInstr::StructNew { .. }) {
-            if let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop) {
-                *last = WirInstr::Return {
-                    value: Some(Box::new(WirInstr::Seq(pad_variant_fields(
-                        fields,
-                        vi,
-                        result_types,
-                    )))),
-                };
-            }
+        if matches!(last, WirInstr::StructNew { .. })
+            && let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop)
+        {
+            *last = WirInstr::Return {
+                value: Some(Box::new(WirInstr::Seq(pad_variant_fields(
+                    fields,
+                    vi,
+                    result_types,
+                )))),
+            };
         } else if let WirInstr::Seq(items) = last {
             rewrite_variant_struct_new_br_to_return(items, target_depth, vi, result_types);
         }
@@ -2001,26 +1998,26 @@ fn take_call_from_local_set(instr: &mut WirInstr) -> (Vec<WirInstr>, Box<WirInst
         unreachable!()
     };
     let mut prefix = Vec::new();
-    let call = unwrap_and_take_call(value, &mut prefix);
+    let call = unwrap_and_take_call(*value, &mut prefix);
     (prefix, Box::new(call))
 }
 
 /// Recursively unwrap `ValueCopy` and `Block` wrappers to extract the `Call` instruction.
 /// Collects any non-result instructions from blocks into `prefix` so they can be
 /// emitted before the call.
-#[allow(clippy::boxed_local)]
-fn unwrap_and_take_call(mut instr: Box<WirInstr>, prefix: &mut Vec<WirInstr>) -> WirInstr {
+fn unwrap_and_take_call(instr: WirInstr, prefix: &mut Vec<WirInstr>) -> WirInstr {
+    let mut current = instr;
     loop {
-        match *instr {
-            WirInstr::Call { .. } => return *instr,
+        match current {
+            WirInstr::Call { .. } => return current,
             WirInstr::ValueCopy { expr, .. } => {
-                instr = expr;
+                current = *expr;
             }
             WirInstr::Block { ref mut body, .. } => {
                 // Extract the call from the block's result position,
                 // and collect all preceding statements as prefix.
                 if let Some(call) = take_block_result_call(body, prefix) {
-                    instr = call;
+                    current = *call;
                 } else {
                     unreachable!("expected call in SROA block unwrap");
                 }

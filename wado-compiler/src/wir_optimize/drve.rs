@@ -251,7 +251,7 @@ fn apply_drve(module: &mut WirModule, confirmed: &[(u32, DrveCandidate)]) {
     }
 }
 
-fn rewrite_drve_returns(instrs: &mut Vec<WirInstr>) {
+fn rewrite_drve_returns(instrs: &mut [WirInstr]) {
     for instr in instrs.iter_mut() {
         match instr {
             WirInstr::Return { value: Some(v) }
@@ -277,7 +277,7 @@ fn rewrite_drve_returns(instrs: &mut Vec<WirInstr>) {
     }
 }
 
-fn rewrite_drve_call_sites(instrs: &mut Vec<WirInstr>, candidate_set: &IndexSet<u32>) {
+fn rewrite_drve_call_sites(instrs: &mut [WirInstr], candidate_set: &IndexSet<u32>) {
     for instr in instrs.iter_mut() {
         match instr {
             WirInstr::Drop(inner)

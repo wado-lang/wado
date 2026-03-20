@@ -294,7 +294,6 @@ fn type_to_cm_primitive_with_resources(
 /// `Future<T>` elements by emitting the necessary local types into `instance_type`.
 ///
 /// Returns the `ComponentValType` list ready to pass to `instance_type.defined_type().tuple(...)`.
-#[allow(clippy::too_many_arguments)]
 fn build_cm_tuple_types(
     elems: &[Type],
     instance_type: &mut InstanceType,
