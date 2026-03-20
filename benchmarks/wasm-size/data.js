@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773967554868,
+  "lastUpdate": 1773973513653,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4640,6 +4640,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22387,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c0064093e8b5278193b7908af690ed0cf2e64201",
+          "message": "Merge pull request #617 from wado-lang/claude/expand-escape-analysis-lJ7V7\n\nAdd stores-aware analysis to SROA and improve ref handling in optimizations",
+          "timestamp": "2026-03-20T11:22:49+09:00",
+          "tree_id": "d915cade345fb5ab45628786c9beb8e8909a7897",
+          "url": "https://github.com/wado-lang/wado/commit/c0064093e8b5278193b7908af690ed0cf2e64201"
+        },
+        "date": 1773973513437,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22322,
             "unit": "bytes"
           }
         ]
