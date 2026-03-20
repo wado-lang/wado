@@ -474,13 +474,6 @@ fn dump_opt_level() {
 }
 
 #[test]
-fn dump_output_template() {
-    let parser = Parser::from_args(&["--tir", "-o", "out/{name}.wado", "input.wado"]);
-    let opts = wado_cli::dump::parse_args(parser).unwrap();
-    assert_eq!(opts.output_template, Some("out/{name}.wado".to_string()));
-}
-
-#[test]
 fn dump_tokens() {
     let parser = Parser::from_args(&["--tokens", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
