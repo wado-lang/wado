@@ -4392,9 +4392,7 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::Call {
                         func_id: w_join_id,
                         args: vec![
-                            WirInstr::LocalGet {
-                                name: handle_name,
-                            },
+                            WirInstr::LocalGet { name: handle_name },
                             WirInstr::LocalGet {
                                 name: result_name.clone(),
                             },
@@ -4476,9 +4474,7 @@ impl FunctionTranslator<'_, '_> {
             name: option_result_name.clone(),
             value: Box::new(WirInstr::If {
                 condition: Box::new(WirInstr::I32Eqz(Box::new(WirInstr::I32And(
-                    Box::new(WirInstr::LocalGet {
-                        name: result_name,
-                    }),
+                    Box::new(WirInstr::LocalGet { name: result_name }),
                     Box::new(WirInstr::I32Const(0xF)),
                 )))),
                 result: Some(option_wir_type),

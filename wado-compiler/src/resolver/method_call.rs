@@ -347,12 +347,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|t| self.type_table.borrow().mangle_type_name(*t))
                     .collect();
                 let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                (
-                    mangled,
-                    name,
-                    type_arg_names,
-                    Some(type_args),
-                )
+                (mangled, name, type_arg_names, Some(type_args))
             }
             _ => {
                 let name = self
@@ -835,12 +830,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .map(|t| self.type_table.borrow().mangle_type_name(*t))
                                     .collect();
                                 let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                                (
-                                    name,
-                                    module_source,
-                                    mangled,
-                                    type_args,
-                                )
+                                (name, module_source, mangled, type_args)
                             }
                             ResolvedType::Newtype {
                                 base_type: inner_base,
@@ -854,12 +844,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                             module_source,
                                             ..
                                         } => {
-                                            break (
-                                                name.clone(),
-                                                module_source,
-                                                name,
-                                                vec![],
-                                            );
+                                            break (name.clone(), module_source, name, vec![]);
                                         }
                                         ResolvedType::Newtype {
                                             base_type: next, ..

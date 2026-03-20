@@ -557,9 +557,7 @@ fn analyze_expr(
                 analysis.callees.insert(callee_id);
 
                 if let Some(effect_name) = original_callee_module.effect_name() {
-                    analysis
-                        .effect_calls
-                        .insert((effect_name, func_name));
+                    analysis.effect_calls.insert((effect_name, func_name));
                 }
             }
 
@@ -779,9 +777,7 @@ fn analyze_expr(
                     ResolvedType::Resource { name, .. } => {
                         // Resource instance method call (e.g., fields.has(), fields.append())
                         // Record as effect call so it's tracked in used_wasi_functions
-                        analysis
-                            .effect_calls
-                            .insert((name, method_name));
+                        analysis.effect_calls.insert((name, method_name));
                     }
                     ResolvedType::Variant {
                         name,

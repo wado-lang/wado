@@ -145,8 +145,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // e.g., IntoIterator::Iter has bound Iterator<Item = Self::Item>.
             // With I: IntoIterator<Item = u8>, Self::Item = I::Item = u8,
             // so I::Iter.assoc_type_bindings = [("Item", u8_typeid)].
-            let assoc_type_bindings = self
-                .compute_assoc_type_bindings(&namespaced.namespace.clone(), &assoc_bounds);
+            let assoc_type_bindings =
+                self.compute_assoc_type_bindings(&namespaced.namespace.clone(), &assoc_bounds);
 
             return self.type_table.borrow_mut().make_assoc_type_projection(
                 param_type_id,

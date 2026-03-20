@@ -365,11 +365,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     });
                 if let Some(trait_info) = trait_info_opt {
                     // Adjust receiver for self kind (&self)
-                    let receiver = self.adjust_receiver_for_self_kind(
-                        left,
-                        trait_info.self_kind,
-                        binary.span,
-                    );
+                    let receiver =
+                        self.adjust_receiver_for_self_kind(left, trait_info.self_kind, binary.span);
 
                     // Create reference type for the argument (rhs: &Self)
                     let arg_ref_type = self
@@ -458,11 +455,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     });
                 if let Some(trait_info) = trait_info_opt {
                     // Adjust receiver for self kind (&self)
-                    let receiver = self.adjust_receiver_for_self_kind(
-                        left,
-                        trait_info.self_kind,
-                        binary.span,
-                    );
+                    let receiver =
+                        self.adjust_receiver_for_self_kind(left, trait_info.self_kind, binary.span);
 
                     // For shift operations, rhs is u32 (not &Self), so pass directly
                     let mangled_method_name = MethodName::format_local(
@@ -728,11 +722,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     });
                 if let Some((trait_info, impl_name)) = neg_info {
                     // Adjust receiver for self kind (&self)
-                    let receiver = self.adjust_receiver_for_self_kind(
-                        expr,
-                        trait_info.self_kind,
-                        unary.span,
-                    );
+                    let receiver =
+                        self.adjust_receiver_for_self_kind(expr, trait_info.self_kind, unary.span);
 
                     let mangled_method_name =
                         MethodName::format_local(&impl_name, Some(&trait_info.trait_name), "neg");
@@ -792,11 +783,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     });
                 if let Some((trait_info, impl_name)) = bitnot_info {
                     // Adjust receiver for self kind (&self)
-                    let receiver = self.adjust_receiver_for_self_kind(
-                        expr,
-                        trait_info.self_kind,
-                        unary.span,
-                    );
+                    let receiver =
+                        self.adjust_receiver_for_self_kind(expr, trait_info.self_kind, unary.span);
 
                     let mangled_method_name = MethodName::format_local(
                         &impl_name,
