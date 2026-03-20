@@ -8,6 +8,7 @@ use std::collections::VecDeque;
 use crate::hashmap::IndexSet;
 
 use crate::hashmap::IndexMap;
+use rustc_hash::FxBuildHasher;
 
 use crate::ast::{Item, Module};
 use crate::bind;
@@ -221,7 +222,7 @@ fn cached_core_stdlib() -> &'static IndexMap<ModuleSource, Module> {
             ("prelude/types.wado", stdlib::CORE_PRELUDE_TYPES),
             ("zlib", stdlib::CORE_ZLIB),
         ];
-        let mut cache = IndexMap::with_capacity_and_hasher(core_modules.len(), Default::default());
+        let mut cache = IndexMap::with_capacity_and_hasher(core_modules.len(), FxBuildHasher);
         for &(name, source) in core_modules {
             let module_source = ModuleSource::Core {
                 name: name.to_string(),

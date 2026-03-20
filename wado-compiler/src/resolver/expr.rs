@@ -832,7 +832,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Handle tuple indexing: t[0] is equivalent to t.0
         if let ResolvedType::Tuple(elements) = base_type {
-            let elements = elements;
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
                 value: ast::Literal::Number(repr),

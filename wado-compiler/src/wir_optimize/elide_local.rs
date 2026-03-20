@@ -20,7 +20,7 @@ pub(super) fn elide_write_only_locals(module: &mut WirModule) {
     }
 }
 
-fn elide_write_only_locals_in_body(body: &mut Vec<WirInstr>) -> bool {
+fn elide_write_only_locals_in_body(body: &mut [WirInstr]) -> bool {
     let mut read_locals: IndexSet<String> = IndexSet::default();
     for instr in body.iter() {
         collect_local_gets_deep(instr, &mut read_locals);

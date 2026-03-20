@@ -110,8 +110,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 {
                     let target_resolved = self.type_table.borrow().get(target_type).clone();
                     if let ResolvedType::Tuple(expected_elem_types) = target_resolved {
-                        // let t: [i32, String] = [1, "hello"] - check element types
-                        let expected_elem_types = expected_elem_types;
                         let elements: Vec<TirExpr> = tuple_lit
                             .elements
                             .iter()
@@ -168,7 +166,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         ..
                     } = target_resolved
                     {
-                        let name = name;
                         let struct_type = target_type;
 
                         let struct_field_types: Vec<(String, TypeId)> = self
@@ -1254,7 +1251,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for_of: &ForOfStmt,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
-        let _span = for_of.span;
+        let _ = for_of.span;
 
         // Check if the iterable is `.enumerate()` on something
         let (actual_iterable, is_enumerate) = match &for_of.iterable {

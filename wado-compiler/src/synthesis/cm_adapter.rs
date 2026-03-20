@@ -392,7 +392,6 @@ fn try_lift_wasi_variant_or_enum(
 
 /// Try to lift a WASI struct (record) type from linear memory into a GC struct.
 /// Returns `None` if the type is not a known WASI struct.
-#[allow(clippy::cast_possible_wrap)]
 fn try_lift_wasi_struct(
     name: &str,
     addr: TirExpr,
@@ -505,7 +504,6 @@ fn try_lift_wasi_struct(
 ///
 /// Generates an if/else chain: disc==0 → Case0, disc==1 → Case1, ...
 /// Payload cases lift the payload from the appropriate memory offset.
-#[allow(clippy::cast_possible_wrap)]
 fn synthesize_lift_wasi_variant(
     _name: &str,
     variant_type: TypeId,
@@ -708,7 +706,6 @@ fn kebab_to_pascal(s: &str) -> String {
 ///
 /// Layout: `[base_ptr: i32, count: i32]` at addr.
 /// Elements at `base_ptr + i * cm_size(T)`.
-#[allow(clippy::cast_possible_wrap)]
 fn synthesize_lift_list(
     elem_ty: &Type,
     addr: TirExpr,
@@ -869,7 +866,6 @@ fn synthesize_lift_list(
 /// Lift an `option<T>` from linear memory at `addr`.
 ///
 /// Layout: discriminant byte at offset 0, payload at `align_to(1, align(T))`.
-#[allow(clippy::cast_possible_wrap)]
 fn synthesize_lift_option_inner(
     inner_ty: &Type,
     addr: TirExpr,
@@ -946,7 +942,6 @@ fn synthesize_lift_option_inner(
 /// Lift a `result<T, E>` from linear memory at `addr`.
 ///
 /// Layout: discriminant i32 at offset 0, payload at aligned offset.
-#[allow(clippy::cast_possible_wrap)]
 fn synthesize_lift_result_inner(
     ok_ty: &Type,
     err_ty: &Type,
@@ -1070,7 +1065,6 @@ fn synthesize_lift_result_inner(
 }
 
 /// Lift a tuple from linear memory at `addr`.
-#[allow(clippy::cast_possible_wrap)]
 fn synthesize_lift_tuple(
     elems: &[Type],
     addr: TirExpr,
@@ -1137,7 +1131,6 @@ fn synthesize_free_element(ty: &Type, addr: TirExpr) -> Vec<TirStmt> {
         Type::Tuple(elems) if !elems.is_empty() => {
             let layout = cm_abi::layout_tuple(elems);
             let mut free_stmts = Vec::new();
-            #[allow(clippy::cast_possible_wrap)]
             for (i, elem_ty) in elems.iter().enumerate() {
                 let elem_addr = binary_add(addr.clone(), i32_const(layout.offsets[i] as i32));
                 free_stmts.extend(synthesize_free_element(elem_ty, elem_addr));
@@ -1341,7 +1334,6 @@ pub fn synthesize_lower(
 ///
 /// Each tuple element is extracted via `FieldAccess` and recursively lowered
 /// at the computed CM ABI offset.
-#[allow(clippy::cast_possible_wrap)]
 fn synthesize_lower_tuple(
     elems: &[Type],
     value: TirExpr,
@@ -1469,9 +1461,7 @@ pub fn cm_flags_byte_size(count: usize) -> u32 {
 
 /// Compute the CM Canonical ABI alignment for a flags type given its label count.
 pub fn cm_flags_byte_align(count: usize) -> u32 {
-    if count == 0 {
-        1
-    } else if count <= 8 {
+    if count <= 8 {
         1
     } else if count <= 16 {
         2
@@ -1574,7 +1564,6 @@ fn needs_flat_result_lifting(ty: &Type) -> bool {
 ///
 /// For `Result<(), ()>`: disc==0 → Ok, disc==1 → Err (no payloads)
 /// For `Result<(), ErrorCode>`: disc==0 → Ok, disc!=0 → `Err(lift_error)`
-#[allow(clippy::too_many_arguments)]
 fn synthesize_lift_flat_result(
     ty: &Type,
     disc_expr: TirExpr,
@@ -2855,7 +2844,7 @@ fn find_struct_decl(
 
 /// Create a `VariantTag` TIR expression (extracts i32 discriminant).
 fn variant_tag(expr: TirExpr) -> TirExpr {
-    let _variant_type_id = expr.type_id;
+    let _ = expr.type_id;
     TirExpr::new(
         TirExprKind::VariantTag {
             expr: Box::new(expr),
@@ -2941,7 +2930,6 @@ struct FlatLocal {
 }
 
 /// Inner recursive implementation of `synthesize_lower_to_flat`.
-#[allow(clippy::too_many_arguments)]
 fn lower_to_flat_inner(
     value: TirExpr,
     type_id: TypeId,
@@ -3234,7 +3222,6 @@ fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
 ///   + case-specific payloads)
 /// - Array<T> for non-u8 elements: uses temp linear memory round-trip via
 ///   realloc, which assumes realloc is linked
-#[allow(clippy::too_many_arguments)]
 fn synthesize_lift_from_flat_params(
     ty: &Type,
     flat_param_locals: &[u32],
@@ -3502,7 +3489,6 @@ fn export_needs_param_lifting(params: &[(String, Type)]) -> bool {
 ///
 /// This is signature-driven: it examines the param/return types to generate
 /// appropriate lifting/lowering code for any export signature.
-#[allow(clippy::too_many_arguments, clippy::vec_init_then_push)]
 fn synthesize_result_export_adapter(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
@@ -3881,7 +3867,6 @@ fn synthesize_result_export_adapter(
 /// if variant_test(value, case_1) { flat[1..] = lower(payload_1) }
 /// ...
 /// ```
-#[allow(clippy::too_many_arguments)]
 fn synthesize_variant_lower_to_flat(
     value_local: u32,
     value_type_id: TypeId,
@@ -4040,7 +4025,6 @@ fn synthesize_void_export_adapter(
 /// - Current worlds use `Result<(), ()>` (no error-context) or `Result<T, E>`
 ///   (handled by `synthesize_result_export_adapter`)
 /// - This function is only used when the user doesn't return Result
-#[allow(clippy::too_many_arguments)]
 fn synthesize_general_export_adapter(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
@@ -4256,7 +4240,6 @@ fn synthesize_void_stub_adapter(export_name: &str) -> Rc<RefCell<TirFunction>> {
 ///     handle(__request);  // user fn calls task-return internally
 /// }
 /// ```
-#[allow(clippy::too_many_arguments)]
 fn synthesize_async_export_adapter(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,

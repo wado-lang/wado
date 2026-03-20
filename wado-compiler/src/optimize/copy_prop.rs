@@ -50,7 +50,6 @@ enum CopySource {
 
 /// Usage information for a local variable
 #[derive(Debug, Default)]
-#[allow(clippy::struct_excessive_bools)]
 struct LocalUsage {
     /// Number of times the local is read
     read_count: u32,

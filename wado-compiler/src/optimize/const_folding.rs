@@ -234,7 +234,6 @@ fn try_fold_f64_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedEx
 fn try_fold_f32_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
     let l = lval as f32;
     let r = rval as f32;
-    #[allow(clippy::float_cmp)]
     match op {
         TirBinaryOp::Add => non_nan_float(f64::from(l + r)),
         TirBinaryOp::Sub => non_nan_float(f64::from(l - r)),
@@ -251,7 +250,6 @@ fn try_fold_f32_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedEx
 }
 
 fn try_fold_float_comparison(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
-    #[allow(clippy::float_cmp)]
     match op {
         TirBinaryOp::Eq => Some(FoldedExpr::Bool(lval == rval)),
         TirBinaryOp::NotEq => Some(FoldedExpr::Bool(lval != rval)),
@@ -322,7 +320,6 @@ fn try_fold_unary(
 // Integer comparison
 // ──────────────────────────────────────────────────────────────────────────────
 
-#[allow(clippy::cast_sign_loss)]
 fn eval_int_cmp(lval: u64, op: TirBinaryOp, rval: u64, prim: PrimitiveType) -> bool {
     let is_signed = matches!(
         prim,
@@ -363,7 +360,6 @@ fn eval_int_shl(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     Some(truncate_int(lval.wrapping_shl(shift), prim))
 }
 
-#[allow(clippy::cast_sign_loss)]
 fn eval_int_shr(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     let bits = int_bit_width(prim);
     let shift = (rval as u32) & (bits - 1);
@@ -441,7 +437,6 @@ fn get_int_primitive(type_id: TypeId, type_table: &TypeTable) -> Option<Primitiv
     }
 }
 
-#[allow(clippy::cast_sign_loss)]
 fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
     match prim {
         PrimitiveType::U8 => value & 0xFF,
@@ -472,7 +467,6 @@ fn eval_int_mul(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     Some(truncate_int(lval.wrapping_mul(rval), prim))
 }
 
-#[allow(clippy::cast_sign_loss, clippy::invalid_upcast_comparisons)]
 fn eval_int_div(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     if rval == 0 {
         return None;
@@ -507,7 +501,6 @@ fn eval_int_div(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     }
 }
 
-#[allow(clippy::cast_sign_loss, clippy::invalid_upcast_comparisons)]
 fn eval_int_mod(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     if rval == 0 {
         return None;
@@ -542,7 +535,6 @@ fn eval_int_mod(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     }
 }
 
-#[allow(clippy::cast_sign_loss)]
 fn eval_int_neg(value: u64, prim: PrimitiveType) -> Option<u64> {
     match prim {
         PrimitiveType::I8 => {

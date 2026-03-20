@@ -239,7 +239,7 @@ fn update_type_definitions(module: &mut WirModule, nullable_map: &IndexMap<u32, 
 
 /// Recursively transform a list of WIR instructions.
 fn transform_body(
-    body: &mut Vec<WirInstr>,
+    body: &mut [WirInstr],
     types: &[WirTypeDef],
     vci: &IndexMap<u32, (u32, u32)>,
     nullable_map: &IndexMap<u32, (u32, WirType)>,

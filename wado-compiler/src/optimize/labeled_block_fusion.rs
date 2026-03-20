@@ -936,7 +936,6 @@ fn perform_fusion(
 /// - `break orig_label: null` → `{ ELSE; break fused_label; }`
 /// - `break orig_label: VariantConstruct(case=C, v)` → `{ let __payload = v; THEN_SUBST; break fused_label; }`
 /// - `break orig_label: VariantConstruct(case≠C)` → `{ ELSE; break fused_label; }`
-#[allow(clippy::too_many_arguments)]
 fn transform_lb_stmts(
     stmts: Vec<TirStmt>,
     orig_label: &str,
@@ -968,7 +967,6 @@ fn transform_lb_stmts(
     out
 }
 
-#[allow(clippy::too_many_arguments)]
 fn transform_lb_stmt(
     stmt: TirStmt,
     orig_label: &str,
@@ -1205,7 +1203,6 @@ fn transform_lb_stmt(
 
 /// Walk a `TirStmtKind` and apply label transformation to any nested block expressions
 /// that may contain `break orig_label`.
-#[allow(clippy::too_many_arguments)]
 fn transform_lb_in_stmt_kind(
     kind: &mut TirStmtKind,
     orig_label: &str,
@@ -1258,7 +1255,6 @@ fn transform_lb_in_stmt_kind(
 
 /// Recursively walk a `TirExpr` to find and transform blocks that contain
 /// `break orig_label` statements.
-#[allow(clippy::too_many_arguments)]
 fn transform_lb_in_expr(
     expr: &mut TirExpr,
     orig_label: &str,
@@ -1443,7 +1439,6 @@ fn transform_lb_in_expr(
 }
 
 /// Transform break statements within a block's stmts in-place.
-#[allow(clippy::too_many_arguments)]
 fn transform_lb_in_block(
     block: &mut TirBlock,
     orig_label: &str,

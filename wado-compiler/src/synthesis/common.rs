@@ -61,7 +61,6 @@ pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> Tir
 }
 
 /// Create an i32 literal expression.
-#[allow(clippy::cast_sign_loss)]
 pub fn i32_const(value: i32) -> TirExpr {
     TirExpr::new(
         TirExprKind::IntLiteral {
@@ -74,7 +73,6 @@ pub fn i32_const(value: i32) -> TirExpr {
 }
 
 /// Create an i64 literal expression.
-#[allow(clippy::cast_sign_loss)]
 pub fn i64_const(value: i64) -> TirExpr {
     TirExpr::new(
         TirExprKind::IntLiteral {

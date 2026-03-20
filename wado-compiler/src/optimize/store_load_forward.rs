@@ -22,8 +22,6 @@
 //! invalidated (selective invalidation), allowing known values for unmodified
 //! locals to survive through assert branches and similar patterns.
 
-use std::collections::HashMap;
-
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::project::Project;
 use crate::tir::{
@@ -35,11 +33,11 @@ use crate::tir::{
 /// Built in a single O(n) bottom-up pass before the forward traversal,
 /// replacing the previous O(n²) approach where `collect_modified_locals`
 /// was called inline at every control-flow node (re-walking subtrees).
-type ModifiedLocalsCache = HashMap<*const TirBlock, IndexSet<u32>>;
+type ModifiedLocalsCache = IndexMap<*const TirBlock, IndexSet<u32>>;
 
 /// Precompute modified locals for all blocks in a single bottom-up pass.
 fn precompute_all_modified_locals(body: &TirBlock) -> ModifiedLocalsCache {
-    let mut cache = ModifiedLocalsCache::new();
+    let mut cache = ModifiedLocalsCache::default();
     precompute_modified_block(body, &mut cache);
     cache
 }

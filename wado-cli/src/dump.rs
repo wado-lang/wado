@@ -226,7 +226,6 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-#[allow(clippy::similar_names)] // show_tir and show_wir are intentional phase names
 /// Parse command-line arguments for the `dump` subcommand.
 ///
 /// # Errors
@@ -611,8 +610,10 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                             wado_compiler::tir::ResolvedType::Enum { .. } => "enum",
                             wado_compiler::tir::ResolvedType::Variant { .. } => "variant",
                             wado_compiler::tir::ResolvedType::Newtype { .. } => "newtype",
-                            wado_compiler::tir::ResolvedType::Resource { .. } => "resource",
-                            wado_compiler::tir::ResolvedType::GenericResource { .. } => "resource",
+                            wado_compiler::tir::ResolvedType::Resource { .. }
+                            | wado_compiler::tir::ResolvedType::GenericResource { .. } => {
+                                "resource"
+                            }
                             wado_compiler::tir::ResolvedType::Ref(_) => "ref",
                             wado_compiler::tir::ResolvedType::MutRef(_) => "mut_ref",
                             wado_compiler::tir::ResolvedType::Function { .. } => "fn",

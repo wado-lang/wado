@@ -20,10 +20,7 @@ impl Template {
         let pattern = format!("{}*{}", self.prefix, self.suffix);
         let mut results: Vec<(String, PathBuf)> = Vec::new();
         for entry in glob::glob(&pattern).expect("invalid glob pattern") {
-            let path = match entry {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
+            let Ok(path) = entry else { continue };
             let path_str = path.to_string_lossy();
             if let Some(name) = path_str
                 .strip_prefix(&self.prefix)

@@ -31,7 +31,6 @@ pub struct RunOptions {
 }
 
 #[derive(Clone, Copy)]
-#[allow(clippy::enum_variant_names)]
 enum Opt {
     Dir,
     NoDir,

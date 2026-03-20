@@ -1707,7 +1707,6 @@ impl WirInstr {
 
     /// Visit all child instructions of this node (non-recursive).
     /// Used by the emitter for pre-scanning (e.g., collecting `DeclareLocal`).
-    #[allow(clippy::many_single_char_names)]
     pub fn for_each_child(&self, f: &mut impl FnMut(&WirInstr)) {
         match self {
             // Leaf nodes
@@ -2282,7 +2281,6 @@ impl WirInstr {
 
     /// Visit all child instructions of this node mutably (non-recursive).
     /// Used by WIR optimization passes for in-place tree rewriting.
-    #[allow(clippy::many_single_char_names)]
     pub fn for_each_boxed_child_mut(&mut self, f: &mut impl FnMut(&mut WirInstr)) {
         match self {
             // Leaf nodes

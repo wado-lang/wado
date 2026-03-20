@@ -3,7 +3,7 @@
 /// A cross-interface type import
 #[derive(Debug, Clone)]
 pub struct WadoImport {
-    /// Type names to import (e.g., ["Instant"])
+    /// Type names to import (e.g., `["Instant"]`)
     pub type_names: Vec<String>,
     /// Source path (e.g., "wasi:clocks/system-clock")
     pub from_path: String,
