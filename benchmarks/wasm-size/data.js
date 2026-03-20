@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773999396598,
+  "lastUpdate": 1774008221063,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4937,6 +4937,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5078d22cfb4ceb6ae3577aac5b76efeea73e8999"
         },
         "date": 1773999396374,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22261,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "243628f14678b8151554d56cabce4087704259be",
+          "message": "Merge pull request #625 from wado-lang/claude/debug-compilation-speed-0TzjA\n\nOptimize compiler passes with single-pass analysis and caching",
+          "timestamp": "2026-03-20T21:01:07+09:00",
+          "tree_id": "093a559d29e14c83d89a1199217d10633779cd22",
+          "url": "https://github.com/wado-lang/wado/commit/243628f14678b8151554d56cabce4087704259be"
+        },
+        "date": 1774008220845,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
