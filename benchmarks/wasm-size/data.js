@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773977296644,
+  "lastUpdate": 1773983220870,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4703,6 +4703,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/08cf27851e3a454649cc8341217f78592faefcca"
         },
         "date": 1773977296428,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22322,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "db2ca706836916f05dd837da565a2c65bbff572b",
+          "message": "Merge pull request #619 from wado-lang/claude/fix-effect-polymorphism-brolz\n\nAdd effect polymorphism support with single effect parameter",
+          "timestamp": "2026-03-20T14:04:33+09:00",
+          "tree_id": "271c674f3f358a9c545ec91de9e3a87d4989da41",
+          "url": "https://github.com/wado-lang/wado/commit/db2ca706836916f05dd837da565a2c65bbff572b"
+        },
+        "date": 1773983220652,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
