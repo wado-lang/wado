@@ -245,7 +245,7 @@ description = "Rebuild bundled libm Wasm module"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release --manifest-path wado-bundled-libm/Cargo.toml
+cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release && cd ..
 cargo run --bin wado-dev-tools -- wasm2wat target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > wado-compiler/lib/builtins/wado-bundled-libm.wat
 """
 
