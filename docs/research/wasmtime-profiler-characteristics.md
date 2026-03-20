@@ -226,32 +226,46 @@ Both profilers cover all these categories equally.
 
 JitDump files are 23-37× larger because they contain actual machine code bytes.
 
-## Decision Guide: Which Profiler to Use First?
+## Decision Guide: Which Profiler to Use?
 
 ```
 Is the guest profiler working? (CM-async disabled)
 ├── Yes → Use guest (cross-platform, self-contained, Firefox Profiler UI)
-└── No (CM-async enabled, as in Wado) →
-    │
-    Do you need instruction-level hot-spot analysis?
-    ├── No → Use perfmap (simplest, zero overhead, samply-compatible)
-    └── Yes → Use jitdump (enables perf annotate)
+└── No (CM-async enabled, as in Wado) → Use jitdump
 ```
 
-**Recommendation: Start with `perfmap`, escalate to `jitdump` when needed.**
+**Recommendation: Use `jitdump` as the default profiler for Wado.**
 
-1. **First pass — `perfmap`:** Identify which functions are hot. Zero overhead means
-   your measurements are not distorted. Works with `samply` for a great UI.
-   This answers "where is time being spent?" at the function level.
+Wado's compiler aggressively inlines functions (`#[inline]`, `#[inline(always)]`,
+and optimizer-driven inlining). This means the "hot function" in a profile is often
+a large inlined blob (e.g., `run` at 7.6 KB containing dozens of inlined callees).
+Function-level attribution (perfmap) would only tell you "run is hot" — not *which
+inlined callee* within `run` is the actual bottleneck.
 
-2. **Second pass — `jitdump`:** Once you've identified the hot function(s), re-run
-   with jitdump to get instruction-level annotation. `perf annotate` shows exactly
-   which loop or instruction is the bottleneck within that function.
+JitDump solves this because `perf annotate` shows instruction-level sample attribution
+within the inlined function body. Even without DWARF debug info, you can identify
+hot loops and correlate instruction patterns back to specific Wado source operations.
 
-In practice, for Wado compiler optimization work, `perfmap` alone is usually sufficient
-because the actionable insight is at the function level (which Wado function to optimize,
-whether to inline, etc.). JitDump's instruction-level detail is most useful when
-optimizing Cranelift codegen quality for a specific hot function.
+**When to use perfmap instead:**
+- Quick sanity checks where you only need "is this function hot at all?"
+- When using `samply` for Firefox Profiler visualization (samply reads perfmap but
+  not jitdump)
+- When output file size matters (perfmap is 23-37× smaller)
+
+**Typical workflow:**
+```sh
+# 1. Record with jitdump
+perf record -k mono wado run --profile jitdump prog.wado
+
+# 2. Inject JIT symbols
+perf inject --jit -i perf.data -o perf.jit.data
+
+# 3. See which functions are hot
+perf report -i perf.jit.data
+
+# 4. Drill into a hot function's instructions
+perf annotate -i perf.jit.data -s run
+```
 
 ## Key Finding: Guest Profiler Incompatibility with CM-async
 
