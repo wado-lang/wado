@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774019469668,
+  "lastUpdate": 1774039247294,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5093,6 +5093,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/83153651cdce28a832a1730db95b77b1fd07d3df"
         },
         "date": 1774019469443,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22261,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8433bfee089a04ec1762c710ac80f13f2aa6b9d5",
+          "message": "Merge pull request #629 from wado-lang/claude/compare-json-benchmarks-BwaVS\n\nUpdate JSON benchmarks to use BTreeMap for fair Rust comparison",
+          "timestamp": "2026-03-21T05:38:22+09:00",
+          "tree_id": "f0c9d530b2e0919e981d93668ac0df6e672172c7",
+          "url": "https://github.com/wado-lang/wado/commit/8433bfee089a04ec1762c710ac80f13f2aa6b9d5"
+        },
+        "date": 1774039247196,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
