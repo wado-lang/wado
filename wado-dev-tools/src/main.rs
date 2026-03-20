@@ -7,7 +7,7 @@ use wado_compiler::OptLevel;
 
 enum Command {
     GoldenDump,
-    WasmPrint,
+    Wasm2Wat,
 }
 
 fn main() {
@@ -56,7 +56,7 @@ fn main() {
                 let cmd = val.to_string_lossy();
                 command = Some(match cmd.as_ref() {
                     "golden-dump" => Command::GoldenDump,
-                    "wasm-print" => Command::WasmPrint,
+                    "wasm2wat" => Command::Wasm2Wat,
                     _ => panic!("unknown command: {cmd}"),
                 });
             }
@@ -67,16 +67,16 @@ fn main() {
         }
     }
 
-    match command.expect("command is required (golden-dump, wasm-print)") {
+    match command.expect("command is required (golden-dump, wasm2wat)") {
         Command::GoldenDump => {
             let in_template = in_template.expect("--in is required");
             let out_template = out_template.expect("--out is required");
             pipeline::run_pipeline(&in_template, &out_template, phase, opt_level, skip_empty);
         }
-        Command::WasmPrint => {
+        Command::Wasm2Wat => {
             let input = positional_args
                 .first()
-                .expect("usage: wado-dev-tools wasm-print <file.wasm>");
+                .expect("usage: wado-dev-tools wasm2wat <file.wasm>");
             let wasm = std::fs::read(input).expect("failed to read input file");
             let wat = wasmprinter::print_bytes(&wasm).expect("failed to print wasm");
             print!("{wat}");
