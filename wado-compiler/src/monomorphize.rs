@@ -320,7 +320,7 @@ impl Monomorphizer {
             .collect();
 
         // Store in module for later phases
-        module.generic_structs = generic_structs.clone();
+        module.generic_structs.clone_from(&generic_structs);
 
         // Phase 2-4: Collect and instantiate structs iteratively
         // This is done in a loop because instantiating a struct (like TreeMap<String,i32>)
@@ -378,7 +378,7 @@ impl Monomorphizer {
             .collect();
 
         // Store in module for later phases
-        module.generic_functions = generic_functions.clone();
+        module.generic_functions.clone_from(&generic_functions);
 
         // Phase 8: Collect function instantiation sites from Call expressions
         self.collect_function_instantiation_sites(&module, &generic_functions);
@@ -488,7 +488,7 @@ impl Monomorphizer {
         external_generic_structs: &IndexMap<String, TirStruct>,
         trait_method_locations: &IndexMap<String, ModuleSource>,
     ) -> TirModule {
-        self.trait_method_locations = trait_method_locations.clone();
+        self.trait_method_locations.clone_from(trait_method_locations);
 
         // Phase 1: Collect all generic struct definitions
         // Include both local structs AND external generic structs from other modules
@@ -503,7 +503,7 @@ impl Monomorphizer {
         }
 
         // Store in module for later phases
-        module.generic_structs = generic_structs.clone();
+        module.generic_structs.clone_from(&generic_structs);
 
         // Build set of valid struct names for collection
         let valid_struct_names: IndexSet<String> = generic_structs.keys().cloned().collect();
@@ -562,7 +562,7 @@ impl Monomorphizer {
         }
 
         // Store in module for later phases
-        module.generic_functions = generic_functions.clone();
+        module.generic_functions.clone_from(&generic_functions);
 
         // Phase 8: Collect function instantiation sites from Call expressions
         self.collect_function_instantiation_sites(&module, &generic_functions);
@@ -816,12 +816,12 @@ impl Monomorphizer {
                 // Update struct_name if it was monomorphized
                 // First try lookup by original type_id
                 if let Some(mangled_name) = self.type_to_mangled_name.get(&original_type_id) {
-                    *struct_name = mangled_name.clone();
+                    struct_name.clone_from(mangled_name);
                 } else {
                     // Derive struct_name from the resolved type
                     match type_table.get(new_type_id) {
                         ResolvedType::Struct { name, .. } => {
-                            *struct_name = name.clone();
+                            struct_name.clone_from(name);
                         }
                         ResolvedType::GenericInstance {
                             name, type_args, ..
@@ -3015,7 +3015,7 @@ impl Monomorphizer {
                 // Update struct_name to match the (possibly monomorphized) struct_type
                 match type_table.get(*struct_type) {
                     ResolvedType::Struct { name, .. } => {
-                        *struct_name = name.clone();
+                        struct_name.clone_from(name);
                     }
                     ResolvedType::GenericInstance {
                         name, type_args, ..

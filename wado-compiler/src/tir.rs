@@ -1892,7 +1892,7 @@ pub enum TirTemplatePart {
     Literal(String),
     /// An interpolated expression with optional format specifier.
     Interpolation {
-        expr: TirExpr,
+        expr: Box<TirExpr>,
         format_spec: Option<TemplateFormatSpec>,
     },
 }

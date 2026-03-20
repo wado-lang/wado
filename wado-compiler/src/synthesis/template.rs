@@ -443,6 +443,7 @@ fn build_template_block(
                 expr: resolved,
                 format_spec,
             } => {
+                let resolved = *resolved;
                 // Strip refs for type-based decisions
                 let inner_type = strip_refs(resolved.type_id, tt);
 

@@ -180,7 +180,7 @@ impl WasmModuleInfo {
         }
 
         // Globals
-        wir.globals = self.globals.clone();
+        wir.globals.clone_from(&self.globals);
 
         // Export memory
         wir.exports.push(WirExport {
