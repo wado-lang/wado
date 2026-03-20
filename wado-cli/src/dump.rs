@@ -611,7 +611,9 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                             wado_compiler::tir::ResolvedType::Variant { .. } => "variant",
                             wado_compiler::tir::ResolvedType::Newtype { .. } => "newtype",
                             wado_compiler::tir::ResolvedType::Resource { .. }
-                            | wado_compiler::tir::ResolvedType::GenericResource { .. } => "resource",
+                            | wado_compiler::tir::ResolvedType::GenericResource { .. } => {
+                                "resource"
+                            }
                             wado_compiler::tir::ResolvedType::Ref(_) => "ref",
                             wado_compiler::tir::ResolvedType::MutRef(_) => "mut_ref",
                             wado_compiler::tir::ResolvedType::Function { .. } => "fn",

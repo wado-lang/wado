@@ -429,10 +429,18 @@ impl<'a> Transformer<'a> {
         let doc_comment = ty.docs.contents.clone();
 
         let def = match &ty.kind {
-            TypeDefKind::Enum(e) => WadoTypeDef::Enum(Self::transform_enum(e, name, doc_comment, wasi_attr)),
-            TypeDefKind::Flags(f) => WadoTypeDef::Flags(Self::transform_flags(f, name, doc_comment, wasi_attr)),
-            TypeDefKind::Record(r) => WadoTypeDef::Struct(self.transform_record(r, name, doc_comment, wasi_attr)?),
-            TypeDefKind::Variant(v) => WadoTypeDef::Variant(self.transform_variant(v, name, doc_comment, wasi_attr)?),
+            TypeDefKind::Enum(e) => {
+                WadoTypeDef::Enum(Self::transform_enum(e, name, doc_comment, wasi_attr))
+            }
+            TypeDefKind::Flags(f) => {
+                WadoTypeDef::Flags(Self::transform_flags(f, name, doc_comment, wasi_attr))
+            }
+            TypeDefKind::Record(r) => {
+                WadoTypeDef::Struct(self.transform_record(r, name, doc_comment, wasi_attr)?)
+            }
+            TypeDefKind::Variant(v) => {
+                WadoTypeDef::Variant(self.transform_variant(v, name, doc_comment, wasi_attr)?)
+            }
             TypeDefKind::Type(inner) => WadoTypeDef::Newtype(WadoNewtype {
                 name,
                 wasi_attr: Some(wasi_attr),
@@ -442,7 +450,10 @@ impl<'a> Transformer<'a> {
                 name,
                 wasi_attr: Some(wasi_attr),
                 target: WadoType::Tuple(
-                    t.types.iter().map(|ty| self.transform_type(*ty)).collect::<Result<Vec<_>>>()?,
+                    t.types
+                        .iter()
+                        .map(|ty| self.transform_type(*ty))
+                        .collect::<Result<Vec<_>>>()?,
                 ),
             }),
             TypeDefKind::List(inner) => WadoTypeDef::Newtype(WadoNewtype {
@@ -470,7 +481,12 @@ impl<'a> Transformer<'a> {
                 wasi_attr: Some(case.name.clone()),
             })
             .collect();
-        WadoEnum { name, doc_comment, wasi_attr: Some(wasi_attr), variants }
+        WadoEnum {
+            name,
+            doc_comment,
+            wasi_attr: Some(wasi_attr),
+            variants,
+        }
     }
 
     fn transform_flags(
@@ -488,7 +504,12 @@ impl<'a> Transformer<'a> {
                 wasi_attr: flag.name.clone(),
             })
             .collect();
-        WadoFlags { name, doc_comment, wasi_attr: Some(wasi_attr), flags }
+        WadoFlags {
+            name,
+            doc_comment,
+            wasi_attr: Some(wasi_attr),
+            flags,
+        }
     }
 
     fn transform_record(
@@ -510,7 +531,12 @@ impl<'a> Transformer<'a> {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        Ok(WadoStruct { name, doc_comment, wasi_attr: Some(wasi_attr), fields })
+        Ok(WadoStruct {
+            name,
+            doc_comment,
+            wasi_attr: Some(wasi_attr),
+            fields,
+        })
     }
 
     fn transform_variant(
@@ -532,7 +558,12 @@ impl<'a> Transformer<'a> {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        Ok(WadoVariant { name, doc_comment, wasi_attr: Some(wasi_attr), cases })
+        Ok(WadoVariant {
+            name,
+            doc_comment,
+            wasi_attr: Some(wasi_attr),
+            cases,
+        })
     }
 
     fn transform_resource(

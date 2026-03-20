@@ -175,7 +175,9 @@ pub fn run_pipeline(
     assert_eq!(
         stats.success_count as usize + stats.skip_count as usize,
         total,
-        "Mismatch: {} + {} != {compile_count}", stats.success_count, stats.skip_count
+        "Mismatch: {} + {} != {compile_count}",
+        stats.success_count,
+        stats.skip_count
     );
 
     print_stats(&stats, total, num_workers, start.elapsed());
@@ -247,7 +249,13 @@ fn collect_results(
         }
     }
 
-    PipelineStats { success_count, skip_count, total_compile_time, max_compile_time, max_compile_file }
+    PipelineStats {
+        success_count,
+        skip_count,
+        total_compile_time,
+        max_compile_time,
+        max_compile_file,
+    }
 }
 
 fn print_stats(stats: &PipelineStats, total: usize, num_workers: usize, elapsed: Duration) {
@@ -257,7 +265,10 @@ fn print_stats(stats: &PipelineStats, total: usize, num_workers: usize, elapsed:
         Duration::ZERO
     };
     eprintln!();
-    eprintln!("  Files:        {} generated, {} skipped, {total} total", stats.success_count, stats.skip_count);
+    eprintln!(
+        "  Files:        {} generated, {} skipped, {total} total",
+        stats.success_count, stats.skip_count
+    );
     eprintln!("  Workers:      {num_workers}");
     eprintln!("  Wall time:    {:.2}s", elapsed.as_secs_f64());
     eprintln!(

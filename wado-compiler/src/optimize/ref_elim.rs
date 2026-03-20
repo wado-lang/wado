@@ -538,7 +538,10 @@ fn check_deref_only_uses_in_stmt(stmt: &TirStmt, refs: &mut IndexMap<u32, DerefO
 fn check_deref_only_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, DerefOnlyRef>) {
     match &expr.kind {
         // `*r` where r is a deref-only candidate: acceptable use
-        TirExprKind::Unary { op: TirUnaryOp::Deref, expr: inner } => {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: inner,
+        } => {
             if let TirExprKind::Local { index, .. } = &inner.kind
                 && let Some(info) = refs.get_mut(index)
             {
