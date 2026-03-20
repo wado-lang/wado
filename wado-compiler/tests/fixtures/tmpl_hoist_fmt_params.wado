@@ -1,0 +1,50 @@
+// Formatter hoisting: different parameter combinations in the same template.
+// Each Formatter with distinct params (fill, align, sign_plus, zero_pad,
+// width, precision — all fields except indent and buf) must be hoisted
+// as a separate local to avoid cross-contamination.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Two formatters: zero-padded width=5 vs right-aligned width=10
+    // {x:05} → fill=48('0'), zero_pad=1, width=5
+    // {x:>10} → fill=32(' '), width=10
+    let mut total = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let s = `{i:05} {i:>10}`;
+        total += s.len();
+    }
+    println(`pad_vs_align={total}`);
+
+    // Two formatters: signed float vs unsigned float
+    // {f:+0.2f} → sign_plus=1, precision=2
+    // {f:0.2f}  → sign_plus=0, precision=2
+    let mut total2 = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let f = i as f64 * 1.5;
+        let s = `{f:+0.2f} {f:0.2f}`;
+        total2 += s.len();
+    }
+    println(`sign={total2}`);
+
+    // Three formatters with different widths: width=3, width=6, width=10
+    let mut total3 = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let s = `{i:3} {i:6} {i:10}`;
+        total3 += s.len();
+    }
+    println(`widths={total3}`);
+
+    // Zero-pad + precision combo: {f:08.2f} vs {f:0.4f}
+    // {f:08.2f} → fill=48, zero_pad=1, width=8, precision=2
+    // {f:0.4f}  → fill=32, zero_pad=0, width=0, precision=4
+    let mut total4 = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let f = i as f64 / 3.0;
+        let s = `{f:08.2f} {f:0.4f}`;
+        total4 += s.len();
+    }
+    println(`zeroprec={total4}`);
+}
+
+__DATA__
+{"stdout": "pad_vs_align=80\nsign=50\nwidths=105\nzeroprec=75\n", "wir_expect:O2": ["__fmt_buf_", ".indent = 0"]}

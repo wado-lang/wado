@@ -107,32 +107,31 @@ fn run() with Stdout {
     let s_6: ref String;
     let i_7: i32;
     let s_8: ref String;
-    let __local_10: ref Formatter;
     let __local_11: ref String;
     let __local_12: ref Formatter;
-    let __local_14: ref Formatter;
     let __local_15: ref String;
     let __local_16: ref Formatter;
     let __local_17: ref String;
     let __local_18: ref Formatter;
-    let __local_21: ref String;
     let __local_23: ref Formatter;
     let __local_28: ref String;
     let __local_30: ref Formatter;
-    let __local_34: ref String;
     let __local_36: ref Formatter;
-    let __local_39: ref String;
     let __local_41: ref Formatter;
     let __local_46: ref String;
     let __local_48: ref Formatter;
     let __local_52: ref String;
     let __local_54: ref Formatter;
     let __tmpl_buf_57: ref String;
-    let __tmpl_buf_58: ref String;
+    let __fmt_buf_58: ref Formatter;
+    let __tmpl_buf_59: ref String;
+    let __fmt_buf_60: ref Formatter;
+    let __fmt_buf_61: ref Formatter;
     total = 0;
     __for_0: block {
         i_1 = 0;
         __tmpl_buf_57 = String { repr: builtin::array_new<u8>(22), used: 0 };
+        __fmt_buf_58 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__tmpl_buf_57) };
         block {
             l1: loop {
                 if (i_1 < 5) == 0 {
@@ -146,11 +145,8 @@ fn run() with Stdout {
                     String::append_char(__tmpl_buf_57, 117);
                     String::append_char(__tmpl_buf_57, 101);
                     String::append_char(__tmpl_buf_57, 61);
-                    __local_10 = __inline_Formatter__new_3: block -> ref Formatter {
-                        __local_21 = __tmpl_buf_57;
-                        break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_21) };
-                    };
-                    __local_23 = __local_10;
+                    __fmt_buf_58.indent = 0;
+                    __local_23 = __fmt_buf_58;
                     i32::fmt_decimal(i_1, __local_23);
                     break __tmpl: __tmpl_buf_57;
                 };
@@ -179,7 +175,9 @@ fn run() with Stdout {
     total2 = 0;
     __for_1: block {
         i_4 = 0;
-        __tmpl_buf_58 = String { repr: builtin::array_new<u8>(38), used: 0 };
+        __tmpl_buf_59 = String { repr: builtin::array_new<u8>(38), used: 0 };
+        __fmt_buf_60 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__tmpl_buf_59) };
+        __fmt_buf_61 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__tmpl_buf_59) };
         block {
             l4: loop {
                 if (i_4 < 3) == 0 {
@@ -187,26 +185,20 @@ fn run() with Stdout {
                 };
                 x = i_4 * 10;
                 s_6 = __tmpl: block -> ref String {
-                    __tmpl_buf_58.used = 0;
-                    String::append_char(__tmpl_buf_58, 105);
-                    String::append_char(__tmpl_buf_58, 61);
-                    __local_14 = __inline_Formatter__new_12: block -> ref Formatter {
-                        __local_34 = __tmpl_buf_58;
-                        break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_34) };
-                    };
-                    __local_36 = __local_14;
+                    __tmpl_buf_59.used = 0;
+                    String::append_char(__tmpl_buf_59, 105);
+                    String::append_char(__tmpl_buf_59, 61);
+                    __fmt_buf_60.indent = 0;
+                    __local_36 = __fmt_buf_60;
                     i32::fmt_decimal(i_4, __local_36);
-                    String::append_char(__tmpl_buf_58, 44);
-                    String::append_char(__tmpl_buf_58, 32);
-                    String::append_char(__tmpl_buf_58, 120);
-                    String::append_char(__tmpl_buf_58, 61);
-                    __local_14 = __inline_Formatter__new_15: block -> ref Formatter {
-                        __local_39 = __tmpl_buf_58;
-                        break __inline_Formatter__new_15: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_39) };
-                    };
-                    __local_41 = __local_14;
+                    String::append_char(__tmpl_buf_59, 44);
+                    String::append_char(__tmpl_buf_59, 32);
+                    String::append_char(__tmpl_buf_59, 120);
+                    String::append_char(__tmpl_buf_59, 61);
+                    __fmt_buf_61.indent = 0;
+                    __local_41 = __fmt_buf_61;
                     i32::fmt_decimal(x, __local_41);
-                    break __tmpl: __tmpl_buf_58;
+                    break __tmpl: __tmpl_buf_59;
                 };
                 total2 = total2 + s_6.used;
                 i_4 = i_4 + 1;

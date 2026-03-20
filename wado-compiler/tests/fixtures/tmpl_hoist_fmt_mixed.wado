@@ -1,0 +1,37 @@
+// Formatter hoisting: mixed default and format-specifier Formatters.
+// A template like `{i}, {x:0.2f}` creates two Formatters with different params.
+// Each distinct parameter set should be hoisted as a separate Formatter.
+// Default Formatter (width=-1, precision=-1) and specifier Formatter (width=0,
+// precision=2) should each be hoisted independently.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // One default + one specifier
+    let mut total = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let x = i as f64;
+        let s = `{i}: {x:0.2f}`;
+        total += s.len();
+    }
+    println(`total={total}`);
+
+    // Two specifiers with different precisions
+    let mut total2 = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let x = i as f64 / 3.0;
+        let s = `{x:0.2f} / {x:0.6f}`;
+        total2 += s.len();
+    }
+    println(`total2={total2}`);
+
+    // Default + hex specifier
+    let mut total3 = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let s = `dec={i} hex={i:x}`;
+        total3 += s.len();
+    }
+    println(`total3={total3}`);
+}
+
+__DATA__
+{"stdout": "total=35\ntotal2=75\ntotal3=55\n", "wir_expect:O2": ["__fmt_buf_", ".indent = 0"]}

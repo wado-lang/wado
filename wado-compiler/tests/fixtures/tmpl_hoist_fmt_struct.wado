@@ -1,0 +1,51 @@
+// Formatter hoisting: struct Display/Inspect in loops.
+// Structs formatted via `{p:?}` (inspect) or `{p}` (Display) use the same
+// Formatter infrastructure. Hoisting should work the same way as with primitives.
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout {
+    // Struct inspect: default Formatter (`:?`)
+    let mut total = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let p = Point { x: i, y: i * 2 };
+        let s = `{p:?}`;
+        total += s.len();
+    }
+    println(`inspect={total}`);
+
+    // Struct inspect with surrounding text
+    let mut total2 = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let p = Point { x: i, y: i * 2 };
+        let s = `point={p:?}!`;
+        total2 += s.len();
+    }
+    println(`ctx={total2}`);
+
+    // Mixed: struct inspect + number with format specifier
+    let mut total3 = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        let p = Point { x: i, y: i * 2 };
+        let d = i as f64 * 1.5;
+        let s = `{p:?} d={d:0.2f}`;
+        total3 += s.len();
+    }
+    println(`mixed={total3}`);
+
+    // Struct inspect + default number interpolation
+    let mut total4 = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        let p = Point { x: i, y: i * 2 };
+        let s = `{p:?} i={i}`;
+        total4 += s.len();
+    }
+    println(`both={total4}`);
+}
+
+__DATA__
+{"stdout": "inspect=100\nctx=135\nmixed=81\nboth=72\n", "wir_expect:O2": ["__fmt_buf_", ".indent = 0"]}
