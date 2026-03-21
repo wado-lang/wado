@@ -70,12 +70,12 @@ Wado already generates WIT internally during compilation (the CM binding synthes
 
 ### How Other Toolchains Handle This
 
-| Toolchain | Approach |
-| --- | --- |
+| Toolchain                            | Approach                                                                                                 |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
 | Rust (wit-bindgen + cargo-component) | Embeds WIT in `"component-type"` custom sections; `wasm-tools component new` creates the final component |
-| C/C++ (wit-bindgen-c) | Same `"component-type"` embedding; opaquely propagated through clang/wasm-ld |
-| Go (wit-bindgen-go) | Same approach via `wasm-tools` |
-| JavaScript (jco) | Can extract WIT from components via `"component-type"` sections |
+| C/C++ (wit-bindgen-c)                | Same `"component-type"` embedding; opaquely propagated through clang/wasm-ld                             |
+| Go (wit-bindgen-go)                  | Same approach via `wasm-tools`                                                                           |
+| JavaScript (jco)                     | Can extract WIT from components via `"component-type"` sections                                          |
 
 Every major CM toolchain uses the `"component-type"` custom section convention. This is the interoperable standard.
 
@@ -95,12 +95,12 @@ This is the same format produced by `wit-component::metadata::encode()` in `wasm
 
 ### When It Applies
 
-| Output Type | WIT Bundled | Rationale |
-| --- | --- | --- |
-| Library package (`lib` in `wado.toml`) | Yes (default) | Consumers need the interface to generate bindings |
-| Command (`wasi:cli/command`) | Yes (default) | Self-describing binaries; tools can inspect the component |
-| Service (`wasi:http/service`) | Yes (default) | Same as command |
-| `-Os` (strip symbols) | Yes | WIT is interface metadata, not debug symbols; stripping it would break interoperability |
+| Output Type                            | WIT Bundled   | Rationale                                                                               |
+| -------------------------------------- | ------------- | --------------------------------------------------------------------------------------- |
+| Library package (`lib` in `wado.toml`) | Yes (default) | Consumers need the interface to generate bindings                                       |
+| Command (`wasi:cli/command`)           | Yes (default) | Self-describing binaries; tools can inspect the component                               |
+| Service (`wasi:http/service`)          | Yes (default) | Same as command                                                                         |
+| `-Os` (strip symbols)                  | Yes           | WIT is interface metadata, not debug symbols; stripping it would break interoperability |
 
 ### CLI Control
 
@@ -125,8 +125,8 @@ This enables any CM-compatible toolchain to consume Wado libraries without Wado-
 
 As described in WEP: Package Manifest, when both producer and consumer are Wado, the compiler can skip the CM canonical ABI and share Wasm GC types directly. WIT bundling does not affect this optimization — it provides the interface metadata that non-Wado consumers need, while Wado consumers can use the embedded Wado provider metadata for the fast path.
 
-| Consumer | Uses WIT? | Uses Wado metadata? |
-| --- | --- | --- |
-| Non-Wado (Rust, C, JS, etc.) | Yes — generates bindings from bundled WIT | No |
-| Wado (source dependency) | No — compiles from source | No |
-| Wado (binary dependency) | Fallback — if no Wado metadata | Yes — GC type sharing |
+| Consumer                     | Uses WIT?                                 | Uses Wado metadata?   |
+| ---------------------------- | ----------------------------------------- | --------------------- |
+| Non-Wado (Rust, C, JS, etc.) | Yes — generates bindings from bundled WIT | No                    |
+| Wado (source dependency)     | No — compiles from source                 | No                    |
+| Wado (binary dependency)     | Fallback — if no Wado metadata            | Yes — GC type sharing |

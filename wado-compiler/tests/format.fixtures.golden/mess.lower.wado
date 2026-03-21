@@ -1442,7 +1442,7 @@ pub fn println(message: String) with Stdout {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
-    let subtask: i32 = __cm_adapter__Stdout_write_via_stream(rx as i32);
+    let subtask: i32 = __cm_binding__Stdout_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, true);
     core::internal::wait_for_subtask(subtask);
 }
@@ -1451,7 +1451,7 @@ pub fn eprintln(message: String) with Stderr {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
-    let subtask: i32 = __cm_adapter__Stderr_write_via_stream(rx as i32);
+    let subtask: i32 = __cm_binding__Stderr_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, true);
     core::internal::wait_for_subtask(subtask);
 }
@@ -1460,7 +1460,7 @@ pub fn print(message: String) with Stdout {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
-    let subtask: i32 = __cm_adapter__Stdout_write_via_stream(rx as i32);
+    let subtask: i32 = __cm_binding__Stdout_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, false);
     core::internal::wait_for_subtask(subtask);
 }
@@ -1469,7 +1469,7 @@ pub fn eprint(message: String) with Stderr {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
-    let subtask: i32 = __cm_adapter__Stderr_write_via_stream(rx as i32);
+    let subtask: i32 = __cm_binding__Stderr_write_via_stream(rx as i32);
     core::cli::write_to_stream(tx, message, false);
     core::internal::wait_for_subtask(subtask);
 }
@@ -1478,14 +1478,14 @@ pub fn print_bytes(data: Array<u8>) with Stdout {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
-    let subtask: i32 = __cm_adapter__Stdout_write_via_stream(rx as i32);
+    let subtask: i32 = __cm_binding__Stdout_write_via_stream(rx as i32);
     core::internal::cm_stream_write_u8(&tx as i32, data);
     cm_raw_call stream-drop-writable(&tx as i32);
     core::internal::wait_for_subtask(subtask);
 }
 
 pub fn env(name: String) -> Option<String> with Environment {
-    let vars: Array<[String, String]> = __cm_adapter__Environment_get_environment();
+    let vars: Array<[String, String]> = __cm_binding__Environment_get_environment();
     __for_0: {
         let mut i: i32 = 0;
         loop {
@@ -1505,23 +1505,23 @@ pub fn env(name: String) -> Option<String> with Environment {
 }
 
 pub fn args() -> Array<String> with Environment {
-    return __cm_adapter__Environment_get_arguments();
+    return __cm_binding__Environment_get_arguments();
 }
 
 pub fn cwd() -> Option<String> with Environment {
-    return __cm_adapter__Environment_get_initial_cwd();
+    return __cm_binding__Environment_get_initial_cwd();
 }
 
 pub fn exit_success() -> ! with Exit {
-    __cm_adapter__Exit_exit(core::cli::Ok(()) as i32);
+    __cm_binding__Exit_exit(core::cli::Ok(()) as i32);
 }
 
 pub fn exit_error() -> ! with Exit {
-    __cm_adapter__Exit_exit(core::cli::Err(()) as i32);
+    __cm_binding__Exit_exit(core::cli::Err(()) as i32);
 }
 
 pub fn exit(code: u8) -> ! with Exit {
-    __cm_adapter__Exit_exit_with_code(code as i32);
+    __cm_binding__Exit_exit_with_code(code as i32);
 }
 
 pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
@@ -14901,17 +14901,17 @@ pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: &fn(i32) -> i32, f: &mut Formatter)
     self."Fn<1,i32>^InspectAlt::inspect_alt"(f);
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data: i32) -> i32 {
+fn __cm_binding__Stdout_write_via_stream(data: i32) -> i32 {
     let __async_outptr: i32 = core::builtin::realloc(0, 0, 1, 2);
     return cm_raw_call wasi:cli/Stdout::write_via_stream(data, __async_outptr);
 }
 
-fn __cm_adapter__Stderr_write_via_stream(data: i32) -> i32 {
+fn __cm_binding__Stderr_write_via_stream(data: i32) -> i32 {
     let __async_outptr: i32 = core::builtin::realloc(0, 0, 1, 2);
     return cm_raw_call wasi:cli/Stderr::write_via_stream(data, __async_outptr);
 }
 
-fn __cm_adapter__Environment_get_environment() -> Array<[String, String]> {
+fn __cm_binding__Environment_get_environment() -> Array<[String, String]> {
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     cm_raw_call wasi:cli/Environment::get_environment(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
@@ -14937,7 +14937,7 @@ fn __cm_adapter__Environment_get_environment() -> Array<[String, String]> {
     return __result;
 }
 
-fn __cm_adapter__Environment_get_arguments() -> Array<String> {
+fn __cm_binding__Environment_get_arguments() -> Array<String> {
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     cm_raw_call wasi:cli/Environment::get_arguments(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
@@ -14960,7 +14960,7 @@ fn __cm_adapter__Environment_get_arguments() -> Array<String> {
     return __result;
 }
 
-fn __cm_adapter__Environment_get_initial_cwd() -> Option<String> {
+fn __cm_binding__Environment_get_initial_cwd() -> Option<String> {
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 12);
     cm_raw_call wasi:cli/Environment::get_initial_cwd(__outptr);
     let __disc: i32 = core::builtin::i32_load8_u(__outptr);
@@ -14973,11 +14973,11 @@ fn __cm_adapter__Environment_get_initial_cwd() -> Option<String> {
     return __option_result;
 }
 
-fn __cm_adapter__Exit_exit(status: i32) {
+fn __cm_binding__Exit_exit(status: i32) {
     cm_raw_call wasi:cli/Exit::exit(status);
 }
 
-fn __cm_adapter__Exit_exit_with_code(status_code: i32) {
+fn __cm_binding__Exit_exit_with_code(status_code: i32) {
     cm_raw_call wasi:cli/Exit::exit_with_code(status_code);
 }
 
