@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774082035033,
+  "lastUpdate": 1774087605661,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5483,6 +5483,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fa600d8971e55d6d374f53b0944d138cc50fe727"
         },
         "date": 1774082034808,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22185,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4e64531bbaaf7194eac1ef3ca2c4e74e79eb6e68",
+          "message": "Merge pull request #640 from wado-lang/claude/update-compiler-docs-ya12c\n\nRefactor compiler pipeline and documentation",
+          "timestamp": "2026-03-21T19:04:25+09:00",
+          "tree_id": "60317c85694a2383bc2cf1721c5d35a7da34cab2",
+          "url": "https://github.com/wado-lang/wado/commit/4e64531bbaaf7194eac1ef3ca2c4e74e79eb6e68"
+        },
+        "date": 1774087605433,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
