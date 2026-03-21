@@ -1,20 +1,15 @@
 // zlib-rs native benchmark for comparison with Wado's core:zlib
 //
-// Compresses and decompresses 100KB of patterned data x10 iterations,
-// using the same data pattern as zlib_bench.wado.
+// Compresses and decompresses twitter.json (~631KB) x10 iterations.
 
 use std::time::Instant;
 use zlib_rs::{DeflateConfig, InflateConfig, ReturnCode};
 
 fn main() {
-    let size = 100_000usize;
+    let data = std::fs::read("json_twitter/twitter.json")
+        .expect("failed to read json_twitter/twitter.json");
+    let size = data.len();
     let iterations = 10;
-
-    // Generate 100KB of patterned data: bytes (i % 256)
-    let mut data = Vec::with_capacity(size);
-    for i in 0..size {
-        data.push((i % 256) as u8);
-    }
 
     println!("zlib {size} bytes x {iterations} iterations");
 
