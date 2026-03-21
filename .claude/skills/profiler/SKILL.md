@@ -16,6 +16,7 @@ wado run --profile guest,profile.json,1 prog.wado
 ```
 
 Parameters: `guest[,path[,interval_ms]]`
+
 - `path`: output file (default: `profile.json`)
 - `interval_ms`: sampling interval in milliseconds (default: 10, use 1 for short-running programs, use 0 for exhaustive recording)
 
