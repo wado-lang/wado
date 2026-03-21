@@ -111,7 +111,6 @@ import fn stream-new from "wasi/stream-new";
 global mut call_count: i32 = 0;
 
 fn run() {
-    let __local_0: ref "tuple/[i32, i32]";
     let a: ref "tuple/[i32, i32, i32]";
     let __v0_2: i32;
     let __cond_3: bool;
@@ -119,7 +118,6 @@ fn run() {
     let __cond_5: bool;
     let __v0_6: i32;
     let __cond_7: bool;
-    let b: ref "tuple/[i32, i32, i32]";
     let __v0_9: i32;
     let __cond_10: bool;
     let __v0_11: i32;
@@ -171,11 +169,11 @@ fn run() {
     let __local_103: ref Formatter;
     let __local_106: ref String;
     let __local_108: ref Formatter;
-    __local_0 = __inline_make_pair_2: block -> ref "tuple/[i32, i32]" {
+    drop(__inline_make_pair_2: block -> ref "tuple/[i32, i32]" {
         call_count = call_count + 1;
         break __inline_make_pair_2: "tuple/[i32, i32]" { 0: 10, 1: 20 };
-    };
-    a = "tuple/[i32, i32, i32]" { 0: __local_0.0, 1: __local_0.1, 2: 30 };
+    });
+    a = "tuple/[i32, i32, i32]" { 0: 10, 1: 20, 2: 30 };
     __v0_2 = a.0;
     __cond_3 = __v0_2 == 10;
     if __cond_3 == 0 {
@@ -295,14 +293,14 @@ condition: call_count == 1
         });
         unreachable;
     };
-    b = __inline_prepend_i32_Tuple_i32_i32___24: block -> ref "tuple/[i32, i32, i32]" {
+    drop(__inline_prepend_i32_Tuple_i32_i32___24: block -> ref "tuple/[i32, i32, i32]" {
         __local_66 = __inline_make_pair_25: block -> ref "tuple/[i32, i32]" {
             call_count = call_count + 1;
             break __inline_make_pair_25: "tuple/[i32, i32]" { 0: 10, 1: 20 };
         };
-        break __inline_prepend_i32_Tuple_i32_i32___24: "tuple/[i32, i32, i32]" { 0: 99, 1: __local_66.0, 2: __local_66.1 };
-    };
-    __v0_9 = b.0;
+        break __inline_prepend_i32_Tuple_i32_i32___24: "tuple/[i32, i32, i32]" { 0: 99, 1: 10, 2: 20 };
+    });
+    __v0_9 = 99;
     __cond_10 = __v0_9 == 99;
     if __cond_10 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -342,7 +340,7 @@ condition: b.0 == 99
         });
         unreachable;
     };
-    __v0_11 = b.1;
+    __v0_11 = 10;
     __cond_12 = __v0_11 == 10;
     if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -382,7 +380,7 @@ condition: b.1 == 10
         });
         unreachable;
     };
-    __v0_13 = b.2;
+    __v0_13 = 20;
     __cond_14 = __v0_13 == 20;
     if __cond_14 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
