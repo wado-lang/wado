@@ -7,8 +7,8 @@ const WADO = './target/release/wado';
 
 type BenchResult = { name: string; unit: string; value: number };
 
-function runBench(src: string, optLevel: string): string {
-  return execFileSync(WADO, ['run', optLevel, src], { encoding: 'utf8' });
+function runBench(src: string, optLevel: string, extraArgs: string[] = []): string {
+  return execFileSync(WADO, ['run', optLevel, ...extraArgs, src], { encoding: 'utf8' });
 }
 
 function parseMs(output: string, pattern: RegExp = /Elapsed: ([\d.]+) ms/): number {
@@ -36,7 +36,7 @@ for (const opt of OPT_LEVELS) {
   output = runBench('benchmark/fts/fts.wado', opt);
   benchmarks.push({ name: `fts (${label})`, unit: 'ms', value: parseMs(output) });
 
-  output = runBench('benchmark/zlib/zlib_bench.wado', opt);
+  output = runBench('benchmark/zlib/zlib_bench.wado', opt, ['--dir', 'benchmark::.']);
   benchmarks.push({ name: `zlib/compress (${label})`, unit: 'ms', value: parseMs(output, /Compress: ([\d.]+) ms/) });
   benchmarks.push({ name: `zlib/decompress (${label})`, unit: 'ms', value: parseMs(output, /Decompress: ([\d.]+) ms/) });
 
