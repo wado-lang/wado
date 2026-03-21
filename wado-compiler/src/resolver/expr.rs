@@ -101,6 +101,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::Matches(_) => {
                 panic!("Matches expression should have been desugared to if-let before resolver")
             }
+            Expr::Spread(..) => {
+                panic!("Spread expression should only appear inside TupleLiteral handling")
+            }
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
         }
     }
@@ -736,7 +739,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> TypeId {
         let resolved_type = self.type_table.borrow().get(type_id).clone();
         match resolved_type {
-            ResolvedType::TypeParam { index, .. } => {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
                 // Direct substitution: T -> type_args[index]
                 type_args.get(index as usize).copied().unwrap_or(type_id)
             }
@@ -755,10 +758,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.type_table.borrow_mut().make_mut_ref(new_inner)
             }
             ResolvedType::Tuple(elems) => {
-                let new_elems: Vec<TypeId> = elems
-                    .iter()
-                    .map(|&e| self.substitute_type_params(e, type_args))
-                    .collect();
+                // Expand TypePack elements: splice the pack's concrete types into the tuple
+                let mut new_elems: Vec<TypeId> = Vec::new();
+                for &e in &elems {
+                    let e_type = self.type_table.borrow().get(e).clone();
+                    if let ResolvedType::TypePack { index, .. } = e_type {
+                        // The substituted type for a pack is a tuple; expand its elements
+                        if let Some(&pack_type) = type_args.get(index as usize) {
+                            let pack_resolved = self.type_table.borrow().get(pack_type).clone();
+                            if let ResolvedType::Tuple(pack_elems) = pack_resolved {
+                                new_elems.extend_from_slice(&pack_elems);
+                            } else {
+                                new_elems.push(pack_type);
+                            }
+                        } else {
+                            new_elems.push(e);
+                        }
+                    } else {
+                        new_elems.push(self.substitute_type_params(e, type_args));
+                    }
+                }
                 self.type_table.borrow_mut().make_tuple(new_elems)
             }
             ResolvedType::GenericResource {
@@ -2210,7 +2229,57 @@ impl<H: CompilerHost> Resolver<'_, H> {
             | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner)) => {
                 self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
             }
-            // Tuple types
+            // Tuple types with type pack: e.g., [A, ..T, B] matched against [i32, String, f64, bool]
+            (ResolvedType::Tuple(expected_elems), ResolvedType::Tuple(actual_elems))
+                if expected_elems.iter().any(|e| {
+                    matches!(
+                        self.type_table.borrow().get(*e),
+                        ResolvedType::TypePack { .. }
+                    )
+                }) =>
+            {
+                // Find the pack index
+                let pack_idx = expected_elems
+                    .iter()
+                    .position(|e| {
+                        matches!(
+                            self.type_table.borrow().get(*e),
+                            ResolvedType::TypePack { .. }
+                        )
+                    })
+                    .unwrap();
+
+                let fixed_before = pack_idx;
+                let fixed_after = expected_elems.len() - pack_idx - 1;
+                let total_fixed = fixed_before + fixed_after;
+
+                if actual_elems.len() >= total_fixed {
+                    // Unify fixed elements before the pack
+                    for i in 0..fixed_before {
+                        self.unify_types_for_inference(
+                            expected_elems[i],
+                            actual_elems[i],
+                            type_param_map,
+                        );
+                    }
+                    // Unify fixed elements after the pack
+                    for i in 0..fixed_after {
+                        self.unify_types_for_inference(
+                            expected_elems[pack_idx + 1 + i],
+                            actual_elems[actual_elems.len() - fixed_after + i],
+                            type_param_map,
+                        );
+                    }
+                    // Map the TypePack to a tuple of the middle elements
+                    let pack_elements: Vec<TypeId> =
+                        actual_elems[fixed_before..actual_elems.len() - fixed_after].to_vec();
+                    let pack_tuple = self.type_table.borrow_mut().make_tuple(pack_elements);
+                    type_param_map
+                        .entry(expected_elems[pack_idx])
+                        .or_insert(pack_tuple);
+                }
+            }
+            // Tuple types (exact match)
             (ResolvedType::Tuple(expected_elems), ResolvedType::Tuple(actual_elems))
                 if expected_elems.len() == actual_elems.len() =>
             {
@@ -2241,28 +2310,127 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
+    /// Check if a type contains a `TypePack` (variadic pack parameter).
+    fn type_contains_pack(&self, type_id: TypeId) -> bool {
+        let ty = self.type_table.borrow().get(type_id).clone();
+        match ty {
+            ResolvedType::TypePack { .. } => true,
+            ResolvedType::Tuple(elems) => elems.iter().any(|e| self.type_contains_pack(*e)),
+            _ => false,
+        }
+    }
+
     /// Resolve a tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`
     pub(super) fn resolve_tuple_literal(
         &mut self,
         tuple_lit: &ast::TupleLiteralExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // Resolve each element expression
-        let elements: Vec<TirExpr> = tuple_lit
-            .elements
-            .iter()
-            .map(|elem| self.resolve_expr(elem, ctx, None))
-            .collect();
+        // Resolve each element expression, handling spread elements
+        let mut elements: Vec<TirExpr> = Vec::new();
+        let mut elem_types: Vec<TypeId> = Vec::new();
+        // Bindings for non-trivial spread expressions: (local_idx, name, expr, span)
+        let mut spread_bindings: Vec<(u32, String, TirExpr, crate::token::Span)> = Vec::new();
+        for elem in &tuple_lit.elements {
+            if let Expr::Spread(inner, _span) = elem {
+                let spread_expr = self.resolve_expr(inner, ctx, None);
+                let contains_pack = self.type_contains_pack(spread_expr.type_id);
+                let spread_type = self.type_table.borrow().get(spread_expr.type_id).clone();
+                if contains_pack {
+                    // Keep as TupleSpread for monomorphization to expand later
+                    elem_types.push(spread_expr.type_id);
+                    elements.push(TirExpr::new(
+                        TirExprKind::TupleSpread {
+                            expr: Box::new(spread_expr),
+                        },
+                        *elem_types.last().unwrap(),
+                        elem.span(),
+                    ));
+                } else if let ResolvedType::Tuple(inner_elems) = spread_type {
+                    // For concrete tuples, expand inline via FieldAccess.
+                    // If the expression is non-trivial (not a local), bind it to a
+                    // temporary to ensure single evaluation.
+                    let spread_ref = if matches!(spread_expr.kind, TirExprKind::Local { .. }) {
+                        spread_expr
+                    } else {
+                        let spread_type_id = spread_expr.type_id;
+                        let tmp_name = format!("__spread_{}", ctx.next_local);
+                        let tmp_idx = ctx.add_local(tmp_name.clone(), spread_type_id, false);
+                        spread_bindings.push((tmp_idx, tmp_name.clone(), spread_expr, elem.span()));
+                        TirExpr::new(
+                            TirExprKind::Local {
+                                index: tmp_idx,
+                                name: tmp_name,
+                            },
+                            spread_type_id,
+                            elem.span(),
+                        )
+                    };
+                    for (i, &et) in inner_elems.iter().enumerate() {
+                        elements.push(TirExpr::new(
+                            TirExprKind::FieldAccess {
+                                expr: Box::new(spread_ref.clone()),
+                                field_index: i as u32,
+                                field_name: i.to_string(),
+                            },
+                            et,
+                            elem.span(),
+                        ));
+                        elem_types.push(et);
+                    }
+                } else {
+                    let _ = self
+                        .logger
+                        .error(crate::resolver::types::TypeError::InvalidLiteral {
+                            message: "spread operator `..` can only be used with tuple types"
+                                .to_string(),
+                            span: elem.span(),
+                        });
+                    elem_types.push(spread_expr.type_id);
+                    elements.push(spread_expr);
+                }
+            } else {
+                let resolved = self.resolve_expr(elem, ctx, None);
+                elem_types.push(resolved.type_id);
+                elements.push(resolved);
+            }
+        }
 
-        // Collect element types for the tuple type
-        let elem_types: Vec<TypeId> = elements.iter().map(|e| e.type_id).collect();
         let tuple_type = self.type_table.borrow_mut().make_tuple(elem_types);
 
-        TirExpr::new(
+        let tuple_expr = TirExpr::new(
             TirExprKind::TupleLiteral { elements },
             tuple_type,
             tuple_lit.span,
-        )
+        );
+
+        if spread_bindings.is_empty() {
+            tuple_expr
+        } else {
+            // Wrap in a block: { let __spread_N = expr; ...; [fields...] }
+            let mut stmts: Vec<TirStmt> = spread_bindings
+                .into_iter()
+                .map(|(idx, name, value, span)| {
+                    let type_id = value.type_id;
+                    TirStmt::new(
+                        TirStmtKind::Let {
+                            name,
+                            local_index: idx,
+                            value,
+                            is_mut: false,
+                            is_reactive: false,
+                            type_id,
+                            skip_value_copy: false,
+                        },
+                        span,
+                    )
+                })
+                .collect();
+            // The tuple literal is the block's return expression
+            stmts.push(TirStmt::new(TirStmtKind::Expr(tuple_expr), tuple_lit.span));
+            let block = TirBlock::new(stmts, tuple_lit.span);
+            TirExpr::new(TirExprKind::Block(block), tuple_type, tuple_lit.span)
+        }
     }
 
     /// Resolve the postfix `?` operator.

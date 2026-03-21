@@ -628,6 +628,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                                 "assoc_type"
                             }
                             wado_compiler::tir::ResolvedType::Flags { .. } => "flags",
+                            wado_compiler::tir::ResolvedType::TypePack { .. } => "type_pack",
                             wado_compiler::tir::ResolvedType::Unknown => "unknown",
                             wado_compiler::tir::ResolvedType::Error => "error",
                         };

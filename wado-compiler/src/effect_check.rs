@@ -412,6 +412,9 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_expr(elem)?;
                 }
             }
+            TirExprKind::TupleSpread { expr } => {
+                self.check_expr(expr)?;
+            }
             TirExprKind::Closure { body, .. } => {
                 // Closures inherit effects from enclosing function, so we continue checking
                 self.check_expr(body)?;

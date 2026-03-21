@@ -481,6 +481,9 @@ impl<'a> Unparser<'a> {
             if param.is_effect {
                 self.output.push_str("effect ");
             }
+            if param.is_pack {
+                self.output.push_str("..");
+            }
             self.output.push_str(&param.name);
             if !param.bounds.is_empty() {
                 self.output.push_str(": ");
@@ -1159,6 +1162,10 @@ impl<'a> Unparser<'a> {
                 self.output.push_str("&mut ");
                 self.unparse_type(inner);
             }
+            Type::TypePackSpread(name, _) => {
+                self.output.push_str("..");
+                self.output.push_str(name);
+            }
             Type::NamespacedGeneric(ng) => {
                 self.output.push_str(&ng.namespace);
                 self.output.push_str("::");
@@ -1570,6 +1577,10 @@ impl<'a> Unparser<'a> {
             Expr::TryOp(qm) => {
                 self.unparse_expr(&qm.expr);
                 self.output.push('?');
+            }
+            Expr::Spread(inner, _) => {
+                self.output.push_str("..");
+                self.unparse_expr(inner);
             }
         }
     }
@@ -2952,6 +2963,10 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
             unparse_expr_into(&qm.expr, output, false);
             output.push('?');
         }
+        Expr::Spread(inner, _) => {
+            output.push_str("..");
+            unparse_expr_into(inner, output, false);
+        }
     }
 }
 
@@ -3291,6 +3306,10 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
         Type::MutReference(inner) => {
             output.push_str("&mut ");
             unparse_type_into(inner, output);
+        }
+        Type::TypePackSpread(name, _) => {
+            output.push_str("..");
+            output.push_str(name);
         }
         Type::NamespacedGeneric(ng) => {
             output.push_str(&ng.namespace);
@@ -4200,6 +4219,11 @@ impl<'a> TirUnparser<'a> {
                     }
                     self.unparse_expr(elem);
                 }
+                self.output.push(']');
+            }
+            TirExprKind::TupleSpread { expr } => {
+                self.output.push_str("[..");
+                self.unparse_expr(expr);
                 self.output.push(']');
             }
             TirExprKind::Closure {

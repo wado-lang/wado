@@ -1,0 +1,21 @@
+fn identity<..T>(x: [..T]) -> [..T] {
+    return x;
+}
+
+export fn run() {
+    let a = identity([1, "hello", true]);
+    assert a.0 == 1;
+    assert a.1 == "hello";
+    assert a.2 == true;
+
+    let b = identity([42]);
+    assert b.0 == 42;
+
+    let c = identity([1, 2, 3]);
+    assert c.0 == 1;
+    assert c.1 == 2;
+    assert c.2 == 3;
+}
+
+__DATA__
+{"stdout": ""}

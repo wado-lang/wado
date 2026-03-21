@@ -883,7 +883,7 @@ fn analyze_expr(
                 analyze_expr(arg, current_module, type_table, analysis);
             }
         }
-        TirExprKind::FieldAccess { expr, .. } => {
+        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr } => {
             analyze_expr(expr, current_module, type_table, analysis);
         }
         TirExprKind::Index { expr, index } => {
@@ -1458,7 +1458,7 @@ fn collect_types_from_expr(
                 collect_types_from_expr(arg, type_table, reachable);
             }
         }
-        TirExprKind::FieldAccess { expr, .. } => {
+        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr } => {
             collect_types_from_expr(expr, type_table, reachable);
         }
         TirExprKind::Index { expr, index } => {
@@ -1700,6 +1700,7 @@ fn collect_type_dependencies(
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
+        | ResolvedType::TypePack { .. }
         | ResolvedType::AssocTypeProjection { .. } => {}
 
         // Newtype: collect dependency on base type
@@ -1967,6 +1968,7 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {

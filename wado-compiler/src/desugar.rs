@@ -128,7 +128,7 @@ fn desugar_type(ty: &Type, ctx: &DesugarContext) -> Type {
             effects: f.effects.clone(),
             stores: f.stores.clone(),
         })),
-        Type::NamespacedGeneric(_) => ty.clone(),
+        Type::NamespacedGeneric(_) | Type::TypePackSpread(..) => ty.clone(),
     }
 }
 
@@ -578,6 +578,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         // becomes: `if let pattern = expr { guard } else { false }`
         // or if no guard: `if let pattern = expr { true } else { false }`
         Expr::Matches(m) => desugar_matches_expr(m),
+        Expr::Spread(inner, span) => Expr::Spread(Box::new(desugar_expr(inner)), *span),
         Expr::TryOp(qm) => Expr::TryOp(Box::new(crate::ast::TryOpExpr {
             expr: desugar_expr(&qm.expr),
             span: qm.span,
@@ -1721,6 +1722,10 @@ fn strip_ns_from_expr(expr: Expr, ctx: &DesugarContext) -> Expr {
         Expr::TryOp(mut t) => {
             t.expr = strip_ns_from_expr(t.expr, ctx);
             Expr::TryOp(t)
+        }
+        Expr::Spread(mut inner, span) => {
+            *inner = strip_ns_from_expr(*inner, ctx);
+            Expr::Spread(inner, span)
         }
         Expr::Literal(_) | Expr::CompoundAssign(_) | Expr::ComparisonChain(_) => expr,
     }

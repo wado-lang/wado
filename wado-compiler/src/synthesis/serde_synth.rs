@@ -659,6 +659,7 @@ fn generate_struct_serialize(
         type_params: vec![TirTypeParam {
             name: "S".to_string(),
             is_effect: false,
+            is_pack: false,
             bounds: vec!["Serializer".to_string()],
             default: None,
             index: 0,
@@ -1192,6 +1193,7 @@ fn generate_struct_deserialize(
         type_params: vec![TirTypeParam {
             name: "D".to_string(),
             is_effect: false,
+            is_pack: false,
             bounds: vec!["Deserializer".to_string()],
             default: None,
             index: 0,
@@ -1508,6 +1510,7 @@ fn generate_enum_serialize(
         type_params: vec![TirTypeParam {
             name: "S".to_string(),
             is_effect: false,
+            is_pack: false,
             bounds: vec!["Serializer".to_string()],
             default: None,
             index: 0,
@@ -1885,6 +1888,7 @@ fn generate_enum_deserialize(
         type_params: vec![TirTypeParam {
             name: "D".to_string(),
             is_effect: false,
+            is_pack: false,
             bounds: vec!["Deserializer".to_string()],
             default: None,
             index: 0,
@@ -2148,6 +2152,7 @@ fn generate_variant_serialize(
         type_params: vec![TirTypeParam {
             name: "S".to_string(),
             is_effect: false,
+            is_pack: false,
             bounds: vec!["Serializer".to_string()],
             default: None,
             index: 0,
@@ -2685,6 +2690,7 @@ fn generate_variant_deserialize(
         type_params: vec![TirTypeParam {
             name: "D".to_string(),
             is_effect: false,
+            is_pack: false,
             bounds: vec!["Deserializer".to_string()],
             default: None,
             index: 0,
@@ -2899,6 +2905,7 @@ fn generate_tuple_serialize(
         type_params: vec![TirTypeParam {
             name: "S".to_string(),
             is_effect: false,
+            is_pack: false,
             bounds: vec!["Serializer".to_string()],
             default: None,
             index: 0,
@@ -3184,6 +3191,7 @@ fn generate_tuple_deserialize(
         type_params: vec![TirTypeParam {
             name: "D".to_string(),
             is_effect: false,
+            is_pack: false,
             bounds: vec!["Deserializer".to_string()],
             default: None,
             index: 0,
