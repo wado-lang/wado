@@ -1,0 +1,76 @@
+// Type pack expansion with try operator: [..T::method(args)?]
+// The ? operator desugars to a Match wrapping the Call.
+// The compiler should recognize through the Match to find the type pack call.
+// BUG: codegen produces invalid Wasm (type mismatch: expected ref, found i32).
+
+struct MyError {
+    msg: String,
+}
+
+trait TryMake {
+    fn try_make(ok: bool) -> Result<Self, MyError>;
+}
+
+impl TryMake for i32 {
+    fn try_make(ok: bool) -> Result<i32, MyError> {
+        if ok {
+            return Result::<i32, MyError>::Ok(42);
+        }
+        return Result::<i32, MyError>::Err(MyError { msg: "int failed" });
+    }
+}
+
+impl TryMake for String {
+    fn try_make(ok: bool) -> Result<String, MyError> {
+        if ok {
+            return Result::<String, MyError>::Ok("hello");
+        }
+        return Result::<String, MyError>::Err(MyError { msg: "str failed" });
+    }
+}
+
+impl TryMake for bool {
+    fn try_make(ok: bool) -> Result<bool, MyError> {
+        if ok {
+            return Result::<bool, MyError>::Ok(true);
+        }
+        return Result::<bool, MyError>::Err(MyError { msg: "bool failed" });
+    }
+}
+
+fn make_all<..T: TryMake>(ok: bool) -> Result<[..T], MyError> {
+    return Result::<[..T], MyError>::Ok([..T::try_make(ok)?]);
+}
+
+test "type pack expansion with tryop success" {
+    let r = make_all::<[i32, String, bool]>(true);
+    if let Ok(t) = r {
+        assert t.0 == 42;
+        assert t.1 == "hello";
+        assert t.2 == true;
+    } else {
+        panic("make_all should succeed");
+    }
+}
+
+test "type pack expansion with tryop failure" {
+    let r = make_all::<[i32, String, bool]>(false);
+    if let Err(e) = r {
+        assert e.msg == "int failed";
+    } else {
+        panic("make_all should fail");
+    }
+}
+
+test "type pack expansion with tryop pair" {
+    let r = make_all::<[i32, String]>(true);
+    if let Ok(t) = r {
+        assert t.0 == 42;
+        assert t.1 == "hello";
+    } else {
+        panic("pair should succeed");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}
