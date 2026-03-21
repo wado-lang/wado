@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774102950677,
+  "lastUpdate": 1774103032463,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5678,6 +5678,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/946f44f8e82623f5ae5ba5a476c3eff443771726"
         },
         "date": 1774102950453,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22175,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1ecb052d644bcb276d198e5661ecb8342000f36e",
+          "message": "Merge pull request #645 from wado-lang/claude/update-benchmark-wasm-docs-HIqWt\n\nUpdate benchmark and wasm-size results",
+          "timestamp": "2026-03-21T23:18:25+09:00",
+          "tree_id": "e31544b9a43d464c02497a80a5b369265a5b7acd",
+          "url": "https://github.com/wado-lang/wado/commit/1ecb052d644bcb276d198e5661ecb8342000f36e"
+        },
+        "date": 1774103032277,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
