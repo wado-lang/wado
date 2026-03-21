@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774090586064,
+  "lastUpdate": 1774094867017,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5576,6 +5576,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22185,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "01ef3218ca483f65c156347fe13cf61fb9d668a3",
+          "message": "Merge pull request #642 from wado-lang/claude/review-numerical-calculations-B8kbo\n\nAdd eqz pattern folding optimization to peephole pass",
+          "timestamp": "2026-03-21T21:05:22+09:00",
+          "tree_id": "94f7ee2f16a4a80b426272afac499a940f10d6cc",
+          "url": "https://github.com/wado-lang/wado/commit/01ef3218ca483f65c156347fe13cf61fb9d668a3"
+        },
+        "date": 1774094866822,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9108,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22181,
             "unit": "bytes"
           }
         ]
