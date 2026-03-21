@@ -365,16 +365,24 @@ where T: Reflect<Fields = [..F]>
 
 - [x] Parser: recognize `..T` in generic parameter lists and `[..T]` in type position
 - [x] AST/TIR: add `TypePackSpread`, `TupleSpread` nodes; track pack bounds
-- [ ] Prelude: add `pub type [...T]` declaration; register tuples' owning module
+- [x] Prelude: add `pub type [...T]` declaration; register tuples' owning module
 - [x] Resolver: at monomorphization, substitute concrete types for packs; extend existing
       tuple-enumeration unrolling to handle `[for let v of tuple { }]` construction form
-- [ ] Type pack expansion: lower `[..T::method()]` to a tuple literal at monomorphization
+- [x] Variadic `for let v of`: deferred expansion via `VariadicForOf` TIR node, expanded
+      by the monomorphizer after type substitution resolves packs to concrete tuples
+- [x] Variadic trait bounds: `..T: Trait` checked via `type_param_bounds`; `TypePack`
+      handled identically to `TypeParam` in `type_implements_trait`
+- [x] Variadic trait impls: `impl<..T: Trait> Trait for [..T]` resolved, monomorphized,
+      and dispatched through standard generic impl pipeline
 - [x] Value spread: lower `[..a, ..b]` into concatenated tuple literal
+- [x] Standard library: add variadic impls for `Inspect`, `InspectAlt`, `Display`,
+      `DisplayAlt` in `core:prelude/tuple.wado`; remove hardcoded tuple synthesis
+- [ ] Type pack expansion: lower `[..T::method()]` to a tuple literal at monomorphization
 - [ ] Coherence: implement Rule 1 (non-VG wins) and Rule 2 (VG overlap forbidden)
 - [ ] `Reflect` trait: synthesize per-struct impl in the lowering pass
 - [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
 - [ ] Error messages: show call site, element index, and body location
-- [ ] Standard library: add variadic impls for `Eq`, `Default`, `Clone`, `Inspect`
+- [ ] Standard library: add variadic impls for `Eq`, `Default`, `Clone`
 - [ ] Remove compiler-magic struct `Inspect`; replace with the `Reflect`-based impl
 
 ---
