@@ -611,6 +611,9 @@ pub enum Expr {
     LabeledBlock(Box<LabeledBlockExpr>),
     /// Postfix `?` operator for error propagation on `Result<T, E>` and `Option<T>`.
     TryOp(Box<TryOpExpr>),
+    /// Spread expression inside a tuple literal: `[..expr]`
+    /// At compile time, splices the tuple's elements into the enclosing tuple.
+    Spread(Box<Expr>, Span),
 }
 
 /// Labeled block expression: `label: { ... }` that produces a value
@@ -656,6 +659,7 @@ impl Expr {
             Expr::TupleLiteral(e) => e.span,
             Expr::LabeledBlock(e) => e.span,
             Expr::TryOp(e) => e.span,
+            Expr::Spread(_, span) => *span,
         }
     }
 
@@ -755,6 +759,7 @@ impl Expr {
                 e.span = new_span;
                 Expr::TryOp(e)
             }
+            Expr::Spread(inner, _) => Expr::Spread(inner, new_span),
         }
     }
 }
@@ -1098,6 +1103,8 @@ pub enum Type {
     Tuple(Vec<Type>),
     Reference(Box<Type>),
     MutReference(Box<Type>),
+    /// Type pack spread inside a tuple: `..T` in `[i32, ..T, bool]`
+    TypePackSpread(String, Span),
 }
 
 #[derive(Debug, Clone)]
@@ -1195,6 +1202,8 @@ pub struct GenericParam {
     pub name: String,
     /// Whether this is an effect parameter (`effect E`)
     pub is_effect: bool,
+    /// Whether this is a type pack parameter (`..T`)
+    pub is_pack: bool,
     /// Trait bounds (e.g., `Ord`, `Builder<Output = T>`)
     pub bounds: Vec<TraitBound>,
     /// Default type (e.g., `T = []` or `Effects = []`)

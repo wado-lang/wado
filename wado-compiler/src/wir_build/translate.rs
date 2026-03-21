@@ -439,6 +439,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::StringLiteral(_)
             | TirExprKind::StructLiteral { .. }
             | TirExprKind::TupleLiteral { .. }
+            | TirExprKind::TupleSpread { .. }
             | TirExprKind::Null => true,
 
             // All call variants return fresh values (callee constructs the return value)
@@ -625,7 +626,8 @@ impl FunctionTranslator<'_, '_> {
     fn is_source_immutable(&self, expr: &TirExpr) -> bool {
         match &expr.kind {
             TirExprKind::Local { index, .. } => self.immutable_locals.contains(index),
-            TirExprKind::FieldAccess { expr: inner, .. } => self.is_source_immutable(inner),
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner } => self.is_source_immutable(inner),
             _ => false,
         }
     }
@@ -1608,6 +1610,10 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     WirInstr::Unreachable
                 }
+            }
+
+            TirExprKind::TupleSpread { .. } => {
+                panic!("TupleSpread should have been expanded during monomorphization")
             }
 
             // === Switch (lowered pattern matching) ===

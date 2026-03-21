@@ -1132,6 +1132,8 @@ impl WasiRegistry {
                     span: ng.span,
                 })
             }
+            // TypePackSpread is only valid inside tuple types — pass through
+            Type::TypePackSpread(..) => ty.clone(),
         }
     }
 }

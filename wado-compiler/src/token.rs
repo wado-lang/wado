@@ -78,6 +78,8 @@ pub enum TokenKind {
     Semicolon,  // ;
     ColonColon, // ::
     Dot,        // .
+    DotDot,     // ..
+    DotDotDot,  // ... (error token: "did you mean `..`?")
     Arrow,      // ->
     FatArrow,   // =>
     Pipe,       // |

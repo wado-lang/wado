@@ -988,6 +988,23 @@ impl Container {
 // Turbofish syntax (explicit type arguments)
 let x = identity::<i32>(42);
 let y = container.transform::<i32, i64>(10, 20 as i64);
+
+// Variadic type packs: operate on tuples of any arity
+fn variadic_identity<..T>(x: [..T]) -> [..T] {
+    return x;
+}
+let t = variadic_identity([1, "hello", true]); // t: [i32, String, bool]
+
+// Mixed scalar + pack parameters
+fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
+    return [a, ..rest];  // value spread: splice rest into tuple
+}
+
+// Value spread (works with any tuple, not just packs)
+let a = [1, "hello"];
+let b = [..a, true];   // [i32, String, bool]
+
+// Note: `...` (three dots) is not valid; use `..` (two dots)
 ```
 
 ## Closures

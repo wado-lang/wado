@@ -195,10 +195,21 @@ impl Parser {
         std::mem::discriminant(self.peek_kind()) == std::mem::discriminant(kind)
     }
 
-    /// Check for `..` (two consecutive dots)
-    fn check_dot_dot(&self) -> bool {
-        matches!(self.peek_kind(), TokenKind::Dot)
-            && matches!(self.peek_nth(1).kind, TokenKind::Dot)
+    /// Check for `..` or `...` token (the latter will produce an error when consumed via `consume_dot_dot`).
+    fn check_dot_dot_or_ellipsis(&self) -> bool {
+        matches!(self.peek_kind(), TokenKind::DotDot | TokenKind::DotDotDot)
+    }
+
+    /// Consume a `..` token. If `...` is found, emit a helpful error.
+    fn consume_dot_dot(&mut self) -> ParseResult<Span> {
+        if matches!(self.peek_kind(), TokenKind::DotDotDot) {
+            return Err(
+                self.error_at_span(self.peek().span, "unexpected `...`; did you mean `..`?")
+            );
+        }
+        let span = self.peek().span;
+        self.expect(&TokenKind::DotDot)?;
+        Ok(span)
     }
 
     fn expect(&mut self, kind: &TokenKind) -> ParseResult<&Token> {
@@ -1723,9 +1734,8 @@ impl Parser {
             self.advance();
             let mut patterns = Vec::new();
             if !self.check(&TokenKind::RBracket) {
-                if self.check_dot_dot() {
-                    self.advance();
-                    self.advance();
+                if self.check_dot_dot_or_ellipsis() {
+                    self.consume_dot_dot()?;
                     // Rest-only: [..] — consume and produce empty pattern list
                 } else {
                     patterns.push(self.parse_pattern()?);
@@ -1734,9 +1744,8 @@ impl Parser {
                         if self.check(&TokenKind::RBracket) {
                             break;
                         }
-                        if self.check_dot_dot() {
-                            self.advance();
-                            self.advance();
+                        if self.check_dot_dot_or_ellipsis() {
+                            self.consume_dot_dot()?;
                             if self.check(&TokenKind::Comma) {
                                 self.advance();
                             }
@@ -1829,16 +1838,14 @@ impl Parser {
 
         if !self.check(&TokenKind::RBrace) {
             // Check for leading `..`
-            if self.check_dot_dot() {
-                self.advance();
-                self.advance();
+            if self.check_dot_dot_or_ellipsis() {
+                self.consume_dot_dot()?;
                 has_rest = true;
             } else {
                 loop {
                     // Check for `..` (rest pattern)
-                    if self.check_dot_dot() {
-                        self.advance();
-                        self.advance();
+                    if self.check_dot_dot_or_ellipsis() {
+                        self.consume_dot_dot()?;
                         has_rest = true;
                         // Trailing comma after `..` is optional
                         if self.check(&TokenKind::Comma) {
@@ -2941,7 +2948,8 @@ impl Parser {
 
     /// Parse tuple literal: `[expr, expr, ...]` or `[]`
     fn parse_tuple_literal(&mut self, start_span: Span) -> ParseResult<Expr> {
-        let elements = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_expr)?;
+        let elements =
+            self.parse_comma_separated(&TokenKind::RBracket, Self::parse_tuple_element)?;
 
         let end_token = self.expect(&TokenKind::RBracket)?;
         let end_span = end_token.span;
@@ -2950,6 +2958,16 @@ impl Parser {
             elements,
             span: start_span.merge(&end_span),
         })))
+    }
+
+    /// Parse a tuple element: either a spread `..expr` or a regular expression.
+    fn parse_tuple_element(&mut self) -> ParseResult<Expr> {
+        if self.check_dot_dot_or_ellipsis() {
+            let span = self.consume_dot_dot()?;
+            let expr = self.parse_expr()?;
+            return Ok(Expr::Spread(Box::new(expr), span));
+        }
+        self.parse_expr()
     }
 
     /// Parse argument list. Returns (args, `has_trailing_comma`).
@@ -3004,6 +3022,16 @@ impl Parser {
             None
         };
         Ok(ClosureParam { name, ty, is_mut })
+    }
+
+    /// Parse a type or a type pack spread (`..T`) inside a tuple type.
+    fn parse_type_or_pack(&mut self) -> ParseResult<Type> {
+        if self.check_dot_dot_or_ellipsis() {
+            let span = self.consume_dot_dot()?;
+            let name = self.consume_ident()?;
+            return Ok(Type::TypePackSpread(name, span));
+        }
+        self.parse_type()
     }
 
     fn parse_type(&mut self) -> ParseResult<Type> {
@@ -3084,10 +3112,11 @@ impl Parser {
             return Ok(inner);
         }
 
-        // Tuple type: [] or [T1, T2, ...]
+        // Tuple type: [] or [T1, T2, ...] or [i32, ..T, bool]
         if self.check(&TokenKind::LBracket) {
             self.advance();
-            let types = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_type)?;
+            let types =
+                self.parse_comma_separated(&TokenKind::RBracket, Self::parse_type_or_pack)?;
             self.expect(&TokenKind::RBracket)?;
             return Ok(Type::Tuple(types));
         }
@@ -3229,6 +3258,28 @@ impl Parser {
                 false
             };
 
+            // Parse type pack parameter: `..T`
+            let is_pack = if self.check_dot_dot_or_ellipsis() {
+                self.consume_dot_dot()?;
+                true
+            } else {
+                false
+            };
+
+            if is_effect && is_pack {
+                return Err(self.error_at_span(
+                    start_span,
+                    "a parameter cannot be both an effect and a type pack",
+                ));
+            }
+
+            if is_pack && params.iter().any(|p: &crate::ast::GenericParam| p.is_pack) {
+                return Err(self.error_at_span(
+                    start_span,
+                    "only one type pack parameter is allowed per generic parameter list",
+                ));
+            }
+
             let name = self.consume_ident()?;
 
             // Parse optional trait bounds: `T: Ord`, `T: Ord + Clone`, `T: Builder<Output = T>`
@@ -3250,6 +3301,7 @@ impl Parser {
             params.push(crate::ast::GenericParam {
                 name,
                 is_effect,
+                is_pack,
                 bounds,
                 default,
                 span: start_span,
@@ -3704,6 +3756,7 @@ impl Parser {
                     type_params.push(crate::ast::GenericParam {
                         name: param_name.clone(),
                         is_effect: false,
+                        is_pack: false,
                         bounds,
                         default: None,
                         span: param_span,

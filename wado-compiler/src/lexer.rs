@@ -189,7 +189,17 @@ impl<'a> Lexer<'a> {
             }
             '.' => {
                 self.advance();
-                TokenKind::Dot
+                if self.peek_char() == Some('.') {
+                    self.advance();
+                    if self.peek_char() == Some('.') {
+                        self.advance();
+                        TokenKind::DotDotDot
+                    } else {
+                        TokenKind::DotDot
+                    }
+                } else {
+                    TokenKind::Dot
+                }
             }
             '?' => {
                 self.advance();
@@ -1546,5 +1556,30 @@ test data"#;
         lexer.tokenize().unwrap();
 
         assert_eq!(lexer.data_section(), Some("test data"));
+    }
+
+    #[test]
+    fn test_dot_dot_token() {
+        let mut lexer = Lexer::new("..x");
+        let tokens = lexer.tokenize().unwrap();
+        assert!(matches!(tokens[0].kind, TokenKind::DotDot));
+        assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "x"));
+    }
+
+    #[test]
+    fn test_dot_dot_dot_token() {
+        let mut lexer = Lexer::new("...x");
+        let tokens = lexer.tokenize().unwrap();
+        assert!(matches!(tokens[0].kind, TokenKind::DotDotDot));
+        assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "x"));
+    }
+
+    #[test]
+    fn test_single_dot_followed_by_ident() {
+        let mut lexer = Lexer::new("a.b");
+        let tokens = lexer.tokenize().unwrap();
+        assert!(matches!(&tokens[0].kind, TokenKind::Ident(s) if s == "a"));
+        assert!(matches!(tokens[1].kind, TokenKind::Dot));
+        assert!(matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "b"));
     }
 }

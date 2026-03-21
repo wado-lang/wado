@@ -529,6 +529,15 @@ fn collect_param_field_usage_in_expr(
                 );
             }
         }
+        TirExprKind::TupleSpread { expr: inner } => {
+            collect_param_field_usage_in_expr(
+                inner,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
         TirExprKind::ClosureToCanonical { functor, .. } => {
             collect_param_field_usage_in_expr(
                 functor,
@@ -1178,6 +1187,9 @@ fn count_field_accesses_in_expr(
                 count_field_accesses_in_expr(elem, counts, false, type_table);
             }
         }
+        TirExprKind::TupleSpread { expr: inner } => {
+            count_field_accesses_in_expr(inner, counts, false, type_table);
+        }
         TirExprKind::IndirectCall { callee, args, .. } => {
             count_field_accesses_in_expr(callee, counts, false, type_table);
             for arg in args {
@@ -1621,7 +1633,7 @@ fn compute_sync_fields_in_expr(
         TirExprKind::Cast { expr, .. } => {
             compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
         }
-        TirExprKind::FieldAccess { expr, .. } => {
+        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr } => {
             compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
         }
         TirExprKind::Index { expr, index } => {
@@ -1935,7 +1947,7 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
 
     // Recurse into sub-expressions
     match &mut expr.kind {
-        TirExprKind::FieldAccess { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
             replace_in_expr(inner, candidates);
         }
         TirExprKind::Binary { left, right, .. } => {

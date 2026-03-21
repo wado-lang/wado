@@ -1,0 +1,19 @@
+fn surround<A, ..T, B>(a: A, middle: [..T], b: B) -> [A, ..T, B] {
+    return [a, ..middle, b];
+}
+
+export fn run() {
+    let result = surround(1, ["hello", true], 99);
+    assert result.0 == 1;
+    assert result.1 == "hello";
+    assert result.2 == true;
+    assert result.3 == 99;
+
+    // Empty middle
+    let empty_mid = surround("start", [], "end");
+    assert empty_mid.0 == "start";
+    assert empty_mid.1 == "end";
+}
+
+__DATA__
+{"stdout": ""}
