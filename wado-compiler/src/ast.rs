@@ -98,6 +98,7 @@ pub enum Item {
     Variant(VariantDecl),
     Flags(FlagsDecl),
     Newtype(Newtype),
+    TupleTypeDecl(TupleTypeDecl),
     Impl(ImplBlock),
     Trait(TraitDecl),
     Resource(ResourceDecl),
@@ -1323,6 +1324,17 @@ pub struct Newtype {
     pub is_pub: bool,
     pub type_params: Vec<GenericParam>,
     pub ty: Type,
+    pub attrs: Vec<Attribute>,
+    pub span: Span,
+}
+
+/// Tuple type family declaration: `pub type [..T];`
+///
+/// Declares the current module as the owner of the tuple type family.
+/// This is a type-system anchor that generates no code.
+#[derive(Debug, Clone)]
+pub struct TupleTypeDecl {
+    pub is_pub: bool,
     pub attrs: Vec<Attribute>,
     pub span: Span,
 }

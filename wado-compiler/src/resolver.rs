@@ -456,10 +456,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             continue;
                         }
                         if !self.trait_ctx.type_params.contains_key(&param.name) {
-                            let type_id = self
-                                .type_table
-                                .borrow_mut()
-                                .make_type_param(param.name.clone(), actual_idx);
+                            let type_id = if param.is_pack {
+                                self.type_table
+                                    .borrow_mut()
+                                    .make_type_pack(param.name.clone(), actual_idx)
+                            } else {
+                                self.type_table
+                                    .borrow_mut()
+                                    .make_type_param(param.name.clone(), actual_idx)
+                            };
                             self.trait_ctx
                                 .type_params
                                 .insert(param.name.clone(), (actual_idx, type_id));

@@ -1130,6 +1130,9 @@ impl FunctionTranslator<'_, '_> {
             TirStmtKind::TaskReturn { .. } => {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
+            TirStmtKind::VariadicForOf { .. } => {
+                unreachable!("VariadicForOf should be expanded during monomorphization")
+            }
         }
     }
 

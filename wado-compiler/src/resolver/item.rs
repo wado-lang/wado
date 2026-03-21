@@ -26,6 +26,7 @@ pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
                     "result" => features |= crate::wir::COMP_FEATURE_RESULT,
                     "default" => features |= crate::wir::COMP_FEATURE_DEFAULT,
                     "from" => features |= crate::wir::COMP_FEATURE_FROM,
+                    "tuple" => features |= crate::wir::COMP_FEATURE_TUPLE,
                     _ => {}
                 }
             }
@@ -620,6 +621,34 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     default: None,
                     index: idx,
                 });
+            }
+        } else if let ast::Type::Tuple(elements) = impl_type {
+            // Variadic tuple impl: `impl<..T: Trait> Trait for [..T]`
+            // Extract type pack params from the tuple's TypePackSpread elements.
+            for elem in elements {
+                if let ast::Type::TypePackSpread(name, _) = elem
+                    && let Some(&(idx, _)) = old_type_params.get(name)
+                {
+                    let type_id = self
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(name.clone(), idx);
+                    self.trait_ctx
+                        .type_params
+                        .insert(name.clone(), (idx, type_id));
+                    let bounds = old_type_param_bounds
+                        .get(name)
+                        .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
+                        .unwrap_or_default();
+                    impl_type_params.push(crate::tir::TirTypeParam {
+                        name: name.clone(),
+                        is_effect: false,
+                        is_pack: true,
+                        bounds,
+                        default: None,
+                        index: idx,
+                    });
+                }
             }
         }
 

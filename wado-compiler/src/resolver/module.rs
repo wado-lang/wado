@@ -327,10 +327,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         if self.is_known_type_name(&param.name) {
                             continue;
                         }
-                        let type_id = self
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(param.name.clone(), actual_idx);
+                        let type_id = if param.is_pack {
+                            self.type_table
+                                .borrow_mut()
+                                .make_type_pack(param.name.clone(), actual_idx)
+                        } else {
+                            self.type_table
+                                .borrow_mut()
+                                .make_type_param(param.name.clone(), actual_idx)
+                        };
                         self.trait_ctx
                             .type_params
                             .insert(param.name.clone(), (actual_idx, type_id));
@@ -442,6 +447,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Type::Generic(generic) => generic.name.clone(),
             Type::Reference(_) => "&".to_string(),
             Type::MutReference(_) => "&mut".to_string(),
+            Type::Tuple(_) => "Tuple".to_string(),
             _ => "Unknown".to_string(),
         }
     }
@@ -452,6 +458,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Type::Generic(generic) => generic.name.clone(),
             Type::Reference(_) => "&".to_string(),
             Type::MutReference(_) => "&mut".to_string(),
+            Type::Tuple(_) => "Tuple".to_string(),
             Type::Function(func_type) => {
                 // Build function type string: "fn(T1, T2) -> R"
                 let param_strs: Vec<String> = func_type

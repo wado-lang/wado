@@ -111,6 +111,9 @@ fn analyze_uses_in_stmt(stmt: &TirStmt, refs: &mut IndexMap<u32, RefInfo>) {
         TirStmtKind::Continue => {}
         TirStmtKind::LetDestructure { value, .. } => analyze_uses_in_expr(value, refs),
         TirStmtKind::TaskReturn { .. } => {}
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 
@@ -313,6 +316,9 @@ fn transform_stmt(stmt: &mut TirStmt, eliminable: &IndexMap<u32, RefInfo>) {
         TirStmtKind::Continue => {}
         TirStmtKind::LetDestructure { value, .. } => transform_expr(value, eliminable),
         TirStmtKind::TaskReturn { .. } => {}
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 
@@ -532,6 +538,9 @@ fn check_deref_only_uses_in_stmt(stmt: &TirStmt, refs: &mut IndexMap<u32, DerefO
         TirStmtKind::Continue => {}
         TirStmtKind::LetDestructure { value, .. } => check_deref_only_uses_in_expr(value, refs),
         TirStmtKind::TaskReturn { .. } => {}
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 
@@ -752,6 +761,9 @@ fn rewrite_deref_only_refs_in_stmt(
             rewrite_deref_only_refs_in_expr(value, eliminable)
         }
         TirStmtKind::TaskReturn { .. } => false,
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 

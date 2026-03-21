@@ -123,13 +123,13 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Matrix^Inspect::inspect" = fn(ref Matrix, ref Formatter);
 
-type "functype/Tuple<i32,String>^Inspect::inspect" = fn(ref "tuple/[i32, String]", ref Formatter);
-
 type "functype/Array<Array<i32>>^Inspect::inspect" = fn(ref Array<Array<i32>>, ref Formatter);
 
 type "functype/Array<i32>^Inspect::inspect" = fn(ref Array<i32>, ref Formatter);
 
 type "functype/Array<Tuple<i32,String>>^Inspect::inspect" = fn(ref Array<Tuple<i32,String>>, ref Formatter);
+
+type "functype/Tuple<i32,String>^Inspect::inspect" = fn(ref "tuple/[i32, String]", ref Formatter);
 
 type "functype/Array<Tuple<i32,String>>::append" = fn(ref Array<Tuple<i32,String>>, ref "tuple/[i32, String]");
 
@@ -641,20 +641,6 @@ fn Matrix^Inspect::inspect(self, f) {
     String::append(f.buf, s_15);
 }
 
-fn Tuple<i32,String>^Inspect::inspect(self, f) {
-    let s_3: ref String;
-    let s_9: ref String;
-    let s_11: ref String;
-    s_3 = String { repr: array.new_data<u8>("["), used: 1 };
-    String::append(f.buf, s_3);
-    i32::fmt_decimal(self.0, f);
-    s_9 = String { repr: array.new_data<u8>(", "), used: 2 };
-    String::append(f.buf, s_9);
-    String^Inspect::inspect(self.1, f);
-    s_11 = String { repr: array.new_data<u8>("]"), used: 1 };
-    String::append(f.buf, s_11);
-}
-
 fn Array<Array<i32>>^Inspect::inspect(self, f) {
     let i: i32;
     let s: ref String;
@@ -749,6 +735,26 @@ fn Array<Tuple<i32,String>>^Inspect::inspect(self, f) {
         };
     };
     String::append_char(f.buf, 93);
+}
+
+fn Tuple<i32,String>^Inspect::inspect(self, f) {
+    let __tuple_3: ref "tuple/[i32, String]";
+    let v_5: i32;
+    let v_6: ref String;
+    let s_8: ref String;
+    let s_16: ref String;
+    let s_18: ref String;
+    s_8 = String { repr: array.new_data<u8>("["), used: 1 };
+    String::append(f.buf, s_8);
+    __tuple_3 = self;
+    v_5 = __tuple_3.0;
+    i32::fmt_decimal(v_5, f);
+    v_6 = __tuple_3.1;
+    s_16 = String { repr: array.new_data<u8>(", "), used: 2 };
+    String::append(f.buf, s_16);
+    String^Inspect::inspect(v_6, f);
+    s_18 = String { repr: array.new_data<u8>("]"), used: 1 };
+    String::append(f.buf, s_18);
 }
 
 fn Array<Tuple<i32,String>>::append(self, value) {

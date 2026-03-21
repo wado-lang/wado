@@ -1266,16 +1266,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let iterable_type_id = iterable.type_id;
 
         // Check if it's a tuple type
-        let tuple_elems = {
+        let tuple_info = {
             let type_table = self.type_table.borrow();
             match type_table.get(iterable_type_id) {
-                ResolvedType::Tuple(elems) => Some(elems.clone()),
+                ResolvedType::Tuple(elems) => {
+                    let has_type_pack = elems
+                        .iter()
+                        .any(|e| matches!(type_table.get(*e), ResolvedType::TypePack { .. }));
+                    Some((elems.clone(), has_type_pack))
+                }
                 _ => None,
             }
         };
 
-        if let Some(elems) = tuple_elems {
-            self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, ctx)
+        if let Some((elems, has_type_pack)) = tuple_info {
+            if has_type_pack {
+                assert!(
+                    !is_enumerate,
+                    "variadic for-of with .enumerate() is not yet supported"
+                );
+                self.resolve_variadic_for_of(for_of, iterable, ctx)
+            } else {
+                self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, ctx)
+            }
         } else {
             self.resolve_iterator_for_of(for_of, is_enumerate, ctx)
         }
@@ -1292,6 +1305,81 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ///     ...
     /// }
     /// ```
+    /// Create a deferred `VariadicForOf` TIR node for `for let v of iterable`
+    /// where `iterable` has a tuple type containing `TypePack` elements.
+    ///
+    /// The body is resolved once with the loop variable having the `TypePack` type.
+    /// The monomorphizer will expand this after type substitution resolves the
+    /// `TypePack` to a concrete tuple.
+    fn resolve_variadic_for_of(
+        &mut self,
+        for_of: &ForOfStmt,
+        iterable: TirExpr,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirStmt> {
+        let span = for_of.span;
+
+        // Validate: no break/continue/return in variadic for-of
+        if let Some((kind, bad_span)) = Self::find_control_flow_in_block(&for_of.body) {
+            let _ = self.logger.error(TypeError::InvalidPattern {
+                message: format!(
+                    "`{kind}` is not allowed inside a variadic for-of loop (the loop is expanded at compile time)"
+                ),
+                span: bad_span,
+            });
+            return vec![TirStmt::new(TirStmtKind::Expr(iterable), span)];
+        }
+
+        let unique_id = ctx.next_local;
+
+        // Extract the TypePack type from the tuple elements.
+        // The iterable is Tuple([TypePack{T}]), so element 0 is the TypePack.
+        let type_pack_type = {
+            let type_table = self.type_table.borrow();
+            match type_table.get(iterable.type_id) {
+                ResolvedType::Tuple(elems) => elems
+                    .iter()
+                    .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
+                    .copied(),
+                _ => None,
+            }
+        }
+        .expect("variadic for-of requires TypePack in tuple elements");
+
+        // Resolve the body with the binding having the TypePack type
+        let binding_name = match &for_of.binding {
+            crate::ast::Pattern::Ident(name) => name.clone(),
+            _ => {
+                panic!("variadic for-of currently only supports simple identifier bindings")
+            }
+        };
+
+        let is_mut = for_of.is_mut;
+
+        ctx.enter_scope();
+        let binding_local = ctx.add_local(binding_name.clone(), type_pack_type, is_mut);
+
+        let mut body_stmts = Vec::new();
+        for stmt in &for_of.body.stmts {
+            body_stmts.extend(self.resolve_stmt(stmt, ctx));
+        }
+        ctx.exit_scope();
+
+        let body = TirBlock::new(body_stmts, span);
+
+        vec![TirStmt::new(
+            TirStmtKind::VariadicForOf {
+                iterable,
+                binding_name,
+                binding_local,
+                is_mut,
+                body,
+                unique_id,
+            },
+            span,
+        )]
+    }
+
     fn resolve_tuple_for_of(
         &mut self,
         for_of: &ForOfStmt,
