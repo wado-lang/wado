@@ -2386,6 +2386,8 @@ impl Monomorphizer {
             self.substitute_types_in_block(&mut new_body, &substitution, type_table);
             // Fixup VariadicForOf: allocate separate locals for each element iteration
             Self::fixup_variadic_for_of_locals(&mut new_body, &mut local_count, &mut local_types);
+            // Fixup TypePackExpansion: allocate separate locals for each expanded element
+            Self::fixup_pack_expansion_locals(&mut new_body, &mut local_count, &mut local_types);
             new_body
         });
 
@@ -2907,6 +2909,226 @@ impl Monomorphizer {
                 .any(|f| Self::expr_uses_local(&f.value, local_index)),
             _ => false,
         }
+    }
+
+    /// Fix up local variable indices in expanded TypePackExpansion elements.
+    ///
+    /// When `[..T::method()?]` is expanded, the `?` operator's match expression
+    /// creates local variables (`__qm_v`, `__qm_e`). All expanded elements share
+    /// the same local indices but need different types. This allocates new locals
+    /// for each element to avoid type conflicts.
+    fn fixup_pack_expansion_locals(
+        block: &mut TirBlock,
+        local_count: &mut u32,
+        local_types: &mut Vec<TypeId>,
+    ) {
+        for stmt in &mut block.stmts {
+            Self::fixup_pack_expansion_locals_in_stmt(stmt, local_count, local_types);
+        }
+    }
+
+    fn fixup_pack_expansion_locals_in_stmt(
+        stmt: &mut TirStmt,
+        local_count: &mut u32,
+        local_types: &mut Vec<TypeId>,
+    ) {
+        match &mut stmt.kind {
+            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
+                Self::fixup_pack_expansion_locals_in_expr(expr, local_count, local_types);
+            }
+            TirStmtKind::Let { value, .. } => {
+                Self::fixup_pack_expansion_locals_in_expr(value, local_count, local_types);
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                Self::fixup_pack_expansion_locals_in_expr(condition, local_count, local_types);
+                Self::fixup_pack_expansion_locals(then_block, local_count, local_types);
+                if let Some(eb) = else_block {
+                    Self::fixup_pack_expansion_locals(eb, local_count, local_types);
+                }
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                Self::fixup_pack_expansion_locals(body, local_count, local_types);
+            }
+            _ => {}
+        }
+    }
+
+    fn fixup_pack_expansion_locals_in_expr(
+        expr: &mut TirExpr,
+        local_count: &mut u32,
+        local_types: &mut Vec<TypeId>,
+    ) {
+        match &mut expr.kind {
+            TirExprKind::TupleLiteral { elements } if elements.len() > 1 => {
+                // Collect local definitions from each element.
+                // If multiple elements define the same local, allocate new locals.
+                let mut first_seen_locals: IndexSet<u32> = IndexSet::default();
+                for (elem_idx, elem) in elements.iter_mut().enumerate() {
+                    let mut locals_in_elem: Vec<u32> = Vec::new();
+                    Self::collect_locals_in_expr(elem, &mut locals_in_elem);
+                    if elem_idx == 0 {
+                        first_seen_locals.extend(locals_in_elem);
+                    } else {
+                        // For subsequent elements, reallocate shared locals
+                        for old_idx in locals_in_elem {
+                            if first_seen_locals.contains(&old_idx) {
+                                let new_idx = *local_count;
+                                *local_count += 1;
+                                // Find the type of this local in the element
+                                let local_type =
+                                    Self::find_local_type_in_expr(elem, old_idx).unwrap_or(
+                                        local_types.get(old_idx as usize).copied().unwrap_or(
+                                            TypeTable::UNIT,
+                                        ),
+                                    );
+                                local_types.push(local_type);
+                                Self::rewrite_local_index_in_expr(elem, old_idx, new_idx);
+                            }
+                        }
+                    }
+                }
+            }
+            TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+                for arg in args {
+                    Self::fixup_pack_expansion_locals_in_expr(
+                        &mut arg.expr,
+                        local_count,
+                        local_types,
+                    );
+                }
+            }
+            TirExprKind::Block(block) => {
+                Self::fixup_pack_expansion_locals(block, local_count, local_types);
+            }
+            TirExprKind::Match { expr: scrutinee, arms } => {
+                Self::fixup_pack_expansion_locals_in_expr(scrutinee, local_count, local_types);
+                for arm in arms {
+                    Self::fixup_pack_expansion_locals_in_expr(
+                        &mut arm.body,
+                        local_count,
+                        local_types,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect all local indices that are defined (via Let) inside an expression.
+    fn collect_locals_in_expr(expr: &TirExpr, locals: &mut Vec<u32>) {
+        match &expr.kind {
+            TirExprKind::Match { expr: scrutinee, arms } => {
+                Self::collect_locals_in_expr(scrutinee, locals);
+                for arm in arms {
+                    Self::collect_locals_in_expr(&arm.body, locals);
+                }
+            }
+            TirExprKind::Block(block) => {
+                Self::collect_locals_in_block(block, locals);
+            }
+            TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+                for arg in args {
+                    Self::collect_locals_in_expr(&arg.expr, locals);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    Self::collect_locals_in_expr(elem, locals);
+                }
+            }
+            TirExprKind::VariantConstruct { payload: Some(p), .. } => {
+                Self::collect_locals_in_expr(p, locals);
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_locals_in_block(block: &TirBlock, locals: &mut Vec<u32>) {
+        for stmt in &block.stmts {
+            match &stmt.kind {
+                TirStmtKind::Let { local_index, .. } => {
+                    locals.push(*local_index);
+                }
+                TirStmtKind::Expr(expr) => Self::collect_locals_in_expr(expr, locals),
+                TirStmtKind::Return { value: Some(v) } => Self::collect_locals_in_expr(v, locals),
+                TirStmtKind::If {
+                    condition,
+                    then_block,
+                    else_block,
+                } => {
+                    Self::collect_locals_in_expr(condition, locals);
+                    Self::collect_locals_in_block(then_block, locals);
+                    if let Some(eb) = else_block {
+                        Self::collect_locals_in_block(eb, locals);
+                    }
+                }
+                TirStmtKind::LabeledBlock { block, .. } | TirStmtKind::Loop { body: block } => {
+                    Self::collect_locals_in_block(block, locals);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Find the type of a local variable definition inside an expression.
+    fn find_local_type_in_expr(expr: &TirExpr, local_idx: u32) -> Option<TypeId> {
+        match &expr.kind {
+            TirExprKind::Match { expr: scrutinee, arms } => {
+                if let Some(t) = Self::find_local_type_in_expr(scrutinee, local_idx) {
+                    return Some(t);
+                }
+                for arm in arms {
+                    if let Some(t) = Self::find_local_type_in_expr(&arm.body, local_idx) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            TirExprKind::Block(block) => Self::find_local_type_in_block(block, local_idx),
+            _ => None,
+        }
+    }
+
+    fn find_local_type_in_block(block: &TirBlock, local_idx: u32) -> Option<TypeId> {
+        for stmt in &block.stmts {
+            match &stmt.kind {
+                TirStmtKind::Let {
+                    local_index,
+                    type_id,
+                    ..
+                } if *local_index == local_idx => return Some(*type_id),
+                TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
+                    if let Some(t) = Self::find_local_type_in_expr(expr, local_idx) {
+                        return Some(t);
+                    }
+                }
+                TirStmtKind::If {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    if let Some(t) = Self::find_local_type_in_block(then_block, local_idx) {
+                        return Some(t);
+                    }
+                    if let Some(eb) = else_block
+                        && let Some(t) = Self::find_local_type_in_block(eb, local_idx)
+                    {
+                        return Some(t);
+                    }
+                }
+                TirStmtKind::LabeledBlock { block, .. } | TirStmtKind::Loop { body: block } => {
+                    if let Some(t) = Self::find_local_type_in_block(block, local_idx) {
+                        return Some(t);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     /// Fix up Return statements inside a type pack expansion element.
