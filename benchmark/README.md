@@ -156,7 +156,7 @@ All implementations produce the same result: 664,579 primes.
 | Runtime               | Time (ms) | Relative |
 | --------------------- | --------- | -------- |
 | zlib-rs (native Rust) | 28        | 1.00x    |
-| C zlib (Wasm)         | 70        | 2.50x   |
+| C zlib (Wasm)         | 70        | 2.50x    |
 | **Wado** (pure Wado)  | 476       | 17.00x   |
 
 ### zlib Decompress (twitter.json 631KB x 10 iterations)
