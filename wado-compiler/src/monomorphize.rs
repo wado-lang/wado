@@ -2326,10 +2326,14 @@ impl Monomorphizer {
         // (e.g., `impl Trait for Foo<ConcreteType, V>` where V has index 1) work correctly.
         for param in &generic.impl_type_params {
             if param.is_pack {
-                // Variadic pack: map the pack index to a tuple of ALL type args.
-                // e.g., impl<..T> Inspect for [..T] with type_args=[i32, String]
-                //        → ..T maps to Tuple(i32, String)
-                let pack_type = type_table.make_tuple(key.type_args.clone());
+                // Variadic pack: map the pack index to a tuple of the pack elements.
+                // The key.type_args contains [pack_elem_0, pack_elem_1, ..., method_type_arg_0, ...]
+                // so we must exclude method-level type args from the pack tuple.
+                let method_param_count = generic.type_params.len();
+                let pack_elem_count = key.type_args.len().saturating_sub(method_param_count);
+                let pack_elems: Vec<TypeId> =
+                    key.type_args[..pack_elem_count].to_vec();
+                let pack_type = type_table.make_tuple(pack_elems);
                 substitution.insert(param.index, pack_type);
             } else if let Some(&arg) = key.type_args.get(param.index as usize) {
                 substitution.insert(param.index, arg);
@@ -2340,15 +2344,27 @@ impl Monomorphizer {
         // The method's type_params have their own indices (0, 1, ...) but in the type table,
         // method type params are offset by impl type params count.
         // e.g., impl<T> { fn foo<U>() } - T has index 0, U has index 1 in type table
-        let offset = generic.impl_type_params.len() as u32;
+        // For variadic packs, the pack contributes multiple elements to key.type_args,
+        // so we skip past all pack elements (not just the impl param count).
+        let has_variadic_pack = generic
+            .impl_type_params
+            .iter()
+            .any(|p| p.is_pack);
+        let impl_offset = generic.impl_type_params.len() as u32;
+        let skip_count = if has_variadic_pack {
+            // Pack contributes N elements; method args start after those
+            key.type_args.len().saturating_sub(generic.type_params.len())
+        } else {
+            impl_offset as usize
+        };
         for (i, (param, &arg)) in generic
             .type_params
             .iter()
-            .zip(key.type_args.iter().skip(offset as usize))
+            .zip(key.type_args.iter().skip(skip_count))
             .enumerate()
         {
-            // Use offset + param.index to get the correct index in the type table
-            substitution.insert(offset + param.index, arg);
+            // Use impl_offset + param.index to get the correct index in the type table
+            substitution.insert(impl_offset + param.index, arg);
             let _ = i; // suppress unused warning
         }
 
