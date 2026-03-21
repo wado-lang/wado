@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774102949373,
+  "lastUpdate": 1774103031352,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -22028,6 +22028,165 @@ window.BENCHMARK_DATA = {
           {
             "name": "json/catalog (-O3)",
             "value": 48,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1ecb052d644bcb276d198e5661ecb8342000f36e",
+          "message": "Merge pull request #645 from wado-lang/claude/update-benchmark-wasm-docs-HIqWt\n\nUpdate benchmark and wasm-size results",
+          "timestamp": "2026-03-21T23:18:25+09:00",
+          "tree_id": "e31544b9a43d464c02497a80a5b369265a5b7acd",
+          "url": "https://github.com/wado-lang/wado/commit/1ecb052d644bcb276d198e5661ecb8342000f36e"
+        },
+        "date": 1774103031113,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime (-O1)",
+            "value": 3310,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O1)",
+            "value": 149,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O1)",
+            "value": 215,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O1)",
+            "value": 124,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 50,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 25,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O1)",
+            "value": 19,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O1)",
+            "value": 136,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O1)",
+            "value": 55,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O2)",
+            "value": 3307,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O2)",
+            "value": 148,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O2)",
+            "value": 63,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O2)",
+            "value": 62,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 26,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 14,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O2)",
+            "value": 18,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O2)",
+            "value": 136,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O2)",
+            "value": 56,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O3)",
+            "value": 3317,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O3)",
+            "value": 148,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O3)",
+            "value": 58,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O3)",
+            "value": 59,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 24,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 14,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O3)",
+            "value": 17,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O3)",
+            "value": 135,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O3)",
+            "value": 49,
             "unit": "ms"
           }
         ]
