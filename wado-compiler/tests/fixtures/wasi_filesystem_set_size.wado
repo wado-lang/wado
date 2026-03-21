@@ -1,0 +1,144 @@
+// Tests: Descriptor::set_size - truncate and extend a file
+//
+// Verifies that:
+// - set_size() truncates a file to a smaller size
+// - stat() reflects the new size after truncation
+// - set_size() extends a file (zero-filled)
+// - stat() reflects the extended size
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, Filesize, DescriptorFlags, PathFlags, OpenFlags } from "wasi:filesystem";
+use { wait_for_subtask } from "core:internal";
+
+fn write_bytes(file: &Descriptor, data: Array<u8>) {
+    let [write_rx, write_tx] = Stream::<u8>::new();
+    let subtask = file.write_via_stream(write_rx, 0 as Filesize);
+    write_tx.write(data);
+    write_tx.drop();
+    wait_for_subtask(subtask);
+}
+
+fn read_all(file: &Descriptor) -> Array<u8> {
+    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut result: Array<u8> = [];
+    loop {
+        let chunk = read_stream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            result.append(b);
+        }
+    }
+    read_stream.drop();
+    return result;
+}
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Create a file with 10 bytes: "ABCDEFGHIJ"
+    let file_result = dir.open_at(
+        PathFlags::none(),
+        "set_size_test.txt",
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    );
+
+    if let Ok(file) = file_result {
+        // Write "ABCDEFGHIJ" (65-74)
+        let data: Array<u8> = [65, 66, 67, 68, 69, 70, 71, 72, 73, 74];
+        write_bytes(&file, data);
+
+        // Verify initial size
+        let stat1 = file.stat();
+        if let Ok(s) = stat1 {
+            if s.size == 10 as Filesize {
+                println("set_size: initial size is 10 (correct)");
+            } else {
+                let sz = s.size as u64;
+                eprintln(`set_size: initial size is {sz}, expected 10`);
+            }
+        }
+
+        // Truncate to 5 bytes
+        let trunc_result = file.set_size(5 as Filesize);
+        if let Ok(_) = trunc_result {
+            println("set_size: truncate to 5 succeeded");
+        } else {
+            eprintln("set_size: truncate failed");
+            return;
+        }
+
+        // Verify truncated size
+        let stat2 = file.stat();
+        if let Ok(s) = stat2 {
+            if s.size == 5 as Filesize {
+                println("set_size: truncated size is 5 (correct)");
+            } else {
+                let sz = s.size as u64;
+                eprintln(`set_size: truncated size is {sz}, expected 5`);
+            }
+        }
+
+        // Read back truncated content
+        let content = read_all(&file);
+        if content.len() == 5
+            && content[0] == 65
+            && content[1] == 66
+            && content[2] == 67
+            && content[3] == 68
+            && content[4] == 69
+        {
+            println("set_size: truncated content is ABCDE (correct)");
+        } else {
+            eprintln(`set_size: truncated content unexpected, len={content.len()}`);
+        }
+
+        // Extend to 8 bytes (zero-filled)
+        let extend_result = file.set_size(8 as Filesize);
+        if let Ok(_) = extend_result {
+            println("set_size: extend to 8 succeeded");
+        } else {
+            eprintln("set_size: extend failed");
+        }
+
+        // Verify extended size
+        let stat3 = file.stat();
+        if let Ok(s) = stat3 {
+            if s.size == 8 as Filesize {
+                println("set_size: extended size is 8 (correct)");
+            } else {
+                let sz = s.size as u64;
+                eprintln(`set_size: extended size is {sz}, expected 8`);
+            }
+        }
+
+        // Clean up
+        dir.unlink_file_at("set_size_test.txt");
+    } else {
+        eprintln("failed to create set_size_test.txt");
+    }
+
+    println("all set_size tests passed");
+}
+
+__DATA__
+{
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout_contains": [
+        "set_size: initial size is 10 (correct)",
+        "set_size: truncate to 5 succeeded",
+        "set_size: truncated size is 5 (correct)",
+        "set_size: truncated content is ABCDE (correct)",
+        "set_size: extend to 8 succeeded",
+        "set_size: extended size is 8 (correct)",
+        "all set_size tests passed"
+    ]
+}

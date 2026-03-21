@@ -306,6 +306,28 @@ fn synthesize_lift_inner(
                 {
                     return lifted;
                 }
+                // Check if this is a WASI flags/enum type that needs a smaller load
+                if let Some(ctx) = ctx {
+                    if let Some(members) = ctx.wasi_registry.get_flags_members(&named.name) {
+                        let load_name = match cm_flags_byte_size(members.len()) {
+                            0 => return i32_const(0),
+                            1 => "i32_load8_u",
+                            2 => "i32_load16_u",
+                            _ => "i32_load",
+                        };
+                        return builtin_call(load_name, vec![addr], TypeTable::I32);
+                    }
+                    if let Some(variants) = ctx.wasi_registry.get_enum_variants(&named.name) {
+                        let load_name = if variants.len() <= 256 {
+                            "i32_load8_u"
+                        } else if variants.len() <= 65536 {
+                            "i32_load16_u"
+                        } else {
+                            "i32_load"
+                        };
+                        return builtin_call(load_name, vec![addr], TypeTable::I32);
+                    }
+                }
                 // Default: treat as i32 handles (resources, unknown types)
                 builtin_call("i32_load", vec![addr], TypeTable::I32)
             }
@@ -1492,6 +1514,177 @@ fn cm_param_align(ty: &Type, wasi_registry: &crate::component_model::WasiRegistr
     crate::component_model::cm_align_with_registry(ty, wasi_registry)
 }
 
+/// Lower a WASI variant (GC struct) to a linear memory buffer at the given address.
+///
+/// Memory layout (Canonical ABI):
+/// - discriminant byte at offset 0
+/// - payload at `align_to(1, payload_align)`, lowered using `synthesize_lower`
+///
+/// For each variant case with a payload, generates:
+///   if `variant_test(value`, `case_i`) { `store_payload(payload_addr`, `variant_payload(value`, i)) }
+fn synthesize_lower_wasi_variant_to_memory(
+    name: &str,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    local_types: &mut Vec<TypeId>,
+    wasi_registry: &crate::component_model::WasiRegistry,
+    type_table: &RefCell<TypeTable>,
+) {
+    let cases = if let Some(c) = wasi_registry.get_variant_cases(name) {
+        c.to_vec()
+    } else {
+        // Fallback: store as i32
+        stmts.push(expr_stmt(builtin_call(
+            "i32_store8",
+            vec![addr, variant_tag(value)],
+            TypeTable::UNIT,
+        )));
+        return;
+    };
+
+    let value_type_id = value.type_id;
+
+    // Materialize value into a local so we can reference it multiple times
+    let value_local = alloc_local(next_local, local_types, value_type_id);
+    stmts.push(let_stmt("__variant_val", value_local, value_type_id, value));
+
+    // Store discriminant byte
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store8",
+        vec![
+            addr.clone(),
+            variant_tag(local_ref(value_local, "__variant_val", value_type_id)),
+        ],
+        TypeTable::UNIT,
+    )));
+
+    // Compute payload offset (aligned to max payload alignment)
+    let mut max_payload_align = 1u32;
+    for case in &cases {
+        if let Some(payload_ty) = &case.payload {
+            max_payload_align = max_payload_align.max(
+                crate::component_model::cm_align_with_registry(payload_ty, wasi_registry),
+            );
+        }
+    }
+    let payload_offset = crate::cm_abi::align_to(1, max_payload_align);
+
+    let payload_addr = if payload_offset == 0 {
+        addr
+    } else {
+        binary_add(addr, i32_const(payload_offset as i32))
+    };
+
+    // For each case with a payload, generate conditional store
+    for (case_idx, case) in cases.iter().enumerate() {
+        if let Some(payload_ty) = &case.payload {
+            let payload_type_id = {
+                let mut tt = type_table.borrow_mut();
+                wasi_type_to_type_id_with_registry(payload_ty, &mut tt, Some(wasi_registry))
+            };
+
+            let payload_expr = variant_payload(
+                local_ref(value_local, "__variant_val", value_type_id),
+                case_idx as u32,
+                payload_type_id,
+            );
+
+            let case_name = kebab_to_pascal(&case.cm_name);
+            let case_stmts = synthesize_lower_wasi_type_to_memory(
+                payload_ty,
+                payload_expr,
+                payload_addr.clone(),
+                next_local,
+                local_types,
+                wasi_registry,
+                type_table,
+            );
+
+            stmts.push(if_stmt(
+                variant_test(
+                    local_ref(value_local, "__variant_val", value_type_id),
+                    case_idx as u32,
+                    &case_name,
+                ),
+                block(case_stmts),
+                None,
+            ));
+        }
+    }
+}
+
+/// Lower a WASI type value to linear memory at the given address.
+fn synthesize_lower_wasi_type_to_memory(
+    ty: &Type,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    local_types: &mut Vec<TypeId>,
+    wasi_registry: &crate::component_model::WasiRegistry,
+    type_table: &RefCell<TypeTable>,
+) -> Vec<TirStmt> {
+    let resolved = wasi_registry.resolve_type(ty);
+    match &resolved {
+        Type::Named(n) => {
+            // WASI struct: store each field at its offset
+            if let Some(fields) = wasi_registry.get_struct_fields_with_wado_names(&n.name) {
+                let resolved_fields: Vec<(String, Type)> = fields
+                    .iter()
+                    .map(|(wn, _, ft)| (wn.clone(), wasi_registry.resolve_type(ft)))
+                    .collect();
+                let mut stmts = Vec::new();
+                let mut offset = 0u32;
+                let mut max_align = 1u32;
+                let value_type_id = value.type_id;
+                let val_local = alloc_local(next_local, local_types, value_type_id);
+                stmts.push(let_stmt("__struct_val", val_local, value_type_id, value));
+
+                for (field_idx, (wado_name, field_ty)) in resolved_fields.iter().enumerate() {
+                    let fa =
+                        crate::component_model::cm_align_with_registry(field_ty, wasi_registry);
+                    let fs = crate::component_model::cm_size_with_registry(field_ty, wasi_registry);
+                    offset = crate::cm_abi::align_to(offset, fa);
+                    let field_type_id = {
+                        let mut tt = type_table.borrow_mut();
+                        wasi_type_to_type_id(field_ty, &mut tt)
+                    };
+                    let field_expr = TirExpr {
+                        kind: crate::tir::TirExprKind::FieldAccess {
+                            expr: Box::new(local_ref(val_local, "__struct_val", value_type_id)),
+                            field_index: field_idx as u32,
+                            field_name: wado_name.clone(),
+                        },
+                        type_id: field_type_id,
+                        span: synth_span(),
+                    };
+                    let field_addr = if offset == 0 {
+                        addr.clone()
+                    } else {
+                        binary_add(addr.clone(), i32_const(offset as i32))
+                    };
+                    stmts.extend(synthesize_lower_wasi_type_to_memory(
+                        field_ty,
+                        field_expr,
+                        field_addr,
+                        next_local,
+                        local_types,
+                        wasi_registry,
+                        type_table,
+                    ));
+                    offset += fs;
+                    max_align = max_align.max(fa);
+                }
+                return stmts;
+            }
+            // Fall through to synthesize_lower for primitives and simple types
+            synthesize_lower(&resolved, value, addr, next_local, local_types)
+        }
+        _ => synthesize_lower(&resolved, value, addr, next_local, local_types),
+    }
+}
+
 /// Produce a store plan for writing a param type to memory: list of (`sub_offset`, `store_instruction`).
 /// Each entry consumes one flat arg from the `flat_args` vector.
 fn cm_param_store_plan(
@@ -1889,6 +2082,23 @@ fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
+            // Variant param: single GC reference, binding lowers to flat args
+            Type::Named(n) if wasi_registry.is_variant(&n.name) => {
+                let variant_type_id = {
+                    let mut tt = type_table.borrow_mut();
+                    wasi_type_to_type_id_with_registry(param_type, &mut tt, Some(wasi_registry))
+                };
+                params.push(TirParam {
+                    name: param_name.clone(),
+                    type_id: variant_type_id,
+                    local_index: next_local,
+                    is_mut: false,
+                    span: synth_span(),
+                });
+                local_types.push(variant_type_id);
+                next_local += 1;
+                param_mapping.push((start, 1));
+            }
             // All other types: create flat params matching CM ABI
             _ => {
                 for (j, flat_ty) in flat_tys.iter().enumerate() {
@@ -2212,6 +2422,11 @@ fn synthesize_adapter(
                     });
                 }
             }
+            // Variant param: pass GC ref, lowered in Step 3 (indirect params)
+            Type::Named(n) if wasi_registry.is_variant(&n.name) => {
+                let variant_type_id = params[start_idx].type_id;
+                flat_args.push(local_ref(param_local, param_name, variant_type_id));
+            }
             // All other types (including Option<T>): flat params passed through directly
             _ => {
                 for j in 0..count {
@@ -2279,7 +2494,14 @@ fn synthesize_adapter(
             async_outptr_info = Some((async_outptr_local, async_result_size, async_result_align));
         }
 
-        if flat_args.len() > MAX_FLAT_ASYNC_PARAMS {
+        // Force indirect path when variant params are present (they need
+        // memory lowering, not direct flat passing).
+        let has_variant_params = func_info
+            .params
+            .iter()
+            .any(|(_, _, ty)| matches!(ty, Type::Named(n) if wasi_registry.is_variant(&n.name)));
+
+        if flat_args.len() > MAX_FLAT_ASYNC_PARAMS || has_variant_params {
             // Indirect calling: write all params to a memory buffer using CM layout.
             // The buffer layout follows the Component Model Canonical ABI spec,
             // which uses component-level type sizes (e.g., flags with ≤8 labels = 1 byte,
@@ -2319,10 +2541,37 @@ fn synthesize_adapter(
             local_types.push(TypeTable::I32);
             next_local += 1;
 
-            // Step 3: Write each param's flat values to the buffer at CM-computed offsets.
+            // Step 3: Write each param's values to the buffer at CM-computed offsets.
             let mut flat_idx = 0;
             for (param_idx, (_, _, ty)) in func_info.params.iter().enumerate() {
                 let base_offset = param_offsets[param_idx];
+                // WASI variants: lower directly to the buffer using registry-aware layout
+                if let Type::Named(n) = ty
+                    && wasi_registry.is_variant(&n.name)
+                {
+                    let buf_addr = if base_offset == 0 {
+                        local_ref(params_buf_local, "__params_buf", TypeTable::I32)
+                    } else {
+                        binary_add(
+                            local_ref(params_buf_local, "__params_buf", TypeTable::I32),
+                            i32_const(base_offset as i32),
+                        )
+                    };
+                    // flat_args has one entry for this variant (the GC ref from Pass 2)
+                    let variant_value = flat_args[flat_idx].clone();
+                    flat_idx += 1;
+                    synthesize_lower_wasi_variant_to_memory(
+                        &n.name,
+                        variant_value,
+                        buf_addr,
+                        &mut next_local,
+                        &mut body_stmts,
+                        &mut local_types,
+                        wasi_registry,
+                        type_table,
+                    );
+                    continue;
+                }
                 let stores = cm_param_store_plan(ty, wasi_registry);
                 for (sub_offset, store_name) in &stores {
                     let offset = base_offset + sub_offset;

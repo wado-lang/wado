@@ -1,0 +1,105 @@
+// Tests: Descriptor::metadata_hash, metadata_hash_at, is_same_object
+//
+// Verifies that:
+// - metadata_hash() returns a hash value for an open file
+// - metadata_hash_at() returns a hash value for a path
+// - Both hashes for the same file match
+// - is_same_object() returns true for two descriptors of the same file
+// - is_same_object() returns false for descriptors of different files
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize } from "wasi:filesystem";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Open hello.txt twice
+    let file1_result = dir.open_at(
+        PathFlags::none(),
+        "hello.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+    let file2_result = dir.open_at(
+        PathFlags::none(),
+        "hello.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+    // Open a different file
+    let file3_result = dir.open_at(
+        PathFlags::none(),
+        "binary.dat",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+
+    if let Ok(file1) = file1_result {
+        // Test metadata_hash on open file descriptor
+        let hash1_result = file1.metadata_hash();
+        if let Ok(hash1) = hash1_result {
+            println("metadata_hash: got hash from file descriptor");
+
+            // Test metadata_hash_at on directory
+            let hash_at_result = dir.metadata_hash_at(PathFlags::none(), "hello.txt");
+            if let Ok(hash_at) = hash_at_result {
+                if hash1.lower == hash_at.lower && hash1.upper == hash_at.upper {
+                    println("metadata_hash: descriptor and path hashes match (correct)");
+                } else {
+                    eprintln("metadata_hash: hashes do not match");
+                }
+            } else {
+                eprintln("metadata_hash_at: failed");
+            }
+        } else {
+            eprintln("metadata_hash: failed on file descriptor");
+        }
+
+        // Test is_same_object: same file
+        if let Ok(file2) = file2_result {
+            let same = file1.is_same_object(&file2);
+            if same {
+                println("is_same_object: same file returns true (correct)");
+            } else {
+                eprintln("is_same_object: same file returned false");
+            }
+
+            // Test is_same_object: different files
+            if let Ok(file3) = file3_result {
+                let different = file1.is_same_object(&file3);
+                if !different {
+                    println("is_same_object: different files returns false (correct)");
+                } else {
+                    eprintln("is_same_object: different files returned true");
+                }
+            } else {
+                eprintln("failed to open binary.dat");
+            }
+        } else {
+            eprintln("failed to open hello.txt second time");
+        }
+    } else {
+        eprintln("failed to open hello.txt");
+        return;
+    }
+
+    println("all metadata_hash tests passed");
+}
+
+__DATA__
+{
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout_contains": [
+        "metadata_hash: got hash from file descriptor",
+        "metadata_hash: descriptor and path hashes match (correct)",
+        "is_same_object: same file returns true (correct)",
+        "is_same_object: different files returns false (correct)",
+        "all metadata_hash tests passed"
+    ]
+}

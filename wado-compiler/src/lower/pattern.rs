@@ -1321,7 +1321,11 @@ impl<'a> PatternLowerer<'a> {
                 }
             }
             TirPattern::Wildcard => {
-                // Discard value
+                // Discard value — emit as expression statement. The WIR
+                // translation wraps non-unit Expr statements in Drop to
+                // consume stack values. For unit-typed expressions (e.g.,
+                // Ok(_) payload in Result<(), E>), the expression should
+                // not produce a value on the wasm stack.
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
             }
             TirPattern::Variant {
@@ -1329,7 +1333,13 @@ impl<'a> PatternLowerer<'a> {
                 payload_type,
                 ..
             } => {
-                if let Some(binding) = bindings.first() {
+                if let Some(binding) = bindings.first()
+                    // Skip payload extraction for unit-type wildcards — there is
+                    // no payload to extract, and the VariantPayload WIR translation
+                    // would emit a struct.get that leaves a dangling value on stack.
+                    && !(*payload_type == TypeTable::UNIT
+                        && matches!(binding, TirPattern::Wildcard))
+                {
                     // Allocate temp and extract payload
                     let variant_temp_index = self.alloc_local(value.type_id);
                     let variant_temp_name = self.next_temp_name();
@@ -1731,8 +1741,14 @@ impl<'a> PatternLowerer<'a> {
                     TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span)
                 };
 
-                // Generate binding statements for the payload
-                if let Some(binding) = bindings.first() {
+                // Generate binding statements for the payload.
+                // Skip for unit-type wildcards: there is no real payload to extract,
+                // and the VariantPayload WIR translation would emit a struct.get
+                // that leaves a dangling value on the wasm stack.
+                if let Some(binding) = bindings.first()
+                    && !(*payload_type == TypeTable::UNIT
+                        && matches!(binding, TirPattern::Wildcard))
+                {
                     let case_index = variant_type_name
                         .as_ref()
                         .and_then(|vt| self.get_case_index(vt, variant_name))

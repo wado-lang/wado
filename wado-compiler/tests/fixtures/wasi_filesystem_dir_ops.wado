@@ -1,0 +1,140 @@
+// Tests: Descriptor::create_directory_at, read_directory, remove_directory_at
+//
+// Verifies that:
+// - create_directory_at creates a new directory
+// - read_directory lists entries including known files
+// - DirectoryEntry has correct type fields
+// - remove_directory_at removes an empty directory
+// - create_directory_at on existing directory returns Exist error
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, DescriptorType, DescriptorFlags, PathFlags, OpenFlags, ErrorCode, DirectoryEntry } from "wasi:filesystem";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Create a new directory
+    let mkdir_result = dir.create_directory_at("test_newdir");
+    if let Ok(_) = mkdir_result {
+        println("create_directory_at: succeeded");
+    } else {
+        eprintln("create_directory_at: failed");
+        return;
+    }
+
+    // Creating the same directory again should fail with Exist
+    let mkdir_dup = dir.create_directory_at("test_newdir");
+    if let Err(err) = mkdir_dup {
+        if err == ErrorCode::Exist {
+            println("create_directory_at: duplicate returns Exist (correct)");
+        } else {
+            eprintln("create_directory_at: duplicate returned wrong error");
+        }
+    } else {
+        eprintln("create_directory_at: duplicate should fail");
+    }
+
+    // Read directory entries
+    let [dir_stream, _done] = dir.read_directory();
+    let mut found_hello = false;
+    let mut found_binary = false;
+    let mut found_subdir = false;
+    let mut found_newdir = false;
+    let mut entry_count = 0;
+
+    loop {
+        let entries = dir_stream.read(100);
+        if entries.len() == 0 {
+            break;
+        }
+        for let entry of entries {
+            entry_count += 1;
+            if entry.name == "hello.txt" {
+                found_hello = true;
+                if entry.type == DescriptorType::RegularFile {
+                    println("read_directory: hello.txt is RegularFile (correct)");
+                }
+            }
+            if entry.name == "binary.dat" {
+                found_binary = true;
+            }
+            if entry.name == "subdir" {
+                found_subdir = true;
+                if entry.type == DescriptorType::Directory {
+                    println("read_directory: subdir is Directory (correct)");
+                }
+            }
+            if entry.name == "test_newdir" {
+                found_newdir = true;
+                if entry.type == DescriptorType::Directory {
+                    println("read_directory: test_newdir is Directory (correct)");
+                }
+            }
+        }
+    }
+    dir_stream.drop();
+
+    if found_hello {
+        println("read_directory: found hello.txt");
+    } else {
+        eprintln("read_directory: missing hello.txt");
+    }
+    if found_binary {
+        println("read_directory: found binary.dat");
+    } else {
+        eprintln("read_directory: missing binary.dat");
+    }
+    if found_subdir {
+        println("read_directory: found subdir");
+    } else {
+        eprintln("read_directory: missing subdir");
+    }
+    if found_newdir {
+        println("read_directory: found test_newdir");
+    } else {
+        eprintln("read_directory: missing test_newdir");
+    }
+
+    println(`read_directory: total entries = {entry_count}`);
+
+    // Remove the created directory
+    let rmdir_result = dir.remove_directory_at("test_newdir");
+    if let Ok(_) = rmdir_result {
+        println("remove_directory_at: succeeded");
+    } else {
+        eprintln("remove_directory_at: failed");
+    }
+
+    // Verify it's gone
+    let rmdir_again = dir.remove_directory_at("test_newdir");
+    if let Err(_) = rmdir_again {
+        println("remove_directory_at: already removed (correct)");
+    } else {
+        eprintln("remove_directory_at: should have failed");
+    }
+
+    println("all dir_ops tests passed");
+}
+
+__DATA__
+{
+    "TODO": true,
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout_contains": [
+        "create_directory_at: succeeded",
+        "create_directory_at: duplicate returns Exist (correct)",
+        "read_directory: found hello.txt",
+        "read_directory: found binary.dat",
+        "read_directory: found subdir",
+        "read_directory: found test_newdir",
+        "remove_directory_at: succeeded",
+        "remove_directory_at: already removed (correct)",
+        "all dir_ops tests passed"
+    ]
+}

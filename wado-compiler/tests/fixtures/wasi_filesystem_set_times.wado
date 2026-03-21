@@ -1,0 +1,106 @@
+// Tests: Descriptor::set_times and Descriptor::set_times_at
+//
+// Verifies that:
+// - set_times(Now, Now) succeeds on an open file
+// - stat() shows non-null timestamps after set_times
+// - set_times_at on a path succeeds
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, Filesize, DescriptorFlags, PathFlags, OpenFlags, NewTimestamp } from "wasi:filesystem";
+use { wait_for_subtask } from "core:internal";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Create a temp file
+    let file_result = dir.open_at(
+        PathFlags::none(),
+        "times_test.txt",
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    );
+
+    if let Ok(file) = file_result {
+        // Write some data so the file is not empty
+        let [w_rx, w_tx] = Stream::<u8>::new();
+        let sub = file.write_via_stream(w_rx, 0 as Filesize);
+        let data: Array<u8> = [104, 105]; // "hi"
+        w_tx.write(data);
+        w_tx.drop();
+        wait_for_subtask(sub);
+
+        // Test set_times on the open file descriptor
+        let times_result = file.set_times(NewTimestamp::Now, NewTimestamp::Now);
+        if let Ok(_) = times_result {
+            println("set_times: Now/Now succeeded");
+        } else {
+            eprintln("set_times: Now/Now failed");
+        }
+
+        // Verify timestamps are set
+        let stat_result = file.stat();
+        if let Ok(stat) = stat_result {
+            if let Some(_ts) = stat.data_access_timestamp {
+                println("set_times: access timestamp is set");
+            } else {
+                eprintln("set_times: access timestamp is null");
+            }
+            if let Some(_ts) = stat.data_modification_timestamp {
+                println("set_times: modification timestamp is set");
+            } else {
+                eprintln("set_times: modification timestamp is null");
+            }
+        } else {
+            eprintln("set_times: stat failed");
+        }
+
+        // Test set_times with NoChange
+        let no_change_result = file.set_times(NewTimestamp::NoChange, NewTimestamp::NoChange);
+        if let Ok(_) = no_change_result {
+            println("set_times: NoChange/NoChange succeeded");
+        } else {
+            eprintln("set_times: NoChange/NoChange failed");
+        }
+    } else {
+        eprintln("failed to create times_test.txt");
+        return;
+    }
+
+    // Test set_times_at on a path
+    let times_at_result = dir.set_times_at(
+        PathFlags::none(),
+        "times_test.txt",
+        NewTimestamp::NoChange,
+        NewTimestamp::Now,
+    );
+    if let Ok(_) = times_at_result {
+        println("set_times_at: NoChange/Now succeeded");
+    } else {
+        eprintln("set_times_at: failed");
+    }
+
+    // Clean up
+    dir.unlink_file_at("times_test.txt");
+
+    println("all set_times tests passed");
+}
+
+__DATA__
+{
+    "TODO": true,
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout_contains": [
+        "set_times: Now/Now succeeded",
+        "set_times: access timestamp is set",
+        "set_times: modification timestamp is set",
+        "set_times: NoChange/NoChange succeeded",
+        "set_times_at: NoChange/Now succeeded",
+        "all set_times tests passed"
+    ]
+}

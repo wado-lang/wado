@@ -1,0 +1,59 @@
+// Tests: Descriptor::append_via_stream
+//
+// Verifies that:
+// - write_via_stream writes initial data to a file
+// - append_via_stream appends data to the end
+// - Reading back the file contains both writes concatenated
+
+use { Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, Filesize, DescriptorFlags, PathFlags, OpenFlags } from "wasi:filesystem";
+use { wait_for_subtask } from "core:internal";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Create file and write "Hello" via write_via_stream
+    let file_result = dir.open_at(
+        PathFlags::none(),
+        "append_test.txt",
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    );
+
+    if let Ok(file) = file_result {
+        // Write "Hello" (72, 101, 108, 108, 111)
+        let [w_rx, w_tx] = Stream::<u8>::new();
+        let sub1 = file.write_via_stream(w_rx, 0 as Filesize);
+        let hello: Array<u8> = [72, 101, 108, 108, 111];
+        w_tx.write(hello);
+        w_tx.drop();
+        wait_for_subtask(sub1);
+
+        // Append ", World!\n" (44, 32, 87, 111, 114, 108, 100, 33, 10)
+        let [a_rx, a_tx] = Stream::<u8>::new();
+        let sub2 = file.append_via_stream(a_rx);
+        let suffix: Array<u8> = [44, 32, 87, 111, 114, 108, 100, 33, 10];
+        a_tx.write(suffix);
+        a_tx.drop();
+        wait_for_subtask(sub2);
+
+        // Read back and pipe to stdout
+        let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+        let sub3 = Stdout::write_via_stream(read_stream);
+        wait_for_subtask(sub3);
+
+        // Clean up
+        dir.unlink_file_at("append_test.txt");
+    }
+}
+
+__DATA__
+{
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout": "Hello, World!\n"
+}
