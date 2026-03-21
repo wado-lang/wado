@@ -1542,7 +1542,11 @@ impl Monomorphizer {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
             TirStmtKind::VariadicForOf { iterable, body, .. } => {
-                self.collect_func_instantiation_sites_in_expr(iterable, generic_functions, type_table);
+                self.collect_func_instantiation_sites_in_expr(
+                    iterable,
+                    generic_functions,
+                    type_table,
+                );
                 self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
             }
         }
@@ -2212,9 +2216,7 @@ impl Monomorphizer {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => Some((name.clone(), type_args.clone())),
-            ResolvedType::Tuple(elems) => {
-                Some(("Tuple".to_string(), elems.clone()))
-            }
+            ResolvedType::Tuple(elems) => Some(("Tuple".to_string(), elems.clone())),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.get_struct_info_from_type(*inner, type_table)
             }
@@ -2463,9 +2465,11 @@ impl Monomorphizer {
             let old_stmts = std::mem::take(&mut block.stmts);
             for mut stmt in old_stmts {
                 if let TirStmtKind::VariadicForOf { .. } = &stmt.kind {
-                    block
-                        .stmts
-                        .extend(self.expand_variadic_for_of(&mut stmt, substitution, type_table));
+                    block.stmts.extend(self.expand_variadic_for_of(
+                        &mut stmt,
+                        substitution,
+                        type_table,
+                    ));
                 } else {
                     self.substitute_types_in_stmt(&mut stmt, substitution, type_table);
                     block.stmts.push(stmt);
@@ -2548,7 +2552,7 @@ impl Monomorphizer {
 
     /// Expand a `VariadicForOf` TIR node into concrete unrolled blocks.
     ///
-    /// After type substitution resolves TypePack to a concrete tuple, this generates
+    /// After type substitution resolves `TypePack` to a concrete tuple, this generates
     /// the same structure as the resolver's `resolve_tuple_for_of`.
     fn expand_variadic_for_of(
         &self,
@@ -2577,17 +2581,14 @@ impl Monomorphizer {
         let elements = match type_table.get(iterable_type) {
             ResolvedType::Tuple(elems) => elems.clone(),
             other => {
-                panic!(
-                    "VariadicForOf: expected concrete Tuple after substitution, got {:?}",
-                    other
-                );
+                panic!("VariadicForOf: expected concrete Tuple after substitution, got {other:?}");
             }
         };
 
         // Find the TypePack index in the substitution map so we can override it per element
         let pack_index = {
             let mut found = None;
-            for (&idx, &tid) in substitution.iter() {
+            for (&idx, &tid) in substitution {
                 if tid == iterable_type || matches!(type_table.get(tid), ResolvedType::Tuple(_)) {
                     found = Some(idx);
                     break;
@@ -2731,8 +2732,18 @@ impl Monomorphizer {
                 then_block,
                 else_block,
             } => {
-                self.rewrite_variadic_types_in_expr(condition, binding_local, elem_type, type_table);
-                self.rewrite_variadic_binding_types(then_block, binding_local, elem_type, type_table);
+                self.rewrite_variadic_types_in_expr(
+                    condition,
+                    binding_local,
+                    elem_type,
+                    type_table,
+                );
+                self.rewrite_variadic_binding_types(
+                    then_block,
+                    binding_local,
+                    elem_type,
+                    type_table,
+                );
                 if let Some(eb) = else_block {
                     self.rewrite_variadic_binding_types(eb, binding_local, elem_type, type_table);
                 }
@@ -2749,8 +2760,18 @@ impl Monomorphizer {
                 else_block,
                 ..
             } => {
-                self.rewrite_variadic_types_in_expr(scrutinee, binding_local, elem_type, type_table);
-                self.rewrite_variadic_binding_types(then_block, binding_local, elem_type, type_table);
+                self.rewrite_variadic_types_in_expr(
+                    scrutinee,
+                    binding_local,
+                    elem_type,
+                    type_table,
+                );
+                self.rewrite_variadic_binding_types(
+                    then_block,
+                    binding_local,
+                    elem_type,
+                    type_table,
+                );
                 if let Some(eb) = else_block {
                     self.rewrite_variadic_binding_types(eb, binding_local, elem_type, type_table);
                 }
@@ -2783,7 +2804,10 @@ impl Monomorphizer {
                 }
             }
             TirExprKind::MethodCall {
-                receiver, func, args, ..
+                receiver,
+                func,
+                args,
+                ..
             } => {
                 self.rewrite_variadic_types_in_expr(receiver, binding_local, elem_type, type_table);
                 for arg in args.iter_mut() {
@@ -2795,15 +2819,15 @@ impl Monomorphizer {
                     );
                 }
                 // If the receiver uses the binding local, update the method's struct name
-                if Self::expr_uses_local(receiver, binding_local) {
-                    if let Some(info) = &mut func.method_info {
-                        let type_name = type_table.mangle_type_name(elem_type);
-                        let base_name = type_table.base_type_name(elem_type);
-                        *info = info.with_substituted_struct_name(&type_name, &base_name);
-                        func.name = info.to_mangled_name();
-                        if let Some(ms) = module_source_for_trait_impl(type_table, elem_type) {
-                            func.module_source = ms;
-                        }
+                if Self::expr_uses_local(receiver, binding_local)
+                    && let Some(info) = &mut func.method_info
+                {
+                    let type_name = type_table.mangle_type_name(elem_type);
+                    let base_name = type_table.base_type_name(elem_type);
+                    *info = info.with_substituted_struct_name(&type_name, &base_name);
+                    func.name = info.to_mangled_name();
+                    if let Some(ms) = module_source_for_trait_impl(type_table, elem_type) {
+                        func.module_source = ms;
                     }
                 }
             }
@@ -2832,8 +2856,18 @@ impl Monomorphizer {
                 else_branch,
                 ..
             } => {
-                self.rewrite_variadic_types_in_expr(condition, binding_local, elem_type, type_table);
-                self.rewrite_variadic_binding_types(then_branch, binding_local, elem_type, type_table);
+                self.rewrite_variadic_types_in_expr(
+                    condition,
+                    binding_local,
+                    elem_type,
+                    type_table,
+                );
+                self.rewrite_variadic_binding_types(
+                    then_branch,
+                    binding_local,
+                    elem_type,
+                    type_table,
+                );
                 if let Some(eb) = else_branch {
                     self.rewrite_variadic_binding_types(eb, binding_local, elem_type, type_table);
                 }
@@ -2862,16 +2896,16 @@ impl Monomorphizer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Index { expr: inner, .. } => Self::expr_uses_local(inner, local_index),
-            TirExprKind::StructLiteral { fields, .. } => {
-                fields.iter().any(|f| Self::expr_uses_local(&f.value, local_index))
-            }
+            TirExprKind::StructLiteral { fields, .. } => fields
+                .iter()
+                .any(|f| Self::expr_uses_local(&f.value, local_index)),
             _ => false,
         }
     }
 
-    /// Fix up local indices in expanded VariadicForOf blocks.
+    /// Fix up local indices in expanded `VariadicForOf` blocks.
     ///
-    /// After expansion, each element iteration uses the same binding_local index.
+    /// After expansion, each element iteration uses the same `binding_local` index.
     /// In Wasm GC, locals have a fixed type, so each iteration needs its own local
     /// with the correct element type.
     fn fixup_variadic_for_of_locals(
@@ -2914,10 +2948,9 @@ impl Monomorphizer {
                                 kind: TirStmtKind::Let { local_index, .. },
                                 ..
                             }) = iter_block.stmts.first()
+                                && binding_local.is_none()
                             {
-                                if binding_local.is_none() {
-                                    binding_local = Some(*local_index);
-                                }
+                                binding_local = Some(*local_index);
                             }
                         }
                     }
@@ -2941,8 +2974,7 @@ impl Monomorphizer {
                             if let TirStmtKind::LabeledBlock {
                                 block: iter_block, ..
                             } = &mut child.kind
-                            {
-                                if let Some(TirStmt {
+                                && let Some(TirStmt {
                                     kind:
                                         TirStmtKind::Let {
                                             local_index,
@@ -2951,35 +2983,32 @@ impl Monomorphizer {
                                         },
                                     ..
                                 }) = iter_block.stmts.first_mut()
-                                {
-                                    let new_idx = *local_count;
-                                    *local_count += 1;
-                                    local_types.push(*type_id);
-                                    let old_idx = *local_index;
-                                    *local_index = new_idx;
-                                    // Update all references to old_idx → new_idx in this block
-                                    for s in iter_block.stmts.iter_mut().skip(1) {
-                                        Self::rewrite_local_index_in_stmt(s, old_idx, new_idx);
-                                    }
+                            {
+                                let new_idx = *local_count;
+                                *local_count += 1;
+                                local_types.push(*type_id);
+                                let old_idx = *local_index;
+                                *local_index = new_idx;
+                                // Update all references to old_idx → new_idx in this block
+                                for s in iter_block.stmts.iter_mut().skip(1) {
+                                    Self::rewrite_local_index_in_stmt(s, old_idx, new_idx);
                                 }
                             }
                         }
 
                         // Fix up temp local too if needed
-                        if let Some(new_temp) = new_temp_local {
-                            if let TirStmtKind::Let { local_index, .. } =
-                                &mut block.stmts[0].kind
-                            {
-                                let old = *local_index;
-                                *local_index = new_temp;
-                                for child in block.stmts.iter_mut().skip(1) {
-                                    if let TirStmtKind::LabeledBlock {
-                                        block: iter_block, ..
-                                    } = &mut child.kind
-                                    {
-                                        for s in &mut iter_block.stmts {
-                                            Self::rewrite_local_index_in_stmt(s, old, new_temp);
-                                        }
+                        if let Some(new_temp) = new_temp_local
+                            && let TirStmtKind::Let { local_index, .. } = &mut block.stmts[0].kind
+                        {
+                            let old = *local_index;
+                            *local_index = new_temp;
+                            for child in block.stmts.iter_mut().skip(1) {
+                                if let TirStmtKind::LabeledBlock {
+                                    block: iter_block, ..
+                                } = &mut child.kind
+                                {
+                                    for s in &mut iter_block.stmts {
+                                        Self::rewrite_local_index_in_stmt(s, old, new_temp);
                                     }
                                 }
                             }
@@ -3059,9 +3088,7 @@ impl Monomorphizer {
                     *index = new_idx;
                 }
             }
-            TirExprKind::MethodCall {
-                receiver, args, ..
-            } => {
+            TirExprKind::MethodCall { receiver, args, .. } => {
                 Self::rewrite_local_index_in_expr(receiver, old_idx, new_idx);
                 for arg in args {
                     Self::rewrite_local_index_in_expr(&mut arg.expr, old_idx, new_idx);
@@ -3078,7 +3105,10 @@ impl Monomorphizer {
                 Self::rewrite_local_index_in_expr(inner, old_idx, new_idx);
             }
             TirExprKind::Binary { left, right, .. }
-            | TirExprKind::Assign { target: left, value: right } => {
+            | TirExprKind::Assign {
+                target: left,
+                value: right,
+            } => {
                 Self::rewrite_local_index_in_expr(left, old_idx, new_idx);
                 Self::rewrite_local_index_in_expr(right, old_idx, new_idx);
             }

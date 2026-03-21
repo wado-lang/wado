@@ -269,7 +269,9 @@ fn collect_param_field_usage_in_stmt(
                 );
             }
         }
-        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => {}
+        TirStmtKind::Continue
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::VariadicForOf { .. } => {}
         TirStmtKind::LetDestructure { value, .. } => {
             collect_param_field_usage_in_expr(
                 value,
@@ -1069,7 +1071,9 @@ fn count_field_accesses_in_stmt(
             count_field_accesses_in_expr(value, counts, false, type_table);
         }
         TirStmtKind::TaskReturn { .. } => {}
-        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 
@@ -1529,7 +1533,9 @@ fn compute_sync_fields_in_stmt(
                 compute_sync_fields_in_expr(v, candidates, type_table, cache, result);
             }
         }
-        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => {}
+        TirStmtKind::Continue
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::VariadicForOf { .. } => {}
         TirStmtKind::LetDestructure { value, .. } => {
             compute_sync_fields_in_expr(value, candidates, type_table, cache, result);
         }
@@ -1875,7 +1881,9 @@ fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate]) {
             replace_in_expr(value, candidates);
         }
         TirStmtKind::TaskReturn { .. } => {}
-        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 

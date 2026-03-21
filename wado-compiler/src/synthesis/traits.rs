@@ -2341,7 +2341,6 @@ fn build_variant_inspect_alt_body(
     chain.map_or_else(Vec::new, |e| vec![TirStmt::new(TirStmtKind::Expr(e), span)])
 }
 
-
 /// Build a `value.inspect_alt(f)` method call statement.
 ///
 /// Identical to `inspect_call` but for the `InspectAlt` trait.

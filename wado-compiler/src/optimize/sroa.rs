@@ -317,7 +317,9 @@ fn collect_candidates_in_stmt(
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
-        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 
@@ -442,7 +444,9 @@ fn check_escape_in_stmt(stmt: &TirStmt, candidates: &IndexSet<u32>, escaped: &mu
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
-        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 
@@ -865,7 +869,9 @@ fn check_soft_escape_in_stmt(
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
-        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 
@@ -1419,7 +1425,9 @@ fn rewrite_stmt(
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
-        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 

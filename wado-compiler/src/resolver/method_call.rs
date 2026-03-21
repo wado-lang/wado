@@ -134,8 +134,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if method_info.is_none() {
             let type_param_name = {
                 let resolved = self.type_table.borrow().get(base_type_id).clone();
-                if let ResolvedType::TypeParam { name, .. }
-                    | ResolvedType::TypePack { name, .. } = resolved
+                if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } =
+                    resolved
                 {
                     Some(name)
                 } else {

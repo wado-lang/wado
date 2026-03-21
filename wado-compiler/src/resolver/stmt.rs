@@ -1270,9 +1270,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let type_table = self.type_table.borrow();
             match type_table.get(iterable_type_id) {
                 ResolvedType::Tuple(elems) => {
-                    let has_type_pack = elems.iter().any(|e| {
-                        matches!(type_table.get(*e), ResolvedType::TypePack { .. })
-                    });
+                    let has_type_pack = elems
+                        .iter()
+                        .any(|e| matches!(type_table.get(*e), ResolvedType::TypePack { .. }));
                     Some((elems.clone(), has_type_pack))
                 }
                 _ => None,
@@ -1281,9 +1281,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         if let Some((elems, has_type_pack)) = tuple_info {
             if has_type_pack {
-                if is_enumerate {
-                    panic!("variadic for-of with .enumerate() is not yet supported");
-                }
+                assert!(
+                    !is_enumerate,
+                    "variadic for-of with .enumerate() is not yet supported"
+                );
                 self.resolve_variadic_for_of(for_of, iterable, ctx)
             } else {
                 self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, ctx)
@@ -1305,11 +1306,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// }
     /// ```
     /// Create a deferred `VariadicForOf` TIR node for `for let v of iterable`
-    /// where `iterable` has a tuple type containing TypePack elements.
+    /// where `iterable` has a tuple type containing `TypePack` elements.
     ///
-    /// The body is resolved once with the loop variable having the TypePack type.
+    /// The body is resolved once with the loop variable having the `TypePack` type.
     /// The monomorphizer will expand this after type substitution resolves the
-    /// TypePack to a concrete tuple.
+    /// `TypePack` to a concrete tuple.
     fn resolve_variadic_for_of(
         &mut self,
         for_of: &ForOfStmt,
@@ -1336,12 +1337,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let type_pack_type = {
             let type_table = self.type_table.borrow();
             match type_table.get(iterable.type_id) {
-                ResolvedType::Tuple(elems) => {
-                    elems.iter().find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. })).copied()
-                }
+                ResolvedType::Tuple(elems) => elems
+                    .iter()
+                    .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
+                    .copied(),
                 _ => None,
             }
-        }.expect("variadic for-of requires TypePack in tuple elements");
+        }
+        .expect("variadic for-of requires TypePack in tuple elements");
 
         // Resolve the body with the binding having the TypePack type
         let binding_name = match &for_of.binding {

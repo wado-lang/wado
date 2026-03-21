@@ -12,8 +12,8 @@ use crate::ast::{
     MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
     Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
     StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleTypeDecl,
-    TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
     VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
@@ -3585,11 +3585,7 @@ impl Parser {
 
     /// Parse a `type` declaration: either a newtype (`type Name = T;`) or
     /// a tuple type family declaration (`type [..T];`).
-    fn parse_type_decl(
-        &mut self,
-        is_pub: bool,
-        attrs: Vec<Attribute>,
-    ) -> ParseResult<Item> {
+    fn parse_type_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<Item> {
         let start_span = self.peek().span;
         // peek past `type` to see if next token is `[` (tuple type decl)
         if self.peek_nth(1).kind == TokenKind::LBracket {

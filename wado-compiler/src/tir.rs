@@ -2151,10 +2151,10 @@ pub enum TirStmtKind {
     /// Deferred tuple for-of expansion for variadic type packs.
     ///
     /// Created when `for let v of iterable` where `iterable` has a tuple type containing
-    /// TypePack elements. The monomorphizer expands this after type substitution resolves
-    /// the TypePack to a concrete tuple.
+    /// `TypePack` elements. The monomorphizer expands this after type substitution resolves
+    /// the `TypePack` to a concrete tuple.
     VariadicForOf {
-        /// The tuple iterable expression (type contains TypePack before substitution)
+        /// The tuple iterable expression (type contains `TypePack` before substitution)
         iterable: TirExpr,
         /// The loop variable name
         binding_name: String,

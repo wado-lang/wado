@@ -462,7 +462,9 @@ fn analyze_block(
             TirStmtKind::TaskReturn { .. } => {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
-            TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
+            TirStmtKind::VariadicForOf { .. } => {
+                unreachable!("VariadicForOf should be expanded during monomorphization")
+            }
         }
     }
 }
@@ -1414,7 +1416,9 @@ fn collect_types_from_block(
             TirStmtKind::TaskReturn { .. } => {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
-            TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
+            TirStmtKind::VariadicForOf { .. } => {
+                unreachable!("VariadicForOf should be expanded during monomorphization")
+            }
         }
     }
 }
@@ -1935,7 +1939,9 @@ fn collect_global_reads_stmt(stmt: &TirStmt, used: &mut IndexSet<(String, String
             collect_global_reads_expr(value, used);
         }
         TirStmtKind::TaskReturn { .. } => {}
-        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 
@@ -2176,7 +2182,9 @@ fn block_has_side_effects(block: &TirBlock) -> bool {
                 || else_block.as_ref().is_some_and(block_has_side_effects)
         }
         TirStmtKind::Break { value, .. } => value.as_ref().is_some_and(expr_has_side_effects),
-        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => false,
+        TirStmtKind::Continue
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::VariadicForOf { .. } => false,
         TirStmtKind::LetDestructure { value, .. } => expr_has_side_effects(value),
     })
 }

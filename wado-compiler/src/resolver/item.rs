@@ -626,28 +626,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Variadic tuple impl: `impl<..T: Trait> Trait for [..T]`
             // Extract type pack params from the tuple's TypePackSpread elements.
             for elem in elements {
-                if let ast::Type::TypePackSpread(name, _) = elem {
-                    if let Some(&(idx, _)) = old_type_params.get(name) {
-                        let type_id = self
-                            .type_table
-                            .borrow_mut()
-                            .make_type_pack(name.clone(), idx);
-                        self.trait_ctx
-                            .type_params
-                            .insert(name.clone(), (idx, type_id));
-                        let bounds = old_type_param_bounds
-                            .get(name)
-                            .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
-                            .unwrap_or_default();
-                        impl_type_params.push(crate::tir::TirTypeParam {
-                            name: name.clone(),
-                            is_effect: false,
-                            is_pack: true,
-                            bounds,
-                            default: None,
-                            index: idx,
-                        });
-                    }
+                if let ast::Type::TypePackSpread(name, _) = elem
+                    && let Some(&(idx, _)) = old_type_params.get(name)
+                {
+                    let type_id = self
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(name.clone(), idx);
+                    self.trait_ctx
+                        .type_params
+                        .insert(name.clone(), (idx, type_id));
+                    let bounds = old_type_param_bounds
+                        .get(name)
+                        .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
+                        .unwrap_or_default();
+                    impl_type_params.push(crate::tir::TirTypeParam {
+                        name: name.clone(),
+                        is_effect: false,
+                        is_pack: true,
+                        bounds,
+                        default: None,
+                        index: idx,
+                    });
                 }
             }
         }

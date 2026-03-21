@@ -10,9 +10,8 @@ use crate::ast::{
     ImplBlock, ImportAttributes, IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt,
     MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt,
     SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleTypeDecl, TupleLiteralExpr, Type, UnaryExpr,
-    UnaryOp, UseDecl,
-    UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl,
+    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
+    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::hashmap::IndexSet;

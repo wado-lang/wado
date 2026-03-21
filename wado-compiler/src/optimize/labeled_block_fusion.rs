@@ -121,7 +121,9 @@ fn fuse_in_stmt(stmt: &mut TirStmt, local_count: &mut u32, local_types: &mut Vec
             }
         }
         TirStmtKind::LetDestructure { value, .. } => fuse_in_expr(value, local_count, local_types),
-        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => false,
+        TirStmtKind::Continue
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::VariadicForOf { .. } => false,
     }
 }
 
@@ -594,7 +596,9 @@ fn count_local_uses_in_stmt(stmt: &TirStmt, local_idx: u32) -> usize {
         TirStmtKind::Break { value, .. } => value
             .as_ref()
             .map_or(0, |v| count_local_uses_in_expr(v, local_idx)),
-        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => 0,
+        TirStmtKind::Continue
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::VariadicForOf { .. } => 0,
     }
 }
 
@@ -745,7 +749,9 @@ fn count_variant_payload_uses_in_stmt(stmt: &TirStmt, local_idx: u32, case_index
         TirStmtKind::Break { value, .. } => value.as_ref().map_or(0, |v| {
             count_variant_payload_uses_in_expr(v, local_idx, case_index)
         }),
-        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => 0,
+        TirStmtKind::Continue
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::VariadicForOf { .. } => 0,
     }
 }
 
@@ -1528,7 +1534,9 @@ fn subst_variant_payload_in_stmt(
                 subst_variant_payload_in_expr(v, temp_local, case_index, payload_local);
             }
         }
-        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => {}
+        TirStmtKind::Continue
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::VariadicForOf { .. } => {}
     }
 }
 
