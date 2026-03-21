@@ -4,8 +4,8 @@ use crate::ast::{self, BinaryOp, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId,
-    TypeTable,
+    CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 
 use super::Resolver;
@@ -508,6 +508,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let _ = self.logger.error(TypeError::InvalidPattern {
                     message: format!(
                         "arithmetic operator `{op_char}` is not allowed on flags types; use bitwise operators (`|`, `&`, `^`) instead"
+                    ),
+                    span: binary.span,
+                });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+            }
+        }
+
+        // Check for modulo on float types: Wasm has no float remainder instruction.
+        // Users should use f64::fmod() or f32::fmod() instead.
+        {
+            let left_resolved = self.type_table.borrow().get(left.type_id).clone();
+            if matches!(binary.op, BinaryOp::Mod)
+                && matches!(
+                    left_resolved,
+                    ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64)
+                )
+            {
+                let type_name = match left_resolved {
+                    ResolvedType::Primitive(PrimitiveType::F32) => "f32",
+                    _ => "f64",
+                };
+                let _ = self.logger.error(TypeError::InvalidPattern {
+                    message: format!(
+                        "operator `%` is not supported on `{type_name}`; use `{type_name}::fmod(a, b)` instead"
                     ),
                     span: binary.span,
                 });

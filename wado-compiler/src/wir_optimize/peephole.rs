@@ -183,6 +183,24 @@ fn fold_constant_comparisons_in_instr(instr: &mut WirInstr) {
             (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv <= *rv)),
             _ => None,
         },
+        WirInstr::I32LtU(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => {
+                Some(i32::from(lv.cast_unsigned() < rv.cast_unsigned()))
+            }
+            _ => None,
+        },
+        WirInstr::I32GtU(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => {
+                Some(i32::from(lv.cast_unsigned() > rv.cast_unsigned()))
+            }
+            _ => None,
+        },
+        WirInstr::I32LeU(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => {
+                Some(i32::from(lv.cast_unsigned() <= rv.cast_unsigned()))
+            }
+            _ => None,
+        },
         _ => None,
     };
 

@@ -1,0 +1,39 @@
+use { println, Stdout } from "core:cli";
+
+fn test_overflow() with Stdout {
+    // Addition overflow: 65535 + 1 should wrap to 0
+    let a: u16 = 65535 as u16;
+    let b: u16 = 1 as u16;
+    let sum = a + b;
+    println(`65535 + 1: {sum}`);
+
+    if sum == 0 as u16 {
+        println("sum == 0: true");
+    } else {
+        println("sum == 0: false");
+    }
+
+    // Subtraction underflow: 0 - 1 should wrap to 65535
+    let zero: u16 = 0 as u16;
+    let sub = zero - b;
+    println(`0 - 1: {sub}`);
+
+    if sub == 65535 as u16 {
+        println("sub == 65535: true");
+    } else {
+        println("sub == 65535: false");
+    }
+
+    // Multiplication overflow: 60000 * 2 should wrap to 54464
+    let c: u16 = 60000 as u16;
+    let two: u16 = 2 as u16;
+    let mul = c * two;
+    println(`60000 * 2: {mul}`);
+}
+
+export fn run() with Stdout {
+    test_overflow();
+}
+
+__DATA__
+{"stdout": "65535 + 1: 0\nsum == 0: true\n0 - 1: 65535\nsub == 65535: true\n60000 * 2: 54464\n"}
