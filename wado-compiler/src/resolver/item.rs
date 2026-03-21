@@ -26,6 +26,7 @@ pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
                     "result" => features |= crate::wir::COMP_FEATURE_RESULT,
                     "default" => features |= crate::wir::COMP_FEATURE_DEFAULT,
                     "from" => features |= crate::wir::COMP_FEATURE_FROM,
+                    "tuple" => features |= crate::wir::COMP_FEATURE_TUPLE,
                     _ => {}
                 }
             }

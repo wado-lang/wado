@@ -10,7 +10,8 @@ use crate::ast::{
     ImplBlock, ImportAttributes, IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt,
     MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt,
     SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl,
+    TemplateStringExpr, TestDecl, TraitDecl, TupleTypeDecl, TupleLiteralExpr, Type, UnaryExpr,
+    UnaryOp, UseDecl,
     UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
@@ -133,6 +134,7 @@ impl<'a> Unparser<'a> {
             Item::World(w) => self.unparse_world(w),
             Item::Test(t) => self.unparse_test(t),
             Item::Global(g) => self.unparse_global(g),
+            Item::TupleTypeDecl(d) => self.unparse_tuple_type_decl(d),
         }
 
         // Emit trailing comments
@@ -664,6 +666,22 @@ impl<'a> Unparser<'a> {
         self.last_source_line = saved_line.max(f.span.end_line());
         self.write_indent();
         self.output.push_str("}\n");
+    }
+
+    fn unparse_tuple_type_decl(&mut self, d: &TupleTypeDecl) {
+        self.write_indent();
+
+        for attr in &d.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
+
+        if d.is_pub {
+            self.output.push_str("pub ");
+        }
+
+        self.output.push_str("type [..T];\n");
     }
 
     fn unparse_newtype(&mut self, t: &Newtype) {
@@ -2566,6 +2584,7 @@ pub fn get_item_span(item: &Item) -> Span {
         Item::World(w) => w.span,
         Item::Test(t) => t.span,
         Item::Global(g) => g.span,
+        Item::TupleTypeDecl(d) => d.span,
     }
 }
 
@@ -3824,6 +3843,30 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str(" = ");
                 self.unparse_expr(value);
                 self.output.push_str(";\n");
+            }
+            TirStmtKind::VariadicForOf {
+                iterable,
+                binding_name,
+                is_mut,
+                body,
+                ..
+            } => {
+                self.write_indent();
+                self.output.push_str("for let ");
+                if *is_mut {
+                    self.output.push_str("mut ");
+                }
+                self.output.push_str(binding_name);
+                self.output.push_str(" of <variadic> ");
+                self.unparse_expr(iterable);
+                self.output.push_str(" {\n");
+                self.indent_level += 1;
+                for stmt in &body.stmts {
+                    self.unparse_stmt(stmt);
+                }
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push_str("}\n");
             }
         }
     }

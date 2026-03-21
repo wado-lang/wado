@@ -258,6 +258,7 @@ fn lower_wide_int_in_stmt(stmt: &mut TirStmt, type_table: &Rc<RefCell<TypeTable>
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
+        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
     }
 }
 

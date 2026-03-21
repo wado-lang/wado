@@ -299,6 +299,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             TirStmtKind::TaskReturn { value } => {
                 self.check_expr(value)?;
             }
+            TirStmtKind::VariadicForOf { .. } => {},
         }
         Ok(())
     }

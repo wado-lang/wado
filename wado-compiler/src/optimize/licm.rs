@@ -413,6 +413,7 @@ fn collect_modified_vars_in_stmt(
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
+        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
     }
 }
 
@@ -743,6 +744,7 @@ fn collect_licm_ref_bindings_in_stmt(
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
+        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
     }
 }
 
@@ -1065,6 +1067,7 @@ fn find_hoist_candidates_in_stmt(
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
+        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
     }
 }
 
@@ -1543,6 +1546,7 @@ fn replace_hoisted_in_stmt(
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
+        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
     }
 }
 

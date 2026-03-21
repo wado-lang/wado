@@ -5223,6 +5223,7 @@ fn rewrite_cm_methods_in_stmt(stmt: &mut TirStmt, tt: &TypeTable) {
         TirStmtKind::TaskReturn { value } => {
             rewrite_cm_methods_in_expr(value, tt);
         }
+        TirStmtKind::VariadicForOf { .. } => {},
     }
 }
 
@@ -6140,6 +6141,7 @@ fn rewrite_calls_in_stmt(
         TirStmtKind::TaskReturn { value } => {
             rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
         }
+        TirStmtKind::VariadicForOf { .. } => {},
     }
 }
 
@@ -6737,6 +6739,7 @@ fn collect_effect_calls_in_stmt(
         TirStmtKind::TaskReturn { value } => {
             collect_effect_calls_in_expr(value, effects, wasi_registry);
         }
+        TirStmtKind::VariadicForOf { .. } => {},
     }
 }
 

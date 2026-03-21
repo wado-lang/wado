@@ -104,6 +104,7 @@ fn precompute_modified_stmt(
             precompute_modified_expr(value, modified, cache);
         }
         TirStmtKind::TaskReturn { .. } => {}
+        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
     }
 }
 
@@ -364,6 +365,7 @@ fn collect_modified_in_stmt(stmt: &TirStmt, modified: &mut IndexSet<u32>) {
         TirStmtKind::Continue => {}
         TirStmtKind::LetDestructure { value, .. } => collect_modified_in_expr(value, modified),
         TirStmtKind::TaskReturn { .. } => {}
+        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
     }
 }
 
@@ -550,6 +552,7 @@ fn collect_unsafe_in_stmt(stmt: &TirStmt, unsafe_locals: &mut IndexSet<u32>) {
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
+        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
     }
 }
 
@@ -875,6 +878,7 @@ fn forward_in_stmt(
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
+        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
     }
 }
 

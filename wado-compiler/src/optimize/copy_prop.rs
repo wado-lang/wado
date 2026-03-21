@@ -181,6 +181,7 @@ fn analyze_stmt(stmt: &TirStmt, result: &mut AnalysisResult, in_loop: bool) {
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
+        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
     }
 }
 
@@ -504,6 +505,7 @@ fn apply_in_stmt(
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
+        TirStmtKind::VariadicForOf { .. } => unreachable!("VariadicForOf should be expanded during monomorphization"),
     }
 }
 
