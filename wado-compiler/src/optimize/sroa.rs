@@ -467,7 +467,8 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
 
         // Assign to a field of a candidate is safe for the target side.
         TirExprKind::Assign { target, value } => {
-            if let TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } = &target.kind
+            if let TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner } = &target.kind
                 && is_candidate_local(inner, candidates).is_some()
             {
                 // Safe: field write. Only recurse into value, not target.
@@ -749,7 +750,8 @@ fn check_has_field_access_expr(
             check_has_field_access_expr(inner, candidates, has_access);
         }
         TirExprKind::Assign { target, value } => {
-            if let TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } = &target.kind
+            if let TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner } = &target.kind
                 && let Some(idx) = is_candidate_local_ref(inner, candidates)
             {
                 has_access.insert(idx);
@@ -887,7 +889,8 @@ fn check_soft_escape_in_expr(
 
         // Assign to field of candidate is safe
         TirExprKind::Assign { target, value } => {
-            if let TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } = &target.kind
+            if let TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner } = &target.kind
                 && is_candidate_local_ref(inner, candidates).is_some()
             {
                 check_soft_escape_in_expr(value, candidates, hard_escaped, false, sl, cm);

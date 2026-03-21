@@ -199,7 +199,8 @@ impl StringCollector {
             TirExprKind::Cast { expr: inner, .. } => {
                 self.collect_expr(inner);
             }
-            TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner } => {
                 self.collect_expr(inner);
             }
             TirExprKind::Index { expr: array, index } => {

@@ -890,7 +890,8 @@ impl Monomorphizer {
             TirExprKind::Cast { expr: inner, .. } => {
                 self.rewrite_types_in_expr(inner, type_table);
             }
-            TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner } => {
                 self.rewrite_types_in_expr(inner, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -1232,17 +1233,13 @@ impl Monomorphizer {
             ResolvedType::TypeParam { index, name } => {
                 // Direct substitution
                 *substitution.get(&index).unwrap_or_else(|| {
-                    panic!(
-                        "TypeParam `{name}` (index {index}) not found in substitution map"
-                    )
+                    panic!("TypeParam `{name}` (index {index}) not found in substitution map")
                 })
             }
             ResolvedType::TypePack { index, name } => {
                 // Direct substitution (the substituted type is typically a tuple)
                 *substitution.get(&index).unwrap_or_else(|| {
-                    panic!(
-                        "TypePack `..{name}` (index {index}) not found in substitution map"
-                    )
+                    panic!("TypePack `..{name}` (index {index}) not found in substitution map")
                 })
             }
             ResolvedType::BuiltinArray(elem) => {
@@ -2005,7 +2002,8 @@ impl Monomorphizer {
             TirExprKind::Cast { expr: inner, .. } => {
                 self.collect_func_instantiation_sites_in_expr(inner, generic_functions, type_table);
             }
-            TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner } => {
                 self.collect_func_instantiation_sites_in_expr(inner, generic_functions, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -3010,8 +3008,7 @@ impl Monomorphizer {
                         }
                     }
                     // Rebuild the tuple type from expanded element types
-                    let new_elem_types: Vec<TypeId> =
-                        elements.iter().map(|e| e.type_id).collect();
+                    let new_elem_types: Vec<TypeId> = elements.iter().map(|e| e.type_id).collect();
                     expr.type_id = type_table.make_tuple(new_elem_types);
                 }
             }
@@ -3026,7 +3023,8 @@ impl Monomorphizer {
                 *target_type = self.substitute_type(*target_type, substitution, type_table);
                 self.substitute_types_in_expr(inner, substitution, type_table);
             }
-            TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -3345,7 +3343,7 @@ impl Monomorphizer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner } => {
                 Self::update_local_expr_types_in_expr(inner, local_types);
             }
             TirExprKind::Block(block) => {
@@ -3831,7 +3829,8 @@ impl Monomorphizer {
             TirExprKind::Cast { expr: inner, .. } => {
                 self.rewrite_function_calls_in_expr(inner, type_table);
             }
-            TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner } => {
                 self.rewrite_function_calls_in_expr(inner, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -4236,7 +4235,7 @@ impl Monomorphizer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleSpread { expr: inner }
             | TirExprKind::GlobalVarSet { value: inner, .. }
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }

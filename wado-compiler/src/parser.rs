@@ -203,10 +203,9 @@ impl Parser {
     /// Consume a `..` token. If `...` is found, emit a helpful error.
     fn consume_dot_dot(&mut self) -> ParseResult<Span> {
         if matches!(self.peek_kind(), TokenKind::DotDotDot) {
-            return Err(self.error_at_span(
-                self.peek().span,
-                "unexpected `...`; did you mean `..`?",
-            ));
+            return Err(
+                self.error_at_span(self.peek().span, "unexpected `...`; did you mean `..`?")
+            );
         }
         let span = self.peek().span;
         self.expect(&TokenKind::DotDot)?;

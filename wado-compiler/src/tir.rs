@@ -1772,9 +1772,9 @@ pub enum TirExprKind {
         elements: Vec<TirExpr>,
     },
 
-    /// Spread a tuple expression into an enclosing TupleLiteral.
+    /// Spread a tuple expression into an enclosing `TupleLiteral`.
     /// Created by the resolver for `[..expr]` syntax. Expanded by monomorphization
-    /// into individual FieldAccess elements once the concrete tuple arity is known.
+    /// into individual `FieldAccess` elements once the concrete tuple arity is known.
     TupleSpread {
         expr: Box<TirExpr>,
     },

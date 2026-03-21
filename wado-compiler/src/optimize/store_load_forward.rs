@@ -117,7 +117,8 @@ fn precompute_modified_expr(
             if let TirExprKind::Local { index, .. } = &target.kind {
                 modified.insert(*index);
             }
-            if let TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } = &target.kind
+            if let TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner } = &target.kind
                 && let TirExprKind::Local { index, .. } = &inner.kind
             {
                 modified.insert(*index);
@@ -372,7 +373,8 @@ fn collect_modified_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
             if let TirExprKind::Local { index, .. } = &target.kind {
                 modified.insert(*index);
             }
-            if let TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } = &target.kind
+            if let TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner } = &target.kind
                 && let TirExprKind::Local { index, .. } = &inner.kind
             {
                 modified.insert(*index);
@@ -599,7 +601,9 @@ fn collect_unsafe_in_expr(expr: &TirExpr, unsafe_locals: &mut IndexSet<u32>) {
         TirExprKind::ClosureToCanonical { functor, .. } => {
             collect_unsafe_in_expr(functor, unsafe_locals);
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } | TirExprKind::Cast { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::Cast { expr: inner, .. } => {
             collect_unsafe_in_expr(inner, unsafe_locals);
         }
         TirExprKind::Index {
@@ -926,7 +930,9 @@ fn forward_in_expr(
         TirExprKind::ClosureToCanonical { functor, .. } => {
             changed |= forward_in_expr(functor, known, unsafe_locals, type_table, cache);
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } | TirExprKind::Cast { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::Cast { expr: inner, .. } => {
             changed |= forward_in_expr(inner, known, unsafe_locals, type_table, cache);
         }
         TirExprKind::Index {

@@ -611,7 +611,9 @@ fn is_loop_invariant(expr: &TirExpr, modified_vars: &IndexSet<u32>) -> bool {
         TirExprKind::Local { index, .. } => !modified_vars.contains(index),
 
         // Field access is invariant if the base expression is invariant
-        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr } => is_loop_invariant(expr, modified_vars),
+        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr } => {
+            is_loop_invariant(expr, modified_vars)
+        }
 
         // Pure binary ops are invariant if operands are invariant
         // (Assignments are handled separately via TirExprKind::Assign, not as binary ops)

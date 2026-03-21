@@ -2310,7 +2310,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Check if a type contains a TypePack (variadic pack parameter).
+    /// Check if a type contains a `TypePack` (variadic pack parameter).
     fn type_contains_pack(&self, type_id: TypeId) -> bool {
         let ty = self.type_table.borrow().get(type_id).clone();
         match ty {
@@ -2350,23 +2350,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // For concrete tuples, expand inline via FieldAccess.
                     // If the expression is non-trivial (not a local), bind it to a
                     // temporary to ensure single evaluation.
-                    let spread_ref =
-                        if matches!(spread_expr.kind, TirExprKind::Local { .. }) {
-                            spread_expr
-                        } else {
-                            let spread_type_id = spread_expr.type_id;
-                            let tmp_name = format!("__spread_{}", ctx.next_local);
-                            let tmp_idx = ctx.add_local(tmp_name.clone(), spread_type_id, false);
-                            spread_bindings.push((tmp_idx, tmp_name.clone(), spread_expr, elem.span()));
-                            TirExpr::new(
-                                TirExprKind::Local {
-                                    index: tmp_idx,
-                                    name: tmp_name,
-                                },
-                                spread_type_id,
-                                elem.span(),
-                            )
-                        };
+                    let spread_ref = if matches!(spread_expr.kind, TirExprKind::Local { .. }) {
+                        spread_expr
+                    } else {
+                        let spread_type_id = spread_expr.type_id;
+                        let tmp_name = format!("__spread_{}", ctx.next_local);
+                        let tmp_idx = ctx.add_local(tmp_name.clone(), spread_type_id, false);
+                        spread_bindings.push((tmp_idx, tmp_name.clone(), spread_expr, elem.span()));
+                        TirExpr::new(
+                            TirExprKind::Local {
+                                index: tmp_idx,
+                                name: tmp_name,
+                            },
+                            spread_type_id,
+                            elem.span(),
+                        )
+                    };
                     for (i, &et) in inner_elems.iter().enumerate() {
                         elements.push(TirExpr::new(
                             TirExprKind::FieldAccess {
@@ -2380,14 +2379,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         elem_types.push(et);
                     }
                 } else {
-                    let _ = self.logger.error(
-                        crate::resolver::types::TypeError::InvalidLiteral {
-                            message:
-                                "spread operator `..` can only be used with tuple types"
-                                    .to_string(),
+                    let _ = self
+                        .logger
+                        .error(crate::resolver::types::TypeError::InvalidLiteral {
+                            message: "spread operator `..` can only be used with tuple types"
+                                .to_string(),
                             span: elem.span(),
-                        },
-                    );
+                        });
                     elem_types.push(spread_expr.type_id);
                     elements.push(spread_expr);
                 }
@@ -2429,10 +2427,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 })
                 .collect();
             // The tuple literal is the block's return expression
-            stmts.push(TirStmt::new(
-                TirStmtKind::Expr(tuple_expr),
-                tuple_lit.span,
-            ));
+            stmts.push(TirStmt::new(TirStmtKind::Expr(tuple_expr), tuple_lit.span));
             let block = TirBlock::new(stmts, tuple_lit.span);
             TirExpr::new(TirExprKind::Block(block), tuple_type, tuple_lit.span)
         }
