@@ -890,7 +890,7 @@ impl Monomorphizer {
             TirExprKind::Cast { expr: inner, .. } => {
                 self.rewrite_types_in_expr(inner, type_table);
             }
-            TirExprKind::FieldAccess { expr: inner, .. } => {
+            TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
                 self.rewrite_types_in_expr(inner, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -2005,7 +2005,7 @@ impl Monomorphizer {
             TirExprKind::Cast { expr: inner, .. } => {
                 self.collect_func_instantiation_sites_in_expr(inner, generic_functions, type_table);
             }
-            TirExprKind::FieldAccess { expr: inner, .. } => {
+            TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
                 self.collect_func_instantiation_sites_in_expr(inner, generic_functions, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -2976,24 +2976,18 @@ impl Monomorphizer {
                 }
             }
             TirExprKind::TupleLiteral { elements } => {
+                // First pass: substitute types in all elements
                 for elem in elements.iter_mut() {
                     self.substitute_types_in_expr(elem, substitution, type_table);
                 }
-                // After type substitution, expand FieldAccess elements that access
-                // pack-typed tuples (a spread that was resolved as field 0 on a
-                // TypePack tuple, now the source tuple has more elements).
-                let new_type = self.substitute_type(expr.type_id, substitution, type_table);
-                if let ResolvedType::Tuple(expected_elems) = type_table.get(new_type).clone()
-                    && expected_elems.len() != elements.len()
-                {
+                // Second pass: expand TupleSpread nodes into FieldAccess elements
+                let has_spread = elements
+                    .iter()
+                    .any(|e| matches!(e.kind, TirExprKind::TupleSpread { .. }));
+                if has_spread {
                     let old_elements = std::mem::take(elements);
                     for elem in old_elements {
-                        if let TirExprKind::FieldAccess {
-                            ref expr,
-                            field_index: 0,
-                            ..
-                        } = elem.kind
-                        {
+                        if let TirExprKind::TupleSpread { ref expr } = elem.kind {
                             let inner_type = type_table.get(expr.type_id).clone();
                             if let ResolvedType::Tuple(inner_elems) = inner_type {
                                 for (i, &elem_type) in inner_elems.iter().enumerate() {
@@ -3007,11 +3001,18 @@ impl Monomorphizer {
                                         elem.span,
                                     ));
                                 }
-                                continue;
+                            } else {
+                                // Single-type spread (not a tuple), keep as-is
+                                elements.push(*expr.clone());
                             }
+                        } else {
+                            elements.push(elem);
                         }
-                        elements.push(elem);
                     }
+                    // Rebuild the tuple type from expanded element types
+                    let new_elem_types: Vec<TypeId> =
+                        elements.iter().map(|e| e.type_id).collect();
+                    expr.type_id = type_table.make_tuple(new_elem_types);
                 }
             }
             TirExprKind::Assign { target, value } => {
@@ -3025,7 +3026,7 @@ impl Monomorphizer {
                 *target_type = self.substitute_type(*target_type, substitution, type_table);
                 self.substitute_types_in_expr(inner, substitution, type_table);
             }
-            TirExprKind::FieldAccess { expr: inner, .. } => {
+            TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -3343,7 +3344,8 @@ impl Monomorphizer {
             }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. } => {
+            | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner } => {
                 Self::update_local_expr_types_in_expr(inner, local_types);
             }
             TirExprKind::Block(block) => {
@@ -3829,7 +3831,7 @@ impl Monomorphizer {
             TirExprKind::Cast { expr: inner, .. } => {
                 self.rewrite_function_calls_in_expr(inner, type_table);
             }
-            TirExprKind::FieldAccess { expr: inner, .. } => {
+            TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
                 self.rewrite_function_calls_in_expr(inner, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -4234,6 +4236,7 @@ impl Monomorphizer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
             | TirExprKind::GlobalVarSet { value: inner, .. }
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }

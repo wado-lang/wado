@@ -1152,6 +1152,7 @@ impl TypeTable {
     pub fn contains_type_param(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => true,
@@ -1769,6 +1770,13 @@ pub enum TirExprKind {
     },
     TupleLiteral {
         elements: Vec<TirExpr>,
+    },
+
+    /// Spread a tuple expression into an enclosing TupleLiteral.
+    /// Created by the resolver for `[..expr]` syntax. Expanded by monomorphization
+    /// into individual FieldAccess elements once the concrete tuple arity is known.
+    TupleSpread {
+        expr: Box<TirExpr>,
     },
 
     /// Access to a captured variable inside a closure body

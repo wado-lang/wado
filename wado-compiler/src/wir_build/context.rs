@@ -691,10 +691,21 @@ impl<'a> WirContext<'a> {
             }
             // Generic resource types (Future<T>, Stream<T>, etc.) are opaque i32 handles
             ResolvedType::GenericResource { .. } => WirType::I32,
-            _ => {
-                // For any unhandled types, use i32 as placeholder
-                WirType::I32
+            // Non-generic resources are opaque i32 handles
+            ResolvedType::Resource { .. } => WirType::I32,
+            // Flags are bitmasks stored as i32
+            ResolvedType::Flags { .. } => WirType::I32,
+            // These should never reach codegen — must be resolved by monomorphization
+            ResolvedType::TypeParam { name, index } => {
+                panic!("unsubstituted TypeParam `{name}` (index {index}) reached codegen")
             }
+            ResolvedType::TypePack { name, index } => {
+                panic!("unsubstituted TypePack `..{name}` (index {index}) reached codegen")
+            }
+            ResolvedType::AssocTypeProjection { assoc_name, .. } => {
+                panic!("unsubstituted AssocTypeProjection `{assoc_name}` reached codegen")
+            }
+            ResolvedType::Error | ResolvedType::Unknown | ResolvedType::Reactive(_) => WirType::I32,
         }
     }
 

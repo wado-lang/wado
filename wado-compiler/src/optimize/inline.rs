@@ -27,7 +27,7 @@ fn count_expr(expr: &TirExpr) -> usize {
         TirExprKind::MethodCall { receiver, args, .. } => {
             count_expr(receiver) + args.iter().map(|a| count_expr(&a.expr)).sum::<usize>()
         }
-        TirExprKind::FieldAccess { expr, .. } => count_expr(expr),
+        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr } => count_expr(expr),
         TirExprKind::Index { expr, index, .. } => count_expr(expr) + count_expr(index),
         TirExprKind::TupleLiteral { elements } => elements.iter().map(count_expr).sum(),
         TirExprKind::StructLiteral { fields, .. } => {
@@ -355,7 +355,7 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
         TirExprKind::Cast { expr, .. } => {
             collect_callees_from_expr(expr, callees);
         }
-        TirExprKind::FieldAccess { expr, .. } => {
+        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr } => {
             collect_callees_from_expr(expr, callees);
         }
         TirExprKind::Index { expr, index } => {
@@ -2033,6 +2033,15 @@ fn remap_expr(
             field_index: *field_index,
             field_name: field_name.clone(),
         },
+        TirExprKind::TupleSpread { expr: inner } => TirExprKind::TupleSpread {
+            expr: Box::new(remap_expr(
+                inner,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            )),
+        },
         TirExprKind::Index { expr: inner, index } => TirExprKind::Index {
             expr: Box::new(remap_expr(
                 inner,
@@ -2697,7 +2706,7 @@ fn inline_calls_in_expr(
                 );
             }
         }
-        TirExprKind::FieldAccess { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
             inline_calls_in_expr(
                 inner,
                 candidates,

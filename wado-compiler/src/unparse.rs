@@ -4221,6 +4221,11 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push(']');
             }
+            TirExprKind::TupleSpread { expr } => {
+                self.output.push_str("[..");
+                self.unparse_expr(expr);
+                self.output.push(']');
+            }
             TirExprKind::Closure {
                 params,
                 body,

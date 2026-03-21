@@ -195,10 +195,22 @@ impl Parser {
         std::mem::discriminant(self.peek_kind()) == std::mem::discriminant(kind)
     }
 
-    /// Check for `..` (two consecutive dots)
-    fn check_dot_dot(&self) -> bool {
-        matches!(self.peek_kind(), TokenKind::Dot)
-            && matches!(self.peek_nth(1).kind, TokenKind::Dot)
+    /// Check for `..` or `...` token (the latter will produce an error when consumed via `consume_dot_dot`).
+    fn check_dot_dot_or_ellipsis(&self) -> bool {
+        matches!(self.peek_kind(), TokenKind::DotDot | TokenKind::DotDotDot)
+    }
+
+    /// Consume a `..` token. If `...` is found, emit a helpful error.
+    fn consume_dot_dot(&mut self) -> ParseResult<Span> {
+        if matches!(self.peek_kind(), TokenKind::DotDotDot) {
+            return Err(self.error_at_span(
+                self.peek().span,
+                "unexpected `...`; did you mean `..`?",
+            ));
+        }
+        let span = self.peek().span;
+        self.expect(&TokenKind::DotDot)?;
+        Ok(span)
     }
 
     fn expect(&mut self, kind: &TokenKind) -> ParseResult<&Token> {
@@ -1723,9 +1735,8 @@ impl Parser {
             self.advance();
             let mut patterns = Vec::new();
             if !self.check(&TokenKind::RBracket) {
-                if self.check_dot_dot() {
-                    self.advance();
-                    self.advance();
+                if self.check_dot_dot_or_ellipsis() {
+                    self.consume_dot_dot()?;
                     // Rest-only: [..] — consume and produce empty pattern list
                 } else {
                     patterns.push(self.parse_pattern()?);
@@ -1734,9 +1745,8 @@ impl Parser {
                         if self.check(&TokenKind::RBracket) {
                             break;
                         }
-                        if self.check_dot_dot() {
-                            self.advance();
-                            self.advance();
+                        if self.check_dot_dot_or_ellipsis() {
+                            self.consume_dot_dot()?;
                             if self.check(&TokenKind::Comma) {
                                 self.advance();
                             }
@@ -1829,16 +1839,14 @@ impl Parser {
 
         if !self.check(&TokenKind::RBrace) {
             // Check for leading `..`
-            if self.check_dot_dot() {
-                self.advance();
-                self.advance();
+            if self.check_dot_dot_or_ellipsis() {
+                self.consume_dot_dot()?;
                 has_rest = true;
             } else {
                 loop {
                     // Check for `..` (rest pattern)
-                    if self.check_dot_dot() {
-                        self.advance();
-                        self.advance();
+                    if self.check_dot_dot_or_ellipsis() {
+                        self.consume_dot_dot()?;
                         has_rest = true;
                         // Trailing comma after `..` is optional
                         if self.check(&TokenKind::Comma) {
@@ -2955,10 +2963,8 @@ impl Parser {
 
     /// Parse a tuple element: either a spread `..expr` or a regular expression.
     fn parse_tuple_element(&mut self) -> ParseResult<Expr> {
-        if self.check_dot_dot() {
-            let span = self.peek().span;
-            self.advance();
-            self.advance();
+        if self.check_dot_dot_or_ellipsis() {
+            let span = self.consume_dot_dot()?;
             let expr = self.parse_expr()?;
             return Ok(Expr::Spread(Box::new(expr), span));
         }
@@ -3021,10 +3027,8 @@ impl Parser {
 
     /// Parse a type or a type pack spread (`..T`) inside a tuple type.
     fn parse_type_or_pack(&mut self) -> ParseResult<Type> {
-        if self.check_dot_dot() {
-            let span = self.peek().span;
-            self.advance();
-            self.advance();
+        if self.check_dot_dot_or_ellipsis() {
+            let span = self.consume_dot_dot()?;
             let name = self.consume_ident()?;
             return Ok(Type::TypePackSpread(name, span));
         }
@@ -3256,9 +3260,8 @@ impl Parser {
             };
 
             // Parse type pack parameter: `..T`
-            let is_pack = if self.check_dot_dot() {
-                self.advance();
-                self.advance();
+            let is_pack = if self.check_dot_dot_or_ellipsis() {
+                self.consume_dot_dot()?;
                 true
             } else {
                 false
