@@ -60,7 +60,7 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 - [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md)
 - [Package Manifest (`wado.toml`)](./wep-2026-02-14-package-manifest.md)
 - [Wasm IR (WIR) Layer](./wep-2026-02-14-wir-layer.md)
-- [TIR-Level CM Adapter Synthesis](./wep-2026-02-15-cm-adapter-synthesis.md)
+- [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)
 - [WASI HTTP Integration](./wep-2026-02-21-wasi-http.md)
 - [Inspect (Debug Output)](./wep-2026-02-21-inspect-debug-output.md)
 - [CLI Subcommands for Package Management](./wep-2026-02-22-cli-subcommands.md)

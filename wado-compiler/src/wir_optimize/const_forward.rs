@@ -128,7 +128,8 @@ impl<'a> FieldKnowledge<'a> {
         }
     }
 
-    /// Record all constant fields from a `StructNew` assigned to `local_name`.
+    /// Record known fields from a `StructNew` assigned to `local_name`.
+    /// Records both constant values and `LocalGet` references.
     /// Skips aliased locals (their fields may be modified through references).
     fn record_struct_new(&mut self, local_name: &str, type_id: WirTypeId, fields: &[WirInstr]) {
         if self.aliased.contains(local_name) {
@@ -139,7 +140,7 @@ impl<'a> FieldKnowledge<'a> {
         };
         for (i, field_def) in st.fields.iter().enumerate() {
             if let Some(field_instr) = fields.get(i)
-                && is_wir_constant(field_instr)
+                && is_forwardable(field_instr)
             {
                 self.fields.insert(
                     (local_name.to_string(), field_def.name.clone()),
@@ -156,8 +157,21 @@ impl<'a> FieldKnowledge<'a> {
     }
 
     /// Invalidate all known fields for a local (on reassignment or mutation).
+    /// Also invalidates entries whose stored value is a `LocalGet` referencing
+    /// the reassigned local, since that value is no longer valid.
     fn invalidate_local(&mut self, local_name: &str) {
-        self.fields.retain(|(name, _), _| name != local_name);
+        self.fields.retain(|(name, _), val| {
+            if name == local_name {
+                return false;
+            }
+            // If the stored value references the reassigned local, invalidate it
+            if let WirInstr::LocalGet { name: source } = val
+                && source == local_name
+            {
+                return false;
+            }
+            true
+        });
     }
 
     /// Invalidate a specific field for a local (on `StructSet`).
@@ -176,6 +190,12 @@ fn is_wir_constant(instr: &WirInstr) -> bool {
             | WirInstr::F32Const(_)
             | WirInstr::F64Const(_)
     )
+}
+
+/// Check if a WIR instruction is forwardable through struct fields.
+/// Includes constants and `LocalGet` (variable references).
+fn is_forwardable(instr: &WirInstr) -> bool {
+    is_wir_constant(instr) || matches!(instr, WirInstr::LocalGet { .. })
 }
 
 /// Process a body (list of instructions), forwarding known constants.
@@ -207,9 +227,12 @@ fn update_knowledge_from_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>)
                     known.record_struct_new(name, type_id.clone(), fields);
                 }
                 // Block whose result is a LocalGet: copy knowledge from that local
+                // Block whose result is a StructNew: record its fields
                 WirInstr::Block { body, .. } => {
                     if let Some(source_name) = extract_block_result_local(body) {
                         copy_field_knowledge(known, &source_name, name);
+                    } else if let Some((type_id, fields)) = extract_block_result_struct_new(body) {
+                        known.record_struct_new(name, type_id, &fields);
                     }
                 }
                 // LocalGet: copy knowledge from source local
@@ -354,6 +377,102 @@ fn extract_block_result_local(body: &[WirInstr]) -> Option<String> {
         }
     }
     None
+}
+
+/// Extract a `StructNew` from a block's result value.
+/// Matches patterns like: `[..., StructNew { ... }, Br { depth: 0 }]`
+/// or `[..., Seq([StructNew { ... }, Br { depth: 0 }])]`.
+/// Returns the (`type_id`, fields) cloned from the `StructNew`.
+///
+/// Only safe when the block has a single exit point (one `Br { depth: 0 }`).
+/// Blocks with multiple exits (e.g., early `break` inside branches) may
+/// produce different `StructNew` values on different paths.
+fn extract_block_result_struct_new(body: &[WirInstr]) -> Option<(WirTypeId, Vec<WirInstr>)> {
+    // Count Br { depth: 0 } in the block body. If there are multiple, the
+    // block result is ambiguous and we cannot safely forward fields.
+    if count_br_depth_zero(body) != 1 {
+        return None;
+    }
+
+    let extract = |items: &[WirInstr]| -> Option<(WirTypeId, Vec<WirInstr>)> {
+        let len = items.len();
+        if len >= 2
+            && let WirInstr::Br { depth: 0 } = &items[len - 1]
+            && let WirInstr::StructNew { type_id, fields } = &items[len - 2]
+        {
+            return Some((type_id.clone(), fields.clone()));
+        }
+        None
+    };
+
+    if let Some(result) = extract(body) {
+        return Some(result);
+    }
+    if let Some(WirInstr::Seq(seq)) = body.last() {
+        return extract(seq);
+    }
+    None
+}
+
+/// Count the number of `Br { depth: 0 }` instructions in a block body,
+/// adjusting depth when entering nested blocks/loops.
+fn count_br_depth_zero(body: &[WirInstr]) -> usize {
+    let mut count = 0;
+    for instr in body {
+        count_br_depth_zero_in_instr(instr, 0, &mut count);
+    }
+    count
+}
+
+fn count_br_depth_zero_in_instr(instr: &WirInstr, nesting: u32, count: &mut usize) {
+    match instr {
+        WirInstr::Br { depth } => {
+            if *depth == nesting {
+                *count += 1;
+            }
+        }
+        WirInstr::Block { body, .. } => {
+            for child in body {
+                count_br_depth_zero_in_instr(child, nesting + 1, count);
+            }
+        }
+        WirInstr::Loop { body, .. } => {
+            // Loop `Br { depth: 0 }` targets the loop itself (continue),
+            // not the outer block. Increment nesting so those don't count.
+            for child in body {
+                count_br_depth_zero_in_instr(child, nesting + 1, count);
+            }
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            // Condition is evaluated outside the if label scope
+            count_br_depth_zero_in_instr(condition, nesting, count);
+            // If body creates a Wasm label: Br { depth: 0 } inside targets
+            // the if, not the enclosing block. Increment nesting.
+            for child in then_body {
+                count_br_depth_zero_in_instr(child, nesting + 1, count);
+            }
+            if let Some(eb) = else_body {
+                for child in eb {
+                    count_br_depth_zero_in_instr(child, nesting + 1, count);
+                }
+            }
+        }
+        WirInstr::Seq(body) => {
+            for child in body {
+                count_br_depth_zero_in_instr(child, nesting, count);
+            }
+        }
+        _ => {
+            instr.for_each_child(&mut |child| {
+                count_br_depth_zero_in_instr(child, nesting, count);
+            });
+        }
+    }
 }
 
 /// Copy all known field values from one local to another.

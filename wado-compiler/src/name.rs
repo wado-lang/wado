@@ -660,7 +660,7 @@ pub struct LocalMethodName {
     /// during monomorphization (e.g., `T^Ord::cmp` where T should become i32).
     pub is_type_param_receiver: bool,
     /// CM canonical name from `#[cm("...")]` attribute on resource methods.
-    /// When set, synthesis generates a CM adapter function and rewrites
+    /// When set, synthesis generates a CM binding function and rewrites
     /// the call site to use it instead of the original resource method.
     pub cm_name: Option<String>,
 }

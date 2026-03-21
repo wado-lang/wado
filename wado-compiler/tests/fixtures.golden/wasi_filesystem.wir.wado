@@ -56,9 +56,9 @@ type "functype/wasi/wasi:filesystem/Preopens::get_directories" = fn(i32);
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__Preopens_get_directories" = fn() -> ref Array<Tuple<Descriptor,String>>;
+type "functype/__cm_binding__Preopens_get_directories" = fn() -> ref Array<Tuple<Descriptor,String>>;
 
 type "functype/__cm_export__run" = fn();
 
@@ -138,7 +138,7 @@ fn run() with Stdout, Preopens {
     let __local_5: ref Formatter;
     let __local_9: ref String;
     let __local_11: ref Formatter;
-    dirs = __cm_adapter__Preopens_get_directories();
+    dirs = __cm_binding__Preopens_get_directories();
     dir_count = dirs.used;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(52), used: 0 };
@@ -171,13 +171,13 @@ fn run() with Stdout, Preopens {
     "core:cli/println"(String { repr: array.new_data<u8>("all filesystem tests passed"), used: 27 });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__Preopens_get_directories() {
+fn __cm_binding__Preopens_get_directories() {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -251,7 +251,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }

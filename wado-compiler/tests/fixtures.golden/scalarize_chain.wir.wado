@@ -45,7 +45,7 @@ type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -105,15 +105,14 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn transform(p) {
-    let inner: ref Pair;
     let __local_2: i32;
     let __local_3: i32;
-    inner = __inline_make_pair_0: block -> ref Pair {
+    drop(__inline_make_pair_0: block -> ref Pair {
         __local_2 = p.x + 1;
         __local_3 = p.y + 2;
         break __inline_make_pair_0: Pair { x: __local_2, y: __local_3 };
-    };
-    return inner.x * 2; inner.y * 3;
+    });
+    return __local_2 * 2; __local_3 * 3;
 }
 
 fn run() with Stdout {
@@ -146,7 +145,7 @@ fn run() with Stdout {
     });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
@@ -182,7 +181,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }

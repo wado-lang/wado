@@ -60,13 +60,13 @@ type "functype/wasi/wasi:filesystem/Descriptor::open_at" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__Stderr_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__Preopens_get_directories" = fn() -> ref Array<Tuple<Descriptor,String>>;
+type "functype/__cm_binding__Preopens_get_directories" = fn() -> ref Array<Tuple<Descriptor,String>>;
 
-type "functype/__cm_adapter__Descriptor_open_at" = fn(i32, i32, ref String, i32, i32) -> ref Result<Descriptor,ErrorCode>;
+type "functype/__cm_binding__Descriptor_open_at" = fn(i32, i32, ref String, i32, i32) -> ref Result<Descriptor,ErrorCode>;
 
 type "functype/__cm_export__run" = fn();
 
@@ -135,7 +135,7 @@ fn run() with Stdout, Stderr, Preopens {
     let open_result: ref Result<Descriptor,ErrorCode>;
     let missing_result: ref Result<Descriptor,ErrorCode>;
     let __local_7: ref String;
-    dirs = __cm_adapter__Preopens_get_directories();
+    dirs = __cm_binding__Preopens_get_directories();
     if dirs.used == 0 {
         "core:cli/eprintln"(String { repr: array.new_data<u8>("open_at: no preopened directories available"), used: 43 });
         return;
@@ -161,14 +161,14 @@ fn run() with Stdout, Stderr, Preopens {
         String::append(__local_7, String { repr: array.new_data<u8>("\""), used: 1 });
         break __tmpl: __local_7;
     });
-    open_result = __cm_adapter__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("hello.txt"), used: 9 }, 0, 1);
+    open_result = __cm_binding__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("hello.txt"), used: 9 }, 0, 1);
     if ref.test Result<Descriptor,ErrorCode>::Ok(open_result) {
         "core:cli/println"(String { repr: array.new_data<u8>("open_at: file opened successfully"), used: 33 });
     } else {
         "core:cli/eprintln"(String { repr: array.new_data<u8>("open_at: failed to open existing file"), used: 37 });
         return;
     };
-    missing_result = __cm_adapter__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("does_not_exist.txt"), used: 18 }, 0, 1);
+    missing_result = __cm_binding__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("does_not_exist.txt"), used: 18 }, 0, 1);
     if ref.test Result<Descriptor,ErrorCode>::Err(missing_result) {
         "core:cli/println"(String { repr: array.new_data<u8>("open_at: nonexistent file returns error (correct)"), used: 49 });
     } else {
@@ -177,19 +177,19 @@ fn run() with Stdout, Stderr, Preopens {
     "core:cli/println"(String { repr: array.new_data<u8>("all open_at tests passed"), used: 24 });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__Stderr_write_via_stream(data) {
+fn __cm_binding__Stderr_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stderr::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__Preopens_get_directories() {
+fn __cm_binding__Preopens_get_directories() {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -233,7 +233,7 @@ fn __cm_adapter__Preopens_get_directories() {
     return __result;
 }
 
-fn __cm_adapter__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
+fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __params_buf: i32;
@@ -292,7 +292,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
@@ -305,7 +305,7 @@ fn "core:cli/eprintln"(message) with Stderr {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stderr_write_via_stream(rx);
+    subtask = __cm_binding__Stderr_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }

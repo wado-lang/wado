@@ -185,9 +185,9 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         if self.mode != CheckMode::StoresOnly {
             return false;
         }
-        // Skip CM adapter functions — they are wrappers generated for the component model boundary
+        // Skip CM binding functions — they are wrappers generated for the component model boundary
         // and handle data transfer via CM semantics (copy/own/borrow), not Wado references.
-        if func.is_cm_adapter {
+        if func.is_cm_binding {
             return false;
         }
         // Skip functions with no parameters at all
@@ -204,8 +204,8 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             return Ok(());
         }
 
-        // Skip CM adapter functions - they are boundary code with special effect semantics
-        if func.is_cm_adapter {
+        // Skip CM binding functions - they are boundary code with special effect semantics
+        if func.is_cm_binding {
             return Ok(());
         }
 

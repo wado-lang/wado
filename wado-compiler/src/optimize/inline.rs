@@ -158,9 +158,9 @@ fn is_inline_eligible(
         return false;
     };
 
-    // Don't inline CM adapter functions - they are ABI bridges between
+    // Don't inline CM binding functions - they are ABI bridges between
     // Wado GC types and CM linear memory that must remain as separate functions
-    if func.is_cm_adapter {
+    if func.is_cm_binding {
         return false;
     }
 
@@ -2349,8 +2349,8 @@ fn remap_function_ref(func: &FunctionRef, source_module: &ModuleSource) -> Funct
         return func.clone();
     }
 
-    // Never remap CM adapter functions - they always live in the entry-point module
-    if func.is_cm_adapter {
+    // Never remap CM binding functions - they always live in the entry-point module
+    if func.is_cm_binding {
         return func.clone();
     }
 
@@ -2363,7 +2363,7 @@ fn remap_function_ref(func: &FunctionRef, source_module: &ModuleSource) -> Funct
             name: func.name.clone(),
             monomorph_info: None,
             method_info: func.method_info.clone(),
-            is_cm_adapter: false,
+            is_cm_binding: false,
         }
     } else {
         func.clone()

@@ -218,9 +218,9 @@ type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
 type "functype/handle" = fn(i32);
 
-type "functype/__cm_adapter__Request_get_authority" = fn(i32) -> ref null String;
+type "functype/__cm_binding__Request_get_authority" = fn(i32) -> ref null String;
 
-type "functype/__cm_adapter__Fields_new" = fn() -> i32;
+type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_export__handle" = fn(i32);
 
@@ -240,7 +240,7 @@ type "functype/wasi/waitable-join" = fn(i32, i32);
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 import fn realloc from "mem/realloc";
 import fn task-return from "wasi/task-return";
@@ -393,15 +393,15 @@ fn handle(request) {
     let __packed_155: i64;
     let __ptr_156: i32;
     let __len_157: i32;
-    drop(__cm_adapter__Request_get_authority(request));
+    drop(__cm_binding__Request_get_authority(request));
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
     trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    headers = __cm_adapter__Fields_new();
+    headers = __cm_binding__Fields_new();
     let __sroa___pattern_temp_1_0: i32;
     let __sroa___pattern_temp_1_1: i32;
-    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
+    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_binding__Response_new(headers, 0, 0, trailers_future);
     response = __sroa___pattern_temp_1_0;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -727,7 +727,7 @@ fn handle(request) {
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 
-fn __cm_adapter__Request_get_authority(self) {
+fn __cm_binding__Request_get_authority(self) {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref null String;
@@ -751,11 +751,11 @@ fn __cm_adapter__Request_get_authority(self) {
     return __option_result;
 }
 
-fn __cm_adapter__Fields_new() {
+fn __cm_binding__Fields_new() {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers) {
+fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
     let __outptr: i32;
     let __lifted_result_5: i32;
     let __lifted_result_6: i32;

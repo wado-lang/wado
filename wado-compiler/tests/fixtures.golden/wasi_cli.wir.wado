@@ -65,13 +65,13 @@ type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__Stderr_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__Environment_get_environment" = fn() -> ref Array<Tuple<String,String>>;
+type "functype/__cm_binding__Environment_get_environment" = fn() -> ref Array<Tuple<String,String>>;
 
-type "functype/__cm_adapter__Environment_get_arguments" = fn() -> ref Array<String>;
+type "functype/__cm_binding__Environment_get_arguments" = fn() -> ref Array<String>;
 
 type "functype/__cm_export__run" = fn();
 
@@ -156,7 +156,7 @@ fn run() with Stdout, Stderr, Environment {
     let __local_17: ref Formatter;
     "core:cli/println"(String { repr: array.new_data<u8>("test: stdout works"), used: 18 });
     "core:cli/eprintln"(String { repr: array.new_data<u8>("test: stderr works"), used: 18 });
-    arguments = __cm_adapter__Environment_get_arguments();
+    arguments = __cm_binding__Environment_get_arguments();
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(57), used: 0 };
         String::append(__local_2, String { repr: array.new_data<u8>("test: Environment::get_arguments().len = "), used: 41 });
@@ -168,7 +168,7 @@ fn run() with Stdout, Stderr, Environment {
         i32::fmt_decimal(arguments.used, __local_10);
         break __tmpl: __local_2;
     });
-    env_vars = __cm_adapter__Environment_get_environment();
+    env_vars = __cm_binding__Environment_get_environment();
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(59), used: 0 };
         String::append(__local_4, String { repr: array.new_data<u8>("test: Environment::get_environment().len = "), used: 43 });
@@ -183,19 +183,19 @@ fn run() with Stdout, Stderr, Environment {
     "core:cli/println"(String { repr: array.new_data<u8>("all cli tests passed"), used: 20 });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__Stderr_write_via_stream(data) {
+fn __cm_binding__Stderr_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stderr::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__Environment_get_environment() {
+fn __cm_binding__Environment_get_environment() {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -248,7 +248,7 @@ fn __cm_adapter__Environment_get_environment() {
     return __result;
 }
 
-fn __cm_adapter__Environment_get_arguments() {
+fn __cm_binding__Environment_get_arguments() {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -318,7 +318,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
@@ -331,7 +331,7 @@ fn "core:cli/eprintln"(message) with Stderr {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stderr_write_via_stream(rx);
+    subtask = __cm_binding__Stderr_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }

@@ -64,7 +64,7 @@ type "functype/static_method_generic" = fn();
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -242,7 +242,7 @@ fn static_method_chained() with Stdout {
             };
             break __inline_Box_i32___new_24: "core:internal/Box<i32>" { value: __local_47 };
         };
-        break __inline_Box_i32___get_21: __local_43.value;
+        break __inline_Box_i32___get_21: __local_47;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_12 = String { repr: builtin::array_new<u8>(32), used: 0 };
@@ -385,7 +385,7 @@ fn run() with Stdout {
     static_method_generic();
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
@@ -423,7 +423,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }

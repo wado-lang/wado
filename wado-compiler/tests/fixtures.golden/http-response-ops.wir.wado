@@ -250,11 +250,11 @@ type "functype/wasi/wasi:http/Response::set_status_code" = fn(i32, i32) -> i32;
 
 type "functype/handle" = fn(i32);
 
-type "functype/__cm_adapter__Fields_new" = fn() -> i32;
+type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
-type "functype/__cm_adapter__Response_get_status_code" = fn(i32) -> u16;
+type "functype/__cm_binding__Response_get_status_code" = fn(i32) -> u16;
 
-type "functype/__cm_adapter__Response_set_status_code" = fn(i32, i32) -> ref Result<unit,unit>;
+type "functype/__cm_binding__Response_set_status_code" = fn(i32, i32) -> ref Result<unit,unit>;
 
 type "functype/__cm_export__handle" = fn(i32);
 
@@ -302,7 +302,7 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
-type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -488,12 +488,12 @@ fn handle(request) {
     __pair_temp_1 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
     trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    headers = __cm_adapter__Fields_new();
+    headers = __cm_binding__Fields_new();
     let __sroa___pattern_temp_1_0: i32;
     let __sroa___pattern_temp_1_1: i32;
-    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
+    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_binding__Response_new(headers, 0, 0, trailers_future);
     response = __sroa___pattern_temp_1_0;
-    default_status = __cm_adapter__Response_get_status_code(response);
+    default_status = __cm_binding__Response_get_status_code(response);
     __cond_8 = default_status == 200;
     if __cond_8 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -534,8 +534,8 @@ condition: default_status == 200
         });
         unreachable;
     };
-    drop(__cm_adapter__Response_set_status_code(response, 404));
-    new_status = __cm_adapter__Response_get_status_code(response);
+    drop(__cm_binding__Response_set_status_code(response, 404));
+    new_status = __cm_binding__Response_get_status_code(response);
     __cond_12 = new_status == 404;
     if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -900,11 +900,11 @@ condition: new_status == 404
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 
-fn __cm_adapter__Fields_new() {
+fn __cm_binding__Fields_new() {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers) {
+fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
     let __outptr: i32;
     let __lifted_result_5: i32;
     let __lifted_result_6: i32;
@@ -916,11 +916,11 @@ fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers)
     return __lifted_result_5; __lifted_result_6;
 }
 
-fn __cm_adapter__Response_get_status_code(self) {
+fn __cm_binding__Response_get_status_code(self) {
     return "wasi/wasi:http/Response::get_status_code"(self);
 }
 
-fn __cm_adapter__Response_set_status_code(self, status_code) {
+fn __cm_binding__Response_set_status_code(self, status_code) {
     let __disc: i32;
     let __result_val: ref Result<unit,unit>;
     __disc = "wasi/wasi:http/Response::set_status_code"(self, status_code);

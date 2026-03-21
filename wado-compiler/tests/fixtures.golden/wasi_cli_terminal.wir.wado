@@ -68,13 +68,13 @@ type "functype/wasi/wasi:cli/TerminalStdout::get_terminal_stdout" = fn(i32);
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__TerminalStdin_get_terminal_stdin" = fn() -> ref Option<TerminalInput>;
+type "functype/__cm_binding__TerminalStdin_get_terminal_stdin" = fn() -> ref Option<TerminalInput>;
 
-type "functype/__cm_adapter__TerminalStdout_get_terminal_stdout" = fn() -> ref Option<TerminalOutput>;
+type "functype/__cm_binding__TerminalStdout_get_terminal_stdout" = fn() -> ref Option<TerminalOutput>;
 
-type "functype/__cm_adapter__TerminalStderr_get_terminal_stderr" = fn() -> ref Option<TerminalOutput>;
+type "functype/__cm_binding__TerminalStderr_get_terminal_stderr" = fn() -> ref Option<TerminalOutput>;
 
 type "functype/__cm_export__run" = fn();
 
@@ -160,7 +160,7 @@ fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
     let __local_22: ref Formatter;
     let __local_26: ref String;
     let __local_28: ref Formatter;
-    stdin_terminal = __cm_adapter__TerminalStdin_get_terminal_stdin();
+    stdin_terminal = __cm_binding__TerminalStdin_get_terminal_stdin();
     let __match_scrut_0: ref Option<TerminalInput>;
     __match_scrut_0 = stdin_terminal;
     __cond_1 = if __match_scrut_0.discriminant == 1 -> bool {
@@ -197,7 +197,7 @@ condition: stdin_terminal matches { None }
         });
         unreachable;
     };
-    stdout_terminal = __cm_adapter__TerminalStdout_get_terminal_stdout();
+    stdout_terminal = __cm_binding__TerminalStdout_get_terminal_stdout();
     let __match_scrut_1: ref Option<TerminalOutput>;
     __match_scrut_1 = stdout_terminal;
     __cond_3 = if __match_scrut_1.discriminant == 1 -> bool {
@@ -234,7 +234,7 @@ condition: stdout_terminal matches { None }
         });
         unreachable;
     };
-    stderr_terminal = __cm_adapter__TerminalStderr_get_terminal_stderr();
+    stderr_terminal = __cm_binding__TerminalStderr_get_terminal_stderr();
     let __match_scrut_2: ref Option<TerminalOutput>;
     __match_scrut_2 = stderr_terminal;
     __cond_5 = if __match_scrut_2.discriminant == 1 -> bool {
@@ -274,13 +274,13 @@ condition: stderr_terminal matches { None }
     "core:cli/println"(String { repr: array.new_data<u8>("all terminal tests passed"), used: 25 });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__TerminalStdin_get_terminal_stdin() {
+fn __cm_binding__TerminalStdin_get_terminal_stdin() {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref Option<TerminalInput>;
@@ -295,7 +295,7 @@ fn __cm_adapter__TerminalStdin_get_terminal_stdin() {
     return __option_result;
 }
 
-fn __cm_adapter__TerminalStdout_get_terminal_stdout() {
+fn __cm_binding__TerminalStdout_get_terminal_stdout() {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref Option<TerminalOutput>;
@@ -310,7 +310,7 @@ fn __cm_adapter__TerminalStdout_get_terminal_stdout() {
     return __option_result;
 }
 
-fn __cm_adapter__TerminalStderr_get_terminal_stderr() {
+fn __cm_binding__TerminalStderr_get_terminal_stderr() {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref Option<TerminalOutput>;
@@ -355,7 +355,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }

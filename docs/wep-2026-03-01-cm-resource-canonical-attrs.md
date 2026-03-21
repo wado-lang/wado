@@ -268,7 +268,7 @@ not application semantics.
 ### WaitableSet Adapter Synthesis
 
 `WaitableSet::wait` returns `WaitEvent` and `WaitableSet::poll` returns
-`Option<WaitEvent>`. The CM adapter synthesis handles linear memory details:
+`Option<WaitEvent>`. The CM binding synthesis handles linear memory details:
 
 For `wait`:
 
@@ -637,7 +637,7 @@ __DATA__
 
 ## Related WEPs
 
-- [WEP: TIR-Level CM Adapter Synthesis](wep-2026-02-15-cm-adapter-synthesis.md) — The type-driven
+- [WEP: TIR-Level CM Binding Synthesis](wep-2026-02-15-cm-binding-synthesis.md) — The type-driven
   synthesizer that generates CM ABI lowering/lifting code for import and export adapters.
   The canonical method synthesis functions (`emit_stream_read`, etc.) proposed here complement
   the import/export adapter synthesis: adapters handle the CM boundary crossing (flat ABI),

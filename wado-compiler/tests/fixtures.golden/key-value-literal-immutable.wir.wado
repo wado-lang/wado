@@ -66,7 +66,7 @@ type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -453,7 +453,7 @@ condition: m2.len() == 2
     "core:cli/println"(String { repr: array.new_data<u8>("key-value-literal-immutable: ok"), used: 31 });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
@@ -489,7 +489,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
@@ -852,10 +852,6 @@ fn FrozenMap<i32>::get(self, key) {
             };
             if String^Eq::eq(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
                 __local_5 = i;
-                if __local_5 >= _licm_used_10 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                    unreachable;
-                };
                 break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_11, __local_5);
             }, key) {
                 return 0; __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
@@ -903,13 +899,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l49: loop {
+            l48: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l49;
+                continue l48;
             };
         };
     };
@@ -923,13 +919,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l52: loop {
+            l51: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l52;
+                continue l51;
             };
         };
     };

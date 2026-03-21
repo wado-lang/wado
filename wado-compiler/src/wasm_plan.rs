@@ -96,7 +96,7 @@ pub fn build_component_plan(project: &Project) -> ComponentPlan {
             .map(|test| {
                 let export_name = sanitize_kebab_export_name(&test.function_name);
                 let core_func_name = project
-                    .export_adapter_names
+                    .export_binding_names
                     .get(&test.function_name)
                     .cloned()
                     .unwrap_or_else(|| test.function_name.clone());
@@ -140,9 +140,9 @@ fn build_world_export_plans(project: &Project) -> Vec<WorldExportPlan> {
         .into_iter()
         .map(|export| {
             let is_http_handler = export.returns_http_response();
-            // Use export adapter if one was synthesized by synthesis::cm_adapter
+            // Use export adapter if one was synthesized by synthesis::cm_binding
             let core_func_name = project
-                .export_adapter_names
+                .export_binding_names
                 .get(&export.name)
                 .cloned()
                 .unwrap_or_else(|| export.name.clone());

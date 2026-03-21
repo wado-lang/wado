@@ -21,7 +21,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                      |
 | Resolve      | AST + Symbols | Project         | Type resolution, produce Project                          |
 | Effect Check | Project       | Project         | Validate function effect requirements                     |
-| Synthesis    | Project       | Project         | Enum traits, serde, CM adapter synthesis                  |
+| Synthesis    | Project       | Project         | Enum traits, serde, CM binding synthesis                  |
 | Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
 | Post-Mono    | Project       | Project         | Template expansion, inspect debug output synthesis        |
 | Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
@@ -58,7 +58,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | SynthTraits     | `synthesis/traits.rs`                | Auto-derived Eq/Ord/Display/Inspect for types               |
 | SynthTemplate   | `synthesis/template.rs`              | Template string expansion (pre-monomorphize)                |
 | SynthInspect    | `synthesis/inspect.rs`               | Inspect debug output synthesis (type→TIR)                   |
-| SynthCmAdapter  | `synthesis/cm_adapter.rs`            | CM boundary adapter synthesis (TIR functions)               |
+| SynthCmBinding  | `synthesis/cm_binding.rs`            | CM boundary adapter synthesis (TIR functions)               |
 | CmAbi           | `cm_abi.rs`                          | Canonical ABI layout computation                            |
 | Monomorphize    | `monomorphize.rs`                    | Generic type/function instantiation (Project→Project)       |
 | Lower           | `lower.rs`                           | Lowering coordinator (`lower/`)                             |
@@ -369,12 +369,12 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 **Type checking:** The `task return` expression is type-checked against the declared return type of the surrounding `export async fn`. Regular `return` is forbidden in `async` function bodies — using it would terminate the Wasm function without notifying the CM runtime.
 
-**CM Adapter expansion:** During the CM Adapter phase, `task return expr` is expanded in-place to a sequence of TIR that:
+**CM Binding expansion:** During the CM Binding phase, `task return expr` is expanded in-place to a sequence of TIR that:
 
 1. Lowers the Wado value to flat CM ABI values (using `synthesize_lower_to_flat`)
 2. Calls `builtin::task_return(0, flat0, flat1, ...)` — the `0` is the Ok discriminant
 
-This expansion is performed by `expand_task_returns_in_func` in `cm_adapter_gen.rs`, which walks the function body and replaces each `TirStmtKind::TaskReturn` with the expanded sequence.
+This expansion is performed by `expand_task_returns_in_func` in `cm_binding_gen.rs`, which walks the function body and replaces each `TirStmtKind::TaskReturn` with the expanded sequence.
 
 ### Builtin Registry
 

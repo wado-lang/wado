@@ -61,7 +61,7 @@ type "functype/first_positive" = fn(ref Array<i32>) -> ref Option<i32>;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -145,10 +145,6 @@ fn first_positive(arr) {
             };
             if __inline_Array_i32__IndexValue__index_value_1: block -> i32 {
                 __local_4 = i;
-                if __local_4 >= _licm_used_7 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                    unreachable;
-                };
                 break __inline_Array_i32__IndexValue__index_value_1: builtin::array_get<i32>(_licm_repr_8, __local_4);
             } > 0 {
                 return Option<i32>::Some { discriminant: 0, payload_0: __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
@@ -293,7 +289,7 @@ condition: first_positive_doubled([-1, -2] as Array<i32>) matches { None }
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
@@ -329,7 +325,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
@@ -339,13 +335,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l15: loop {
+            l14: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l15;
+                continue l14;
             };
         };
     };
@@ -462,13 +458,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l22: loop {
+            l21: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l22;
+                continue l21;
             };
         };
     };
@@ -485,14 +481,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l26: loop {
+                l25: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l26;
+                    continue l25;
                 };
             };
         };
@@ -624,13 +620,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l39: loop {
+            l38: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l39;
+                continue l38;
             };
         };
     };
@@ -644,13 +640,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l42: loop {
+            l41: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l42;
+                continue l41;
             };
         };
     };
