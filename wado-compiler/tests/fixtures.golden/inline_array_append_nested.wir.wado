@@ -530,6 +530,10 @@ fn Container::process(self) {
                 };
                 Array<i32>::append(_licm_items_19, __inline_Array_i32__IndexValue__index_value_6: block -> i32 {
                     __local_14 = j;
+                    if __local_14 >= _licm_used_18 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
                     break __inline_Array_i32__IndexValue__index_value_6: builtin::array_get<i32>(_licm_repr_20, __local_14);
                 } + 100);
                 j = j + 1;
@@ -568,13 +572,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l36: loop {
+            l37: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l36;
+                continue l37;
             };
         };
     };
@@ -588,13 +592,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l39: loop {
+            l40: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l39;
+                continue l40;
             };
         };
     };

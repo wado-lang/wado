@@ -546,6 +546,10 @@ fn Array<Point>^InspectAlt::inspect_alt(self, f) {
                 Formatter::write_indent(f);
                 Point^InspectAlt::inspect_alt(__inline_Array_Point__IndexValue__index_value_7: block -> ref Point {
                     __local_15 = i;
+                    if __local_15 >= _licm_used_25 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
                     break __inline_Array_Point__IndexValue__index_value_7: builtin::array_get<ref Point>(_licm_repr_26, __local_15);
                 }, f);
                 String::append_char(f.buf, 44);
@@ -590,13 +594,13 @@ fn Array<Point>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l30: loop {
+            l31: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Point>(new_repr, i, builtin::array_get<ref Point>(old_repr, i));
                 i = i + 1;
-                continue l30;
+                continue l31;
             };
         };
     };
@@ -632,13 +636,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l34: loop {
+            l35: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l34;
+                continue l35;
             };
         };
     };
@@ -666,7 +670,7 @@ fn Array<i32>^InspectAlt::inspect_alt(self, f) {
         _licm_used_31 = self.used;
         _licm_repr_32 = self.repr;
         block {
-            l38: loop {
+            l39: loop {
                 if (i < _licm_used_31) == 0 {
                     break __for_6;
                 };
@@ -674,11 +678,15 @@ fn Array<i32>^InspectAlt::inspect_alt(self, f) {
                 Formatter::write_indent(f);
                 i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_8: block -> i32 {
                     __local_17 = i;
+                    if __local_17 >= _licm_used_31 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
                     break __inline_Array_i32__IndexValue__index_value_8: builtin::array_get<i32>(_licm_repr_32, __local_17);
                 }, f);
                 String::append_char(f.buf, 44);
                 i = i + 1;
-                continue l38;
+                continue l39;
             };
         };
     };
@@ -696,13 +704,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l41: loop {
+            l43: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l41;
+                continue l43;
             };
         };
     };
@@ -800,14 +808,14 @@ fn Formatter::write_indent(self) {
         _licm_indent_4 = self.indent;
         _licm_buf_5 = self.buf;
         block {
-            l61: loop {
+            l63: loop {
                 if (i < _licm_indent_4) == 0 {
                     break __for_4;
                 };
                 s = String { repr: array.new_data<u8>("  "), used: 2 };
                 String::append(_licm_buf_5, s);
                 i = i + 1;
-                continue l61;
+                continue l63;
             };
         };
     };

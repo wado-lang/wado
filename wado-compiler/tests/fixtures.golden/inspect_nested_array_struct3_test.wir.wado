@@ -508,6 +508,10 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
                 };
                 Array<i32>^Inspect::inspect(__inline_Array_Array_i32___IndexValue__index_value_3: block -> ref Array<i32> {
                     __local_9 = i;
+                    if __local_9 >= _licm_used_12 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
                     break __inline_Array_Array_i32___IndexValue__index_value_3: builtin::array_get<ref Array<i32>>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
@@ -530,7 +534,7 @@ fn Array<i32>^Inspect::inspect(self, f) {
         _licm_used_16 = self.used;
         _licm_repr_17 = self.repr;
         block {
-            l29: loop {
+            l30: loop {
                 if (i < _licm_used_16) == 0 {
                     break __for_5;
                 };
@@ -540,10 +544,14 @@ fn Array<i32>^Inspect::inspect(self, f) {
                 };
                 i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_4: block -> i32 {
                     __local_11 = i;
+                    if __local_11 >= _licm_used_16 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
                     break __inline_Array_i32__IndexValue__index_value_4: builtin::array_get<i32>(_licm_repr_17, __local_11);
                 }, f);
                 i = i + 1;
-                continue l29;
+                continue l30;
             };
         };
     };
@@ -579,13 +587,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l34: loop {
+            l36: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l34;
+                continue l36;
             };
         };
     };
@@ -621,13 +629,13 @@ fn Array<Array<i32>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l38: loop {
+            l40: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Array<i32>>(new_repr, i, builtin::array_get<ref Array<i32>>(old_repr, i));
                 i = i + 1;
-                continue l38;
+                continue l40;
             };
         };
     };
@@ -641,13 +649,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l41: loop {
+            l43: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l41;
+                continue l43;
             };
         };
     };

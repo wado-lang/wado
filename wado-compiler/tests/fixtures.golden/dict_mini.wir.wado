@@ -652,6 +652,10 @@ fn MiniDict<String,String>::has(self, key) {
                 };
                 if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
                     __local_5 = i;
+                    if __local_5 >= _licm_used_7 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
                     break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_8, __local_5);
                 }.0, key) {
                     return 1;
@@ -677,21 +681,29 @@ fn MiniDict<String,String>::get(self, key) {
         _licm_used_9 = _licm_entries_8.used;
         _licm_repr_10 = _licm_entries_8.repr;
         block {
-            l44: loop {
+            l45: loop {
                 if (i < _licm_used_9) == 0 {
                     break __for_1;
                 };
                 if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
                     __local_5 = i;
+                    if __local_5 >= _licm_used_9 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
                     break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_5);
                 }.0, key) {
                     return ref.as_non_null(__inline_Array_Tuple_String_String___IndexValue__index_value_2: block -> ref "tuple/[String, String]" {
                         __local_7 = i;
+                        if __local_7 >= _licm_used_9 {
+                            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                            unreachable;
+                        };
                         break __inline_Array_Tuple_String_String___IndexValue__index_value_2: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_7);
                     }.1);
                 };
                 i = i + 1;
-                continue l44;
+                continue l45;
             };
         };
     };
@@ -712,12 +724,16 @@ fn MiniDict<String,String>::set(self, key, value) {
         _licm_used_11 = _licm_entries_10.used;
         _licm_repr_12 = _licm_entries_10.repr;
         block {
-            l48: loop {
+            l51: loop {
                 if (i < _licm_used_11) == 0 {
                     break __for_0;
                 };
                 if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
                     __local_6 = i;
+                    if __local_6 >= _licm_used_11 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
                     break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_12, __local_6);
                 }.0, key) {
                     index = i;
@@ -726,7 +742,7 @@ fn MiniDict<String,String>::set(self, key, value) {
                     return;
                 };
                 i = i + 1;
-                continue l48;
+                continue l51;
             };
         };
     };
@@ -740,13 +756,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l52: loop {
+            l56: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l52;
+                continue l56;
             };
         };
     };

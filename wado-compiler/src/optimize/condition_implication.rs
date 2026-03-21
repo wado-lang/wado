@@ -30,7 +30,7 @@ enum Def {
     AddConst(u32, i64),
     /// `let x = obj.field` — field access on a local
     FieldAccess { local: u32, field_index: u32 },
-    /// Struct literal: maps field_index → local_index for fields that are simple locals
+    /// Struct literal: maps `field_index` → `local_index` for fields that are simple locals
     StructLit(IndexMap<u32, u32>),
 }
 
@@ -109,7 +109,7 @@ fn process_loop(body: &mut TirBlock, defs: &mut DefMap) -> bool {
     if let Some(guard) = &guard {
         // Collect defs from the loop body before eliminating
         let mut loop_defs = defs.clone();
-        for stmt in body.stmts.iter() {
+        for stmt in &body.stmts {
             record_def_from_stmt(stmt, &mut loop_defs);
             record_defs_from_nested(stmt, &mut loop_defs);
         }
@@ -121,7 +121,7 @@ fn process_loop(body: &mut TirBlock, defs: &mut DefMap) -> bool {
     }
 
     // Recurse into nested loops
-    for stmt in body.stmts.iter_mut() {
+    for stmt in &mut body.stmts {
         changed |= process_stmt_nested_loops(stmt, defs);
     }
 
@@ -226,7 +226,7 @@ fn extract_loop_guard(stmts: &[TirStmt]) -> Option<LoopGuard> {
     Some(LoopGuard {
         var: *var,
         bound: *bound,
-        is_strict: is_strict,
+        is_strict,
     })
 }
 
@@ -292,7 +292,7 @@ fn record_struct_lit_def(
     }
 }
 
-/// Unwrap a LabeledBlock expression to find the value from its break statement.
+/// Unwrap a `LabeledBlock` expression to find the value from its break statement.
 /// `LABEL: { ...; break LABEL: expr; }` → `expr`
 fn unwrap_labeled_block_value(expr: &TirExpr) -> &TirExpr {
     if let TirExprKind::LabeledBlock { block, label, .. } = &expr.kind {
@@ -302,11 +302,10 @@ fn unwrap_labeled_block_value(expr: &TirExpr) -> &TirExpr {
                 label: Some(break_label),
                 value: Some(val),
             } = &stmt.kind
+                && break_label == label
             {
-                if break_label == label {
-                    // Recursively unwrap in case of nested labeled blocks
-                    return unwrap_labeled_block_value(val);
-                }
+                // Recursively unwrap in case of nested labeled blocks
+                return unwrap_labeled_block_value(val);
             }
         }
     }
@@ -395,15 +394,15 @@ fn eliminate_in_stmt(stmt: &mut TirStmt, guard: &LoopGuard, defs: &DefMap) -> bo
         then_block,
         else_block: None,
     } = &mut stmt.kind
+        && is_panic_block(then_block)
+        && is_implied_false(condition, guard, defs)
     {
-        if is_panic_block(then_block) && is_implied_false(condition, guard, defs) {
-            *condition = TirExpr {
-                kind: TirExprKind::BoolLiteral(false),
-                type_id: condition.type_id,
-                span: condition.span.clone(),
-            };
-            return true;
-        }
+        *condition = TirExpr {
+            kind: TirExprKind::BoolLiteral(false),
+            type_id: condition.type_id,
+            span: condition.span,
+        };
+        return true;
     }
 
     // Recurse into sub-structures
@@ -494,8 +493,8 @@ fn eliminate_in_expr(expr: &mut TirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
 ///   `check_var >= check_bound` is false when both resolve to the same locals.
 ///
 /// For a `<=` guard (`var <= limit`):
-///   `check_var >= check_bound` is false when check_var resolves to var
-///   AND check_bound resolves to `limit + 1`.
+///   `check_var >= check_bound` is false when `check_var` resolves to var
+///   AND `check_bound` resolves to `limit + 1`.
 fn is_implied_false(condition: &TirExpr, guard: &LoopGuard, defs: &DefMap) -> bool {
     let TirExprKind::Binary { left, op, right } = &condition.kind else {
         return false;
@@ -570,23 +569,17 @@ fn resolves_to_plus_one_inner(source: u32, target: u32, defs: &DefMap, depth: us
         Some(Def::AddConst(base, 1)) => resolves_to_inner(*base, target, defs, depth + 1),
         Some(Def::FieldAccess { local, field_index }) => {
             // Follow: `_licm_used = arr.used` → look up arr's struct literal
-            if let Some(Def::StructLit(fields)) = defs.get(local) {
-                if let Some(field_local) = fields.get(field_index) {
-                    return resolves_to_plus_one_inner(*field_local, target, defs, depth + 1);
-                }
+            if let Some(Def::StructLit(fields)) = defs.get(local)
+                && let Some(field_local) = fields.get(field_index)
+            {
+                return resolves_to_plus_one_inner(*field_local, target, defs, depth + 1);
             }
             // Also follow through copies of the struct local
-            if let Some(Def::Copy(next)) = defs.get(local) {
-                if let Some(Def::StructLit(fields)) = defs.get(next) {
-                    if let Some(field_local) = fields.get(field_index) {
-                        return resolves_to_plus_one_inner(
-                            *field_local,
-                            target,
-                            defs,
-                            depth + 1,
-                        );
-                    }
-                }
+            if let Some(Def::Copy(next)) = defs.get(local)
+                && let Some(Def::StructLit(fields)) = defs.get(next)
+                && let Some(field_local) = fields.get(field_index)
+            {
+                return resolves_to_plus_one_inner(*field_local, target, defs, depth + 1);
             }
             false
         }

@@ -777,6 +777,10 @@ fn Container<String>::count_flagged(self) {
                 };
                 if __inline_Array_bool__IndexValue__index_value_1: block -> bool {
                     __local_5 = i;
+                    if __local_5 >= _licm_used_7 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
                     break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_8, __local_5);
                 } {
                     count = count + 1;
@@ -818,13 +822,13 @@ fn Array<bool>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l52: loop {
+            l53: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
                 i = i + 1;
-                continue l52;
+                continue l53;
             };
         };
     };
@@ -838,13 +842,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l55: loop {
+            l56: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l55;
+                continue l56;
             };
         };
     };
