@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774087605661,
+  "lastUpdate": 1774090586064,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5522,6 +5522,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4e64531bbaaf7194eac1ef3ca2c4e74e79eb6e68"
         },
         "date": 1774087605433,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22185,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0f84ed14f77d27cad8741e675267813004767396",
+          "message": "Merge pull request #641 from wado-lang/claude/variadic-generics-traits-J38AY\n\nImplement variadic for-of loops for tuple type iteration",
+          "timestamp": "2026-03-21T19:53:58+09:00",
+          "tree_id": "b0aba62313a3846a124970a32a2666037334e3cb",
+          "url": "https://github.com/wado-lang/wado/commit/0f84ed14f77d27cad8741e675267813004767396"
+        },
+        "date": 1774090585841,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
