@@ -1032,7 +1032,7 @@ fn write_digits_at(buf, offset, val, nd) {
                 break b91;
             };
             index = idx;
-            value = 48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255);
+            value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
             builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
@@ -1661,7 +1661,9 @@ fn Formatter::apply_padding(self, start_pos) {
     padding = self.width - content_len;
     fill_byte = self.fill & 255;
     align = self.align;
-    if align == 0 {
+    let __match_scrut_0: enum:Alignment;
+    __match_scrut_0 = align;
+    if __match_scrut_0 == 0 {
         String::append_byte_filled(self.buf, fill_byte, padding);
     } else if align == 1 {
         left_pad = padding / 2;

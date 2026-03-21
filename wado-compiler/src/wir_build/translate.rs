@@ -1298,11 +1298,9 @@ impl FunctionTranslator<'_, '_> {
                         | TirBinaryOp::GtEq
                         | TirBinaryOp::And
                         | TirBinaryOp::Or
-                ) {
-                    if let ResolvedType::Primitive(prim) = self.type_table.get(left.type_id)
-                    {
-                        return Self::truncate_to_sub_i32(result, prim);
-                    }
+                ) && let ResolvedType::Primitive(prim) = self.type_table.get(left.type_id)
+                {
+                    return Self::truncate_to_sub_i32(result, prim);
                 }
                 result
             }
@@ -1315,12 +1313,10 @@ impl FunctionTranslator<'_, '_> {
                     let o = Box::new(self.translate_expr(inner));
                     let result = self.translate_unary_op(op, o, inner.type_id);
                     // Truncate sub-i32 results for Neg and BitNot.
-                    if matches!(op, TirUnaryOp::Neg | TirUnaryOp::BitNot) {
-                        if let ResolvedType::Primitive(prim) =
-                            self.type_table.get(inner.type_id)
-                        {
-                            return Self::truncate_to_sub_i32(result, prim);
-                        }
+                    if matches!(op, TirUnaryOp::Neg | TirUnaryOp::BitNot)
+                        && let ResolvedType::Primitive(prim) = self.type_table.get(inner.type_id)
+                    {
+                        return Self::truncate_to_sub_i32(result, prim);
                     }
                     result
                 }
