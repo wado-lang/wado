@@ -333,6 +333,11 @@ struct Result<String,DeserializeError>::Err {
     payload_0: ref "core:serde/DeserializeError",
 }
 
+variant Option<String> {
+    Some(ref String),
+    None,
+}
+
 variant Result<JsonSeqSerializer,SerializeError> {
     Ok(ref "core:json/JsonSeqSerializer"),
     Err(ref "core:serde/SerializeError"),
@@ -361,11 +366,6 @@ struct Result<JsonMapSerializer,SerializeError>::Ok {
 struct Result<JsonMapSerializer,SerializeError>::Err {
     discriminant: i32,
     payload_0: ref "core:serde/SerializeError",
-}
-
-variant Option<String> {
-    Some(ref String),
-    None,
 }
 
 variant Result<JsonMapAccess,DeserializeError> {

@@ -1642,8 +1642,9 @@ fn compute_sync_fields_in_expr(
         TirExprKind::Cast { expr, .. } => {
             compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
         }
-        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr }
-            | TirExprKind::TypePackExpansion { expr, .. } => {
+        TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TypePackExpansion { expr, .. } => {
             compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
         }
         TirExprKind::Index { expr, index } => {
@@ -1960,8 +1961,9 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
 
     // Recurse into sub-expressions
     match &mut expr.kind {
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { expr: inner, .. } => {
             replace_in_expr(inner, candidates);
         }
         TirExprKind::Binary { left, right, .. } => {

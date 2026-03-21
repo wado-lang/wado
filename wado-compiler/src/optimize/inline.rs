@@ -27,10 +27,9 @@ fn count_expr(expr: &TirExpr) -> usize {
         TirExprKind::MethodCall { receiver, args, .. } => {
             count_expr(receiver) + args.iter().map(|a| count_expr(&a.expr)).sum::<usize>()
         }
-        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr }
-            | TirExprKind::TypePackExpansion { expr, .. } => {
-            count_expr(expr)
-        }
+        TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TypePackExpansion { expr, .. } => count_expr(expr),
         TirExprKind::Index { expr, index, .. } => count_expr(expr) + count_expr(index),
         TirExprKind::TupleLiteral { elements } => elements.iter().map(count_expr).sum(),
         TirExprKind::StructLiteral { fields, .. } => {
@@ -364,8 +363,9 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
         TirExprKind::Cast { expr, .. } => {
             collect_callees_from_expr(expr, callees);
         }
-        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr }
-            | TirExprKind::TypePackExpansion { expr, .. } => {
+        TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TypePackExpansion { expr, .. } => {
             collect_callees_from_expr(expr, callees);
         }
         TirExprKind::Index { expr, index } => {
@@ -2058,7 +2058,10 @@ fn remap_expr(
                 source_module,
             )),
         },
-        TirExprKind::TypePackExpansion { expr: inner, pack_param_index } => TirExprKind::TypePackExpansion {
+        TirExprKind::TypePackExpansion {
+            expr: inner,
+            pack_param_index,
+        } => TirExprKind::TypePackExpansion {
             expr: Box::new(remap_expr(
                 inner,
                 param_to_local,
@@ -2735,8 +2738,9 @@ fn inline_calls_in_expr(
                 );
             }
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { expr: inner, .. } => {
             inline_calls_in_expr(
                 inner,
                 candidates,

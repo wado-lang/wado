@@ -183,21 +183,6 @@ struct Result<JsonSeqAccess,DeserializeError>::Err {
     payload_0: ref "core:serde/DeserializeError",
 }
 
-variant Result<Option<String>,DeserializeError> {
-    Ok(ref null String),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<Option<String>,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref null String,
-}
-
-struct Result<Option<String>,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
 variant Result<Option<i32>,DeserializeError> {
     Ok(ref Option<i32>),
     Err(ref "core:serde/DeserializeError"),
@@ -209,6 +194,21 @@ struct Result<Option<i32>,DeserializeError>::Ok {
 }
 
 struct Result<Option<i32>,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<Option<String>,DeserializeError> {
+    Ok(ref null String),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Option<String>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref null String,
+}
+
+struct Result<Option<String>,DeserializeError>::Err {
     discriminant: i32,
     payload_0: ref "core:serde/DeserializeError",
 }

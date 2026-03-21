@@ -2320,9 +2320,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Check if a resolved expression is a static call on a TypePack parameter,
+    /// Check if a resolved expression is a static call on a `TypePack` parameter,
     /// returning the pack parameter index if so.
-    /// Also handles `?` (TryOp) wrapping: `T::method(args)?` desugars into a Match
+    /// Also handles `?` (`TryOp`) wrapping: `T::method(args)?` desugars into a Match
     /// whose scrutinee is the original Call.
     fn find_type_pack_call_index(&self, expr: &TirExpr) -> Option<u32> {
         // Direct call: T::method(args)

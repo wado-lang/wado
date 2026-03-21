@@ -1617,9 +1617,10 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            TirExprKind::TupleSpread { .. }
-            | TirExprKind::TypePackExpansion { .. } => {
-                panic!("TupleSpread/TypePackExpansion should have been expanded during monomorphization")
+            TirExprKind::TupleSpread { .. } | TirExprKind::TypePackExpansion { .. } => {
+                panic!(
+                    "TupleSpread/TypePackExpansion should have been expanded during monomorphization"
+                )
             }
 
             // === Switch (lowered pattern matching) ===

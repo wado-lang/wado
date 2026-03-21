@@ -2331,8 +2331,7 @@ impl Monomorphizer {
                 // so we must exclude method-level type args from the pack tuple.
                 let method_param_count = generic.type_params.len();
                 let pack_elem_count = key.type_args.len().saturating_sub(method_param_count);
-                let pack_elems: Vec<TypeId> =
-                    key.type_args[..pack_elem_count].to_vec();
+                let pack_elems: Vec<TypeId> = key.type_args[..pack_elem_count].to_vec();
                 let pack_type = type_table.make_tuple(pack_elems);
                 substitution.insert(param.index, pack_type);
             } else if let Some(&arg) = key.type_args.get(param.index as usize) {
@@ -2346,14 +2345,13 @@ impl Monomorphizer {
         // e.g., impl<T> { fn foo<U>() } - T has index 0, U has index 1 in type table
         // For variadic packs, the pack contributes multiple elements to key.type_args,
         // so we skip past all pack elements (not just the impl param count).
-        let has_variadic_pack = generic
-            .impl_type_params
-            .iter()
-            .any(|p| p.is_pack);
+        let has_variadic_pack = generic.impl_type_params.iter().any(|p| p.is_pack);
         let impl_offset = generic.impl_type_params.len() as u32;
         let skip_count = if has_variadic_pack {
             // Pack contributes N elements; method args start after those
-            key.type_args.len().saturating_sub(generic.type_params.len())
+            key.type_args
+                .len()
+                .saturating_sub(generic.type_params.len())
         } else {
             impl_offset as usize
         };
@@ -3473,8 +3471,7 @@ impl Monomorphizer {
                         }
                         let mangled = type_table.mangle_type_name_resolving_newtypes(inner);
                         let base = type_table.base_type_name(inner);
-                        let mut substituted =
-                            info.with_substituted_struct_name(&mangled, &base);
+                        let mut substituted = info.with_substituted_struct_name(&mangled, &base);
                         // Also substitute method-level type args (e.g. W in process<W>)
                         if let FunctionRef {
                             monomorph_info: Some(mi),
@@ -3485,8 +3482,7 @@ impl Monomorphizer {
                                 .type_args
                                 .iter()
                                 .map(|&tid| {
-                                    let sub =
-                                        self.substitute_type(tid, substitution, type_table);
+                                    let sub = self.substitute_type(tid, substitution, type_table);
                                     type_table.mangle_type_name(sub)
                                 })
                                 .collect();
@@ -3665,8 +3661,7 @@ impl Monomorphizer {
                 let has_expansion = elements.iter().any(|e| {
                     matches!(
                         e.kind,
-                        TirExprKind::TupleSpread { .. }
-                            | TirExprKind::TypePackExpansion { .. }
+                        TirExprKind::TupleSpread { .. } | TirExprKind::TypePackExpansion { .. }
                     )
                 });
                 if has_expansion {
@@ -3716,11 +3711,7 @@ impl Monomorphizer {
                                 let mut call = *expr.clone();
                                 let mut elem_sub = substitution.clone();
                                 elem_sub.insert(pack_param_index, elem_type);
-                                self.substitute_types_in_expr(
-                                    &mut call,
-                                    &elem_sub,
-                                    type_table,
-                                );
+                                self.substitute_types_in_expr(&mut call, &elem_sub, type_table);
                                 elements.push(call);
                             }
                         } else {

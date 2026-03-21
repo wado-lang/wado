@@ -300,8 +300,9 @@ fn mark_local_as_fully_modified(expr: &TirExpr, modified: &mut ModifiedVars) {
         TirExprKind::Local { index, .. } => {
             modified.insert_full(*index);
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { expr: inner, .. } => {
             mark_local_as_fully_modified(inner, modified);
         }
         TirExprKind::Unary { expr: inner, .. } => {
@@ -498,8 +499,9 @@ fn collect_modified_vars_in_expr(
                 collect_modified_vars_in_expr(arg, modified, type_table);
             }
         }
-        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr }
-            | TirExprKind::TypePackExpansion { expr, .. } => {
+        TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TypePackExpansion { expr, .. } => {
             collect_modified_vars_in_expr(expr, modified, type_table);
         }
         TirExprKind::Index { expr, index } => {
@@ -616,10 +618,9 @@ fn is_loop_invariant(expr: &TirExpr, modified_vars: &IndexSet<u32>) -> bool {
         TirExprKind::Local { index, .. } => !modified_vars.contains(index),
 
         // Field access is invariant if the base expression is invariant
-        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr }
-            | TirExprKind::TypePackExpansion { expr, .. } => {
-            is_loop_invariant(expr, modified_vars)
-        }
+        TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TypePackExpansion { expr, .. } => is_loop_invariant(expr, modified_vars),
 
         // Pure binary ops are invariant if operands are invariant
         // (Assignments are handled separately via TirExprKind::Assign, not as binary ops)
@@ -786,8 +787,9 @@ fn collect_licm_ref_bindings_in_expr(
         TirExprKind::Unary { expr: inner, .. } => {
             collect_licm_ref_bindings_in_expr(inner, type_table, bindings);
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { expr: inner, .. } => {
             collect_licm_ref_bindings_in_expr(inner, type_table, bindings);
         }
         TirExprKind::Index { expr: inner, index } => {
@@ -1612,8 +1614,9 @@ fn replace_hoisted_in_expr(
 
     // Recurse into sub-expressions
     match &mut expr.kind {
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { expr: inner, .. } => {
             replace_hoisted_in_expr(inner, candidates, ref_bindings);
         }
         TirExprKind::Binary { left, right, .. } => {

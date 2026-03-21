@@ -2937,7 +2937,10 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::TypePackExpansion { expr: inner, pack_param_index } => TirExpr::new(
+            TirExprKind::TypePackExpansion {
+                expr: inner,
+                pack_param_index,
+            } => TirExpr::new(
                 TirExprKind::TypePackExpansion {
                     expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
                     pack_param_index: *pack_param_index,

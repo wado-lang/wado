@@ -413,8 +413,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_expr(elem)?;
                 }
             }
-            TirExprKind::TupleSpread { expr }
-            | TirExprKind::TypePackExpansion { expr, .. } => {
+            TirExprKind::TupleSpread { expr } | TirExprKind::TypePackExpansion { expr, .. } => {
                 self.check_expr(expr)?;
             }
             TirExprKind::Closure { body, .. } => {

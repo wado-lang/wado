@@ -462,8 +462,9 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
     match &expr.kind {
         // FieldAccess on a candidate local is safe — don't mark the base local as escaped.
         // But do recurse into the non-base subexpressions.
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { expr: inner, .. } => {
             if is_candidate_local(inner, candidates).is_some() {
                 // Safe: field read on candidate. Don't recurse into inner (it's the local itself).
                 return;
@@ -751,8 +752,9 @@ fn check_has_field_access_expr(
     has_access: &mut IndexSet<u32>,
 ) {
     match &expr.kind {
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { expr: inner, .. } => {
             if let Some(idx) = is_candidate_local_ref(inner, candidates) {
                 has_access.insert(idx);
                 return;
@@ -894,8 +896,9 @@ fn check_soft_escape_in_expr(
     let cm = current_module;
     match &expr.kind {
         // FieldAccess on candidate is always safe — skip
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { expr: inner, .. } => {
             if is_candidate_local_ref(inner, candidates).is_some() {
                 return;
             }
@@ -1509,8 +1512,9 @@ fn rewrite_expr(
 
     // Recurse into child expressions
     match &mut expr.kind {
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { expr: inner, .. } => {
             rewrite_expr(
                 inner,
                 safe_set,
