@@ -3781,6 +3781,38 @@ Effect parameters:
 - Can coexist with type parameters: `<T, effect E>`
 - Test functions implicitly have all effects
 
+### Variadic Type Packs
+
+Use `<..T>` to declare a type pack parameter that represents zero or more types. Type packs enable writing functions that operate on tuples of any arity.
+
+```wado
+fn identity<..T>(x: [..T]) -> [..T] {
+    return x;
+}
+
+fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
+    return [a, ..rest];
+}
+```
+
+Type pack parameters:
+
+- Are declared with `..` prefix in generic parameter lists: `<..T>`, `<A, ..T>`
+- At most one type pack parameter is allowed per function
+- Cannot be combined with `effect`: `<effect ..T>` is invalid
+- Appear inside tuple types as `[..T]` (type pack spread)
+- Can be mixed with fixed type elements: `[A, ..T]`, `[..T, B]`
+- Type arguments are inferred from tuple argument types at call sites
+- Expansion happens at monomorphization time
+
+Value spread `[..expr]` splices a tuple's elements into an enclosing tuple literal:
+
+```wado
+let a = [1, "hello"];
+let b = [..a, true];   // b: [i32, String, bool]
+let c = [42, ..a];     // c: [i32, i32, String]
+```
+
 ### Reference Storage (`stores[...]`)
 
 > **Not yet implemented.** See [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md) for the design.
