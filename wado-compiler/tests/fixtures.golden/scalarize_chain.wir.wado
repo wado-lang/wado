@@ -105,15 +105,14 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn transform(p) {
-    let inner: ref Pair;
     let __local_2: i32;
     let __local_3: i32;
-    inner = __inline_make_pair_0: block -> ref Pair {
+    drop(__inline_make_pair_0: block -> ref Pair {
         __local_2 = p.x + 1;
         __local_3 = p.y + 2;
         break __inline_make_pair_0: Pair { x: __local_2, y: __local_3 };
-    };
-    return inner.x * 2; inner.y * 3;
+    });
+    return __local_2 * 2; __local_3 * 3;
 }
 
 fn run() with Stdout {
