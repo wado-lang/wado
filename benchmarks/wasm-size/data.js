@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774073539848,
+  "lastUpdate": 1774075751473,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5366,6 +5366,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/db4207bf657aa61597c951b2f98b2409a2d22e83"
         },
         "date": 1774073539625,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22185,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dfa2a182bfb68b26fb7cddccc8e4018ad4640102",
+          "message": "Merge pull request #637 from wado-lang/claude/implement-variadic-generics-rhGGV\n\nImplement variadic type pack parameters - part 1",
+          "timestamp": "2026-03-21T15:46:52+09:00",
+          "tree_id": "605f0a7000daf6fa24cbfa03e871fa96fc99e2a9",
+          "url": "https://github.com/wado-lang/wado/commit/dfa2a182bfb68b26fb7cddccc8e4018ad4640102"
+        },
+        "date": 1774075751286,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
