@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774051054501,
+  "lastUpdate": 1774070650857,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5303,6 +5303,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22261,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "386a08d86315523e3e3ae9de0d2909cab7d59fa9",
+          "message": "Merge pull request #635 from wado-lang/claude/improve-compiler-optimizer-69F0d\n\nExtend bounds check elimination to support <= loop guards",
+          "timestamp": "2026-03-21T14:21:45+09:00",
+          "tree_id": "9421a9dcade6d36ef0cde25c0e8fd26aafad9ecb",
+          "url": "https://github.com/wado-lang/wado/commit/386a08d86315523e3e3ae9de0d2909cab7d59fa9"
+        },
+        "date": 1774070650658,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22185,
             "unit": "bytes"
           }
         ]
