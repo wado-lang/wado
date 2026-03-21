@@ -4,21 +4,22 @@ set -euo pipefail
 # Regenerate format fixture golden files:
 #   - Formatted (clean) version of each dirty fixture
 #   - Compiler phase outputs (TIR, lower, optimize, WIR, WAT) for compilable fixtures
-
-cargo build --profile dev-optimized --bin wado --bin wado-dev-tools --quiet
+#
+# Expects binaries to be pre-built (on-task-done builds them before calling this).
 
 FIXTURES_DIR="wado-compiler/tests/format.fixtures"
 GOLDEN_DIR="wado-compiler/tests/format.fixtures.golden"
 mkdir -p "$GOLDEN_DIR"
 
-DUMP="cargo run --profile dev-optimized --bin wado-dev-tools --quiet --"
+WADO="./target/dev-optimized/wado"
+DUMP="./target/dev-optimized/wado-dev-tools"
 
 # Generate formatted (clean) versions
 for f in "$FIXTURES_DIR"/*.dirty.wado; do
   name=$(basename "$f" .dirty.wado)
   clean="$GOLDEN_DIR/$name.clean.wado"
   cp "$f" "$clean"
-  cargo run --profile dev-optimized --bin wado --quiet -- format -w "$clean"
+  "$WADO" format -w "$clean"
   echo "  Generated $clean"
 done
 

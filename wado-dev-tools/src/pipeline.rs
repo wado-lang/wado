@@ -129,7 +129,7 @@ pub fn run_pipeline(
 
                     loop {
                         let item = {
-                            let guard = rx.lock().unwrap();
+                            let guard = rx.lock().unwrap_or_else(|e| e.into_inner());
                             match guard.recv() {
                                 Ok(item) => item,
                                 Err(_) => break, // channel closed
@@ -138,13 +138,26 @@ pub fn run_pipeline(
 
                         let output_path =
                             format!("{}{}{}", out_tmpl_prefix, item.name, out_tmpl_suffix);
+                        let input_path = item.input_path.clone();
                         let t0 = Instant::now();
-                        let content = rt.block_on(compile_one(
-                            &item.source,
-                            &item.input_path,
-                            phase,
-                            opt_level,
-                        ));
+                        let content = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            rt.block_on(compile_one(
+                                &item.source,
+                                &item.input_path,
+                                phase,
+                                opt_level,
+                            ))
+                        }))
+                        .unwrap_or_else(|panic_val| {
+                            let msg = match panic_val.downcast_ref::<String>() {
+                                Some(s) => s.clone(),
+                                None => match panic_val.downcast_ref::<&str>() {
+                                    Some(s) => (*s).to_string(),
+                                    None => "unknown panic".to_string(),
+                                },
+                            };
+                            Err(format!("panic in {input_path}: {msg}"))
+                        });
                         let compile_time = t0.elapsed();
 
                         if tx
