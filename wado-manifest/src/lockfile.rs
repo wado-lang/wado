@@ -42,7 +42,8 @@ impl FromStr for LockFile {
 
     fn from_str(toml_str: &str) -> Result<Self, Self::Err> {
         let raw: RawLockFile =
-            toml::from_str(toml_str).map_err(|e| LockFileError::Toml(e.to_string()))?;
+            toml::from_str::<RawLockFile>(toml_str)
+                .map_err(|e| LockFileError::Toml(e.to_string()))?;
 
         let version = raw.version.ok_or_else(|| LockFileError::MissingField {
             package_id: "(header)".to_string(),
