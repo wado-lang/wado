@@ -2273,10 +2273,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Map the TypePack to a tuple of the middle elements
                     let pack_elements: Vec<TypeId> =
                         actual_elems[fixed_before..actual_elems.len() - fixed_after].to_vec();
-                    let pack_tuple = self
-                        .type_table
-                        .borrow_mut()
-                        .make_tuple(pack_elements);
+                    let pack_tuple = self.type_table.borrow_mut().make_tuple(pack_elements);
                     type_param_map
                         .entry(expected_elems[pack_idx])
                         .or_insert(pack_tuple);
@@ -2340,10 +2337,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         ));
                     }
                 } else {
-                    let _ = self.logger.error(crate::resolver::types::TypeError::InvalidLiteral {
-                        message: "spread operator `..` can only be used with tuple types".to_string(),
-                        span: elem.span(),
-                    });
+                    let _ = self
+                        .logger
+                        .error(crate::resolver::types::TypeError::InvalidLiteral {
+                            message: "spread operator `..` can only be used with tuple types"
+                                .to_string(),
+                            span: elem.span(),
+                        });
                     elements.push(spread_expr);
                 }
             } else {

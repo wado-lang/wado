@@ -94,7 +94,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Type::TypePackSpread(name, span) => {
                 // Look up the type pack parameter
                 if let Some((index, _type_id)) = self.trait_ctx.type_params.get(name) {
-                    self.type_table.borrow_mut().make_type_pack(name.clone(), *index)
+                    self.type_table
+                        .borrow_mut()
+                        .make_type_pack(name.clone(), *index)
                 } else {
                     let _ = self.logger.error(TypeError::UnknownType {
                         name: format!("..{name}"),

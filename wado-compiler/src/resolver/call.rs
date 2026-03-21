@@ -1064,16 +1064,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         for (i, tp) in type_params.iter().filter(|p| !p.is_effect).enumerate() {
                             let idx = i as u32;
                             let type_id = if tp.is_pack {
-                                self.type_table.borrow_mut().make_type_pack(tp.name.clone(), idx)
+                                self.type_table
+                                    .borrow_mut()
+                                    .make_type_pack(tp.name.clone(), idx)
                             } else {
-                                self.type_table.borrow_mut().make_type_param(tp.name.clone(), idx)
+                                self.type_table
+                                    .borrow_mut()
+                                    .make_type_param(tp.name.clone(), idx)
                             };
                             self.trait_ctx
                                 .type_params
                                 .insert(tp.name.clone(), (idx, type_id));
                         }
-                        let result =
-                            params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                        let result = params.iter().map(|p| self.resolve_type(&p.ty)).collect();
                         self.trait_ctx.type_params = saved;
                         return result;
                     }

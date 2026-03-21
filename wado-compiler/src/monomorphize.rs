@@ -2969,34 +2969,35 @@ impl Monomorphizer {
                 // TypePack tuple, now the source tuple has more elements).
                 let new_type = self.substitute_type(expr.type_id, substitution, type_table);
                 if let ResolvedType::Tuple(expected_elems) = type_table.get(new_type).clone()
-                    && expected_elems.len() != elements.len() {
-                        let old_elements = std::mem::take(elements);
-                        for elem in old_elements {
-                            if let TirExprKind::FieldAccess {
-                                ref expr,
-                                field_index: 0,
-                                ..
-                            } = elem.kind
-                            {
-                                let inner_type = type_table.get(expr.type_id).clone();
-                                if let ResolvedType::Tuple(inner_elems) = inner_type {
-                                    for (i, &elem_type) in inner_elems.iter().enumerate() {
-                                        elements.push(TirExpr::new(
-                                            TirExprKind::FieldAccess {
-                                                expr: expr.clone(),
-                                                field_index: i as u32,
-                                                field_name: i.to_string(),
-                                            },
-                                            elem_type,
-                                            elem.span,
-                                        ));
-                                    }
-                                    continue;
+                    && expected_elems.len() != elements.len()
+                {
+                    let old_elements = std::mem::take(elements);
+                    for elem in old_elements {
+                        if let TirExprKind::FieldAccess {
+                            ref expr,
+                            field_index: 0,
+                            ..
+                        } = elem.kind
+                        {
+                            let inner_type = type_table.get(expr.type_id).clone();
+                            if let ResolvedType::Tuple(inner_elems) = inner_type {
+                                for (i, &elem_type) in inner_elems.iter().enumerate() {
+                                    elements.push(TirExpr::new(
+                                        TirExprKind::FieldAccess {
+                                            expr: expr.clone(),
+                                            field_index: i as u32,
+                                            field_name: i.to_string(),
+                                        },
+                                        elem_type,
+                                        elem.span,
+                                    ));
                                 }
+                                continue;
                             }
-                            elements.push(elem);
                         }
+                        elements.push(elem);
                     }
+                }
             }
             TirExprKind::Assign { target, value } => {
                 self.substitute_types_in_expr(target, substitution, type_table);

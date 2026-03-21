@@ -276,9 +276,10 @@ fn classify_position(
             }
         }
         // Tuples, function types, and type pack spreads have no single named head → foreign
-        Type::Tuple(_) | Type::Function(_) | Type::NamespacedGeneric(_) | Type::TypePackSpread(..) => {
-            PositionKind::ForeignType
-        }
+        Type::Tuple(_)
+        | Type::Function(_)
+        | Type::NamespacedGeneric(_)
+        | Type::TypePackSpread(..) => PositionKind::ForeignType,
     }
 }
 
