@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774075751473,
+  "lastUpdate": 1774080564221,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5405,6 +5405,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dfa2a182bfb68b26fb7cddccc8e4018ad4640102"
         },
         "date": 1774075751286,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22185,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "70c7cab278e74e4a311279722afdc38d90e513e6",
+          "message": "Merge pull request #638 from wado-lang/claude/fix-golden-fixture-flaky-suZa3\n\nImprove pipeline resilience and build performance",
+          "timestamp": "2026-03-21T17:07:04+09:00",
+          "tree_id": "b43953f9ebcfb662d91882e32667e7faf210ba03",
+          "url": "https://github.com/wado-lang/wado/commit/70c7cab278e74e4a311279722afdc38d90e513e6"
+        },
+        "date": 1774080564000,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
