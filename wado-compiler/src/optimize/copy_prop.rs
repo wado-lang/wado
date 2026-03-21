@@ -487,9 +487,10 @@ fn can_propagate_copy(
             }
             // Source must not be reassigned
             if let Some(su) = usage.get(index)
-                && su.is_assigned {
-                    return false;
-                }
+                && su.is_assigned
+            {
+                return false;
+            }
             true
         }
     }
