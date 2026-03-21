@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774070650857,
+  "lastUpdate": 1774073539848,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5327,6 +5327,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/386a08d86315523e3e3ae9de0d2909cab7d59fa9"
         },
         "date": 1774070650658,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22185,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "db4207bf657aa61597c951b2f98b2409a2d22e83",
+          "message": "Merge pull request #636 from wado-lang/claude/verify-wasm-wit-specs-edUbk\n\nRename CM adapter synthesis to CM binding synthesis",
+          "timestamp": "2026-03-21T15:10:01+09:00",
+          "tree_id": "ba7da1502cfb29143a25da1841c7698fcb565aba",
+          "url": "https://github.com/wado-lang/wado/commit/db4207bf657aa61597c951b2f98b2409a2d22e83"
+        },
+        "date": 1774073539625,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
