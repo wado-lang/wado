@@ -66,7 +66,7 @@ When this package is compiled to a `.wasm` component and published to a registry
 2. **Synchronization**: The WIT and binary can drift out of sync across versions
 3. **Self-description**: A standalone `.wasm` file cannot describe its own interface; tools like `wasm-tools component wit` cannot extract interface information
 
-Wado already generates WIT internally during compilation (the CM adapter synthesis phase derives the component's type structure). Bundling this generated WIT into the output binary is a natural extension.
+Wado already generates WIT internally during compilation (the CM binding synthesis phase derives the component's type structure). Bundling this generated WIT into the output binary is a natural extension.
 
 ### How Other Toolchains Handle This
 

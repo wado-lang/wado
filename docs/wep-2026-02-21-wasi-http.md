@@ -55,7 +55,7 @@ Rules:
 - `return` is forbidden in `async fn` bodies.
 - The expression is type-checked against the declared return type of the enclosing `export async fn`.
 
-The compiler expands `task return` during the synthesis phase (CM adapter generation) into a sequence that lowers the Wado value to flat CM ABI values and calls `builtin::task_return`. See [WEP: TIR-Level CM Adapter Synthesis](wep-2026-02-15-cm-adapter-synthesis.md) for implementation details.
+The compiler expands `task return` during the synthesis phase (CM binding generation) into a sequence that lowers the Wado value to flat CM ABI values and calls `builtin::task_return`. See [WEP: TIR-Level CM Binding Synthesis](wep-2026-02-15-cm-binding-synthesis.md) for implementation details.
 
 ### 3. Trailers Future Pattern
 
@@ -247,7 +247,7 @@ Stream body fixtures are in `wado-compiler/tests/fixtures/stream-http-*.wado`:
 
 ### Compiler
 
-- The synthesis phase (CM adapter generation) synthesizes a different adapter for `export async fn` vs `export fn`. The async adapter lifts parameters only; it does not wrap the return value. Instead, `task return` statements in the user function body are expanded inline into `task.return` calls. See [WEP: TIR-Level CM Adapter Synthesis](wep-2026-02-15-cm-adapter-synthesis.md).
+- The synthesis phase (CM binding generation) synthesizes a different adapter for `export async fn` vs `export fn`. The async adapter lifts parameters only; it does not wrap the return value. Instead, `task return` statements in the user function body are expanded inline into `task.return` calls. See [WEP: TIR-Level CM Binding Synthesis](wep-2026-02-15-cm-binding-synthesis.md).
 - `return` in `async fn` is a compile error, detected during desugaring or type-checking.
 
 ### Runtime
@@ -259,7 +259,7 @@ Stream body fixtures are in `wado-compiler/tests/fixtures/stream-http-*.wado`:
 
 - WASI HTTP WIT: `vendor/wasmtime/crates/wasi-http/src/p3/wit/deps/http.wit`
 - Wado HTTP types: `wado-compiler/lib/wasi/http.wado`
-- [WEP: TIR-Level CM Adapter Synthesis](wep-2026-02-15-cm-adapter-synthesis.md)
+- [WEP: TIR-Level CM Binding Synthesis](wep-2026-02-15-cm-binding-synthesis.md)
 - [WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md)
 - [WEP: Target WASI P3 Only](wep-2026-01-11-wasi-p3-only.md)
 - WASI HTTP types: `wasi:http/types@0.3.0-rc-2026-01-06`

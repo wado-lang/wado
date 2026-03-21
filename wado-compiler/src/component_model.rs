@@ -2077,11 +2077,11 @@ pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
             }
             // Check enums
             if let Some(variants) = registry.get_enum_variants(&named.name) {
-                return crate::synthesis::cm_adapter::cm_enum_byte_size(variants.len());
+                return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
             }
             // Check flags
             if let Some(members) = registry.get_flags_members(&named.name) {
-                return crate::synthesis::cm_adapter::cm_flags_byte_size(members.len());
+                return crate::synthesis::cm_binding::cm_flags_byte_size(members.len());
             }
             crate::cm_abi::cm_size(ty)
         }
@@ -2126,10 +2126,10 @@ pub fn cm_align_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
                 return max_align;
             }
             if let Some(variants) = registry.get_enum_variants(&named.name) {
-                return crate::synthesis::cm_adapter::cm_enum_byte_size(variants.len());
+                return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
             }
             if let Some(members) = registry.get_flags_members(&named.name) {
-                return crate::synthesis::cm_adapter::cm_flags_byte_align(members.len());
+                return crate::synthesis::cm_binding::cm_flags_byte_align(members.len());
             }
             crate::cm_abi::cm_align(ty)
         }

@@ -1,14 +1,14 @@
-//! CM Adapter Synthesis phase.
+//! CM Binding Synthesis phase.
 //!
-//! Generates TIR adapter functions for Component Model boundary crossing.
-//! Each adapter handles lifting Wado values to CM flat ABI (lowering params)
+//! Generates TIR binding functions for Component Model boundary crossing.
+//! Each binding handles lifting Wado values to CM flat ABI (lowering params)
 //! and lifting CM flat ABI values back to Wado types (lifting results).
 //!
 //! Pipeline position: after `effect_check`, before monomorphize.
-//! This ensures adapter functions go through monomorphization, lowering,
+//! This ensures binding functions go through monomorphization, lowering,
 //! and optimization.
 //!
-//! See `docs/wep-2026-02-15-cm-adapter-synthesis.md` for design details.
+//! See `docs/wep-2026-02-15-cm-binding-synthesis.md` for design details.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -45,7 +45,7 @@ pub struct LiftContext<'a> {
 
 /// Convert a WASI AST `Type` to a `TypeId` in the type table.
 ///
-/// This is needed for synthesized adapter code that calls generic methods
+/// This is needed for synthesized binding code that calls generic methods
 /// (e.g., `Array::<String>::with_capacity()`). The monomorphizer requires
 /// concrete `TypeId`s in `MonomorphInfo::type_args` to instantiate generic methods.
 pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
@@ -1540,13 +1540,13 @@ fn cm_param_store_plan(
     }
 }
 
-/// Build the adapter function name for a WASI import.
-pub fn adapter_func_name(effect_name: &str, method_name: &str) -> String {
-    format!("__cm_adapter__{effect_name}_{method_name}")
+/// Build the binding function name for a WASI import.
+pub fn binding_func_name(effect_name: &str, method_name: &str) -> String {
+    format!("__cm_binding__{effect_name}_{method_name}")
 }
 
-/// Build the export adapter function name for a world export.
-pub fn export_adapter_func_name(export_name: &str) -> String {
+/// Build the export binding function name for a world export.
+pub fn export_binding_func_name(export_name: &str) -> String {
     format!("__cm_export__{export_name}")
 }
 
@@ -1689,7 +1689,7 @@ fn synthesize_lift_flat_result(
 }
 
 /// Create a `TirFunction` with default metadata fields.
-fn make_adapter_function(
+fn make_binding_function(
     name: String,
     params: Vec<TirParam>,
     return_type: TypeId,
@@ -1715,7 +1715,7 @@ fn make_adapter_function(
         local_count,
         local_types,
         address_taken_locals: IndexSet::default(),
-        is_cm_adapter: true,
+        is_cm_binding: true,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,
@@ -1723,7 +1723,7 @@ fn make_adapter_function(
     }))
 }
 
-/// Map a WASI return type to the flat return `TypeId` for the adapter.
+/// Map a WASI return type to the flat return `TypeId` for the binding.
 /// Sync functions with outptr return void from the raw call itself.
 fn wasi_return_type_id(
     func_info: &WasiFunctionInfo,
@@ -1759,16 +1759,16 @@ fn wasi_return_type_id(
     }
 }
 
-/// Synthesize a CM adapter function for a WASI import.
+/// Synthesize a CM binding function for a WASI import.
 ///
-/// The adapter function:
+/// The binding function:
 /// 1. Accepts the same parameter types as the WASI function
 /// 2. Lowers parameters to flat CM ABI (String → ptr/len, etc.)
 /// 3. Calls the lowered WASI function via `CmRawCall`
 /// 4. Lifts the result from flat CM ABI back to Wado types
 /// 5. Returns the Wado-typed result
 ///
-/// The adapter's Wado-level return type matches the WASI function declaration.
+/// The binding's Wado-level return type matches the WASI function declaration.
 /// All return types are lifted inline using `synthesize_lift` — no per-type
 /// converter functions are needed.
 fn synthesize_adapter(
@@ -1776,7 +1776,7 @@ fn synthesize_adapter(
     wasi_registry: &crate::component_model::WasiRegistry,
     type_table: &RefCell<TypeTable>,
 ) -> Rc<RefCell<TirFunction>> {
-    let name = adapter_func_name(&func_info.effect_name, &func_info.method_name);
+    let name = binding_func_name(&func_info.effect_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
 
     // Derive outptr needs from return type using Canonical ABI layout.
@@ -1814,8 +1814,8 @@ fn synthesize_adapter(
     // ---- Pass 1: Allocate all parameter locals (contiguous) ----
     // Wasm requires params at indices [0..n-1], so allocate them first.
     //
-    // For types that the adapter lowers internally (String, Array<u8>), we create
-    // a single placeholder param. The adapter body will lower them to flat CM args.
+    // For types that the binding lowers internally (String, Array<u8>), we create
+    // a single placeholder param. The binding body will lower them to flat CM args.
     //
     // For other types (handles, Option<T>, etc.), we create flat params matching
     // the CM ABI directly. The call site must flatten args before passing them.
@@ -1829,7 +1829,7 @@ fn synthesize_adapter(
         }
         let start = params.len();
         match param_type {
-            // String: single placeholder param (adapter body lowers to ptr+len)
+            // String: single placeholder param (binding body lowers to ptr+len)
             Type::Named(n) if n.name == "String" => {
                 params.push(TirParam {
                     name: param_name.clone(),
@@ -1842,7 +1842,7 @@ fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
-            // Array<u8>: single placeholder param (adapter body lowers to ptr+len)
+            // Array<u8>: single placeholder param (binding body lowers to ptr+len)
             Type::Generic(g)
                 if g.name == "Array"
                     && g.args.len() == 1
@@ -1859,7 +1859,7 @@ fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
-            // General Array<T>: single placeholder param (adapter body lowers to ptr+len)
+            // General Array<T>: single placeholder param (binding body lowers to ptr+len)
             Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
                 params.push(TirParam {
                     name: param_name.clone(),
@@ -1872,7 +1872,7 @@ fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
-            // Struct (record) param: single GC reference, adapter extracts fields
+            // Struct (record) param: single GC reference, binding extracts fields
             Type::Named(n) if wasi_registry.is_struct(&n.name) => {
                 let struct_type_id = {
                     let mut tt = type_table.borrow_mut();
@@ -2130,7 +2130,7 @@ fn synthesize_adapter(
                                 name: iv_mangled,
                                 monomorph_info: None,
                                 method_info: Some(iv_info),
-                                is_cm_adapter: false,
+                                is_cm_binding: false,
                             },
                             type_args: vec![],
                             args: vec![CallArg::new(
@@ -2387,13 +2387,13 @@ fn synthesize_adapter(
     let raw_call_expr = cm_raw_call(&local_name, flat_args, raw_call_return_type);
 
     // ---- Handle result ----
-    // The adapter's return type to the Wado caller:
+    // The binding's return type to the Wado caller:
     let adapter_return_type;
 
     if func_info.is_async && func_info.has_streaming_param() {
         // Streaming async function (has Stream<T> or Future<T> parameter):
         // The caller must write to the stream before the subtask completes,
-        // so we cannot wait inside the adapter. Return the packed subtask handle
+        // so we cannot wait inside the binding. Return the packed subtask handle
         // (i32) directly. The caller is responsible for waiting via wait_for_subtask().
         body_stmts.push(return_stmt(Some(raw_call_expr)));
         adapter_return_type = TypeTable::I32;
@@ -2523,7 +2523,7 @@ fn synthesize_adapter(
         let resolved = wasi_registry.resolve_type(return_type);
         if needs_flat_result_lifting(&resolved) {
             // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
-            // an i32 discriminant on the stack, but the adapter needs to return a GC struct.
+            // an i32 discriminant on the stack, but the binding needs to return a GC struct.
             // Synthesize VariantConstruct from the discriminant.
             let disc_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
             body_stmts.push(let_stmt(
@@ -2571,7 +2571,7 @@ fn synthesize_adapter(
 
     let body = block(body_stmts);
 
-    make_adapter_function(
+    make_binding_function(
         name,
         params,
         adapter_return_type,
@@ -2896,7 +2896,7 @@ fn field_access(expr: TirExpr, field_name: &str, field_index: u32, field_type: T
 /// Synthesize TIR that lowers a Wado value to flat CM ABI values (on-stack).
 ///
 /// Unlike `synthesize_lower` which stores to linear memory, this produces
-/// TIR that yields individual flat values as locals. Used for export adapters
+/// TIR that yields individual flat values as locals. Used for export bindings
 /// where results are passed to `task-return` as flat params.
 ///
 /// Returns: list of local indices containing the flat values, and appends
@@ -3478,9 +3478,9 @@ fn export_needs_param_lifting(params: &[(String, Type)]) -> bool {
     params.iter().any(|(_, ty)| param_needs_lifting(ty))
 }
 
-/// Synthesize a CM export adapter for an async export with a Result return type.
+/// Synthesize a CM export binding for an async export with a Result return type.
 ///
-/// The adapter:
+/// The binding:
 /// 1. Lifts flat CM params to Wado-typed values (if needed)
 /// 2. Calls the user's export function with lifted args
 /// 3. Pattern-matches the Result<T, E> return value
@@ -3489,7 +3489,7 @@ fn export_needs_param_lifting(params: &[(String, Type)]) -> bool {
 ///
 /// This is signature-driven: it examines the param/return types to generate
 /// appropriate lifting/lowering code for any export signature.
-fn synthesize_result_export_adapter(
+fn synthesize_result_export_binding(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
     entry_source: &ModuleSource,
@@ -3499,7 +3499,7 @@ fn synthesize_result_export_adapter(
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
 ) -> Rc<RefCell<TirFunction>> {
-    let adapter_name = export_adapter_func_name(export_name);
+    let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
     let mut local_types: Vec<TypeId> = Vec::new();
 
@@ -3629,9 +3629,9 @@ fn synthesize_result_export_adapter(
             (type_args[0], type_args[1])
         }
         _ => {
-            // Not a Result — shouldn't happen for result export adapters
+            // Not a Result — shouldn't happen for result export bindings
             panic!(
-                "Expected Result type for export adapter return, got: {:?}",
+                "Expected Result type for export binding return, got: {:?}",
                 tt.get(user_return_type)
             );
         }
@@ -3846,16 +3846,16 @@ fn synthesize_result_export_adapter(
     let body = block(body_stmts);
     let local_count = next_local;
 
-    let adapter = make_adapter_function(
-        adapter_name,
+    let binding = make_binding_function(
+        binding_name,
         adapter_params,
         TypeTable::UNIT,
         body,
         local_count,
         local_types,
     );
-    adapter.borrow_mut().is_export = true;
-    adapter
+    binding.borrow_mut().is_export = true;
+    binding
 }
 
 /// Synthesize TIR for lowering a variant value to flat CM locals.
@@ -3953,9 +3953,9 @@ fn synthesize_variant_lower_to_flat(
     }
 }
 
-/// Synthesize a CM export adapter for a `() -> ()` async export.
+/// Synthesize a CM export binding for a `() -> ()` async export.
 ///
-/// The adapter calls the user's export function and then calls `task-return(0)`
+/// The binding calls the user's export function and then calls `task-return(0)`
 /// to signal successful completion. This replaces the task-return wrapping
 /// that was previously done at the codegen level.
 ///
@@ -3966,12 +3966,12 @@ fn synthesize_variant_lower_to_flat(
 ///     cm_raw_call task-return(0);
 /// }
 /// ```
-fn synthesize_void_export_adapter(
+fn synthesize_void_export_binding(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
     entry_source: &ModuleSource,
 ) -> Rc<RefCell<TirFunction>> {
-    let adapter_name = export_adapter_func_name(export_name);
+    let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
 
     // Call the user's export function
@@ -3995,17 +3995,17 @@ fn synthesize_void_export_adapter(
 
     let body = block(body_stmts);
 
-    let adapter = make_adapter_function(adapter_name, vec![], TypeTable::UNIT, body, 0, vec![]);
+    let binding = make_binding_function(binding_name, vec![], TypeTable::UNIT, body, 0, vec![]);
     // Mark as export so DCE keeps it as a root
-    adapter.borrow_mut().is_export = true;
-    adapter
+    binding.borrow_mut().is_export = true;
+    binding
 }
 
-/// Synthesize a CM export adapter for a non-Result return type.
+/// Synthesize a CM export binding for a non-Result return type.
 ///
 /// For exports where the user function returns a non-Result type (e.g., `-> i32`,
 /// `-> String`, `-> ()`), the CM export still wraps the return in `result<T, error-context>`.
-/// The adapter calls `task-return(0, ...flat_values)` — Ok with the lowered return value.
+/// The binding calls `task-return(0, ...flat_values)` — Ok with the lowered return value.
 ///
 /// This handles parameter lifting from flat CM params when needed.
 ///
@@ -4020,12 +4020,12 @@ fn synthesize_void_export_adapter(
 ///
 /// Known limitation: flat return types are computed from the user's return type,
 /// not from the world's `result<T, error-context>` wrapper. If `error-context`
-/// has more flat slots than the Ok payload, the adapter may emit too few
+/// has more flat slots than the Ok payload, the binding may emit too few
 /// task-return args. In practice this is safe because:
 /// - Current worlds use `Result<(), ()>` (no error-context) or `Result<T, E>`
-///   (handled by `synthesize_result_export_adapter`)
+///   (handled by `synthesize_result_export_binding`)
 /// - This function is only used when the user doesn't return Result
-fn synthesize_general_export_adapter(
+fn synthesize_general_export_binding(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
     entry_source: &ModuleSource,
@@ -4033,7 +4033,7 @@ fn synthesize_general_export_adapter(
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
 ) -> Rc<RefCell<TirFunction>> {
-    let adapter_name = export_adapter_func_name(export_name);
+    let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
     let mut local_types: Vec<TypeId> = Vec::new();
 
@@ -4196,24 +4196,24 @@ fn synthesize_general_export_adapter(
     let body = block(body_stmts);
     let local_count = next_local;
 
-    let adapter = make_adapter_function(
-        adapter_name,
+    let binding = make_binding_function(
+        binding_name,
         adapter_params,
         TypeTable::UNIT,
         body,
         local_count,
         local_types,
     );
-    adapter.borrow_mut().is_export = true;
-    adapter
+    binding.borrow_mut().is_export = true;
+    binding
 }
 
-/// Synthesize a stub export adapter that just calls `task-return(0)`.
+/// Synthesize a stub export binding that just calls `task-return(0)`.
 ///
 /// Used when the world declares an export but the user didn't define the function
 /// (e.g., test-only files that have `test` blocks but no `export fn run()`).
 fn synthesize_void_stub_adapter(export_name: &str) -> Rc<RefCell<TirFunction>> {
-    let adapter_name = export_adapter_func_name(export_name);
+    let binding_name = export_binding_func_name(export_name);
 
     // Just call task-return(0) — Ok discriminant for result<_, _>
     let body = block(vec![expr_stmt(cm_raw_call(
@@ -4222,15 +4222,15 @@ fn synthesize_void_stub_adapter(export_name: &str) -> Rc<RefCell<TirFunction>> {
         TypeTable::UNIT,
     ))]);
 
-    let adapter = make_adapter_function(adapter_name, vec![], TypeTable::UNIT, body, 0, vec![]);
-    adapter.borrow_mut().is_export = true;
-    adapter
+    let binding = make_binding_function(binding_name, vec![], TypeTable::UNIT, body, 0, vec![]);
+    binding.borrow_mut().is_export = true;
+    binding
 }
 
-/// Synthesize an export adapter for `export async fn` functions.
+/// Synthesize an export binding for `export async fn` functions.
 ///
 /// The user function calls `task-return` internally via `task return expr` stmts
-/// (which are expanded by `expand_task_returns_in_func`). The adapter only needs to
+/// (which are expanded by `expand_task_returns_in_func`). The binding only needs to
 /// lift flat CM params to Wado types and call the user function.
 ///
 /// Generated TIR (for `export async fn handle(request: Request)`):
@@ -4240,7 +4240,7 @@ fn synthesize_void_stub_adapter(export_name: &str) -> Rc<RefCell<TirFunction>> {
 ///     handle(__request);  // user fn calls task-return internally
 /// }
 /// ```
-fn synthesize_async_export_adapter(
+fn synthesize_async_export_binding(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
     entry_source: &ModuleSource,
@@ -4248,7 +4248,7 @@ fn synthesize_async_export_adapter(
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
 ) -> Rc<RefCell<TirFunction>> {
-    let adapter_name = export_adapter_func_name(export_name);
+    let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
     let mut local_types: Vec<TypeId> = Vec::new();
 
@@ -4358,16 +4358,16 @@ fn synthesize_async_export_adapter(
     let body = block(body_stmts);
     let local_count = local_types.len() as u32;
 
-    let adapter = make_adapter_function(
-        adapter_name,
+    let binding = make_binding_function(
+        binding_name,
         adapter_params,
         TypeTable::UNIT,
         body,
         local_count,
         local_types,
     );
-    adapter.borrow_mut().is_export = true;
-    adapter
+    binding.borrow_mut().is_export = true;
+    binding
 }
 
 /// Expand `TaskReturn` stmts in an `export async fn` user function into inline CM calls.
@@ -4769,14 +4769,14 @@ fn generate_inline_task_return(
     stmts
 }
 
-/// Phase entry point: generate CM adapter functions and rewrite call sites.
+/// Phase entry point: generate CM binding functions and rewrite call sites.
 ///
 /// For each WASI import function used in the program:
-/// 1. Synthesizes an adapter TIR function that handles CM boundary crossing
-/// 2. Rewrites effect-like `Call` nodes to target the adapter function
+/// 1. Synthesizes a binding TIR function that handles CM boundary crossing
+/// 2. Rewrites effect-like `Call` nodes to target the binding function
 ///
 /// For each world export function:
-/// 3. Synthesizes an export adapter that wraps the user function with task-return
+/// 3. Synthesizes an export binding that wraps the user function with task-return
 ///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
@@ -4797,7 +4797,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
     }
 
     if !seen_effects.is_empty() {
-        // Step 2: Synthesize adapter functions for each used WASI function
+        // Step 2: Synthesize binding functions for each used WASI function
         let entry_type_table = project
             .tir_modules
             .get(&project.entry_module_source)
@@ -4807,20 +4807,20 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
         for qualified_name in &seen_effects {
             if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
                 let func_info = func_info.clone();
-                let adapter_name =
-                    adapter_func_name(&func_info.effect_name, &func_info.method_name);
+                let binding_name =
+                    binding_func_name(&func_info.effect_name, &func_info.method_name);
                 let adapter =
                     synthesize_adapter(&func_info, project.wasi_registry, &entry_type_table);
                 adapters.insert(qualified_name.clone(), adapter.clone());
-                // Also index by adapter function name for lookup
-                adapters.insert(adapter_name, adapter);
+                // Also index by binding function name for lookup
+                adapters.insert(binding_name, adapter);
             }
         }
 
-        // Step 3: Add adapter functions to the entry module
+        // Step 3: Add binding functions to the entry module
         if let Some(entry_module) = project.tir_modules.get_mut(&entry_source) {
             for (key, adapter_rc) in &adapters {
-                // Only add each adapter once (skip the duplicate keyed by adapter_name)
+                // Only add each adapter once (skip the duplicate keyed by binding_name)
                 if key.contains("::") {
                     entry_module.functions.push(adapter_rc.clone());
                 }
@@ -4847,7 +4847,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                     );
                 }
                 // Sync local_types with any Let stmts that were updated by the rewrite
-                // (e.g., streaming adapter calls changing the let binding type to i32).
+                // (e.g., streaming binding calls changing the let binding type to i32).
                 if !func.local_types.is_empty() {
                     let mut updates = Vec::new();
                     if let Some(body) = &func.body {
@@ -4863,7 +4863,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
 
     // ---- Export adapters ----
 
-    // Step 5: Synthesize export adapters for world exports (signature-driven)
+    // Step 5: Synthesize export bindings for world exports (signature-driven)
     let world_info = project.world_registry.get(&project.target_world).cloned();
     if let Some(world_info) = world_info {
         let entry_type_table = project
@@ -4872,7 +4872,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
             .map(|m| m.type_table.clone())
             .unwrap_or_else(|| Rc::new(RefCell::new(TypeTable::new())));
 
-        // Collect adapters in a read-only pass (synthesize_result_export_adapter needs &tir_modules)
+        // Collect adapters in a read-only pass (synthesize_result_export_binding needs &tir_modules)
         let mut export_adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
         {
             let entry_module = project
@@ -4903,7 +4903,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                     ));
                 }
 
-                let adapter_name = export_adapter_func_name(&export.name);
+                let binding_name = export_binding_func_name(&export.name);
                 let adapter = if let Some(user_func_rc) = found_exported {
                     // Validate parameter count matches world declaration
                     {
@@ -4944,7 +4944,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                                 &entry_type_table,
                             );
                         }
-                        synthesize_async_export_adapter(
+                        synthesize_async_export_binding(
                             &export.name,
                             user_func_rc,
                             &entry_source,
@@ -4973,7 +4973,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                                 &tt,
                             );
                             drop(tt);
-                            synthesize_result_export_adapter(
+                            synthesize_result_export_binding(
                                 &export.name,
                                 user_func_rc,
                                 &entry_source,
@@ -4997,7 +4997,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
 
                             if is_void_no_params {
                                 // Simple void adapter for () -> ()
-                                synthesize_void_export_adapter(
+                                synthesize_void_export_binding(
                                     &export.name,
                                     user_func_rc,
                                     &entry_source,
@@ -5005,7 +5005,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                             } else {
                                 // General adapter: handles params (with lifting if needed)
                                 // and non-void return types
-                                synthesize_general_export_adapter(
+                                synthesize_general_export_binding(
                                     &export.name,
                                     user_func_rc,
                                     &entry_source,
@@ -5020,7 +5020,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                     // No user function: stub that just calls task-return(0)
                     synthesize_void_stub_adapter(&export.name)
                 };
-                export_adapters.push((export.name.clone(), adapter_name, adapter));
+                export_adapters.push((export.name.clone(), binding_name, adapter));
             }
         }
 
@@ -5048,15 +5048,15 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
             .tir_modules
             .get_mut(&entry_source)
             .expect("entry module should exist");
-        for (export_name, adapter_name, adapter) in export_adapters {
+        for (export_name, binding_name, adapter) in export_adapters {
             project
-                .export_adapter_names
-                .insert(export_name, adapter_name);
+                .export_binding_names
+                .insert(export_name, binding_name);
             entry_module.functions.push(adapter);
         }
     }
 
-    // Step 6: Synthesize export adapters for test functions (__test_*)
+    // Step 6: Synthesize export bindings for test functions (__test_*)
     // Only when targeting the test world — in other worlds, tests are dead code.
     if project.is_test_world() {
         let entry_module = project
@@ -5075,9 +5075,9 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
             .collect();
 
         for (test_name, user_func_rc) in test_funcs {
-            let adapter_name = export_adapter_func_name(&test_name);
-            let adapter = synthesize_void_export_adapter(&test_name, user_func_rc, &entry_source);
-            project.export_adapter_names.insert(test_name, adapter_name);
+            let binding_name = export_binding_func_name(&test_name);
+            let adapter = synthesize_void_export_binding(&test_name, user_func_rc, &entry_source);
+            project.export_binding_names.insert(test_name, binding_name);
             entry_module.functions.push(adapter);
         }
     }
@@ -5101,20 +5101,20 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
     }
 
     // ---- CM Resource Method Adapters ----
-    // Rewrite #[cm("...")] resource method calls to target internal/builtin adapter functions.
+    // Rewrite #[cm("...")] resource method calls to target internal/builtin binding functions.
     // This replaces the inline WIR emission in wir_build/translate.rs with pre-monomorphization
-    // synthesis, so the adapter functions go through the normal compilation pipeline.
+    // synthesis, so the binding functions go through the normal compilation pipeline.
     rewrite_cm_resource_methods(&mut project);
 
     Ok(project)
 }
 
-/// Determine the internal adapter function name for a CM resource method.
+/// Determine the internal binding function name for a CM resource method.
 /// Returns `Some(("internal" | "builtin", function_name))` or `None` if not handled.
 /// Maps CM method names to their adapter dispatch.
 /// - `"raw"`: direct `CmRawCall` to canonical Wasm import (for simple void operations)
-/// - `"internal"`: call to internal.wado adapter function (for complex operations)
-fn cm_adapter_function(cm_name: &str) -> Option<(&'static str, &'static str)> {
+/// - `"internal"`: call to internal.wado binding function (for complex operations)
+fn cm_binding_function(cm_name: &str) -> Option<(&'static str, &'static str)> {
     match cm_name {
         // Simple drops → direct CmRawCall (non-parameterized)
         "stream-drop-readable" => Some(("raw", "stream-drop-readable")),
@@ -5136,7 +5136,7 @@ fn cm_adapter_function(cm_name: &str) -> Option<(&'static str, &'static str)> {
         // Simple constructors → direct CmRawCall (returns i32 handle)
         "waitable-set-new" => Some(("raw", "waitable-set-new")),
 
-        // Complex operations → internal adapter functions
+        // Complex operations → internal binding functions
         "stream-read" => Some(("internal", "cm_stream_read_u8")),
         "stream-write" => Some(("internal", "cm_stream_write_u8")),
         "stream-write-raw" => Some(("internal", "cm_stream_write_raw_u8")),
@@ -5321,8 +5321,8 @@ fn rewrite_cm_methods_in_expr(expr: &mut TirExpr, tt: &TypeTable) {
         return;
     }
 
-    // Look up the adapter function
-    let Some((kind, func_name)) = cm_adapter_function(&cm_name) else {
+    // Look up the binding function
+    let Some((kind, func_name)) = cm_binding_function(&cm_name) else {
         // Not handled by synthesis yet — will fall through to WIR translate
         return;
     };
@@ -5386,7 +5386,7 @@ fn rewrite_cm_static_method(expr: &mut TirExpr, kind: &str, func_name: &str) {
     *expr = new_expr;
 }
 
-/// Recursively replace WASI-derived types with user types in the adapter.
+/// Recursively replace WASI-derived types with user types in the binding.
 /// Given a WASI AST `Type` and the user's `TypeId`, compute the WASI-derived `TypeId`
 /// and replace it, then recurse into sub-types (Array elements, Tuple fields, etc.).
 fn replace_wasi_derived_type_recursive(
@@ -5470,9 +5470,9 @@ fn replace_wasi_derived_type_recursive(
     }
 }
 
-/// Fix up WASI-derived types in the adapter body to match the user's types.
+/// Fix up WASI-derived types in the binding body to match the user's types.
 ///
-/// The adapter body uses `TypeIds` from `wasi_type_to_type_id` (e.g., `Array<Tuple<String, Array<u8>>>`).
+/// The binding body uses `TypeIds` from `wasi_type_to_type_id` (e.g., `Array<Tuple<String, Array<u8>>>`).
 /// The call site uses user types with newtype aliases (e.g., `Array<Tuple<FieldName, FieldValue>>`).
 /// This function computes the WASI-derived `TypeId` for each param and replaces it in the body.
 fn fixup_wasi_derived_types_in_adapter(
@@ -5505,8 +5505,8 @@ fn fixup_wasi_derived_types_in_adapter(
     }
 }
 
-/// Fix up the return expression's type in the adapter body to match the caller's
-/// expected return type. The adapter was created with placeholder `TypeId`s
+/// Fix up the return expression's type in the binding body to match the caller's
+/// expected return type. The binding was created with placeholder `TypeId`s
 /// (e.g., `TypeTable::I32`) that need to be corrected to actual Wado types.
 fn fixup_return_type_in_body(adapter: &mut TirFunction, old_type: TypeId, new_type: TypeId) {
     if let Some(body) = &mut adapter.body {
@@ -5514,7 +5514,7 @@ fn fixup_return_type_in_body(adapter: &mut TirFunction, old_type: TypeId, new_ty
     }
 }
 
-/// Replace ALL occurrences of `old_type` with `new_type` throughout the adapter's
+/// Replace ALL occurrences of `old_type` with `new_type` throughout the binding's
 /// body, locals, and params. Used when a param or return type is fixed up from
 /// WASI-derived types to the user code's newtype aliases.
 fn replace_type_in_adapter(adapter: &mut TirFunction, old_type: TypeId, new_type: TypeId) {
@@ -5545,7 +5545,7 @@ fn replace_type_in_adapter(adapter: &mut TirFunction, old_type: TypeId, new_type
 
 /// Like `replace_type_in_adapter` but also renames function references that
 /// contain the old type name to use the new type name. This is needed when
-/// the adapter body calls monomorphized functions like `Array<T>::with_capacity`
+/// the binding body calls monomorphized functions like `Array<T>::with_capacity`
 /// where T is a WASI-derived type that differs from the user's newtype alias.
 fn replace_type_in_adapter_with_names(
     adapter: &mut TirFunction,
@@ -5842,7 +5842,7 @@ fn replace_type_in_expr(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) 
 /// Recursively fix types in a block — replaces `old_type` with `new_type`
 /// in return statements, let bindings, and expressions.
 /// Also replaces `TypeTable::I32` placeholders with `new_type` (for cases
-/// where the adapter used I32 as a placeholder).
+/// where the binding used I32 as a placeholder).
 fn fixup_types_in_block(
     block: &mut TirBlock,
     old_type: TypeId,
@@ -6171,7 +6171,7 @@ fn rewrite_calls_in_expr(
                 .get_function(&qualified)
                 .is_some_and(|f| f.is_async && f.has_streaming_param());
 
-            // Fix up adapter function types from the call site
+            // Fix up binding function types from the call site
             {
                 let mut adapter = adapter_rc.borrow_mut();
                 if is_streaming {
@@ -6237,7 +6237,7 @@ fn rewrite_calls_in_expr(
                 }
             }
 
-            // Rewrite to call the adapter function
+            // Rewrite to call the binding function
             *func = FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone());
             *type_args = vec![];
 
@@ -6255,7 +6255,7 @@ fn rewrite_calls_in_expr(
         }
     }
 
-    // Check if this is a resource MethodCall that should be rewritten to target an adapter
+    // Check if this is a resource MethodCall that should be rewritten to target a binding
     if let TirExprKind::MethodCall { func, .. } = &expr.kind
         && let Some(method_info) = func.method_info.clone()
     {
@@ -6293,8 +6293,8 @@ fn rewrite_calls_in_expr(
                     unreachable!()
                 };
 
-            // Fix up adapter function types from the call site
-            // The adapter params include self as the first param
+            // Fix up binding function types from the call site
+            // The binding params include self as the first param
             {
                 let mut adapter = adapter_rc.borrow_mut();
                 if is_streaming {
@@ -6380,7 +6380,7 @@ fn rewrite_calls_in_expr(
                 }
             }
 
-            // Replace MethodCall with Call targeting the adapter
+            // Replace MethodCall with Call targeting the binding
             // Prepend receiver to args
             let mut all_args = vec![taken_receiver];
             all_args.extend(taken_args.into_iter().map(|a| a.expr));
@@ -6410,7 +6410,7 @@ fn rewrite_calls_in_expr(
         }
     }
 
-    // Check if this is a resource static Call (with method_info) that should be rewritten to target an adapter
+    // Check if this is a resource static Call (with method_info) that should be rewritten to target a binding
     if let TirExprKind::Call { func, .. } = &expr.kind
         && func.method_info.is_some()
     {
@@ -6438,7 +6438,7 @@ fn rewrite_calls_in_expr(
                     fixup_return_type_in_body(&mut adapter, old_return_type, expr.type_id);
                 }
                 // Fix up adapter param types for GC pass-through params (String,
-                // Array<T>) where the adapter receives the GC value directly.
+                // Array<T>) where the binding receives the GC value directly.
                 // Do NOT fix up params that get flattened (Option, resource handles)
                 // because taken_args indices don't match flat adapter param indices.
                 if let Some(func_info) = &wasi_func_info {
@@ -6470,7 +6470,7 @@ fn rewrite_calls_in_expr(
                     }
                 }
                 // Replace WASI-derived types in the body with the user's types.
-                // For each param that uses Array<T>/etc, the adapter body may have
+                // For each param that uses Array<T>/etc, the binding body may have
                 // created method calls using the WASI-derived TypeId which differs
                 // from the user's newtype-aliased TypeId.
                 if let Some(func_info) = &wasi_func_info {
@@ -6486,8 +6486,8 @@ fn rewrite_calls_in_expr(
                 }
             }
 
-            // Flatten call site args to match the adapter's flat CM params.
-            // Types that the adapter lowers internally (String, Array<u8>) are
+            // Flatten call site args to match the binding's flat CM params.
+            // Types that the binding lowers internally (String, Array<u8>) are
             // passed through. Option<T> and other multi-flat types are flattened
             // here into individual i32 args.
             let flat_call_args = if let Some(func_info) = &wasi_func_info {
@@ -6498,7 +6498,7 @@ fn rewrite_calls_in_expr(
                         continue;
                     }
                     match param_type {
-                        // String/Array<u8>: pass through (adapter body lowers)
+                        // String/Array<u8>: pass through (binding body lowers)
                         Type::Named(n) if n.name == "String" => {
                             flat.push(taken_args[i].clone());
                         }
@@ -6522,7 +6522,7 @@ fn rewrite_calls_in_expr(
                 taken_args
             };
 
-            // Replace static Call with Call targeting the adapter
+            // Replace static Call with Call targeting the binding
             expr.kind = TirExprKind::Call {
                 func: FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone()),
                 args: flat_call_args
@@ -6973,10 +6973,10 @@ mod tests {
     }
 
     #[test]
-    fn adapter_name() {
+    fn binding_name() {
         assert_eq!(
-            adapter_func_name("Stdout", "write_via_stream"),
-            "__cm_adapter__Stdout_write_via_stream"
+            binding_func_name("Stdout", "write_via_stream"),
+            "__cm_binding__Stdout_write_via_stream"
         );
     }
 

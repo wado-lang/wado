@@ -10,7 +10,7 @@
 
 The existing `wasm_plan` phase (WEP 2026-02-03) moved Component Model analysis out of codegen, but the core problem remains: codegen is doing extensive TIR-to-Wasm translation and analysis that is tangled with low-level `wasm_encoder` API calls. There is no inspectable intermediate form between TIR and binary.
 
-A complementary approach — [TIR-Level CM Adapter Synthesis](./wep-2026-02-15-cm-adapter-synthesis.md) — can reduce the CM-specific surface area of codegen independently.
+A complementary approach — [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md) — can reduce the CM-specific surface area of codegen independently.
 
 ## Decision
 
@@ -137,7 +137,7 @@ Created `compile_with_wir(&Project) -> Vec<u8>` in `tir_to_wir/mod.rs`. Created 
 
 ### Phase 3: Core Translation (complete)
 
-All translation steps implemented: type registration (structs, variants, enums, flags, arrays, tuples, closures, function types, rec groups), module skeleton (imports, globals, data, elements, exports, name section), function body translation (constants, locals, arithmetic, comparisons, casts, control flow, calls, GC ops, value copy, match, closures, globals), and Component Model wrapper (WASI imports, bundled modules, world exports). CM adapter functions are handled as ordinary TIR functions via [TIR-Level CM Adapter Synthesis](./wep-2026-02-15-cm-adapter-synthesis.md).
+All translation steps implemented: type registration (structs, variants, enums, flags, arrays, tuples, closures, function types, rec groups), module skeleton (imports, globals, data, elements, exports, name section), function body translation (constants, locals, arithmetic, comparisons, casts, control flow, calls, GC ops, value copy, match, closures, globals), and Component Model wrapper (WASI imports, bundled modules, world exports). CM binding functions are handled as ordinary TIR functions via [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md).
 
 ### Phase 4: Cutover (complete)
 

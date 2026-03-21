@@ -432,7 +432,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     name: mangled_method_name,
                     monomorph_info,
                     method_info: Some(method_info),
-                    is_cm_adapter: false,
+                    is_cm_binding: false,
                 },
                 type_args: method_type_args, // Use inferred type args
                 args: args
@@ -979,7 +979,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
         .with_struct_type_args(&impl_type_arg_names);
 
-        // Propagate #[cm("...")] from resource static methods for CM adapter synthesis.
+        // Propagate #[cm("...")] from resource static methods for CM binding synthesis.
         method_info.cm_name =
             self.lookup_resource_static_cm(&struct_name, &struct_module, &static_call.method);
 
@@ -990,7 +990,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     name: mangled_func_name,
                     monomorph_info,
                     method_info: Some(method_info),
-                    is_cm_adapter: false,
+                    is_cm_binding: false,
                 },
                 type_args: vec![],
                 args: args
@@ -1724,7 +1724,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         m.cm_name = cm_name;
                         m
                     }),
-                    is_cm_adapter: false,
+                    is_cm_binding: false,
                 },
                 type_args: vec![],
                 args: args

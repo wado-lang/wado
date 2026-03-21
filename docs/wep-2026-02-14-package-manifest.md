@@ -128,7 +128,7 @@ Semantically, cross-package references always go through the CM boundary (`expor
 
 | Consumer → Producer                               | Path                                         |
 | ------------------------------------------------- | -------------------------------------------- |
-| Wado → Wado (source dependency)                   | CM adapter skipped; GC types shared directly |
+| Wado → Wado (source dependency)                   | CM binding skipped; GC types shared directly |
 | Wado → Wado (`.wasm` with Wado provider metadata) | Provider detected; GC types shared directly  |
 | Wado → arbitrary `.wasm`                          | CM canonical ABI (lifting/lowering)          |
 | Arbitrary → Wado `.wasm`                          | CM canonical ABI                             |

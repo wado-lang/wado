@@ -98,7 +98,7 @@ fn try_lower_to_select(
             is_blanket: false,
         }),
         method_info: None,
-        is_cm_adapter: false,
+        is_cm_binding: false,
     };
 
     Some(TirExpr::new(

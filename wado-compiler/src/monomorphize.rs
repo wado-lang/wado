@@ -2388,7 +2388,7 @@ impl Monomorphizer {
             local_types,
             address_taken_locals: generic.address_taken_locals.clone(),
             // Scratch local fields - computed by lower phase (after monomorphization)
-            is_cm_adapter: false,
+            is_cm_binding: false,
             inline_hint: generic.inline_hint,
             comp_features: generic.comp_features,
             export_name: generic.export_name.clone(),
@@ -2681,7 +2681,7 @@ impl Monomorphizer {
                                     name: new_func_name,
                                     monomorph_info: new_monomorph,
                                     method_info: Some(new_info),
-                                    is_cm_adapter: false,
+                                    is_cm_binding: false,
                                 };
                             } else {
                                 let monomorph_info = Some(MonomorphInfo {
@@ -2694,7 +2694,7 @@ impl Monomorphizer {
                                     name: new_func_name,
                                     monomorph_info,
                                     method_info: Some(new_info),
-                                    is_cm_adapter: false,
+                                    is_cm_binding: false,
                                 };
                             }
                         }
@@ -2856,7 +2856,7 @@ impl Monomorphizer {
                                 name: new_func_name,
                                 monomorph_info,
                                 method_info: Some(new_info),
-                                is_cm_adapter: false,
+                                is_cm_binding: false,
                             };
                         } else {
                             // Normal monomorphization (e.g., Array<T>::len -> Array<i32>::len)
@@ -2902,7 +2902,7 @@ impl Monomorphizer {
                                 name: new_func_name,
                                 monomorph_info,
                                 method_info: Some(new_info),
-                                is_cm_adapter: false,
+                                is_cm_binding: false,
                             };
                         }
                     }
@@ -3442,7 +3442,7 @@ impl Monomorphizer {
                                 is_blanket: false,
                             }),
                             method_info: original_method_info,
-                            is_cm_adapter: false,
+                            is_cm_binding: false,
                         };
 
                         // Update the expression's type_id if it's a type parameter
@@ -3494,7 +3494,7 @@ impl Monomorphizer {
                                     is_blanket: false,
                                 }),
                                 method_info: original_method_info,
-                                is_cm_adapter: false,
+                                is_cm_binding: false,
                             };
                             break;
                         }
@@ -3557,7 +3557,7 @@ impl Monomorphizer {
                                     is_blanket: false,
                                 }),
                                 method_info: original_method_info,
-                                is_cm_adapter: false,
+                                is_cm_binding: false,
                             };
                             type_args.clear();
                             rewritten = true;
@@ -3610,7 +3610,7 @@ impl Monomorphizer {
                                             is_blanket: false,
                                         }),
                                         method_info: original_method_info,
-                                        is_cm_adapter: false,
+                                        is_cm_binding: false,
                                     };
                                     type_args.clear();
 
@@ -3678,7 +3678,7 @@ impl Monomorphizer {
                                     is_blanket: false,
                                 }),
                                 method_info: original_method_info,
-                                is_cm_adapter: false,
+                                is_cm_binding: false,
                             };
                             break;
                         }
@@ -3715,7 +3715,7 @@ impl Monomorphizer {
                                 is_blanket: true,
                             }),
                             method_info: original_method_info,
-                            is_cm_adapter: false,
+                            is_cm_binding: false,
                         };
                     }
                 }
@@ -3952,7 +3952,7 @@ impl Monomorphizer {
                     name: mangled_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
-                    is_cm_adapter: false,
+                    is_cm_binding: false,
                 },
                 type_args: vec![],
                 args: vec![CallArg::new(arg_ref, false)],
@@ -4024,7 +4024,7 @@ impl Monomorphizer {
                         name: mangled_name,
                         monomorph_info: None,
                         method_info: Some(method_info),
-                        is_cm_adapter: false,
+                        is_cm_binding: false,
                     },
                     type_args: vec![],
                     args: vec![CallArg::new(arg_ref, false)],
