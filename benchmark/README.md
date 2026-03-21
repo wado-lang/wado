@@ -42,10 +42,11 @@ mise run benchmark-sieve
 
 ### zlib Compression (`zlib/`)
 
-Compresses and decompresses 100KB of patterned data (bytes `i % 256`) for 10 iterations.
+Compresses and decompresses `twitter.json` (~631KB of real JSON data) for 10 iterations.
 
 - **Use case**: Compression library performance, byte array throughput
 - **Operations**: zlib compress/decompress, large byte array manipulation
+- **Data**: `json_twitter/twitter.json` — realistic JSON from Twitter API (better than synthetic patterns)
 - **Comparison**: Wado (`core:zlib`, pure Wado) vs C zlib-1.3.1 (Wasm/wasmtime) vs zlib-rs (native Rust)
 
 ```bash
@@ -124,9 +125,9 @@ mise run benchmark-json-catalog
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| JavaScript  | 191       | 1.00x    |
-| C (gcc -O3) | 194       | 1.02x    |
-| **Wado**    | 194       | 1.02x    |
+| **Wado**    | 194       | 1.00x    |
+| C (gcc -O3) | 198       | 1.02x    |
+| JavaScript  | 200       | 1.03x    |
 
 All implementations produce the same result: 47,407,790 total iterations.
 
@@ -134,9 +135,9 @@ All implementations produce the same result: 47,407,790 total iterations.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 4,872     | 1.00x    |
-| **Wado**    | 4,907     | 1.01x    |
-| JavaScript  | 6,579     | 1.35x    |
+| **Wado**    | 3,249     | 1.00x    |
+| C (gcc -O3) | 3,258     | 1.00x    |
+| JavaScript  | 3,313     | 1.02x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -145,37 +146,37 @@ All implementations produce the same result: 664,579 primes.
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
 | C (gcc -O3) | 40        | 1.00x    |
-| JavaScript  | 60        | 1.50x    |
-| **Wado**    | 78        | 1.95x    |
+| JavaScript  | 62        | 1.55x    |
+| **Wado**    | 81        | 2.03x    |
 
 All implementations produce the same result: 664,579 primes.
 
-### zlib Compress (100KB x 10 iterations)
+### zlib Compress (twitter.json 631KB x 10 iterations)
 
 | Runtime               | Time (ms) | Relative |
 | --------------------- | --------- | -------- |
-| zlib-rs (native Rust) | 1.461     | 1.00x    |
-| C zlib (Wasm)         | 6.473     | 4.43x    |
-| **Wado** (pure Wado)  | 47        | 32.17x   |
+| zlib-rs (native Rust) | 28        | 1.00x    |
+| C zlib (Wasm)         | 70        | 2.50x    |
+| **Wado** (pure Wado)  | 476       | 17.00x   |
 
-### zlib Decompress (100KB x 10 iterations)
+### zlib Decompress (twitter.json 631KB x 10 iterations)
 
 | Runtime               | Time (ms) | Relative |
 | --------------------- | --------- | -------- |
-| zlib-rs (native Rust) | 0.258     | 1.00x    |
-| C zlib (Wasm)         | 1.407     | 5.45x    |
-| **Wado** (pure Wado)  | 29        | 112.40x  |
+| zlib-rs (native Rust) | 4         | 1.00x    |
+| C zlib (Wasm)         | 10        | 2.50x    |
+| **Wado** (pure Wado)  | 97        | 24.25x   |
 
-zlib-rs runs natively; C zlib and Wado are compiled to Wasm and run on wasmtime. Wado's `core:zlib` is a pure Wado implementation, so significant overhead is expected.
+zlib-rs runs natively; C zlib and Wado are compiled to Wasm and run on wasmtime. Wado's `core:zlib` is a pure Wado implementation. Compression ratio: ~8–9% (631KB → ~52KB).
 
 ### Float-to-String (500,000 conversions, 6 decimal places)
 
 | Runtime             | Time (ms) | Relative |
 | ------------------- | --------- | -------- |
-| Zig (-OReleaseFast) | 37        | 1.00x    |
-| Rust (rustc -O)     | 49        | 1.32x    |
-| **Wado**            | 80        | 2.16x    |
-| C (gcc -O3)         | 87        | 2.35x    |
+| Zig (-OReleaseFast) | 30        | 1.00x    |
+| Rust (rustc -O)     | 37        | 1.23x    |
+| **Wado**            | 61        | 2.03x    |
+| C (gcc -O3)         | 66        | 2.20x    |
 
 All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 
@@ -183,8 +184,8 @@ All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 0.974     | 1.00x    |
-| **Wado** (core:json, Wasm) | 24.239    | 24.89x   |
+| Rust (serde_json, native)  | 0.798     | 1.00x    |
+| **Wado** (core:json, Wasm) | 21.273    | 26.66x   |
 
 Both implementations parse 100 statuses from Twitter search results.
 
@@ -192,8 +193,8 @@ Both implementations parse 100 statuses from Twitter search results.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 11.178    | 1.00x    |
-| **Wado** (core:json, Wasm) | 190.580   | 17.05x   |
+| Rust (serde_json, native)  | 9.811     | 1.00x    |
+| **Wado** (core:json, Wasm) | 168.290   | 17.15x   |
 
 Both implementations parse 55,563 coordinate points from GeoJSON.
 
@@ -201,8 +202,8 @@ Both implementations parse 55,563 coordinate points from GeoJSON.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 3.362     | 1.00x    |
-| **Wado** (core:json, Wasm) | 72.779    | 21.65x   |
+| Rust (serde_json, native)  | 2.742     | 1.00x    |
+| **Wado** (core:json, Wasm) | 62.863    | 22.92x   |
 
 Both implementations parse 184 events and 243 performances from CITM catalog data. Rust uses `BTreeMap` (ordered map) to match Wado's `TreeMap`.
 
@@ -301,7 +302,7 @@ samply record wado run --profile perfmap benchmark/count_prime/count_prime.wado
 - Times include program initialization overhead
 - Wado CLI is built with `--release` for fair comparison with natively-compiled competitors
 - Wado benchmarks use `MonotonicClock::now()` from `wasi:clocks` for timing
-- zlib benchmark compares Wado's pure Wado zlib, C zlib-1.3.1 (Wasm/wasmtime), and native zlib-rs (Rust)
+- zlib benchmark uses `twitter.json` (~631KB) as input; compares Wado's pure Wado zlib, C zlib-1.3.1 (Wasm/wasmtime), and native zlib-rs (Rust)
 - fts benchmark compares Wado, C (`snprintf`), Rust (`write!`), and Zig (`std.fmt`)
 - Rust benchmarks use `rustc -O` (release optimization)
 - Zig benchmarks use `-OReleaseFast`

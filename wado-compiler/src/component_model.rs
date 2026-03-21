@@ -1224,10 +1224,10 @@ impl CmInstanceTypeGen {
             })
             .collect();
 
-        let variant_cases: Vec<(&str, Option<ComponentValType>, Option<u32>)> = cases
+        let variant_cases: Vec<(&str, Option<ComponentValType>)> = cases
             .iter()
             .zip(payload_cm_types.iter())
-            .map(|(case, payload_cm)| (case.cm_name.as_str(), *payload_cm, None))
+            .map(|(case, payload_cm)| (case.cm_name.as_str(), *payload_cm))
             .collect();
         instance_type.ty().defined_type().variant(variant_cases);
         let variant_idx = self.alloc_idx();

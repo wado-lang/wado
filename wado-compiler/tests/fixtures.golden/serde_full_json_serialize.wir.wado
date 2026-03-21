@@ -257,16 +257,10 @@ fn run() with Stdout {
     let __local_5: ref Array<String>;
     let user2: ref User;
     let __local_8: ref JsonSerializer;
-    let __local_9: ref String;
     let __local_10: ref JsonSerializer;
-    let __local_11: ref Point;
     let __local_12: ref JsonSerializer;
-    let __local_20: ref User;
     let __local_21: ref JsonSerializer;
-    let __local_25: ref User;
     let __local_26: ref JsonSerializer;
-    let __local_28: ref JsonSerializer;
-    let __local_30: ref JsonSerializer;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -276,27 +270,19 @@ fn run() with Stdout {
     };
     "core:cli/println"(__inline_to_json_i32__1: block -> ref String {
         __local_8 = JsonSerializer { w: JsonWriter { buf: String { repr: builtin::array_new<u8>(0), used: 0 } } };
-        drop(__inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref null SerializeError {
-            __local_28 = __local_8;
-            break __inline_i32_Serialize__serialize_JsonSerializer__0: JsonSerializer^Serializer::serialize_i32(__local_28.w, 42);
-        });
+        drop(JsonSerializer^Serializer::serialize_i32(__local_8.w, 42));
         break __inline_to_json_i32__1: __local_8.w.buf;
     });
     s = String { repr: array.new_data<u8>("hello"), used: 5 };
     "core:cli/println"(__inline_to_json_String__2: block -> ref String {
-        __local_9 = s;
         __local_10 = JsonSerializer { w: JsonWriter { buf: String { repr: builtin::array_new<u8>(0), used: 0 } } };
-        drop(__inline_String_Serialize__serialize_JsonSerializer__1: block -> ref null SerializeError {
-            __local_30 = __local_10;
-            break __inline_String_Serialize__serialize_JsonSerializer__1: JsonSerializer^Serializer::serialize_string(__local_30.w, __local_9);
-        });
+        drop(JsonSerializer^Serializer::serialize_string(__local_10.w, s));
         break __inline_to_json_String__2: __local_10.w.buf;
     });
     point = Point { x: 1.5, y: 2.5 };
     "core:cli/println"(__inline_to_json_Point__3: block -> ref String {
-        __local_11 = point;
         __local_12 = JsonSerializer { w: JsonWriter { buf: String { repr: builtin::array_new<u8>(0), used: 0 } } };
-        drop(Point^Serialize::serialize<JsonSerializer>(__local_11, __local_12.w));
+        drop(Point^Serialize::serialize<JsonSerializer>(point, __local_12.w));
         break __inline_to_json_Point__3: __local_12.w.buf;
     });
     user = User { name: String { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1, location: Point { x: 10, y: 20 }, tags: ref.as_non_null(__seq_lit: block -> ref Array<String> {
@@ -304,9 +290,8 @@ fn run() with Stdout {
         break __seq_lit: __local_3;
     }) };
     "core:cli/println"(__inline_to_json_User__9: block -> ref String {
-        __local_20 = user;
         __local_21 = JsonSerializer { w: JsonWriter { buf: String { repr: builtin::array_new<u8>(0), used: 0 } } };
-        drop(User^Serialize::serialize<JsonSerializer>(__local_20, __local_21.w));
+        drop(User^Serialize::serialize<JsonSerializer>(user, __local_21.w));
         break __inline_to_json_User__9: __local_21.w.buf;
     });
     user2 = User { name: String { repr: array.new_data<u8>("Bob"), used: 3 }, age: 25, active: 0, location: ref.null none, tags: ref.as_non_null(__seq_lit: block -> ref Array<String> {
@@ -314,9 +299,8 @@ fn run() with Stdout {
         break __seq_lit: __local_5;
     }) };
     "core:cli/println"(__inline_to_json_User__13: block -> ref String {
-        __local_25 = user2;
         __local_26 = JsonSerializer { w: JsonWriter { buf: String { repr: builtin::array_new<u8>(0), used: 0 } } };
-        drop(User^Serialize::serialize<JsonSerializer>(__local_25, __local_26.w));
+        drop(User^Serialize::serialize<JsonSerializer>(user2, __local_26.w));
         break __inline_to_json_User__13: __local_26.w.buf;
     });
 }
@@ -401,15 +385,13 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
     let subtask: i32;
     let ws: i32;
     let __local_4: i32;
-    let __local_5: i32;
     handle = packed >> 4;
     if handle != 0 {
         subtask = handle;
         ws = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
             __local_4 = subtask;
-            __local_5 = ws;
-            "wasi/waitable-join"(__local_4, __local_5);
+            "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
         });
         "core:internal/cm_waitable_set_wait"(ws);
@@ -1089,7 +1071,7 @@ fn write_digits_at(buf, offset, val, nd) {
                 break b87;
             };
             index = idx;
-            value = 48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255);
+            value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
             builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
@@ -1664,17 +1646,11 @@ fn JsonSerializer^Serializer::serialize_i32(self, v) {
     let __local_3: ref Formatter;
     let self_4: ref JsonWriter;
     let s: ref String;
-    let __local_7: ref String;
-    let __local_9: ref Formatter;
     self_4 = self;
     s = __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = __inline_Formatter__new_2: block -> ref Formatter {
-            __local_7 = __local_2;
-            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
-        };
-        __local_9 = __local_3;
-        i32::fmt_decimal(v, __local_9);
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        i32::fmt_decimal(v, __local_3);
         break __tmpl: __local_2;
     };
     String::append(self_4.buf, s);
@@ -1686,17 +1662,11 @@ fn JsonSerializer^Serializer::serialize_f64(self, v) {
     let __local_3: ref Formatter;
     let self_4: ref JsonWriter;
     let s: ref String;
-    let __local_7: ref String;
-    let __local_9: ref Formatter;
     self_4 = self;
     s = __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = __inline_Formatter__new_2: block -> ref Formatter {
-            __local_7 = __local_2;
-            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
-        };
-        __local_9 = __local_3;
-        f64::fmt_into(v, __local_9);
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        f64::fmt_into(v, __local_3);
         break __tmpl: __local_2;
     };
     String::append(self_4.buf, s);
@@ -1884,17 +1854,13 @@ fn JsonSeqSerializer^SerializeSeq::element<String>(self, value) {
     let ser: ref JsonSerializer;
     let self_3: ref JsonWriter;
     let s: ref String;
-    let __local_6: ref JsonSerializer;
     if self.count > 0 {
         self_3 = self.w;
         s = String { repr: array.new_data<u8>(","), used: 1 };
         String::append(self_3.buf, s);
     };
     ser = JsonSerializer { w: ref.as_non_null(self.w) };
-    drop(__inline_String_Serialize__serialize_JsonSerializer__1: block -> ref null SerializeError {
-        __local_6 = ser;
-        break __inline_String_Serialize__serialize_JsonSerializer__1: JsonSerializer^Serializer::serialize_string(__local_6.w, value);
-    });
+    drop(JsonSerializer^Serializer::serialize_string(ser.w, value));
     self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
@@ -1991,7 +1957,6 @@ fn JsonStructSerializer^SerializeStruct::field<f64>(self, name, value) {
     let s_6: ref String;
     let self_7: ref JsonWriter;
     let s_8: ref String;
-    let __local_11: ref JsonSerializer;
     if self.count > 0 {
         self_5 = self.w;
         s_6 = String { repr: array.new_data<u8>(","), used: 1 };
@@ -2008,10 +1973,7 @@ fn JsonStructSerializer^SerializeStruct::field<f64>(self, name, value) {
     };
     String::append(self_7.buf, s_8);
     ser = JsonSerializer { w: ref.as_non_null(self.w) };
-    drop(__inline_f64_Serialize__serialize_JsonSerializer__3: block -> ref null SerializeError {
-        __local_11 = ser;
-        break __inline_f64_Serialize__serialize_JsonSerializer__3: JsonSerializer^Serializer::serialize_f64(__local_11.w, value);
-    });
+    drop(JsonSerializer^Serializer::serialize_f64(ser.w, value));
     self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
@@ -2024,7 +1986,6 @@ fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
     let s_6: ref String;
     let self_7: ref JsonWriter;
     let s_8: ref String;
-    let __local_11: ref JsonSerializer;
     if self.count > 0 {
         self_5 = self.w;
         s_6 = String { repr: array.new_data<u8>(","), used: 1 };
@@ -2041,10 +2002,7 @@ fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
     };
     String::append(self_7.buf, s_8);
     ser = JsonSerializer { w: ref.as_non_null(self.w) };
-    drop(__inline_bool_Serialize__serialize_JsonSerializer__3: block -> ref null SerializeError {
-        __local_11 = ser;
-        break __inline_bool_Serialize__serialize_JsonSerializer__3: JsonSerializer^Serializer::serialize_bool(__local_11.w, value);
-    });
+    drop(JsonSerializer^Serializer::serialize_bool(ser.w, value));
     self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
@@ -2057,7 +2015,6 @@ fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
     let s_6: ref String;
     let self_7: ref JsonWriter;
     let s_8: ref String;
-    let __local_11: ref JsonSerializer;
     if self.count > 0 {
         self_5 = self.w;
         s_6 = String { repr: array.new_data<u8>(","), used: 1 };
@@ -2074,10 +2031,7 @@ fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
     };
     String::append(self_7.buf, s_8);
     ser = JsonSerializer { w: ref.as_non_null(self.w) };
-    drop(__inline_i32_Serialize__serialize_JsonSerializer__3: block -> ref null SerializeError {
-        __local_11 = ser;
-        break __inline_i32_Serialize__serialize_JsonSerializer__3: JsonSerializer^Serializer::serialize_i32(__local_11.w, value);
-    });
+    drop(JsonSerializer^Serializer::serialize_i32(ser.w, value));
     self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
@@ -2090,7 +2044,6 @@ fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
     let s_6: ref String;
     let self_7: ref JsonWriter;
     let s_8: ref String;
-    let __local_11: ref JsonSerializer;
     if self.count > 0 {
         self_5 = self.w;
         s_6 = String { repr: array.new_data<u8>(","), used: 1 };
@@ -2107,10 +2060,7 @@ fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
     };
     String::append(self_7.buf, s_8);
     ser = JsonSerializer { w: ref.as_non_null(self.w) };
-    drop(__inline_String_Serialize__serialize_JsonSerializer__3: block -> ref null SerializeError {
-        __local_11 = ser;
-        break __inline_String_Serialize__serialize_JsonSerializer__3: JsonSerializer^Serializer::serialize_string(__local_11.w, value);
-    });
+    drop(JsonSerializer^Serializer::serialize_string(ser.w, value));
     self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
@@ -2177,7 +2127,9 @@ fn Formatter::apply_padding(self, start_pos) {
     padding = self.width - content_len;
     fill_byte = self.fill & 255;
     align = self.align;
-    if align == 0 {
+    let __match_scrut_0: enum:Alignment;
+    __match_scrut_0 = align;
+    if __match_scrut_0 == 0 {
         String::append_byte_filled(self.buf, fill_byte, padding);
     } else if align == 1 {
         left_pad = padding / 2;
@@ -2302,7 +2254,9 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     align = self.align;
-    if align == 0 {
+    let __match_scrut_0: enum:Alignment;
+    __match_scrut_0 = align;
+    if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::append(self.buf, sign);
         };

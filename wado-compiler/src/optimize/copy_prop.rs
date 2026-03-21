@@ -1,7 +1,8 @@
 //! Copy propagation optimization for Wado TIR
 //!
-//! This module eliminates trivial copy bindings like `let x = y` or `let x = 42`
-//! by propagating the source value to all uses of the target variable.
+//! This module eliminates trivial copy bindings like `let x = y`, `let x = 42`,
+//! `let x = &y`, or `let x = &mut y` by propagating the source value to all
+//! uses of the target variable.
 //!
 //! The optimization is safe when:
 //! - The target variable is not assigned after initialization
@@ -9,6 +10,7 @@
 //! - The target variable is not captured by a closure
 //! - For local-to-local copies: the source is not modified after the copy
 //! - For value types: the source is dead after the binding (`read_count` is 1)
+//! - For ref/mut-ref copies: the target is single-use and the source is not reassigned
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
@@ -19,12 +21,12 @@ use crate::tir::{
 };
 
 /// Information about a copy binding that may be eliminable.
-/// Pattern: `let x: T = y` where y is a local variable or simple literal
+/// Pattern: `let x: T = y` where y is a local variable, simple literal, or `&y`/`&mut y`
 #[derive(Debug, Clone)]
 struct CopyBinding {
     /// Local index of the target variable (x)
     target_local: u32,
-    /// The source expression (either a Local or a simple literal)
+    /// The source expression (either a Local, simple literal, or Ref/MutRef of a Local)
     source: CopySource,
     /// Type of the binding
     type_id: TypeId,
@@ -46,6 +48,18 @@ enum CopySource {
     BoolLiteral(bool),
     /// Copy from a char literal
     CharLiteral(char),
+    /// Copy from `&local` — propagated as `&source` at use site
+    Ref {
+        index: u32,
+        name: String,
+        inner_type_id: TypeId,
+    },
+    /// Copy from `&mut local` — propagated as `&mut source` at use site
+    MutRef {
+        index: u32,
+        name: String,
+        inner_type_id: TypeId,
+    },
 }
 
 /// Usage information for a local variable
@@ -91,6 +105,28 @@ fn analyze_copy_binding(stmt: &TirStmt) -> Option<CopyBinding> {
         },
         TirExprKind::BoolLiteral(b) => CopySource::BoolLiteral(*b),
         TirExprKind::CharLiteral(c) => CopySource::CharLiteral(*c),
+        // `let x = &y` or `let x = &mut y` where y is a local
+        TirExprKind::Unary { op, expr: inner }
+            if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef) =>
+        {
+            if let TirExprKind::Local { index, name } = &inner.kind {
+                if matches!(op, TirUnaryOp::Ref) {
+                    CopySource::Ref {
+                        index: *index,
+                        name: name.clone(),
+                        inner_type_id: inner.type_id,
+                    }
+                } else {
+                    CopySource::MutRef {
+                        index: *index,
+                        name: name.clone(),
+                        inner_type_id: inner.type_id,
+                    }
+                }
+            } else {
+                return None;
+            }
+        }
         _ => return None,
     };
 
@@ -441,6 +477,24 @@ fn can_propagate_copy(
         | CopySource::FloatLiteral { .. }
         | CopySource::BoolLiteral(_)
         | CopySource::CharLiteral(_) => true,
+        // `let x = &y` or `let x = &mut y`:
+        // Safe when target is single-use and source is not reassigned.
+        // We move the `&y`/`&mut y` expression from the definition to the use site.
+        // Multi-use is not allowed because each substitution creates a new `&mut`
+        // expression, which could change semantics in the presence of aliasing.
+        CopySource::Ref { index, .. } | CopySource::MutRef { index, .. } => {
+            // Must be single-use
+            if target_usage.read_count != 1 {
+                return false;
+            }
+            // Source must not be reassigned
+            if let Some(su) = usage.get(index)
+                && su.is_assigned
+            {
+                return false;
+            }
+            true
+        }
     }
 }
 
@@ -523,25 +577,63 @@ fn apply_in_expr(
     if let TirExprKind::Local { index, .. } = &expr.kind
         && let Some(source) = substitutions.get(index)
     {
-        expr.kind = match source {
+        match source {
             CopySource::Local {
                 index: src_idx,
                 name: src_name,
-            } => TirExprKind::Local {
-                index: *src_idx,
-                name: src_name.clone(),
-            },
-            CopySource::IntLiteral { value, repr } => TirExprKind::IntLiteral {
-                value: *value,
-                repr: repr.clone(),
-            },
-            CopySource::FloatLiteral { value, repr } => TirExprKind::FloatLiteral {
-                value: *value,
-                repr: repr.clone(),
-            },
-            CopySource::BoolLiteral(b) => TirExprKind::BoolLiteral(*b),
-            CopySource::CharLiteral(c) => TirExprKind::CharLiteral(*c),
-        };
+            } => {
+                expr.kind = TirExprKind::Local {
+                    index: *src_idx,
+                    name: src_name.clone(),
+                };
+            }
+            CopySource::IntLiteral { value, repr } => {
+                expr.kind = TirExprKind::IntLiteral {
+                    value: *value,
+                    repr: repr.clone(),
+                };
+            }
+            CopySource::FloatLiteral { value, repr } => {
+                expr.kind = TirExprKind::FloatLiteral {
+                    value: *value,
+                    repr: repr.clone(),
+                };
+            }
+            CopySource::BoolLiteral(b) => {
+                expr.kind = TirExprKind::BoolLiteral(*b);
+            }
+            CopySource::CharLiteral(c) => {
+                expr.kind = TirExprKind::CharLiteral(*c);
+            }
+            CopySource::Ref {
+                index: src_idx,
+                name: src_name,
+                inner_type_id,
+            }
+            | CopySource::MutRef {
+                index: src_idx,
+                name: src_name,
+                inner_type_id,
+            } => {
+                let op = if matches!(source, CopySource::Ref { .. }) {
+                    TirUnaryOp::Ref
+                } else {
+                    TirUnaryOp::MutRef
+                };
+                let inner = TirExpr::new(
+                    TirExprKind::Local {
+                        index: *src_idx,
+                        name: src_name.clone(),
+                    },
+                    *inner_type_id,
+                    expr.span,
+                );
+                expr.kind = TirExprKind::Unary {
+                    op,
+                    expr: Box::new(inner),
+                };
+            }
+        }
         return;
     }
 
@@ -709,7 +801,9 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
 
         for binding in eliminable {
             let source_conflicts = match &binding.source {
-                CopySource::Local { index, .. } => target_set.contains(index),
+                CopySource::Local { index, .. }
+                | CopySource::Ref { index, .. }
+                | CopySource::MutRef { index, .. } => target_set.contains(index),
                 _ => false,
             };
             if source_conflicts {

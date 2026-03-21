@@ -387,7 +387,6 @@ fn generate_inspect_impls(module: &mut TirModule) {
         match resolved {
             ResolvedType::Tuple(_) => {
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
-                continue;
             }
             ResolvedType::Function {
                 params,
@@ -1899,7 +1898,6 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         let resolved = tt.get(type_id).clone();
         if let ResolvedType::Tuple(_) = resolved {
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
-            continue;
         } else {
             // Function types, opaque types: delegate to Inspect
             let di = LocalMethodName::new(

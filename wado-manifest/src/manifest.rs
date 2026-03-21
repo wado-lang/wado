@@ -82,8 +82,8 @@ impl FromStr for Manifest {
     ///
     /// This performs both TOML parsing and semantic validation.
     fn from_str(toml_str: &str) -> Result<Self, Self::Err> {
-        let raw: RawManifest =
-            toml::from_str(toml_str).map_err(|e| ManifestError::Toml(e.to_string()))?;
+        let raw: RawManifest = toml::from_str::<RawManifest>(toml_str)
+            .map_err(|e| ManifestError::Toml(e.to_string()))?;
         let manifest = convert_raw(raw)?;
         validate::validate(&manifest)?;
         Ok(manifest)

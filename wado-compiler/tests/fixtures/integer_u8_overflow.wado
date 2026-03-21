@@ -1,0 +1,46 @@
+use { println, Stdout } from "core:cli";
+
+fn test_overflow() with Stdout {
+    // Addition overflow: 255 + 1 should wrap to 0
+    let a: u8 = 255 as u8;
+    let b: u8 = 1 as u8;
+    let sum = a + b;
+    println(`255 + 1: {sum}`);
+
+    // The wrapped value should equal 0
+    if sum == 0 as u8 {
+        println("sum == 0: true");
+    } else {
+        println("sum == 0: false");
+    }
+
+    // Addition overflow: 200 + 100 should wrap to 44
+    let c: u8 = 200 as u8;
+    let d: u8 = 100 as u8;
+    let sum2 = c + d;
+    println(`200 + 100: {sum2}`);
+
+    // Subtraction underflow: 0 - 1 should wrap to 255
+    let zero: u8 = 0 as u8;
+    let sub = zero - b;
+    println(`0 - 1: {sub}`);
+
+    // The wrapped value should be 255
+    if sub == 255 as u8 {
+        println("sub == 255: true");
+    } else {
+        println("sub == 255: false");
+    }
+
+    // Multiplication overflow: 200 * 2 should wrap to 144
+    let two: u8 = 2 as u8;
+    let mul = c * two;
+    println(`200 * 2: {mul}`);
+}
+
+export fn run() with Stdout {
+    test_overflow();
+}
+
+__DATA__
+{"stdout": "255 + 1: 0\nsum == 0: true\n200 + 100: 44\n0 - 1: 255\nsub == 255: true\n200 * 2: 144\n"}

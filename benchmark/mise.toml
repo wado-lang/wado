@@ -124,11 +124,11 @@ echo "=== zlib-rs (native Rust) ==="
 
 if [ "$HAVE_C_WASM" -eq 1 ]; then
     echo "=== C zlib (Wasm/wasmtime) ==="
-    wasmtime zlib/zlib_c.wasm
+    wasmtime --dir .::. zlib/zlib_c.wasm
 fi
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 zlib/zlib_bench.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir .::. zlib/zlib_bench.wado
 """
 
 [tasks.fts]

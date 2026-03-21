@@ -655,7 +655,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     self.trait_ctx
                         .type_param_bounds
                         .entry(param.name.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .extend(param.bounds.clone());
                 }
             }
