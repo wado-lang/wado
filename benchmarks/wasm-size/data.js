@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774094867017,
+  "lastUpdate": 1774100022210,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5615,6 +5615,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22181,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bf6da7f1811447d83e70a5a3b2c0b898e6b71724",
+          "message": "Merge pull request #643 from wado-lang/claude/optimize-fixture-variables-Qxs65\n\nOptimize copy propagation to reduce unnecessary local variables",
+          "timestamp": "2026-03-21T22:31:19+09:00",
+          "tree_id": "8e147c11f67f75636223e383757203de36db9d16",
+          "url": "https://github.com/wado-lang/wado/commit/bf6da7f1811447d83e70a5a3b2c0b898e6b71724"
+        },
+        "date": 1774100022135,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22175,
             "unit": "bytes"
           }
         ]
