@@ -1,0 +1,31 @@
+// Variadic trait impl where the method has its own type param
+
+trait Processor {
+    fn process<W>(&self, w: &mut W);
+}
+
+impl Processor for i32 {
+    fn process<W>(&self, w: &mut W) {}
+}
+
+impl Processor for String {
+    fn process<W>(&self, w: &mut W) {}
+}
+
+impl<..T: Processor> Processor for [..T] {
+    fn process<W>(&self, w: &mut W) {
+        for let v of *self {
+            v.process::<W>(w);
+        }
+    }
+}
+
+test "variadic trait with method type param" {
+    let t = [1, "hello"];
+    let mut x = 0;
+    t.process::<i32>(&mut x);
+    assert x == 0;
+}
+
+__DATA__
+{"test": {}, "TODO": true}

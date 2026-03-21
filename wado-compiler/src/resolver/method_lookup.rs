@@ -1340,6 +1340,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // all items in all modules.
         let names_to_check: Vec<String> = {
             let mut names = vec![struct_name.to_string()];
+            // For concrete tuple types (Tuple<i32, String>), also check bare "Tuple"
+            // to match variadic tuple impls: `impl<..T: Trait> Trait for [..T]`
+            if let Some(type_id) = receiver_type_id
+                && matches!(
+                    self.type_table.borrow().get(type_id),
+                    ResolvedType::Tuple(_)
+                )
+                && !names.contains(&"Tuple".to_string())
+            {
+                names.push("Tuple".to_string());
+            }
             if let Some(&newtype_id) = self.newtypes.get(struct_name) {
                 let mut current = newtype_id;
                 loop {
