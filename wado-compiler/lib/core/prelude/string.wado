@@ -457,22 +457,22 @@ impl String {
                     break;
                 }
             }
-            // Decode the character at pos
-            let b0 = builtin::array_get_u8(self.repr, pos);
+            // Decode the character at pos (cast to u32 before shifting to avoid u8 truncation)
+            let b0 = builtin::array_get_u8(self.repr, pos) as u32;
             let code = if b0 < 0x80 {
-                b0 as u32;
+                b0;
             } else if b0 < 0xE0 {
-                let b1 = builtin::array_get_u8(self.repr, pos + 1);
-                ((b0 & 0x1F) << 6 | b1 & 0x3F) as u32;
+                let b1 = builtin::array_get_u8(self.repr, pos + 1) as u32;
+                (b0 & 0x1F) << 6 | b1 & 0x3F;
             } else if b0 < 0xF0 {
-                let b1 = builtin::array_get_u8(self.repr, pos + 1);
-                let b2 = builtin::array_get_u8(self.repr, pos + 2);
-                ((b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F) as u32;
+                let b1 = builtin::array_get_u8(self.repr, pos + 1) as u32;
+                let b2 = builtin::array_get_u8(self.repr, pos + 2) as u32;
+                (b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F;
             } else {
-                let b1 = builtin::array_get_u8(self.repr, pos + 1);
-                let b2 = builtin::array_get_u8(self.repr, pos + 2);
-                let b3 = builtin::array_get_u8(self.repr, pos + 3);
-                ((b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F) as u32;
+                let b1 = builtin::array_get_u8(self.repr, pos + 1) as u32;
+                let b2 = builtin::array_get_u8(self.repr, pos + 2) as u32;
+                let b3 = builtin::array_get_u8(self.repr, pos + 3) as u32;
+                (b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F;
             };
             let ch = char::from_u32_unchecked(code);
             if ch.is_whitespace() {
