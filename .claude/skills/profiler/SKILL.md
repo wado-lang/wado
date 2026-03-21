@@ -1,82 +1,107 @@
 ---
 name: profiler
-description: Profile Wado programs using wasmtime's jitdump profiler and Linux perf.
+description: Profile Wado programs using wasmtime's guest profiler to identify hot functions.
 ---
 
 # Profiling Wado Programs
 
-Profile Wado programs with `--profile jitdump` and Linux `perf` to identify hot functions and instructions.
-
-## Why jitdump?
-
-Wado aggressively inlines functions, so hot functions are often large inlined blobs. Function-level profiling ("run is hot") is not actionable. JitDump enables instruction-level annotation via `perf annotate`, revealing which inlined callee is the actual bottleneck.
-
-The guest profiler (`--profile guest`) does not work with the current CM-async runtime (produces 0 samples).
+Profile Wado programs with `--profile guest` to identify hot functions and call stacks.
 
 ## Workflow
 
-### 1. Record
+### 1. Run with guest profiler
 
 ```sh
-perf record -k mono wado run --profile jitdump prog.wado
+wado run --profile guest,profile.json,1 prog.wado
 ```
+
+Parameters: `guest[,path[,interval_ms]]`
+- `path`: output file (default: `profile.json`)
+- `interval_ms`: sampling interval in milliseconds (default: 10, use 1 for short-running programs)
 
 Or with cargo during development:
 
 ```sh
-perf record -k mono cargo run --release --bin wado -- run --profile jitdump prog.wado
+cargo run --release --bin wado -- run --profile guest,profile.json,1 prog.wado
 ```
 
-### 2. Inject JIT symbols
+### 2. Analyze with a script
+
+The output is Firefox Profiler JSON format. Parse it programmatically:
 
 ```sh
-perf inject --jit -i perf.data -o perf.jit.data
+python3 -c "
+import json, sys
+from collections import Counter
+
+with open('profile.json') as f:
+    data = json.load(f)
+
+t = data['threads'][0]
+strings = t['stringArray']
+samples = t['samples']
+stack_table = t['stackTable']
+frame_table = t['frameTable']
+func_table = t['funcTable']
+
+# Count inclusive samples per function
+func_counts = Counter()
+for stack_idx in samples['stack']:
+    cur = stack_idx
+    while cur is not None:
+        frame_idx = stack_table['frame'][cur]
+        func_idx = frame_table['func'][frame_idx]
+        func_name = strings[func_table['name'][func_idx]]
+        func_counts[func_name] += 1
+        cur = stack_table['prefix'][cur]
+
+total = samples['length']
+print(f'Total samples: {total}')
+print(f'{"Samples":>8s} {"Pct":>6s}  Function')
+for name, count in func_counts.most_common():
+    print(f'{count:8d} {100*count/total:5.1f}%  {name}')
+"
 ```
 
-### 3. Report (function-level)
+### 3. View in Firefox Profiler (optional)
 
-```sh
-perf report -i perf.jit.data
-```
+Upload `profile.json` to `https://profiler.firefox.com/` for interactive flame graph visualization.
 
-This shows which functions consume the most samples. Look for `wasm[1]::function[N]::name` entries — these are user Wasm functions compiled from Wado source.
+## Choosing the sampling interval
 
-### 4. Annotate (instruction-level)
+| Program duration | Recommended interval | Expected samples |
+| ---------------- | -------------------- | ---------------- |
+| < 200 ms         | 1 ms                 | ~100–200         |
+| 200 ms – 2 s     | 5 ms                 | ~40–400          |
+| > 2 s            | 10 ms (default)      | 200+             |
 
-```sh
-perf annotate -i perf.jit.data -s <function_name>
-```
+Use shorter intervals for short-running programs to get enough samples for meaningful analysis.
 
-For example:
+## Characteristics
 
-```sh
-perf annotate -i perf.jit.data -s run
-perf annotate -i perf.jit.data -s inflate_raw_ex
-```
-
-This disassembles the function and shows per-instruction sample percentages. Use this to identify hot loops within inlined code.
+- **Cross-platform:** Works on Linux, macOS, and Windows
+- **Runtime overhead:** ~5–8%
+- **Granularity:** Function-level with call stacks
+- **Output:** Firefox Profiler JSON (~5–50 KB)
+- **CM-async compatibility:** Works (wasmtime 42+)
 
 ## Symbol naming
 
-Symbols include full monomorphization detail:
+Function names reflect Wado source names with monomorphization detail:
 
 ```
-wasm[1]::function[78]::Status^Deserialize::deserialize<JsonDeserializer>
-wasm[1]::function[48]::deflate_with_level
+f64::fmt_fixed
+Status^Deserialize::deserialize<JsonDeserializer>
+TreeMap::insert
 ```
-
-Each function has both a long form (`wasm[1]::function[N]::name`) and a short alias (`name`).
 
 ## Cleanup
 
-JitDump creates `jit-<pid>.dump` files (500-600 KB each) in the current working directory. Remove after analysis:
-
 ```sh
-rm -f jit-*.dump perf.data perf.jit.data
+rm -f profile.json
 ```
 
 ## Notes
 
-- Runtime overhead is ~1% — measurements are not significantly distorted.
-- `perf record` requires Linux. There is no macOS equivalent for jitdump.
-- For background, see `docs/research/wasmtime-profiler-characteristics.md`.
+- For instruction-level profiling on Linux, use `--profile jitdump` with `perf`. See `docs/research/jitdump-profiling.md`.
+- The `--profile perfmap` mode is also available for Linux `perf` integration without the `perf inject` step, but provides function-level granularity only.
