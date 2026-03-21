@@ -558,10 +558,6 @@ fn Holder<i32>::min(self) {
                 };
                 if __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
                     __local_7 = i;
-                    if __local_7 >= _licm_used_11 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    };
                     break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_12, __local_7);
                 } < m {
                     m = __inline_Array_i32__IndexValue__index_value_3: block -> i32 {
@@ -606,13 +602,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l40: loop {
+            l39: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l40;
+                continue l39;
             };
         };
     };
@@ -672,13 +668,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l49: loop {
+            l48: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l49;
+                continue l48;
             };
         };
     };

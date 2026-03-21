@@ -328,10 +328,11 @@ fn record_defs_from_nested(stmt: &TirStmt, defs: &mut DefMap) {
             }
         }
         TirStmtKind::If {
+            condition,
             then_block,
             else_block,
-            ..
         } => {
+            record_defs_from_expr(condition, defs);
             for s in &then_block.stmts {
                 record_def_from_stmt(s, defs);
                 record_defs_from_nested(s, defs);
@@ -343,34 +344,67 @@ fn record_defs_from_nested(stmt: &TirStmt, defs: &mut DefMap) {
                 }
             }
         }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            record_defs_from_expr(scrutinee, defs);
+            for s in &then_block.stmts {
+                record_def_from_stmt(s, defs);
+                record_defs_from_nested(s, defs);
+            }
+            if let Some(eb) = else_block {
+                for s in &eb.stmts {
+                    record_def_from_stmt(s, defs);
+                    record_defs_from_nested(s, defs);
+                }
+            }
+        }
+        TirStmtKind::Return { value: Some(expr) }
+        | TirStmtKind::Break {
+            value: Some(expr), ..
+        } => {
+            record_defs_from_expr(expr, defs);
+        }
         _ => {}
     }
 }
 
 fn record_defs_from_expr(expr: &TirExpr, defs: &mut DefMap) {
     match &expr.kind {
-        TirExprKind::LabeledBlock { block, .. } => {
+        TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
             for s in &block.stmts {
                 record_def_from_stmt(s, defs);
                 record_defs_from_nested(s, defs);
             }
         }
-        TirExprKind::Binary { left, right, .. } => {
+        TirExprKind::Binary { left, right, .. }
+        | TirExprKind::Assign {
+            target: left,
+            value: right,
+        }
+        | TirExprKind::Index {
+            expr: left,
+            index: right,
+        } => {
             record_defs_from_expr(left, defs);
             record_defs_from_expr(right, defs);
         }
-        TirExprKind::Unary { expr: inner, .. } => {
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::GlobalVarSet { value: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner, .. } => {
             record_defs_from_expr(inner, defs);
         }
-        TirExprKind::Assign { target, value } => {
-            record_defs_from_expr(target, defs);
-            record_defs_from_expr(value, defs);
-        }
         TirExprKind::If {
+            condition,
             then_branch,
             else_branch,
-            ..
         } => {
+            record_defs_from_expr(condition, defs);
             for s in &then_branch.stmts {
                 record_def_from_stmt(s, defs);
                 record_defs_from_nested(s, defs);
@@ -381,6 +415,33 @@ fn record_defs_from_expr(expr: &TirExpr, defs: &mut DefMap) {
                     record_defs_from_nested(s, defs);
                 }
             }
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                record_defs_from_expr(&arg.expr, defs);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            record_defs_from_expr(receiver, defs);
+            for arg in args {
+                record_defs_from_expr(&arg.expr, defs);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for f in fields {
+                record_defs_from_expr(&f.value, defs);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } | TirExprKind::CmRawCall { args: elements, .. } => {
+            for e in elements {
+                record_defs_from_expr(e, defs);
+            }
+        }
+        TirExprKind::VariantConstruct {
+            payload: Some(inner),
+            ..
+        } => {
+            record_defs_from_expr(inner, defs);
         }
         _ => {}
     }
@@ -409,12 +470,17 @@ fn eliminate_in_stmt(stmt: &mut TirStmt, guard: &LoopGuard, defs: &DefMap) -> bo
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } => eliminate_in_expr(value, guard, defs),
         TirStmtKind::Expr(expr) => eliminate_in_expr(expr, guard, defs),
+        TirStmtKind::Return { value: Some(expr) }
+        | TirStmtKind::Break {
+            value: Some(expr), ..
+        } => eliminate_in_expr(expr, guard, defs),
         TirStmtKind::If {
+            condition,
             then_block,
             else_block,
-            ..
         } => {
-            let mut changed = eliminate_in_block(then_block, guard, defs);
+            let mut changed = eliminate_in_expr(condition, guard, defs);
+            changed |= eliminate_in_block(then_block, guard, defs);
             if let Some(eb) = else_block {
                 changed |= eliminate_in_block(eb, guard, defs);
             }
@@ -422,11 +488,13 @@ fn eliminate_in_stmt(stmt: &mut TirStmt, guard: &LoopGuard, defs: &DefMap) -> bo
         }
         TirStmtKind::LabeledBlock { block, .. } => eliminate_in_block(block, guard, defs),
         TirStmtKind::IfLet {
+            scrutinee,
             then_block,
             else_block,
             ..
         } => {
-            let mut changed = eliminate_in_block(then_block, guard, defs);
+            let mut changed = eliminate_in_expr(scrutinee, guard, defs);
+            changed |= eliminate_in_block(then_block, guard, defs);
             if let Some(eb) = else_block {
                 changed |= eliminate_in_block(eb, guard, defs);
             }
@@ -446,24 +514,34 @@ fn eliminate_in_block(block: &mut TirBlock, guard: &LoopGuard, defs: &DefMap) ->
 
 fn eliminate_in_expr(expr: &mut TirExpr, guard: &LoopGuard, defs: &DefMap) -> bool {
     match &mut expr.kind {
-        TirExprKind::LabeledBlock { block, .. } => eliminate_in_block(block, guard, defs),
-        TirExprKind::Binary { left, right, .. } => {
+        TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
+            eliminate_in_block(block, guard, defs)
+        }
+        TirExprKind::Binary { left, right, .. }
+        | TirExprKind::Assign {
+            target: left,
+            value: right,
+        }
+        | TirExprKind::Index {
+            expr: left,
+            index: right,
+        } => {
             let mut c = eliminate_in_expr(left, guard, defs);
             c |= eliminate_in_expr(right, guard, defs);
             c
         }
-        TirExprKind::Unary { expr: inner, .. } => eliminate_in_expr(inner, guard, defs),
-        TirExprKind::Assign { target, value } => {
-            let mut c = eliminate_in_expr(target, guard, defs);
-            c |= eliminate_in_expr(value, guard, defs);
-            c
-        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::GlobalVarSet { value: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner, .. } => eliminate_in_expr(inner, guard, defs),
         TirExprKind::If {
+            condition,
             then_branch,
             else_branch,
-            ..
         } => {
-            let mut c = eliminate_in_block(then_branch, guard, defs);
+            let mut c = eliminate_in_expr(condition, guard, defs);
+            c |= eliminate_in_block(then_branch, guard, defs);
             if let Some(eb) = else_branch {
                 c |= eliminate_in_block(eb, guard, defs);
             }
@@ -476,13 +554,31 @@ fn eliminate_in_expr(expr: &mut TirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
             }
             c
         }
-        TirExprKind::MethodCall { args, .. } => {
-            let mut c = false;
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            let mut c = eliminate_in_expr(receiver, guard, defs);
             for arg in args {
                 c |= eliminate_in_expr(&mut arg.expr, guard, defs);
             }
             c
         }
+        TirExprKind::StructLiteral { fields, .. } => {
+            let mut c = false;
+            for f in fields {
+                c |= eliminate_in_expr(&mut f.value, guard, defs);
+            }
+            c
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            let mut c = false;
+            for e in elements {
+                c |= eliminate_in_expr(e, guard, defs);
+            }
+            c
+        }
+        TirExprKind::VariantConstruct {
+            payload: Some(inner),
+            ..
+        } => eliminate_in_expr(inner, guard, defs),
         _ => false,
     }
 }
