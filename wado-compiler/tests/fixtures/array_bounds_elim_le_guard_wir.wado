@@ -1,0 +1,29 @@
+// Test: WIR-level verification of <= loop-guarded bounds check elimination
+// When `i <= limit` is the loop guard and `arr.used == limit + 1`,
+// the bounds check `i >= arr.used` is redundant and should be eliminated at O2.
+
+use { println, Stdout } from "core:cli";
+
+fn sum_le(limit: i32) -> i32 {
+    let arr = Array::<i32>::filled(limit + 1, 1);
+    let mut sum = 0;
+    for let mut i = 0; i <= limit; i += 1 {
+        sum += arr[i];
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    println(`{sum_le(5)}`);
+}
+
+__DATA__
+{
+    "stdout": "6\n",
+    "wir_expect:O2": [
+        "builtin::array_get<i32>("
+    ],
+    "wir_not_expect:O2": [
+        "index out of bounds"
+    ]
+}

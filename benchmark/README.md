@@ -112,7 +112,7 @@ mise run benchmark-json-catalog
 
 | Component  | Version      |
 | ---------- | ------------ |
-| Wado       | 2026-03-20   |
+| Wado       | 2026-03-21   |
 | wasmtime   | 42.0.1       |
 | Node.js    | v24.14.0     |
 | C compiler | gcc 13.3.0   |
@@ -144,9 +144,9 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 46        | 1.00x    |
-| JavaScript  | 70        | 1.52x    |
-| **Wado**    | 140       | 3.04x    |
+| C (gcc -O3) | 40        | 1.00x    |
+| JavaScript  | 60        | 1.50x    |
+| **Wado**    | 78        | 1.95x    |
 
 All implementations produce the same result: 664,579 primes.
 

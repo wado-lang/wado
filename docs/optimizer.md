@@ -155,8 +155,8 @@ After parameter SROA, substitutes `StructGet(LocalGet(x), field)` with the inner
 ### Phase 3: Data Flow
 
 - **Collapse array append sequences** — merges consecutive `append` calls into `array.new_fixed`
-- **Forward struct field constants** — tracks known field values through `StructGet` for bounds check elimination. Uses stores-aware alias analysis: locals passed to functions without `stores` declarations are not marked as aliased, enabling field forwarding even when references are passed to callees
-- **Eliminate loop-guarded bounds checks** — removes redundant `index >= bound` checks when the loop guard `i < bound` dominates them
+- **Forward struct field constants** — tracks known field values (constants and `LocalGet` references) through `StructGet` for bounds check elimination. Also resolves block-result `StructNew` patterns for single-exit blocks. Uses stores-aware alias analysis: locals passed to functions without `stores` declarations are not marked as aliased, enabling field forwarding even when references are passed to callees
+- **Eliminate loop-guarded bounds checks** — removes redundant `index >= bound` checks when the loop guard dominates them. Supports both `i < bound` (strict) and `i <= limit` (inclusive) guards. For inclusive guards, resolves definition chains to verify that the bounds check bound equals `limit + 1` (e.g., `arr.used == limit + 1` when `arr = Array::filled(limit + 1, ...)`)
 
 ### Phase 4: Library-Specific Rewrites
 
