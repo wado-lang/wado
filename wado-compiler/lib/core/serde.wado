@@ -121,6 +121,13 @@ pub trait Serializer {
 
 pub trait Serialize {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
+
+    fn __serialize_seq_element<Q: SerializeSeq>(&self, seq: &mut Q) {
+        let r = seq.element::<Self>(self);
+        if let Err(e) = r {
+            panic(e.message);
+        }
+    }
 }
 
 
@@ -190,6 +197,20 @@ pub trait Deserializer {
 
 pub trait Deserialize {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>;
+
+    fn __seq_next<A: DeserializeSeq>(seq: &mut A) -> Self {
+        let r = seq.next_element::<Self>();
+        if let Ok(opt) = r {
+            if let Some(v) = opt {
+                return v;
+            }
+            panic("expected tuple element");
+        }
+        if let Err(e) = r {
+            panic(e.message);
+        }
+        unreachable();
+    }
 }
 
 
@@ -315,9 +336,25 @@ impl<T: Serialize> Serialize for Array<T> {
 }
 
 
-// Variadic tuple Serialize — blocked by codegen issue with method-level type params
-// in variadic trait impls. Keeping compiler synthesis until this is resolved.
-// impl<..T: Serialize> Serialize for [..T] { ... }
+// Variadic tuple Serialize/Deserialize impls.
+// The impls are ready but require further compiler fixes:
+// - Serialize: __serialize_seq_element default method has codegen issues with some types
+// - Deserialize: static method instantiation doesn't include pack elements in type_args
+// Until resolved, tuple serde remains compiler-synthesized (serde_synth.rs).
+//
+// impl<..T: Serialize> Serialize for [..T] {
+//     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+//         let mut len = 0;
+//         for let _v of *self { len += 1; }
+//         let seq_r = s.begin_seq(len);
+//         if let Ok(mut seq) = seq_r {
+//             for let v of *self { v.__serialize_seq_element(&mut seq); }
+//             return seq.end();
+//         }
+//         if let Err(e) = seq_r { return Result::<(), SerializeError>::Err(e); }
+//         unreachable();
+//     }
+// }
 
 impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
@@ -556,7 +593,10 @@ impl<T: Deserialize> Deserialize for Array<T> {
     }
 }
 
-// Variadic tuple Deserialize: blocked by same limitation as Serialize above.
+// Tuple Deserialize is still compiler-synthesized. The variadic impl below
+// requires fixes to how the monomorphizer collects type args for static method
+// calls (deserialize has no receiver, so pack elements aren't included in
+// the InstantiationKey's type_args). This will be addressed separately.
 //
 // impl<..T: Deserialize> Deserialize for [..T] {
 //     fn deserialize<D: Deserializer>(d: &mut D) -> Result<[..T], DeserializeError> {
