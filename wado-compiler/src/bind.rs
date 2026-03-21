@@ -702,6 +702,10 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.bind_expr(&qm.expr)?;
             }
 
+            Expr::Spread(inner, _) => {
+                self.bind_expr(inner)?;
+            }
+
             // Literals don't reference variables
             Expr::Literal(_) => {}
         }

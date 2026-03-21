@@ -2941,7 +2941,8 @@ impl Parser {
 
     /// Parse tuple literal: `[expr, expr, ...]` or `[]`
     fn parse_tuple_literal(&mut self, start_span: Span) -> ParseResult<Expr> {
-        let elements = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_expr)?;
+        let elements =
+            self.parse_comma_separated(&TokenKind::RBracket, Self::parse_tuple_element)?;
 
         let end_token = self.expect(&TokenKind::RBracket)?;
         let end_span = end_token.span;
@@ -2950,6 +2951,18 @@ impl Parser {
             elements,
             span: start_span.merge(&end_span),
         })))
+    }
+
+    /// Parse a tuple element: either a spread `..expr` or a regular expression.
+    fn parse_tuple_element(&mut self) -> ParseResult<Expr> {
+        if self.check_dot_dot() {
+            let span = self.peek().span;
+            self.advance();
+            self.advance();
+            let expr = self.parse_expr()?;
+            return Ok(Expr::Spread(Box::new(expr), span));
+        }
+        self.parse_expr()
     }
 
     /// Parse argument list. Returns (args, `has_trailing_comma`).

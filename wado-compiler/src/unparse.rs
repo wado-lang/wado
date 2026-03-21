@@ -1578,6 +1578,10 @@ impl<'a> Unparser<'a> {
                 self.unparse_expr(&qm.expr);
                 self.output.push('?');
             }
+            Expr::Spread(inner, _) => {
+                self.output.push_str("..");
+                self.unparse_expr(inner);
+            }
         }
     }
 
@@ -2958,6 +2962,10 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
         Expr::TryOp(qm) => {
             unparse_expr_into(&qm.expr, output, false);
             output.push('?');
+        }
+        Expr::Spread(inner, _) => {
+            output.push_str("..");
+            unparse_expr_into(inner, output, false);
         }
     }
 }

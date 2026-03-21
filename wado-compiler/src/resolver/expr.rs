@@ -101,6 +101,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::Matches(_) => {
                 panic!("Matches expression should have been desugared to if-let before resolver")
             }
+            Expr::Spread(..) => {
+                panic!("Spread expression should only appear inside TupleLiteral handling")
+            }
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
         }
     }
@@ -2316,12 +2319,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
         tuple_lit: &ast::TupleLiteralExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // Resolve each element expression
-        let elements: Vec<TirExpr> = tuple_lit
-            .elements
-            .iter()
-            .map(|elem| self.resolve_expr(elem, ctx, None))
-            .collect();
+        // Resolve each element expression, expanding spread elements
+        let mut elements: Vec<TirExpr> = Vec::new();
+        for elem in &tuple_lit.elements {
+            if let Expr::Spread(inner, _span) = elem {
+                // Resolve the spread expression
+                let spread_expr = self.resolve_expr(inner, ctx, None);
+                let spread_type = self.type_table.borrow().get(spread_expr.type_id).clone();
+                if let ResolvedType::Tuple(inner_elems) = spread_type {
+                    // Splice: extract each element using field access
+                    for (i, &elem_type) in inner_elems.iter().enumerate() {
+                        elements.push(TirExpr::new(
+                            TirExprKind::FieldAccess {
+                                expr: Box::new(spread_expr.clone()),
+                                field_index: i as u32,
+                                field_name: i.to_string(),
+                            },
+                            elem_type,
+                            elem.span(),
+                        ));
+                    }
+                } else {
+                    let _ = self.logger.error(crate::resolver::types::TypeError::InvalidLiteral {
+                        message: "spread operator `..` can only be used with tuple types".to_string(),
+                        span: elem.span(),
+                    });
+                    elements.push(spread_expr);
+                }
+            } else {
+                elements.push(self.resolve_expr(elem, ctx, None));
+            }
+        }
 
         // Collect element types for the tuple type
         let elem_types: Vec<TypeId> = elements.iter().map(|e| e.type_id).collect();
