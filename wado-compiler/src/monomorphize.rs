@@ -1249,17 +1249,20 @@ impl Monomorphizer {
                 let mut new_elems: Vec<TypeId> = Vec::new();
                 for &e in &elems {
                     match type_table.get(e).clone() {
-                        ResolvedType::TypePack { index, .. } => {
+                        ResolvedType::TypePack { index, name } => {
                             // Splice: the substituted type for a pack is a tuple; expand its elements
-                            if let Some(&pack_type) = substitution.get(&index) {
-                                match type_table.get(pack_type).clone() {
-                                    ResolvedType::Tuple(pack_elems) => {
-                                        new_elems.extend_from_slice(&pack_elems);
-                                    }
-                                    _ => {
-                                        // Single type (not a tuple) — treat as one-element pack
-                                        new_elems.push(pack_type);
-                                    }
+                            let &pack_type = substitution.get(&index).unwrap_or_else(|| {
+                                panic!(
+                                    "TypePack `..{name}` (index {index}) not found in substitution map"
+                                )
+                            });
+                            match type_table.get(pack_type).clone() {
+                                ResolvedType::Tuple(pack_elems) => {
+                                    new_elems.extend_from_slice(&pack_elems);
+                                }
+                                _ => {
+                                    // Single type (not a tuple) — treat as one-element pack
+                                    new_elems.push(pack_type);
                                 }
                             }
                         }
