@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774080564221,
+  "lastUpdate": 1774082035033,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5444,6 +5444,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/70c7cab278e74e4a311279722afdc38d90e513e6"
         },
         "date": 1774080564000,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1864,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9120,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22185,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fa600d8971e55d6d374f53b0944d138cc50fe727",
+          "message": "Merge pull request #639 from wado-lang/claude/wasi-filesystem-tests-pTS1k\n\nAdd WASI filesystem tests and optimize enum/flags loading",
+          "timestamp": "2026-03-21T17:31:36+09:00",
+          "tree_id": "10bae5ee1e9aa3452b67f46d7a516f34e9d6c591",
+          "url": "https://github.com/wado-lang/wado/commit/fa600d8971e55d6d374f53b0944d138cc50fe727"
+        },
+        "date": 1774082034808,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
