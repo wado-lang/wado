@@ -249,9 +249,9 @@ type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
 type "functype/handle" = fn(i32);
 
-type "functype/__cm_adapter__Request_get_path_with_query" = fn(i32) -> ref null String;
+type "functype/__cm_binding__Request_get_path_with_query" = fn(i32) -> ref null String;
 
-type "functype/__cm_adapter__Fields_new" = fn() -> i32;
+type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_export__handle" = fn(i32);
 
@@ -305,7 +305,7 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
-type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
@@ -479,7 +479,7 @@ fn handle(request) {
     let __local_167: ref String;
     let __local_169: ref Formatter;
     let __local_172: ref String;
-    path = __cm_adapter__Request_get_path_with_query(request);
+    path = __cm_binding__Request_get_path_with_query(request);
     if ref.is_null(path) == 0 {
         p = ref.as_non_null(path);
         __v0 = p;
@@ -530,10 +530,10 @@ condition: p == \"/hello\"
     __pair_temp_1 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
     trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    headers = __cm_adapter__Fields_new();
+    headers = __cm_binding__Fields_new();
     let __sroa___pattern_temp_2_0: i32;
     let __sroa___pattern_temp_2_1: i32;
-    multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
+    multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_binding__Response_new(headers, 0, 0, trailers_future);
     response = __sroa___pattern_temp_2_0;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -859,7 +859,7 @@ condition: p == \"/hello\"
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 
-fn __cm_adapter__Request_get_path_with_query(self) {
+fn __cm_binding__Request_get_path_with_query(self) {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref null String;
@@ -883,11 +883,11 @@ fn __cm_adapter__Request_get_path_with_query(self) {
     return __option_result;
 }
 
-fn __cm_adapter__Fields_new() {
+fn __cm_binding__Fields_new() {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers) {
+fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
     let __outptr: i32;
     let __lifted_result_5: i32;
     let __lifted_result_6: i32;

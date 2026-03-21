@@ -231,7 +231,7 @@ type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
 type "functype/handle" = fn(i32);
 
-type "functype/__cm_adapter__Fields_new" = fn() -> i32;
+type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_export__handle" = fn(i32);
 
@@ -257,7 +257,7 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/future-write" = fn(i32, i32) -> i32;
 
-type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -425,10 +425,10 @@ fn handle(request) {
     __pair_temp_2 = "wasi/stream-new"();
     body_rx = builtin::i32_wrap_i64(__pair_temp_2);
     body_tx = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
-    headers = __cm_adapter__Fields_new();
+    headers = __cm_binding__Fields_new();
     let __sroa___pattern_temp_2_0: i32;
     let __sroa___pattern_temp_2_1: i32;
-    multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_adapter__Response_new(headers, 1, body_rx, trailers_future);
+    multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_binding__Response_new(headers, 1, body_rx, trailers_future);
     response = __sroa___pattern_temp_2_0;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -760,11 +760,11 @@ fn handle(request) {
     drop("mem/realloc"(__fw_write_ptr_3, 40, 8, 0));
 }
 
-fn __cm_adapter__Fields_new() {
+fn __cm_binding__Fields_new() {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers) {
+fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
     let __outptr: i32;
     let __lifted_result_5: i32;
     let __lifted_result_6: i32;

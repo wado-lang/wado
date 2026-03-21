@@ -259,13 +259,13 @@ type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
 type "functype/handle" = fn(i32);
 
-type "functype/__cm_adapter__Request_get_headers" = fn(i32) -> i32;
+type "functype/__cm_binding__Request_get_headers" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__Fields_has" = fn(i32, ref String) -> bool;
+type "functype/__cm_binding__Fields_has" = fn(i32, ref String) -> bool;
 
-type "functype/__cm_adapter__Fields_get" = fn(i32, ref String) -> ref Array<Array<u8>>;
+type "functype/__cm_binding__Fields_get" = fn(i32, ref String) -> ref Array<Array<u8>>;
 
-type "functype/__cm_adapter__Fields_new" = fn() -> i32;
+type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_export__handle" = fn(i32);
 
@@ -323,7 +323,7 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
-type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -505,8 +505,8 @@ fn handle(request) {
     let __local_184: ref Formatter;
     let __local_187: ref String;
     let __local_189: ref Formatter;
-    req_headers = __cm_adapter__Request_get_headers(request);
-    __v0_2 = __cm_adapter__Fields_has(req_headers, String { repr: array.new_data<u8>("x-custom"), used: 8 });
+    req_headers = __cm_binding__Request_get_headers(request);
+    __v0_2 = __cm_binding__Fields_has(req_headers, String { repr: array.new_data<u8>("x-custom"), used: 8 });
     if __v0_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_12 = String { repr: builtin::array_new<u8>(185), used: 0 };
@@ -548,7 +548,7 @@ condition: req_headers.has(\"x-custom\" as FieldName)
         });
         unreachable;
     };
-    values = __cm_adapter__Fields_get(req_headers, String { repr: array.new_data<u8>("x-custom"), used: 8 });
+    values = __cm_binding__Fields_get(req_headers, String { repr: array.new_data<u8>("x-custom"), used: 8 });
     __v0_5 = values.used;
     __cond = __v0_5 == 1;
     if __cond == 0 {
@@ -592,10 +592,10 @@ condition: values.len() == 1
     __pair_temp_1 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
     trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    headers = __cm_adapter__Fields_new();
+    headers = __cm_binding__Fields_new();
     let __sroa___pattern_temp_1_0: i32;
     let __sroa___pattern_temp_1_1: i32;
-    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
+    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_binding__Response_new(headers, 0, 0, trailers_future);
     response = __sroa___pattern_temp_1_0;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -921,17 +921,17 @@ condition: values.len() == 1
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 
-fn __cm_adapter__Request_get_headers(self) {
+fn __cm_binding__Request_get_headers(self) {
     return "wasi/wasi:http/Request::get_headers"(self);
 }
 
-fn __cm_adapter__Fields_has(self, name) {
+fn __cm_binding__Fields_has(self, name) {
     let __name_packed: i64;
     __name_packed = "core:internal/cm_lower_string"(name);
     return "wasi/wasi:http/Fields::has"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64));
 }
 
-fn __cm_adapter__Fields_get(self, name) {
+fn __cm_binding__Fields_get(self, name) {
     let __name_packed: i64;
     let __outptr: i32;
     let __base_4: i32;
@@ -987,11 +987,11 @@ fn __cm_adapter__Fields_get(self, name) {
     return __result_6;
 }
 
-fn __cm_adapter__Fields_new() {
+fn __cm_binding__Fields_new() {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers) {
+fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
     let __outptr: i32;
     let __lifted_result_5: i32;
     let __lifted_result_6: i32;
