@@ -7,7 +7,7 @@ This document describes the Wado compiler architecture and implementation status
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → Synthesis → Monomorphize → Post-Mono Synthesis → Lower → Optimize → WIR Build → WIR Optimize → Codegen
+Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Synthesis → Effect Check → Stores Check → Erase Newtypes/Flags → Monomorphize → Lower → Optimize → WIR Build → WIR Optimize → Codegen
 ```
 
 ### Compilation Pipeline
@@ -20,10 +20,11 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Load         | AST           | All modules     | Load dependencies; each module: parse → bind → desugar    |
 | Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                      |
 | Resolve      | AST + Symbols | Project         | Type resolution, produce Project                          |
+| Synthesis    | Project       | Project         | Enum/serde/CM binding/template/inspect synthesis          |
 | Effect Check | Project       | Project         | Validate function effect requirements                     |
-| Synthesis    | Project       | Project         | Enum traits, serde, CM binding synthesis                  |
+| Stores Check | Project       | Project         | Validate reference storage declarations                   |
+| Erase Types  | Project       | Project         | Erase newtypes and flags to base types                    |
 | Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
-| Post-Mono    | Project       | Project         | Template expansion, inspect debug output synthesis        |
 | Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
 | Optimize     | Project       | Project         | Inlining, copy-prop, LICM, DCE, post-opt rewrite          |
 | WIR Build    | Project       | WirModule       | Planning + TIR → WIR (Wasm IR) translation                |
@@ -56,8 +57,8 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | SynthCommon     | `synthesis/common.rs`                | Shared TIR builders for synthesis phases                    |
 | SynthSerde      | `synthesis/serde_synth.rs`           | Synthesized Serialize/Deserialize for structs               |
 | SynthTraits     | `synthesis/traits.rs`                | Auto-derived Eq/Ord/Display/Inspect for types               |
-| SynthTemplate   | `synthesis/template.rs`              | Template string expansion (pre-monomorphize)                |
-| SynthInspect    | `synthesis/inspect.rs`               | Inspect debug output synthesis (type→TIR)                   |
+| SynthTemplate   | `synthesis/template.rs`              | Template string expansion                                   |
+| SynthFrom       | `synthesis/from_synth.rs`            | From trait synthesis                                        |
 | SynthCmBinding  | `synthesis/cm_binding.rs`            | CM boundary adapter synthesis (TIR functions)               |
 | CmAbi           | `cm_abi.rs`                          | Canonical ABI layout computation                            |
 | Monomorphize    | `monomorphize.rs`                    | Generic type/function instantiation (Project→Project)       |
@@ -70,16 +71,21 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | LowerString     | `lower/string.rs`                    | String/bytes literal collection for data section            |
 | Project         | `project.rs`                         | Project: compilation context passed through pipeline        |
 | Optimize        | `optimize.rs`                        | Optimization coordinator (`optimize/`)                      |
-| ConstFold       | `optimize/const_fold.rs`             | Constant folding for integer/float arithmetic               |
-| ConstProp       | `optimize/const_prop.rs`             | Constant propagation for immutable globals                  |
+| ConstFolding    | `optimize/const_folding.rs`          | Constant folding for integer/float arithmetic               |
+| ConstProp       | `optimize/const_propagation.rs`      | Constant propagation for immutable globals                  |
 | ConstGlobal     | `optimize/const_global_promotion.rs` | Promote runtime globals to compile-time constants           |
+| ConstBranch     | `optimize/const_branch_prune.rs`     | Dead branch elimination for known-false conditions          |
 | DCE             | `optimize/dce.rs`                    | Dead code elimination via reachability analysis             |
 | Inline          | `optimize/inline.rs`                 | Function inlining for small, pure functions                 |
 | RefElim         | `optimize/ref_elim.rs`               | Reference elimination after inlining                        |
 | CopyProp        | `optimize/copy_prop.rs`              | Copy propagation for trivial bindings                       |
 | SROA            | `optimize/sroa.rs`                   | Scalar replacement of aggregates (struct/tuple elim)        |
 | LICM            | `optimize/licm.rs`                   | Loop-invariant code motion                                  |
-| Rewrite         | `optimize/rewrite.rs`                | Select lowering, move insertion, block simplification       |
+| SelectLower     | `optimize/select_lowering.rs`        | if/else → Wasm `select` instruction                         |
+| FieldScalarize  | `optimize/field_scalarize.rs`        | Hot field scalarization from GC structs                     |
+| BlockFusion     | `optimize/labeled_block_fusion.rs`   | Labeled block fusion                                        |
+| StoreLoadFwd    | `optimize/store_load_forward.rs`     | Store-load forwarding for literal values                    |
+| TmplHoist       | `optimize/tmpl_hoist.rs`             | Template buffer hoisting out of loops                       |
 | WasmPlan        | `wasm_plan.rs`                       | `ComponentPlan` types and `build_component_plan`            |
 | Stdlib          | `stdlib.rs`                          | Embedded core library sources                               |
 | CompilerHost    | `compiler_host.rs`                   | I/O abstraction for the compiler                            |
@@ -172,22 +178,6 @@ The `monomorphize.rs` module is a dedicated compilation phase that instantiates 
 **Cross-Module Support:**
 
 The monomorphizer supports cross-module generic function instantiation. Generic functions defined in one module (e.g., `Array` methods from prelude) can be instantiated when used in another module. This is achieved by collecting all generic functions from all modules before processing.
-
-**Supported Features:**
-
-| Feature                        | Example                                  | Status |
-| ------------------------------ | ---------------------------------------- | ------ |
-| Single type parameter          | `Box<i32>`                               | ✅     |
-| Multiple type parameters       | `Pair<i32, String>`                      | ✅     |
-| Nested generics                | `Box<Box<i32>>`                          | ✅     |
-| Generics in Array              | `Array<Pair<i32, String>>`               | ✅     |
-| Struct type parameters         | `Box<Point>`                             | ✅     |
-| Impl on specialization         | `impl Box<i32> { fn get() }`             | ✅     |
-| Generic functions              | `fn identity<T>(x: T) -> T`              | ✅     |
-| Generic methods                | `impl T { fn foo<U>(&self) }`            | ✅     |
-| Generic trait methods          | `trait T { fn f<D>(&self, d: D) }`       | ✅     |
-| Static trait methods with args | `i32::deserialize::<MockDeserializer>()` | ✅     |
-| Variadic type packs            | `fn f<..T>(x: [..T]) -> [..T]`           | ✅     |
 
 **Name Mangling:**
 
@@ -421,44 +411,7 @@ Builtins with `#[canonical("namespace", "name")]` are imported as CM canonical b
 
 **Instruction Builtins:**
 
-| Function              | Wasm Instruction      | Category    |
-| --------------------- | --------------------- | ----------- |
-| `i32_and`             | `i32.and`             | i32 ops     |
-| `i32_eqz`             | `i32.eqz`             | i32 ops     |
-| `i32_clz`             | `i32.clz`             | i32 ops     |
-| `i64_clz`             | `i64.clz`             | i64 ops     |
-| `array_len`           | `array.len`           | Array       |
-| `array_get_u8`        | `array.get_u $type`   | Array       |
-| `array_set_u8`        | `array.set $type`     | Array       |
-| `memory_store8`       | `i32.store8`          | Memory      |
-| `memory_load8_u`      | `i32.load8_u`         | Memory      |
-| `unreachable`         | `unreachable`         | Control     |
-| `f32_abs`             | `f32.abs`             | Float math  |
-| `f64_abs`             | `f64.abs`             | Float math  |
-| `f32_ceil`            | `f32.ceil`            | Float math  |
-| `f64_ceil`            | `f64.ceil`            | Float math  |
-| `f32_floor`           | `f32.floor`           | Float math  |
-| `f64_floor`           | `f64.floor`           | Float math  |
-| `f32_trunc`           | `f32.trunc`           | Float math  |
-| `f64_trunc`           | `f64.trunc`           | Float math  |
-| `f32_nearest`         | `f32.nearest`         | Float math  |
-| `f64_nearest`         | `f64.nearest`         | Float math  |
-| `f32_sqrt`            | `f32.sqrt`            | Float math  |
-| `f64_sqrt`            | `f64.sqrt`            | Float math  |
-| `f32_min`             | `f32.min`             | Float math  |
-| `f64_min`             | `f64.min`             | Float math  |
-| `f32_max`             | `f32.max`             | Float math  |
-| `f64_max`             | `f64.max`             | Float math  |
-| `f32_copysign`        | `f32.copysign`        | Float math  |
-| `f64_copysign`        | `f64.copysign`        | Float math  |
-| `i64_add128`          | `i64.add128`          | Wide arith  |
-| `i64_sub128`          | `i64.sub128`          | Wide arith  |
-| `i64_mul_wide_u`      | `i64.mul_wide_u`      | Wide arith  |
-| `i64_mul_wide_s`      | `i64.mul_wide_s`      | Wide arith  |
-| `i64_reinterpret_f64` | `i64.reinterpret_f64` | Reinterpret |
-| `f64_reinterpret_i64` | `f64.reinterpret_i64` | Reinterpret |
-| `i32_reinterpret_f32` | `i32.reinterpret_f32` | Reinterpret |
-| `f32_reinterpret_i32` | `f32.reinterpret_i32` | Reinterpret |
+Functions without the `#[canonical]` attribute compile directly to Wasm instructions (e.g., `i32_and` → `i32.and`, `f64_sqrt` → `f64.sqrt`). See `lib/core/builtin.wado` for the full list. Categories include: i32/i64 ops, array ops, linear memory ops, float math, wide arithmetic (i128), reinterpret casts, and control flow.
 
 **Registry Usage:**
 
@@ -570,19 +523,7 @@ The module loader loads all modules and applies the frontend pipeline to each:
 3. **Bind**: Validate local scopes, detect use-before-define and duplicate definitions
 4. **Desugar**: Transform syntactic sugar (compound assignment, comparison chains, loops)
 
-**Namespace Validation:**
-
-```rust
-pub enum ModuleSource {
-    Core { name: String },      // core:prelude, core:cli
-    Wasi { interface: String }, // wasi:cli, wasi:io
-    Local { path: String },     // ./module.wado, ../lib.wado
-    Remote { url: String },     // https://example.com/lib.wado
-    EntryPoint,                 // The main entry module
-}
-```
-
-**Resolution Rules:**
+**Resolution Rules** (based on `ModuleSource`, see [ModuleSource](#modulesource)):
 
 1. `core:*` → `ModuleSource::Core` → embedded stdlib
 2. `wasi:*` → `ModuleSource::Wasi` → embedded stdlib
@@ -1053,84 +994,11 @@ See [WEP: 128-bit Integer Types](./wep-2026-01-24-i128-u128-types.md).
 
 ### Template String Interpolation
 
-Wado supports template strings with interpolation using backticks and `{expr}` syntax, similar to JavaScript but with Python-like format specifiers.
+Template strings use backticks with `{expr}` syntax and Python-like format specifiers (e.g., `{pi:.2f}`). The compilation pipeline:
 
-**Syntax:**
-
-```wado
-let name = "Alice";
-let age = 30;
-
-// Basic interpolation
-let greeting = `Hello, {name}!`;
-
-// Complex expressions
-let message = `Sum: {a + b * c}`;
-
-// Format specifiers (Python-like)
-let pi = 3.14159;
-let formatted = `Pi: {pi:.2f}`;        // "Pi: 3.14"
-let padded = `Value: {x:0.3f}`;        // Zero padding
-
-// Method calls
-let text = `Length: {name.len()}`;
-
-// Nested templates
-let outer = `Outer {`Inner {x}`}`;
-```
-
-**Lexer (`lexer.rs`):**
-
-- Backtick string tokenization with `TemplateStringLit` token
-- Brace depth tracking to handle nested `{}` in interpolations
-- String literal tracking inside interpolations
-- Escape sequence support (`\n`, `\t`, `\uHHHH`, `\{`, `\}`, etc.)
-- `\{` and `\}` produce literal braces without triggering interpolation (emitted as `{{`/`}}` for the parser's doubling rule)
-- Nested template string support
-
-**Parser (`parser.rs`):**
-
-- Template string AST nodes (`TemplateStringExpr`, `TemplatePart`, `FormatSpec`)
-- Interpolation expression parsing (any valid expression)
-- Format specifier extraction after `:`
-- **`:` vs `::` distinction**: Single-character lookahead to differentiate:
-  - `:` alone → format specifier start
-  - `::` → scope resolution (part of expression)
-- Recursive parsing for nested template strings
-- Comprehensive error handling
-
-**AST Structure:**
-
-```rust
-pub struct TemplateStringExpr {
-    pub parts: Vec<TemplatePart>,
-    pub span: Span,
-}
-
-pub enum TemplatePart {
-    String(String),                    // Literal string
-    Interpolation {
-        expr: Box<Expr>,               // Expression to interpolate
-        format: Option<FormatSpec>,    // Optional format spec
-    },
-}
-
-pub struct FormatSpec {
-    pub spec: String,  // e.g., ".2f", "0.3f", "10"
-}
-```
-
-**Template Expansion (pre-monomorphize, `synthesis/template.rs`):**
-
-Template strings are expanded before monomorphization. The resolver emits `TirExprKind::TemplateString` nodes without expansion; the synthesis phase replaces each with a `__tmpl` labeled block containing:
-
-- `String::with_capacity(N)` to allocate a buffer
-- `String::append(literal)` for literal parts
-- `Formatter` construction with format spec fields
-- Trait method calls to `Display::fmt` or `Inspect::inspect` based on the concrete type
-- Direct `Formatter::write_str` for optimized paths (e.g., String append, closure source text)
-
-Template expansion emits generic trait method calls that the monomorphizer resolves to concrete implementations.
+1. **Lexer**: Tokenizes backtick strings with brace depth tracking, nested template support, and escape sequences (`\{`, `\}`)
+2. **Parser**: Builds `TemplateStringExpr` with `TemplatePart::String` and `TemplatePart::Interpolation` nodes. Distinguishes `:` (format spec) from `::` (scope resolution) via lookahead
+3. **Synthesis** (`synthesis/template.rs`): Expands each template string into a `__tmpl` labeled block that allocates a `String` buffer, appends literal parts, and calls `Display::fmt` or `Inspect::inspect` for interpolated expressions. Emits generic trait calls that the monomorphizer resolves to concrete implementations
 
 ### Serde Synthesis (`synthesis/serde_synth.rs`)
 
@@ -1222,158 +1090,9 @@ The compiler:
 
 This ensures that `get_value()` is called only once, not twice (once for caching and once for condition evaluation).
 
-### Reactive Signals
-
-Wado's `reactive` keyword compiles to efficient Wasm code with minimal runtime overhead.
-
-**Reactive Value Categories:**
-
-```wado
-let reactive mut count = 0;           // Source: mutable reactive state
-let reactive doubled = || count * 2;  // Derived: computed from sources
-```
-
-**Sources** are mutable reactive values that can be directly assigned.
-**Derived** values are computed from other reactive values (sources or other derived).
-
-**Compilation Strategy:**
-
-The compiler uses static analysis to build a dependency graph at compile-time:
-
-1. **Dependency Analysis**: Track which derived values read which sources
-2. **Topological Sort**: Order updates so dependencies are computed before dependents
-3. **Inline Update Code**: At each mutation site, generate code to update all affected derived values
-
-**Example transformation:**
-
-```wado
-// Source code
-let reactive mut count = 0;
-let reactive doubled = || count * 2;
-let reactive quadrupled = || doubled * 2;
-
-count = 5;  // Mutation site
-```
-
-```wat
-;; Conceptual WAT output (simplified)
-;; Mutation site: count = 5
-(local.set $count (i32.const 5))
-;; Update doubled (depends on count)
-(local.set $doubled (i32.mul (local.get $count) (i32.const 2)))
-;; Update quadrupled (depends on doubled)
-(local.set $quadrupled (i32.mul (local.get $doubled) (i32.const 2)))
-```
-
-**Effect Blocks (TBD):**
-
-> **Note**: The syntax for reactive side effects is under discussion. See spec.md for alternatives.
-
-Effect blocks subscribe to reactive values read within them:
-
-```wado
-effect {
-    println(`Count is {count}`);
-}
-```
-
-The compiler:
-
-1. Analyzes which reactive values are read inside the effect block
-2. Generates a closure for the effect body
-3. Inserts calls to this closure after any mutation of its dependencies
-
-**Execution Context:**
-
-The compiler generates different code depending on the target hosted world:
-
-CLI hosted world (`wasi:cli/command` — synchronous):
-
-- Updates propagate immediately at each mutation site
-- Effect closures are called inline, synchronously
-- No event loop or scheduler needed
-
-```wat
-;; CLI: Synchronous update at mutation site
-(local.set $count (i32.const 5))
-(call $effect_0)  ;; Effect runs immediately
-;; Next statement executes after effect completes
-```
-
-Event-looped hosted world (Browser/GUI — future):
-
-- Updates may be batched within an event handler
-- Compiler generates a scheduler that collects mutations and flushes at end of event
-- Effect closures are registered with the reactive runtime
-
-```wat
-;; Event-loop: Batched updates
-(call $reactive_set (local.get $count_ref) (i32.const 5))  ;; Queues update
-(call $reactive_set (local.get $count_ref) (i32.const 6))  ;; Queues another
-;; At end of event handler:
-(call $reactive_flush)  ;; Runs all effects once with final values
-```
-
-**Wasm Representation:**
-
-| Wado Construct            | Wasm Representation                             |
-| ------------------------- | ----------------------------------------------- |
-| `reactive mut` source     | Local variable + generated update dispatch      |
-| `reactive` derived        | Local variable, recomputed on dependency change |
-| `effect { ... }`          | Closure called after dependency mutations       |
-| `&reactive T` (reference) | Wasm GC struct ref with getter/setter           |
-
-**Dynamic Dependencies (Future):**
-
-For cases where dependencies aren't statically known:
-
-```wado
-let reactive computed = || {
-    if condition {
-        return a + b;
-    } else {
-        return c + d;
-    }
-};
-```
-
-The compiler may generate runtime tracking when static analysis is insufficient. This uses a lightweight subscription mechanism stored in Wasm GC structs.
-
-**Reactive References:**
-
-Passing reactive values by reference:
-
-```wado
-fn increment(counter: &reactive mut i32) {
-    *counter += 1;  // Triggers updates in caller's scope
-}
-
-let reactive mut count = 0;
-let reactive doubled = || count * 2;
-increment(&reactive count);  // doubled gets updated
-```
-
-This requires the reactive reference to carry update callback information, implemented as a Wasm GC struct containing the value and a reference to the update dispatcher.
-
 ### Value Semantics
 
-Wado uses value semantics for composite types: assignment creates a copy rather than sharing references. This matches the behavior users expect from languages like Swift and differs from reference semantics in languages like JavaScript.
-
-**Supported Types:**
-
-| Type        | Copy Strategy                                     |
-| ----------- | ------------------------------------------------- |
-| Struct      | Field-by-field copy via `struct.get`/`struct.new` |
-| Array<T>    | Element-by-element copy with loop                 |
-| Tuple       | Same as struct (implemented as Wasm GC struct)    |
-| String      | Element copy with `ArrayGetU` (packed i8)         |
-| Option<T>   | Conditional copy if non-null                      |
-| Result<T,E> | Not yet implemented (codegen blocked)             |
-| Variant     | Copy tag + all fields                             |
-
-**Reference Types:**
-
-Reference types (`&T`, `&mut T`) do **not** have value semantics - they share the underlying value. This is intentional: references provide a way to share data when needed.
+Wado uses value semantics for composite types: assignment creates a copy. Structs and tuples are copied field-by-field via `struct.get`/`struct.new`. Arrays and strings are copied element-by-element. Option and variant types conditionally copy their payloads. Reference types (`&T`, `&mut T`) do **not** have value semantics — they share the underlying value.
 
 ### Auto-Dereference for Method Calls
 
@@ -1390,68 +1109,7 @@ let p_ref2 = &p_ref;
 let sum2 = p_ref2.sum();  // Double auto-deref: (**p_ref2).sum()
 ```
 
-The resolver (`resolver.rs`) handles auto-deref in `resolve_method_call()`:
-
-1. Check if receiver type is `Ref(T)` or `MutRef(T)`
-2. If so, insert a `TirUnaryOp::Deref` expression
-3. Repeat until receiver is not a reference type
-4. Proceed with normal method resolution on the dereferenced type
-
-**Supported Cases:**
-
-| Receiver Type | Auto-Deref | Example                                      |
-| ------------- | ---------- | -------------------------------------------- |
-| `&T`          | ✅         | `(&point).sum()` → `(*&point).sum()`         |
-| `&mut T`      | ✅         | `(&mut point).sum()` → `(*&mut point).sum()` |
-| `&&T`         | ✅         | Double deref applied                         |
-| `&&&T`        | ✅         | Triple deref applied                         |
-| `&Box<T>`     | ✅         | Generic struct methods work                  |
-| `&String`     | ✅         | String methods like `.len()` work            |
-| `&Array<T>`   | ❌         | See Known Limitations                        |
-
-### String Equality
-
-String equality (`==` and `!=`) uses value semantics - comparing the actual string contents rather than reference identity.
-
-**Desugaring:**
-
-The resolver desugars string comparisons to calls to `core::internal::string_eq`:
-
-```wado
-// Source
-a == b
-a != b
-
-// Desugared to
-core::internal::string_eq(&a, &b)
-!core::internal::string_eq(&a, &b)
-```
-
-**Implementation:**
-
-The `string_eq` function in `lib/core/internal.wado`:
-
-```wado
-pub fn string_eq(a: &String, b: &String) -> bool {
-    let len_a = a.len();
-    let len_b = b.len();
-    if len_a != len_b {
-        return false;
-    }
-    for (let mut i = 0; i < len_a; i += 1) {
-        if a.get(i) != b.get(i) {
-            return false;
-        }
-    }
-    return true;
-}
-```
-
-Key design decisions:
-
-- Takes `&String` parameters to avoid copying strings
-- Uses auto-dereference so `a.len()` and `a.get(i)` work on references
-- Byte-by-byte comparison (UTF-8 safe since equal strings have identical byte sequences)
+The resolver handles auto-deref in `resolve_method_call()`: it repeatedly inserts `TirUnaryOp::Deref` expressions until the receiver is not a reference type, then proceeds with normal method resolution. Works for `&T`, `&mut T`, and multi-level references (`&&T`, `&&&T`).
 
 ### Global Variables
 
@@ -1508,151 +1166,6 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 
 ---
 
-## Implemented
-
-### Parser
-
-#### Items
-
-- `use` declarations
-- `fn` declarations (with params, return type, effects)
-- `pub` modifier
-- `effect` declarations
-- `struct` declarations
-- `impl` blocks
-- `trait` declarations (static dispatch, default method implementations)
-- `impl Trait for Type` (trait implementations)
-- Associated types in traits (`type Output;` and `type Output = T;`)
-- `enum` declarations (payload-free, CM semantics, match/if let/matches, auto-derived Display/Eq/Ord, impl blocks)
-- `global` declarations (module-level Wasm globals)
-- `type` declarations (newtypes)
-- `resource` declarations
-- `world` declarations (with imports/exports)
-- Attributes (`#[...]`)
-- `variant` declarations (with payloads, construction, if let pattern matching with tuple destructuring)
-- Generic parameters on structs (monomorphization)
-
-#### Statements
-
-- `let` statements (with `mut`, `reactive`, type annotation)
-- Expression statements
-- `return` statements
-- `assert` statements with optional message (power-assert style error messages)
-- `if` statements
-- `while` loops
-- C-style `for` loops
-- `loop` loops
-- `for-of` loops
-
-#### Expressions
-
-- Identifiers
-- Integer literals
-- Float literals
-- String literals
-- Character literals
-- Boolean literals (`true`, `false`)
-- Null literal (`null`)
-- Unit `()`
-- Template string interpolation (`` `Hello, {name}!` ``)
-- Compile-time location literals (`#file`, `#line`, `#function`)
-- Binary operators (arithmetic, comparison, logical, bitwise)
-- Comparison chaining (`a < b < c` → `a < b && b < c`)
-- Unary operators (`-`, `!`, `~`, `&`, `*`)
-- Parentheses for grouping `(expr)`
-- Function calls
-- Method calls
-- Static method calls (`Point::origin()`)
-- Static method calls on generic types (`Array::<i32>::with_capacity()`)
-- Field access
-- Index access (`[]`)
-- Type cast (`as T`) for primitive types
-- Closures (`|params| expr`)
-- `if` expressions (`let x = if cond { a } else { b }`)
-- Block expressions / Labeled blocks (`scope: { ... }`)
-- Struct literals (`Point { x: 1, y: 2 }`)
-- Implicit struct literals with type context (`let p: Point = { x: 1, y: 2 }`)
-- Tuple literals (`[1, 2, 3]` creates `[i32, i32, i32]`)
-- Array literals (`[1, 2, 3] as Array<i32>` or via type coercion)
-
-#### Types
-
-- Named types
-- Generic types (`Array<T>`, `Result<T, E>`)
-- Reference types (`&T`)
-- Tuple types (`[T, U]`)
-- Unit type `()`
-- Never type `!`
-
-#### Patterns
-
-- Identifier patterns
-- Mutable identifier patterns (`if let Some(mut x) = ...`, `match { Ok(mut v) => ... }`)
-- Wildcard `_`
-- Tuple patterns
-- Variant patterns in if let (`if let Circle(r) = shape`, `if let Rect([w, h]) = shape`)
-- Option variant patterns (`if let Some(x) = ...`, `if let None = ...`)
-
-### Semantic Analysis
-
-- Symbol table construction
-- Module resolution (core library)
-- Import resolution
-- Builtin function detection
-- Effect checking (validates function calls have required effects)
-- Scope analysis for variables
-- Immutable variable reassignment detection
-
-### Code Generation
-
-- Component Model binary output
-- WASI P3 imports (`wasi:cli/stdout`, `wasi:cli/types`)
-- Stream/Future intrinsics (`stream.*`, `future.*`)
-- Async task intrinsics (`task.return`, `waitable-set.*`, `subtask.drop`)
-- Memory module with string data
-- `println` function (core::cli)
-- Multiple function calls
-- Async function lifting/lowering
-- Template strings (literals, integer interpolation, float interpolation, format specifiers)
-- Variables and locals (`let`, `let mut`)
-- Global variables (`global`, `global mut`) with Wasm global section
-- Control flow (`if` statements, `if let init`, `while`, `for`, `loop`, `for-of`)
-- Binary/unary operations (arithmetic, comparison, logical, bitwise)
-- Type cast (`as T`) for primitive types (i32, i64, f32, f64)
-- Assert statements with power-assert style error messages (intermediate values, value caching)
-- User-defined functions (from core:: modules)
-- Branch hinting (`builtin::likely`, `builtin::unlikely`)
-- WASI clocks (`wasi:clocks/monotonic-clock`, `now()`)
-- Mixed-type arithmetic (i64 vs i32 literal promotion)
-- Struct construction and field access
-- Tuple construction and index access
-- Array construction, index access, and iteration
-- Reference types (`&T`, `&mut T`) for primitives, structs, tuples, and arrays
-- Dereference operator (`*ref`)
-- Auto-dereference for method calls (`ref.method()` auto-derefs to `(*ref).method()`)
-- String equality (`==`, `!=`) with value semantics (desugared to `string_eq(&a, &b)`)
-- Generic structs with monomorphization (`Box<T>`, `Pair<A, B>`)
-- Generic struct instantiation with type inference
-- Generic struct field access
-- Impl blocks on generic struct specializations (`impl Box<i32>`)
-- Nested generic types (`Box<Box<i32>>`, `Array<Pair<i32, String>>`)
-- Generic structs as function parameters and return types
-- Generic functions with explicit turbofish syntax (`identity::<i32>(x)`)
-- Generic methods with explicit turbofish syntax (`obj.method::<T, U>(...)`)
-- Double generics with mixed types (`Container<T>.combine::<U, V>()` where T, U, V are different)
-- Variant construction (`Option::<T>::Some(x)`, `Color::Red`, `Shape::Circle(r)`)
-- Option pattern matching (`if let Some(x) = ...`)
-- Custom variant pattern matching (`if let Circle(r) = shape`, `if let Rect([w, h]) = shape`)
-- Closures (pure and capturing, `&mut ||` for mutable captures)
-- Template string type conversion (i8/i16/i32/i64/u8/u16/u32/u64/bool/char → string, f32/f64 → string)
-- Value semantics for structs (field-by-field copy on assignment)
-- Value semantics for arrays (element-by-element copy on assignment)
-- Value semantics for tuples (field-by-field copy on assignment)
-- Value semantics for strings (element-by-element copy on assignment)
-- Value semantics for Option<T> (conditional copy of inner value)
-- Value semantics for Variant (copy tag + all fields)
-- Template string array concatenation
-
 ### Linear Memory and `realloc`
 
 The Component Model requires each core module to export a `realloc` function. The CM runtime calls `realloc` whenever it needs guest-side linear memory — for example, `stream.read` copies bytes from the host into a guest buffer allocated via `realloc`, and string lifting/lowering also goes through it. Because CM operations can allocate significant amounts of memory (e.g., reading a large HTTP response body in a loop), the `realloc` implementation must be robust.
@@ -1693,20 +1206,15 @@ Selection rules:
 
 ### Known Limitations
 
-1. **Parser doesn't support generic resources**: `resource Stream<T>` in `prelude.wado` fails to parse
-2. **Implicit struct literals don't work with generic structs**: `let b: Box<i32> = { value };` fails. Use explicit form: `let b: Box<i32> = Box { value };`
-3. **No type checking**: The analyzer doesn't perform type checking yet
-4. **GC arrays cannot be passed directly to streams**: As of wasmtime v40, `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
-5. **Non-pub functions from other modules are skipped**: The codegen currently only includes `pub` functions from imported modules (`core::*`). Internal helper functions must be marked `pub` to be included in compilation. This limitation could be addressed later with proper internal dependency tracking.
+1. **Implicit struct literals don't work with generic structs**: `let b: Box<i32> = { value };` fails. Use explicit form: `let b: Box<i32> = Box { value };`
+2. **GC arrays cannot be passed directly to streams**: `stream<u8>` operations require linear memory. GC arrays must be copied to linear memory before writing to streams. See [component-model#525](https://github.com/WebAssembly/component-model/issues/525)
 
 ---
 
 ## Not Yet Implemented
 
-- Range expressions
 - `?` operator (error propagation)
-- Type inference
 - Effect handlers
 - Reactive signals (source values, derived values, effect blocks)
 - JSX
-- Generic function/method type inference
+- Generic function/method call type inference
