@@ -355,3 +355,4 @@ When you have completed a task, make sure everything is up-to-date and tested:
   - docs/compiler.md
   - docs/optimizer.md
 - Run `mise run on-task-done` to format, clippy-fix, update golden fixtures, regenerate stdlib docs, and test. It will take 15+ minutes.
+  - Run in foreground and commit the results. CI's integrity check fails if generated files are uncommitted.
