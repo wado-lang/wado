@@ -110,10 +110,32 @@ pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
     while remaining > 0 {
         let k = i32::min(remaining, nmax);
         remaining -= k;
-        for let mut i = 0; i < k; i += 1 {
+        let mut n = k;
+        while n >= 16 {
+            s1 += buf[pos] as u32; s2 += s1;
+            s1 += buf[pos + 1] as u32; s2 += s1;
+            s1 += buf[pos + 2] as u32; s2 += s1;
+            s1 += buf[pos + 3] as u32; s2 += s1;
+            s1 += buf[pos + 4] as u32; s2 += s1;
+            s1 += buf[pos + 5] as u32; s2 += s1;
+            s1 += buf[pos + 6] as u32; s2 += s1;
+            s1 += buf[pos + 7] as u32; s2 += s1;
+            s1 += buf[pos + 8] as u32; s2 += s1;
+            s1 += buf[pos + 9] as u32; s2 += s1;
+            s1 += buf[pos + 10] as u32; s2 += s1;
+            s1 += buf[pos + 11] as u32; s2 += s1;
+            s1 += buf[pos + 12] as u32; s2 += s1;
+            s1 += buf[pos + 13] as u32; s2 += s1;
+            s1 += buf[pos + 14] as u32; s2 += s1;
+            s1 += buf[pos + 15] as u32; s2 += s1;
+            pos += 16;
+            n -= 16;
+        }
+        while n > 0 {
             s1 += buf[pos] as u32;
             s2 += s1;
             pos += 1;
+            n -= 1;
         }
         s1 = s1 % base;
         s2 = s2 % base;
@@ -1486,29 +1508,37 @@ fn bi_reverse(code: u32, len: i32) -> u32 {
 // Bit writer for deflate output
 struct BitWriter {
     output: Array<u8>,
-    buf: u32,
+    buf: u64,
     bits: i32,
 }
 
 impl BitWriter {
     fn new() -> BitWriter {
-        return BitWriter { output: [], buf: 0, bits: 0 };
+        return BitWriter { output: [], buf: 0 as u64, bits: 0 };
     }
 
     fn write_bits(&mut self, value: u32, count: i32) {
-        self.buf = self.buf | value << self.bits as u32;
+        self.buf = self.buf | (value as u64) << self.bits as u64;
         self.bits += count;
+        while self.bits >= 32 {
+            self.output.append((self.buf & 0xFF) as u8);
+            self.output.append((self.buf >> 8 & 0xFF) as u8);
+            self.output.append((self.buf >> 16 & 0xFF) as u8);
+            self.output.append((self.buf >> 24 & 0xFF) as u8);
+            self.buf = self.buf >> 32;
+            self.bits -= 32;
+        }
+    }
+
+    fn flush(&mut self) {
         while self.bits >= 8 {
             self.output.append((self.buf & 0xFF) as u8);
             self.buf = self.buf >> 8;
             self.bits -= 8;
         }
-    }
-
-    fn flush(&mut self) {
         if self.bits > 0 {
             self.output.append((self.buf & 0xFF) as u8);
-            self.buf = 0;
+            self.buf = 0 as u64;
             self.bits = 0;
         }
     }
@@ -1661,15 +1691,22 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
             let mut chain = head[h];
             let mut chain_count = 0;
 
+            let max_len = i32::min(input_len - pos, 258);
             while chain >= 0 && chain_count < 128 {
                 let dist = pos - chain;
                 if dist > 32768 || dist <= 0 {
                     break;
                 }
 
+                // Early termination: skip if can't beat current best
+                if best_len >= 3 && best_len < max_len && input[chain + best_len] != input[pos + best_len] {
+                    chain = prev[chain & 32767];
+                    chain_count += 1;
+                    continue;
+                }
+
                 // Check match length
                 let mut match_len = 0;
-                let max_len = i32::min(input_len - pos, 258);
                 while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
                     match_len += 1;
                 }
@@ -1682,12 +1719,12 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
                     }
                 }
 
-                chain = prev[chain % 32768];
+                chain = prev[chain & 32767];
                 chain_count += 1;
             }
 
             // Update hash table
-            prev[pos % 32768] = head[h];
+            prev[pos & 32767] = head[h];
             head[h] = pos;
         }
 
@@ -1715,7 +1752,7 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
             for let mut i = 1; i < best_len; i += 1 {
                 if pos + i + 2 < input_len {
                     let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
-                    prev[(pos + i) % 32768] = head[mh];
+                    prev[(pos + i) & 32767] = head[mh];
                     head[mh] = pos + i;
                 }
             }
@@ -2428,14 +2465,21 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         config.max_chain;
                     };
 
+                    let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
                     while chain >= 0 && chain_count < max_chain {
                         let dist = pos - chain;
                         if dist > 32768 || dist <= 0 {
                             break;
                         }
 
+                        // Early termination: skip if can't beat current best
+                        if best_len >= 3 && best_len < max_len && input[chain + best_len] != input[pos + best_len] {
+                            chain = prev[chain & 32767];
+                            chain_count += 1;
+                            continue;
+                        }
+
                         let mut match_len = 0;
-                        let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
                         while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
                             match_len += 1;
                         }
@@ -2448,11 +2492,11 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                             }
                         }
 
-                        chain = prev[chain % 32768];
+                        chain = prev[chain & 32767];
                         chain_count += 1;
                     }
 
-                    prev[pos % 32768] = head[h];
+                    prev[pos & 32767] = head[h];
                     head[h] = pos;
                 }
 
@@ -2473,7 +2517,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         for let mut i = 0; i < skip - 1; i += 1 {
                             if pos + i + 2 < input_len {
                                 let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
-                                prev[(pos + i) % 32768] = head[mh];
+                                prev[(pos + i) & 32767] = head[mh];
                                 head[mh] = pos + i;
                             }
                         }
@@ -2496,7 +2540,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         for let mut i = 1; i < best_len; i += 1 {
                             if pos + i + 2 < input_len {
                                 let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
-                                prev[(pos + i) % 32768] = head[mh];
+                                prev[(pos + i) & 32767] = head[mh];
                                 head[mh] = pos + i;
                             }
                         }
@@ -2528,14 +2572,21 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                     let mut chain = head[h];
                     let mut chain_count = 0;
 
+                    let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
                     while chain >= 0 && chain_count < config.max_chain {
                         let dist = pos - chain;
                         if dist > 32768 || dist <= 0 {
                             break;
                         }
 
+                        // Early termination: skip if can't beat current best
+                        if best_len >= 3 && best_len < max_len && input[chain + best_len] != input[pos + best_len] {
+                            chain = prev[chain & 32767];
+                            chain_count += 1;
+                            continue;
+                        }
+
                         let mut match_len = 0;
-                        let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
                         while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
                             match_len += 1;
                         }
@@ -2548,11 +2599,11 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                             }
                         }
 
-                        chain = prev[chain % 32768];
+                        chain = prev[chain & 32767];
                         chain_count += 1;
                     }
 
-                    prev[pos % 32768] = head[h];
+                    prev[pos & 32767] = head[h];
                     head[h] = pos;
                 }
 
@@ -2562,7 +2613,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                     for let mut i = 1; i < best_len; i += 1 {
                         if pos + i + 2 < input_len {
                             let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
-                            prev[(pos + i) % 32768] = head[mh];
+                            prev[(pos + i) & 32767] = head[mh];
                             head[mh] = pos + i;
                         }
                     }
