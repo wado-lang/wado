@@ -3031,7 +3031,7 @@ fn write_digits_at(buf, offset, val, nd) {
                 break b185;
             };
             index = idx;
-            value = 48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255);
+            value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
             builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
@@ -3565,10 +3565,10 @@ fn parse_text(s) {
                 } == 0 {
                     break __for_0;
                 };
-                d = (d * 10_i64) + builtin::i64_extend_i32_u(__inline_String__get_byte_14: block -> u8 {
+                d = (d * 10_i64) + builtin::i64_extend_i32_u((__inline_String__get_byte_14: block -> u8 {
                     __local_56 = i;
                     break __inline_String__get_byte_14: builtin::array_get_u8(_licm_repr_79, __local_56);
-                } - 48);
+                } - 48) & 255);
                 i = i + 1;
                 continue l244;
             };
@@ -3609,10 +3609,10 @@ fn parse_text(s) {
                     } == 0 {
                         break __for_1;
                     };
-                    d = (d * 10_i64) + builtin::i64_extend_i32_u(__inline_String__get_byte_18: block -> u8 {
+                    d = (d * 10_i64) + builtin::i64_extend_i32_u((__inline_String__get_byte_18: block -> u8 {
                         __local_64 = i;
                         break __inline_String__get_byte_18: builtin::array_get_u8(_licm_repr_80, __local_64);
-                    } - 48);
+                    } - 48) & 255);
                     frac = frac + 1;
                     i = i + 1;
                     continue l252;
@@ -3692,10 +3692,10 @@ fn parse_text(s) {
                     } == 0 {
                         break __for_2;
                     };
-                    p = (p * 10) + (__inline_String__get_byte_25: block -> u8 {
+                    p = (p * 10) + ((__inline_String__get_byte_25: block -> u8 {
                         __local_78 = i;
                         break __inline_String__get_byte_25: builtin::array_get_u8(_licm_repr_81, __local_78);
-                    } - 48);
+                    } - 48) & 255);
                     i = i + 1;
                     continue l268;
                 };
@@ -6257,7 +6257,9 @@ fn Formatter::pad(self, content) {
     };
     padding = self.width - content_len;
     align = self.align;
-    if align == 0 {
+    let __match_scrut_0: enum:Alignment;
+    __match_scrut_0 = align;
+    if __match_scrut_0 == 0 {
         String::append(self.buf, content);
         Formatter::write_char_n(self, self.fill, padding);
     } else if align == 1 {
@@ -6314,7 +6316,9 @@ fn Formatter::apply_padding(self, start_pos) {
     padding = self.width - content_len;
     fill_byte = self.fill & 255;
     align = self.align;
-    if align == 0 {
+    let __match_scrut_0: enum:Alignment;
+    __match_scrut_0 = align;
+    if __match_scrut_0 == 0 {
         String::append_byte_filled(self.buf, fill_byte, padding);
     } else if align == 1 {
         left_pad = padding / 2;
@@ -6439,7 +6443,9 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     align = self.align;
-    if align == 0 {
+    let __match_scrut_0: enum:Alignment;
+    __match_scrut_0 = align;
+    if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::append(self.buf, sign);
         };

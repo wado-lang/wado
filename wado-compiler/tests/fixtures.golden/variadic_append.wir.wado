@@ -629,19 +629,16 @@ fn String^Eq::eq(self, other) {
 
 fn StrCharIter^Iterator::next(self) {
     let b0: u8;
-    let b1_2: u8;
-    let code_3: u8;
-    let b1_4: u8;
-    let b2_5: u8;
-    let code_6: u8;
-    let b1_7: u8;
-    let b2_8: u8;
-    let b3: u8;
-    let code_10: u8;
+    let b1_2: u32;
+    let code_3: u32;
+    let b1_4: u32;
+    let b2_5: u32;
+    let code_6: u32;
+    let b1_7: u32;
+    let b2_8: u32;
+    let b3: u32;
+    let code_10: u32;
     let __local_11: u32;
-    let __local_12: u32;
-    let __local_13: u32;
-    let __local_14: u32;
     if self.byte_index >= self.used {
         return 1; 0;
     };
@@ -657,30 +654,21 @@ fn StrCharIter^Iterator::next(self) {
         b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
         self.byte_index = self.byte_index + 1;
         code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
-        return 0; __inline_char__from_u32_unchecked_1: block -> char {
-            __local_12 = code_3;
-            break __inline_char__from_u32_unchecked_1: __local_12;
-        };
+        return 0; code_3;
     };
     if b0 <u 240 {
         b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
         b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
         self.byte_index = self.byte_index + 2;
         code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
-        return 0; __inline_char__from_u32_unchecked_2: block -> char {
-            __local_13 = code_6;
-            break __inline_char__from_u32_unchecked_2: __local_13;
-        };
+        return 0; code_6;
     };
     b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
     b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
     b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
     self.byte_index = self.byte_index + 3;
     code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
-    return 0; __inline_char__from_u32_unchecked_3: block -> char {
-        __local_14 = code_10;
-        break __inline_char__from_u32_unchecked_3: __local_14;
-    };
+    return 0; code_10;
 }
 
 fn String::append_char(self, c) {
@@ -746,7 +734,9 @@ fn Formatter::pad(self, content) {
     };
     padding = self.width - content_len;
     align = self.align;
-    if align == 0 {
+    let __match_scrut_0: enum:Alignment;
+    __match_scrut_0 = align;
+    if __match_scrut_0 == 0 {
         String::append(self.buf, content);
         Formatter::write_char_n(self, self.fill, padding);
     } else if align == 1 {
@@ -806,7 +796,9 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     align = self.align;
-    if align == 0 {
+    let __match_scrut_0: enum:Alignment;
+    __match_scrut_0 = align;
+    if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::append(self.buf, sign);
         };

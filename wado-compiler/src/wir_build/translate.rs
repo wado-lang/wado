@@ -1288,7 +1288,24 @@ impl FunctionTranslator<'_, '_> {
                 }
                 let l = Box::new(self.translate_expr(left));
                 let r = Box::new(self.translate_expr(right));
-                self.translate_binary_op(op, l, r, left.type_id)
+                let result = self.translate_binary_op(op, l, r, left.type_id);
+                // Truncate sub-i32 arithmetic/bitwise results to the correct width.
+                // Comparisons and logical ops return bool (i32 0/1), so skip those.
+                if !matches!(
+                    op,
+                    TirBinaryOp::Eq
+                        | TirBinaryOp::NotEq
+                        | TirBinaryOp::Lt
+                        | TirBinaryOp::LtEq
+                        | TirBinaryOp::Gt
+                        | TirBinaryOp::GtEq
+                        | TirBinaryOp::And
+                        | TirBinaryOp::Or
+                ) && let ResolvedType::Primitive(prim) = self.type_table.get(left.type_id)
+                {
+                    return Self::truncate_to_sub_i32(result, prim);
+                }
+                result
             }
 
             // === Unary Operations ===
@@ -1297,7 +1314,14 @@ impl FunctionTranslator<'_, '_> {
                 TirUnaryOp::Deref => self.translate_expr(inner),
                 _ => {
                     let o = Box::new(self.translate_expr(inner));
-                    self.translate_unary_op(op, o, inner.type_id)
+                    let result = self.translate_unary_op(op, o, inner.type_id);
+                    // Truncate sub-i32 results for Neg and BitNot.
+                    if matches!(op, TirUnaryOp::Neg | TirUnaryOp::BitNot)
+                        && let ResolvedType::Primitive(prim) = self.type_table.get(inner.type_id)
+                    {
+                        return Self::truncate_to_sub_i32(result, prim);
+                    }
+                    result
                 }
             },
 

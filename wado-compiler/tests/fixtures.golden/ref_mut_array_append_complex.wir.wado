@@ -145,7 +145,7 @@ fn process(arr, input, count) {
             if val <u 128 {
                 Array<u8>::append(arr, val);
             } else {
-                dist = val - 128;
+                dist = (val - 128) & 255;
                 src = arr.used - dist;
                 Array<u8>::append(arr, __inline_Array_u8__IndexValue__index_value_2: block -> u8 {
                     if src >= arr.used {
@@ -647,7 +647,9 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     align = self.align;
-    if align == 0 {
+    let __match_scrut_0: enum:Alignment;
+    __match_scrut_0 = align;
+    if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::append(self.buf, sign);
         };
