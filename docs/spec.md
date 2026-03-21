@@ -3805,12 +3805,23 @@ Type pack parameters:
 - Type arguments are inferred from tuple argument types at call sites
 - Expansion happens at monomorphization time
 
+**Lexical note:** `..` is a single token (`DotDot`). Writing `...` (three dots) is a parse error with the diagnostic _"unexpected `...`; did you mean `..`?"_.
+
+#### Value Spread
+
 Value spread `[..expr]` splices a tuple's elements into an enclosing tuple literal:
 
 ```wado
 let a = [1, "hello"];
 let b = [..a, true];   // b: [i32, String, bool]
 let c = [42, ..a];     // c: [i32, i32, String]
+```
+
+The spread expression is evaluated exactly once. For non-trivial expressions (e.g., function calls), the compiler introduces a temporary binding to avoid duplicate evaluation:
+
+```wado
+// make_pair() is called once, not twice
+let t = [..make_pair(), 30];
 ```
 
 ### Reference Storage (`stores[...]`)

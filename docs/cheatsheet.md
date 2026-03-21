@@ -1003,6 +1003,8 @@ fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
 // Value spread (works with any tuple, not just packs)
 let a = [1, "hello"];
 let b = [..a, true];   // [i32, String, bool]
+
+// Note: `...` (three dots) is not valid; use `..` (two dots)
 ```
 
 ## Closures
