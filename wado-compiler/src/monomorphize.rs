@@ -1229,9 +1229,21 @@ impl Monomorphizer {
         type_table: &mut TypeTable,
     ) -> TypeId {
         match type_table.get(type_id).clone() {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                // Direct substitution (for TypePack, the substituted type is typically a tuple)
-                *substitution.get(&index).unwrap_or(&type_id)
+            ResolvedType::TypeParam { index, name } => {
+                // Direct substitution
+                *substitution.get(&index).unwrap_or_else(|| {
+                    panic!(
+                        "TypeParam `{name}` (index {index}) not found in substitution map"
+                    )
+                })
+            }
+            ResolvedType::TypePack { index, name } => {
+                // Direct substitution (the substituted type is typically a tuple)
+                *substitution.get(&index).unwrap_or_else(|| {
+                    panic!(
+                        "TypePack `..{name}` (index {index}) not found in substitution map"
+                    )
+                })
             }
             ResolvedType::BuiltinArray(elem) => {
                 let new_elem = self.substitute_type(elem, substitution, type_table);
