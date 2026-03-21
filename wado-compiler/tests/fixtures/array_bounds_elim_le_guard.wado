@@ -1,0 +1,27 @@
+// Test: bounds check elimination with <= loop guard
+// When `for i = 0; i <= limit; i += 1` and array has size `limit + 1`,
+// the bounds check `i >= arr.used` is redundant and should be eliminated.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let limit = 10;
+    let mut arr = Array::<i32>::filled(limit + 1, 0);
+
+    // Fill with squares using <= guard
+    for let mut i = 0; i <= limit; i += 1 {
+        arr[i] = i * i;
+    }
+
+    // Sum using <= guard
+    let mut sum = 0;
+    for let mut i = 0; i <= limit; i += 1 {
+        sum += arr[i];
+    }
+    println(`{sum}`);
+}
+
+__DATA__
+{
+    "stdout": "385\n"
+}
