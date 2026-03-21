@@ -10,7 +10,10 @@
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 
-use super::visitor::{TirVisitor, visit_project_functions, walk_block, walk_expr};
+use super::visitor::{
+    TirVisitor, block_has_break_to, expr_has_break_to, visit_project_functions, walk_block,
+    walk_expr,
+};
 
 /// Prune constant branches and simplify trivial blocks in all functions.
 pub fn prune_constant_branches(project: &mut Project) -> bool {
@@ -84,9 +87,12 @@ fn prune_expr(expr: &mut TirExpr) -> bool {
         && block.stmts.len() == 1
         && let TirStmtKind::Break {
             label: Some(brk_label),
-            ..
+            value: brk_value,
         } = &block.stmts[0].kind
         && brk_label == label
+        // Only simplify if the break value itself doesn't contain breaks
+        // to the same label (e.g., from try-op error paths in nested expressions).
+        && !brk_value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
     {
         let TirExprKind::LabeledBlock { block, .. } =
             std::mem::replace(&mut expr.kind, TirExprKind::Unit)
@@ -210,82 +216,4 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
         block.stmts.push(stmt);
     }
     true
-}
-
-fn block_has_break_to(label: &str, block: &TirBlock) -> bool {
-    block.stmts.iter().any(|s| stmt_has_break_to(label, s))
-}
-
-fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
-    match &stmt.kind {
-        TirStmtKind::Break { label: Some(l), .. } => l == label,
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
-            expr_has_break_to(label, value)
-        }
-        TirStmtKind::Expr(expr) => expr_has_break_to(label, expr),
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            expr_has_break_to(label, condition)
-                || block_has_break_to(label, then_block)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|b| block_has_break_to(label, b))
-        }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            block_has_break_to(label, body)
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_has_break_to(label, scrutinee)
-                || block_has_break_to(label, then_block)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|b| block_has_break_to(label, b))
-        }
-        TirStmtKind::Return { value } => {
-            value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
-        }
-        _ => false,
-    }
-}
-
-fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
-    match &expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            block_has_break_to(label, block)
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            expr_has_break_to(label, condition)
-                || block_has_break_to(label, then_branch)
-                || else_branch
-                    .as_ref()
-                    .is_some_and(|b| block_has_break_to(label, b))
-        }
-        TirExprKind::Match { expr, arms } => {
-            expr_has_break_to(label, expr)
-                || arms.iter().any(|arm| expr_has_break_to(label, &arm.body))
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            expr_has_break_to(label, scrutinee)
-                || arms.iter().any(|arm| block_has_break_to(label, arm))
-                || block_has_break_to(label, default)
-        }
-        _ => false,
-    }
 }
