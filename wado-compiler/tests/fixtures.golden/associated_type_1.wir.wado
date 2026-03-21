@@ -104,8 +104,6 @@ import fn subtask-drop from "wasi/subtask-drop";
 fn associated_type_basic() with Stdout {
     let __local_2: ref String;
     let __local_3: ref Formatter;
-    let __local_6: ref String;
-    let __local_8: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(23), used: 0 };
         String::append_char(__local_2, 86);
@@ -115,12 +113,8 @@ fn associated_type_basic() with Stdout {
         String::append_char(__local_2, 101);
         String::append_char(__local_2, 58);
         String::append_char(__local_2, 32);
-        __local_3 = __inline_Formatter__new_2: block -> ref Formatter {
-            __local_6 = __local_2;
-            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
-        };
-        __local_8 = __local_3;
-        i32::fmt_decimal(42, __local_8);
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        i32::fmt_decimal(42, __local_3);
         break __tmpl: __local_2;
     });
 }
@@ -128,8 +122,6 @@ fn associated_type_basic() with Stdout {
 fn associated_type_index_assign() with Stdout {
     let __local_1: ref String;
     let __local_2: ref Formatter;
-    let __local_7: ref String;
-    let __local_9: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(23), used: 0 };
         String::append_char(__local_1, 86);
@@ -139,12 +131,8 @@ fn associated_type_index_assign() with Stdout {
         String::append_char(__local_1, 101);
         String::append_char(__local_1, 58);
         String::append_char(__local_1, 32);
-        __local_2 = __inline_Formatter__new_2: block -> ref Formatter {
-            __local_7 = __local_1;
-            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
-        };
-        __local_9 = __local_2;
-        i32::fmt_decimal(42, __local_9);
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
+        i32::fmt_decimal(42, __local_2);
         break __tmpl: __local_1;
     });
 }
@@ -218,15 +206,13 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
     let subtask: i32;
     let ws: i32;
     let __local_4: i32;
-    let __local_5: i32;
     handle = packed >> 4;
     if handle != 0 {
         subtask = handle;
         ws = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
             __local_4 = subtask;
-            __local_5 = ws;
-            "wasi/waitable-join"(__local_4, __local_5);
+            "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
         });
         "core:internal/cm_waitable_set_wait"(ws);
