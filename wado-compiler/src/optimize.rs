@@ -10,6 +10,7 @@
 //! - Loop-Invariant Code Motion (LICM) via `licm` module
 //! - Select lowering via `select_lowering` module
 
+mod condition_implication;
 mod const_branch_prune;
 mod const_folding;
 mod const_global_promotion;
@@ -27,6 +28,7 @@ mod store_load_forward;
 mod tmpl_hoist;
 pub(crate) mod visitor;
 
+use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::prune_constant_branches;
 use const_folding::fold_constants;
 use const_global_promotion::promote_constant_globals;
@@ -239,6 +241,9 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig, profiler: 
             prune_constant_branches(p)
         });
         changed |= run_pass("tir/licm", project, profiler, apply_licm);
+        changed |= run_pass("tir/condition_implication", project, profiler, |p| {
+            eliminate_implied_conditions(p)
+        });
         changed |= run_pass("tir/tmpl_hoist", project, profiler, |p| {
             hoist_template_buffers(p)
         });

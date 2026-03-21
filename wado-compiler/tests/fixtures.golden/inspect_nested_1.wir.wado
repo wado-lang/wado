@@ -116,8 +116,6 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
-
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/inspect_nested" = fn();
@@ -142,13 +140,7 @@ type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
-
 type "functype/core:internal/wait_for_subtask" = fn(i32);
-
-type "functype/core:internal/log_stderr" = fn(ref String);
-
-type "functype/core:internal/panic" = fn(ref String);
 
 type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
 
@@ -245,7 +237,6 @@ import fn waitable-join from "wasi/waitable-join";
 import fn waitable-set-drop from "wasi/waitable-set-drop";
 import fn waitable-set-new from "wasi/waitable-set-new";
 import fn waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -486,23 +477,6 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     };
 }
 
-fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
-    let bytes: ref array<u8>;
-    let len: i32;
-    let new_repr: ref array<u8>;
-    bytes = message.repr;
-    len = message.used;
-    if add_newline {
-        new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
-        builtin::array_set_u8(new_repr, len, 10);
-        "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
-    } else {
-        "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
-    "wasi/stream-drop-writable"(tx);
-}
-
 fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
     let handle: i32;
     let subtask: i32;
@@ -521,24 +495,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
         "wasi/subtask-drop"(subtask);
         "wasi/waitable-set-drop"(ws);
     };
-}
-
-fn "core:internal/log_stderr"(message) {  // from core:internal
-    let rx: i32;
-    let tx: i32;
-    let subtask: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
-    "core:internal/write_string_to_stream"(tx, message, 1);
-    "core:internal/wait_for_subtask"(subtask);
-}
-
-fn "core:internal/panic"(message) {  // from core:internal
-    "core:internal/log_stderr"(message);
-    unreachable;
 }
 
 fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
@@ -595,13 +551,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l9: loop {
+            l8: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l9;
+                continue l8;
             };
         };
     };
@@ -618,14 +574,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l13: loop {
+                l12: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l13;
+                    continue l12;
                 };
             };
         };
@@ -861,13 +817,13 @@ fn Array<String>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l30: loop {
+            l29: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
                 i = i + 1;
-                continue l30;
+                continue l29;
             };
         };
     };
@@ -886,7 +842,7 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l33: loop {
+            l32: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -899,7 +855,7 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
                     break __inline_Array_Array_i32___IndexValue__index_value_3: builtin::array_get<ref Array<i32>>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l33;
+                continue l32;
             };
         };
     };
@@ -918,7 +874,7 @@ fn Array<i32>^Inspect::inspect(self, f) {
         _licm_used_16 = self.used;
         _licm_repr_17 = self.repr;
         block {
-            l37: loop {
+            l36: loop {
                 if (i < _licm_used_16) == 0 {
                     break __for_5;
                 };
@@ -931,7 +887,7 @@ fn Array<i32>^Inspect::inspect(self, f) {
                     break __inline_Array_i32__IndexValue__index_value_4: builtin::array_get<i32>(_licm_repr_17, __local_11);
                 }, f);
                 i = i + 1;
-                continue l37;
+                continue l36;
             };
         };
     };
@@ -950,7 +906,7 @@ fn Array<Array<String>>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l41: loop {
+            l40: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -963,7 +919,7 @@ fn Array<Array<String>>^Inspect::inspect(self, f) {
                     break __inline_Array_Array_String___IndexValue__index_value_3: builtin::array_get<ref Array<String>>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l41;
+                continue l40;
             };
         };
     };
@@ -982,7 +938,7 @@ fn Array<String>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l45: loop {
+            l44: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -995,7 +951,7 @@ fn Array<String>^Inspect::inspect(self, f) {
                     break __inline_Array_String__IndexValue__index_value_3: builtin::array_get<ref String>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l45;
+                continue l44;
             };
         };
     };
@@ -1031,13 +987,13 @@ fn Array<Array<String>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l50: loop {
+            l49: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Array<String>>(new_repr, i, builtin::array_get<ref Array<String>>(old_repr, i));
                 i = i + 1;
-                continue l50;
+                continue l49;
             };
         };
     };
@@ -1056,7 +1012,7 @@ fn Array<Option<i32>>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l53: loop {
+            l52: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -1069,7 +1025,7 @@ fn Array<Option<i32>>^Inspect::inspect(self, f) {
                     break __inline_Array_Option_i32___IndexValue__index_value_3: builtin::array_get<ref Option<i32>>(_licm_repr_13, __local_9);
                 }), f);
                 i = i + 1;
-                continue l53;
+                continue l52;
             };
         };
     };
@@ -1121,13 +1077,13 @@ fn Array<Option<i32>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l60: loop {
+            l59: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Option<i32>>(new_repr, i, builtin::array_get<ref Option<i32>>(old_repr, i));
                 i = i + 1;
-                continue l60;
+                continue l59;
             };
         };
     };
@@ -1146,7 +1102,7 @@ fn Array<Array<Array<i32>>>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l63: loop {
+            l62: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -1159,7 +1115,7 @@ fn Array<Array<Array<i32>>>^Inspect::inspect(self, f) {
                     break __inline_Array_Array_Array_i32____IndexValue__index_value_3: builtin::array_get<ref Array<Array<i32>>>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l63;
+                continue l62;
             };
         };
     };
@@ -1195,13 +1151,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l68: loop {
+            l67: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l68;
+                continue l67;
             };
         };
     };
@@ -1237,13 +1193,13 @@ fn Array<Array<i32>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l72: loop {
+            l71: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Array<i32>>(new_repr, i, builtin::array_get<ref Array<i32>>(old_repr, i));
                 i = i + 1;
-                continue l72;
+                continue l71;
             };
         };
     };
@@ -1279,13 +1235,13 @@ fn Array<Array<Array<i32>>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l76: loop {
+            l75: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Array<Array<i32>>>(new_repr, i, builtin::array_get<ref Array<Array<i32>>>(old_repr, i));
                 i = i + 1;
-                continue l76;
+                continue l75;
             };
         };
     };
@@ -1320,7 +1276,7 @@ fn Array<Point>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l81: loop {
+            l80: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -1333,7 +1289,7 @@ fn Array<Point>^Inspect::inspect(self, f) {
                     break __inline_Array_Point__IndexValue__index_value_3: builtin::array_get<ref Point>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l81;
+                continue l80;
             };
         };
     };
@@ -1369,13 +1325,13 @@ fn Array<Point>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l86: loop {
+            l85: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Point>(new_repr, i, builtin::array_get<ref Point>(old_repr, i));
                 i = i + 1;
-                continue l86;
+                continue l85;
             };
         };
     };
@@ -1389,13 +1345,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l89: loop {
+            l88: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l89;
+                continue l88;
             };
         };
     };
@@ -1498,8 +1454,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b108: block {
-        l109: loop {
+    b107: block {
+        l108: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -1524,9 +1480,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b108;
+                break b107;
             };
-            continue l109;
+            continue l108;
         };
     };
     String::append_char(f.buf, 34);

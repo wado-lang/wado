@@ -56,8 +56,6 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
-
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/print_depth" = fn(i32);
@@ -74,13 +72,7 @@ type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
-
 type "functype/core:internal/wait_for_subtask" = fn(i32);
-
-type "functype/core:internal/log_stderr" = fn(ref String);
-
-type "functype/core:internal/panic" = fn(ref String);
 
 type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
 
@@ -131,7 +123,6 @@ import fn waitable-join from "wasi/waitable-join";
 import fn waitable-set-drop from "wasi/waitable-set-drop";
 import fn waitable-set-new from "wasi/waitable-set-new";
 import fn waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -248,23 +239,6 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     };
 }
 
-fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
-    let bytes: ref array<u8>;
-    let len: i32;
-    let new_repr: ref array<u8>;
-    bytes = message.repr;
-    len = message.used;
-    if add_newline {
-        new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
-        builtin::array_set_u8(new_repr, len, 10);
-        "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
-    } else {
-        "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
-    "wasi/stream-drop-writable"(tx);
-}
-
 fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
     let handle: i32;
     let subtask: i32;
@@ -283,24 +257,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
         "wasi/subtask-drop"(subtask);
         "wasi/waitable-set-drop"(ws);
     };
-}
-
-fn "core:internal/log_stderr"(message) {  // from core:internal
-    let rx: i32;
-    let tx: i32;
-    let subtask: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(__pair_temp_1);
-    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
-    "core:internal/write_string_to_stream"(tx, message, 1);
-    "core:internal/wait_for_subtask"(subtask);
-}
-
-fn "core:internal/panic"(message) {  // from core:internal
-    "core:internal/log_stderr"(message);
-    unreachable;
 }
 
 fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
@@ -357,13 +313,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l9: loop {
+            l8: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l9;
+                continue l8;
             };
         };
     };
@@ -380,14 +336,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l13: loop {
+                l12: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l13;
+                    continue l12;
                 };
             };
         };
@@ -519,13 +475,13 @@ fn Array<String>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l26: loop {
+            l25: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
                 i = i + 1;
-                continue l26;
+                continue l25;
             };
         };
     };
@@ -546,7 +502,7 @@ fn Node<String>::traverse(self, depth) with Stdout {
             _licm_used_7 = _licm_children_6.used;
             _licm_repr_8 = _licm_children_6.repr;
             block {
-                l30: loop {
+                l29: loop {
                     if (i < _licm_used_7) == 0 {
                         break __for_0;
                     };
@@ -555,7 +511,7 @@ fn Node<String>::traverse(self, depth) with Stdout {
                         break __inline_Array_Node_String___IndexValue__index_value_1: builtin::array_get<ref Node<String>>(_licm_repr_8, __local_5);
                     }, depth + 1);
                     i = i + 1;
-                    continue l30;
+                    continue l29;
                 };
             };
         };
@@ -591,13 +547,13 @@ fn Array<Node<String>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l34: loop {
+            l33: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Node<String>>(new_repr, i, builtin::array_get<ref Node<String>>(old_repr, i));
                 i = i + 1;
-                continue l34;
+                continue l33;
             };
         };
     };
@@ -611,13 +567,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l37: loop {
+            l36: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l37;
+                continue l36;
             };
         };
     };
