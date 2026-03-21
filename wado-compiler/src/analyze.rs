@@ -385,6 +385,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     self.symbols
                         .define(&global.name, kind, module_source, Some(global.span));
                 }
+
+                Item::TupleTypeDecl(_) => {
+                    // Tuple type family declaration — handled in orchestration
+                }
             }
         }
     }

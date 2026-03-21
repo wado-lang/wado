@@ -171,6 +171,10 @@ fn expand_stmt(
         TirStmtKind::LabeledBlock { block, .. } => {
             expand_block(block, tt, alloc, cs);
         }
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
+            expand_expr(iterable, tt, alloc, cs);
+            expand_block(body, tt, alloc, cs);
+        }
         _ => {}
     }
 }
@@ -1018,7 +1022,7 @@ fn method_name_for_type(
     let tt_ref = tt.borrow();
     let resolved = tt_ref.get(type_id).clone();
     match resolved {
-        ResolvedType::TypeParam { ref name, .. } => {
+        ResolvedType::TypeParam { ref name, .. } | ResolvedType::TypePack { ref name, .. } => {
             let mut info = LocalMethodName::new(
                 name.clone(),
                 Some(trait_name.to_string()),

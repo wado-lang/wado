@@ -136,6 +136,9 @@ fn count_block_exprs(block: &TirBlock) -> usize {
             TirStmtKind::TaskReturn { .. } => {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
+            TirStmtKind::VariadicForOf { .. } => {
+                unreachable!("VariadicForOf should be expanded during monomorphization")
+            }
         })
         .sum()
 }
@@ -319,6 +322,9 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut IndexSet<String>) {
         }
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+        }
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
         }
     }
 }
@@ -984,6 +990,9 @@ fn inline_calls_in_block(
             TirStmtKind::TaskReturn { .. } => {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
+            TirStmtKind::VariadicForOf { .. } => {
+                unreachable!("VariadicForOf should be expanded during monomorphization")
+            }
         }
     }
 
@@ -1632,6 +1641,9 @@ fn remap_stmt_with_label(
         },
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+        }
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
         }
     };
 
@@ -2527,6 +2539,9 @@ fn remap_stmt(
         },
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+        }
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
         }
     };
 

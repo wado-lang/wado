@@ -914,6 +914,8 @@ pub const COMP_FEATURE_RESULT: u32 = 1 << 4;
 pub const COMP_FEATURE_DEFAULT: u32 = 1 << 5;
 /// Compiler feature flag: trait is the canonical `From<T>` trait.
 pub const COMP_FEATURE_FROM: u32 = 1 << 6;
+/// Compiler feature flag: declares ownership of the tuple type family (`pub type [..T];`).
+pub const COMP_FEATURE_TUPLE: u32 = 1 << 7;
 
 /// A function declaration with optional body.
 #[derive(Debug)]

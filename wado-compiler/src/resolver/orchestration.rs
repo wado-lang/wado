@@ -146,6 +146,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 .register_comp_feature_trait(comp_features, module_source.clone());
                         }
                     }
+                    Item::TupleTypeDecl(decl) => {
+                        let comp_features = super::item::extract_comp_features(&decl.attrs);
+                        if comp_features & crate::wir::COMP_FEATURE_TUPLE != 0 {
+                            type_table
+                                .borrow_mut()
+                                .register_tuple_module_source(module_source.clone());
+                        }
+                    }
                     _ => {}
                 }
             }

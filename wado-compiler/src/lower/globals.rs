@@ -552,6 +552,9 @@ fn renumber_locals_in_stmt(stmt: &mut TirStmt, offset: u32) {
             renumber_locals_in_expr(value, offset);
         }
         TirStmtKind::TaskReturn { .. } => {}
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 

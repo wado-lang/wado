@@ -40,7 +40,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Type parameters satisfy bounds declared on them (e.g., T: Describable
         // means T implements Describable within the scope of that declaration)
-        if let ResolvedType::TypeParam { name, .. } = &resolved {
+        if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } =
+            &resolved
+        {
             if let Some(bounds) = self.trait_ctx.type_param_bounds.get(name) {
                 return bounds.iter().any(|b| b.name == trait_name);
             }

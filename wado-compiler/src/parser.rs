@@ -12,9 +12,9 @@ use crate::ast::{
     MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
     Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
     StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, Type,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport,
-    WhileStmt, WorldDecl, WorldExport, WorldImport,
+    StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -400,7 +400,7 @@ impl Parser {
             TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
             TokenKind::Variant => self.parse_variant_decl(is_pub, attrs).map(Item::Variant),
             TokenKind::Flags => self.parse_flags_decl(is_pub, attrs).map(Item::Flags),
-            TokenKind::Type => self.parse_newtype(is_pub, attrs).map(Item::Newtype),
+            TokenKind::Type => self.parse_type_decl(is_pub, attrs),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
             TokenKind::Trait => self.parse_trait_decl(is_pub, attrs).map(Item::Trait),
             TokenKind::Resource => self.parse_resource_decl(is_pub, attrs).map(Item::Resource),
@@ -3581,6 +3581,25 @@ impl Parser {
             attrs,
             span: start_span,
         })
+    }
+
+    /// Parse a `type` declaration: either a newtype (`type Name = T;`) or
+    /// a tuple type family declaration (`type [..T];`).
+    fn parse_type_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<Item> {
+        let start_span = self.peek().span;
+        // peek past `type` to see if next token is `[` (tuple type decl)
+        if self.peek_nth(1).kind == TokenKind::LBracket {
+            self.expect(&TokenKind::Type)?;
+            // Parse `[..T]` as a type (will be a Tuple containing TypePackSpread)
+            let _ty = self.parse_type()?;
+            let end_span = self.expect(&TokenKind::Semicolon)?.span;
+            return Ok(Item::TupleTypeDecl(TupleTypeDecl {
+                is_pub,
+                attrs,
+                span: start_span.merge(&end_span),
+            }));
+        }
+        self.parse_newtype(is_pub, attrs).map(Item::Newtype)
     }
 
     fn parse_newtype(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<Newtype> {

@@ -1609,17 +1609,23 @@ fn Shape^Inspect::inspect(self, f) {
 }
 
 fn Tuple<f64,f64>^Inspect::inspect(self, f) {
-    let s_3: ref String;
-    let s_7: ref String;
-    let s_11: ref String;
-    s_3 = String { repr: array.new_data<u8>("["), used: 1 };
-    String::append(f.buf, s_3);
-    f64::inspect_into(self.0, f);
-    s_7 = String { repr: array.new_data<u8>(", "), used: 2 };
-    String::append(f.buf, s_7);
-    f64::inspect_into(self.1, f);
-    s_11 = String { repr: array.new_data<u8>("]"), used: 1 };
-    String::append(f.buf, s_11);
+    let __tuple_3: ref "tuple/[f64, f64]";
+    let v_5: f64;
+    let v_6: f64;
+    let s_8: ref String;
+    let s_14: ref String;
+    let s_18: ref String;
+    s_8 = String { repr: array.new_data<u8>("["), used: 1 };
+    String::append(f.buf, s_8);
+    __tuple_3 = self;
+    v_5 = __tuple_3.0;
+    f64::inspect_into(v_5, f);
+    v_6 = __tuple_3.1;
+    s_14 = String { repr: array.new_data<u8>(", "), used: 2 };
+    String::append(f.buf, s_14);
+    f64::inspect_into(v_6, f);
+    s_18 = String { repr: array.new_data<u8>("]"), used: 1 };
+    String::append(f.buf, s_18);
 }
 
 fn Formatter::apply_padding(self, start_pos) {

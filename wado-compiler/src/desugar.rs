@@ -148,6 +148,7 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
         Item::World(w) => Item::World(w.clone()),
         Item::Test(t) => Item::Test(desugar_test(t, ctx)),
         Item::Global(g) => Item::Global(desugar_global(g, ctx)),
+        Item::TupleTypeDecl(d) => Item::TupleTypeDecl(d.clone()),
     }
 }
 

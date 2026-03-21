@@ -134,7 +134,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if method_info.is_none() {
             let type_param_name = {
                 let resolved = self.type_table.borrow().get(base_type_id).clone();
-                if let ResolvedType::TypeParam { name, .. } = resolved {
+                if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } =
+                    resolved
+                {
                     Some(name)
                 } else {
                     None
@@ -349,6 +351,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                 (mangled, name, type_arg_names, Some(type_args))
             }
+            ResolvedType::Tuple(elems) => {
+                let type_arg_names: Vec<String> = elems
+                    .iter()
+                    .map(|t| self.type_table.borrow().mangle_type_name(*t))
+                    .collect();
+                let receiver = format!("Tuple<{}>", type_arg_names.join(","));
+                (receiver, "Tuple".to_string(), type_arg_names, Some(elems))
+            }
             _ => {
                 let name = self
                     .type_table
@@ -406,7 +416,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Build method_info with base struct name, then apply impl and method type args
         let is_type_param_receiver = matches!(
             self.type_table.borrow().get(base_type_id),
-            ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. }
+            ResolvedType::TypeParam { .. }
+                | ResolvedType::TypePack { .. }
+                | ResolvedType::AssocTypeProjection { .. }
         );
         let param_is_mut = self.lookup_method_param_is_mut(&base_struct_name, &method_call.method);
         let mut method_info = LocalMethodName::new(

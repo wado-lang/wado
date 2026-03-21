@@ -484,6 +484,8 @@ pub struct TypeTable {
     default_trait_module_source: Option<ModuleSource>,
     /// Module source of the canonical `From<T>` trait, set via `#[comp_feature("from")]`.
     from_trait_module_source: Option<ModuleSource>,
+    /// Module source that owns the tuple type family, set via `#[comp_feature("tuple")]`.
+    tuple_module_source: Option<ModuleSource>,
     /// Associated type resolutions: `(concrete_type_id, assoc_name)` → `resolved_type_id`.
     /// Populated when impl blocks with associated type bindings are processed.
     assoc_type_resolutions: IndexMap<(TypeId, String), TypeId>,
@@ -533,6 +535,7 @@ impl TypeTable {
             result_module_source: None,
             default_trait_module_source: None,
             from_trait_module_source: None,
+            tuple_module_source: None,
             assoc_type_resolutions: IndexMap::default(),
             redirects: IndexMap::default(),
             newtype_to_base_name: IndexMap::default(),
@@ -684,6 +687,16 @@ impl TypeTable {
         if comp_features & crate::wir::COMP_FEATURE_FROM != 0 {
             self.from_trait_module_source = Some(module_source);
         }
+    }
+
+    /// Register the module source for the tuple type family (`pub type [..T];`).
+    pub fn register_tuple_module_source(&mut self, module_source: ModuleSource) {
+        self.tuple_module_source = Some(module_source);
+    }
+
+    /// Get the module source that owns the tuple type family.
+    pub fn tuple_module_source(&self) -> Option<&ModuleSource> {
+        self.tuple_module_source.as_ref()
     }
 
     /// Get the module source where the `Default` trait is defined.
@@ -2134,6 +2147,25 @@ pub enum TirStmtKind {
         is_mut: bool,
         /// The value expression (must be a tuple)
         value: TirExpr,
+    },
+    /// Deferred tuple for-of expansion for variadic type packs.
+    ///
+    /// Created when `for let v of iterable` where `iterable` has a tuple type containing
+    /// `TypePack` elements. The monomorphizer expands this after type substitution resolves
+    /// the `TypePack` to a concrete tuple.
+    VariadicForOf {
+        /// The tuple iterable expression (type contains `TypePack` before substitution)
+        iterable: TirExpr,
+        /// The loop variable name
+        binding_name: String,
+        /// Local index for the loop variable
+        binding_local: u32,
+        /// Whether the binding is mutable
+        is_mut: bool,
+        /// The body to execute for each element (resolved with TypePack-typed binding)
+        body: TirBlock,
+        /// Unique ID for generating labels
+        unique_id: u32,
     },
 }
 
