@@ -101,7 +101,9 @@ pub(crate) fn walk_expr(visitor: &mut impl TirVisitor, expr: &mut TirExpr) -> bo
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { call_expr: inner, .. }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }

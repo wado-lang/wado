@@ -1800,9 +1800,9 @@ pub enum TirExprKind {
     /// the `TypePack`. During monomorphization, the pack type is substituted
     /// with each concrete element type to produce individual calls.
     TypePackExpansion {
-        /// The call expression template (resolved with TypePack type)
+        /// The call expression template (resolved with `TypePack` type)
         call_expr: Box<TirExpr>,
-        /// The TypePack type ID (index into type table, pre-substitution)
+        /// The `TypePack` type ID (index into type table, pre-substitution)
         pack_type_id: TypeId,
     },
 

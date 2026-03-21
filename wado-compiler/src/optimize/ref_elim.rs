@@ -121,8 +121,11 @@ fn analyze_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, RefInfo>) {
     match &expr.kind {
         // Field access on a tracked ref local: this is the pattern we want to optimize.
         // The use is acceptable (field-access-only), so we DON'T mark it as non-eliminable.
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
             if let TirExprKind::Local { index, .. } = &inner.kind
                 && refs.contains_key(index)
             {
@@ -325,8 +328,11 @@ fn transform_stmt(stmt: &mut TirStmt, eliminable: &IndexMap<u32, RefInfo>) {
 
 fn transform_expr(expr: &mut TirExpr, eliminable: &IndexMap<u32, RefInfo>) {
     match &mut expr.kind {
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
             // Check if the inner expression is a local that should be replaced
             if let TirExprKind::Local { index, .. } = &inner.kind
                 && let Some(info) = eliminable.get(index)
@@ -666,8 +672,11 @@ fn check_deref_only_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, DerefO
             }
             collect_deref_only_refs_in_block(default, refs);
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
             check_deref_only_uses_in_expr(inner, refs);
         }
         TirExprKind::IntLiteral { .. }
@@ -908,10 +917,11 @@ fn rewrite_deref_only_refs_in_expr(
             changed |= rewrite_deref_only_refs_in_block(default, eliminable);
             changed
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
-            rewrite_deref_only_refs_in_expr(inner, eliminable)
-        }
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => rewrite_deref_only_refs_in_expr(inner, eliminable),
         TirExprKind::Local { .. }
         | TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }

@@ -122,7 +122,9 @@ fn precompute_modified_expr(
             }
             if let TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { call_expr: inner, .. } = &target.kind
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } = &target.kind
                 && let TirExprKind::Local { index, .. } = &inner.kind
             {
                 modified.insert(*index);
@@ -136,7 +138,9 @@ fn precompute_modified_expr(
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { call_expr: inner, .. }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
         | TirExprKind::Cast { expr: inner, .. } => {
             precompute_modified_expr(inner, modified, cache);
         }
@@ -383,7 +387,9 @@ fn collect_modified_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
             }
             if let TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { call_expr: inner, .. } = &target.kind
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } = &target.kind
                 && let TirExprKind::Local { index, .. } = &inner.kind
             {
                 modified.insert(*index);
@@ -397,7 +403,9 @@ fn collect_modified_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { call_expr: inner, .. }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
         | TirExprKind::Cast { expr: inner, .. } => {
             collect_modified_in_expr(inner, modified);
         }
@@ -616,7 +624,9 @@ fn collect_unsafe_in_expr(expr: &TirExpr, unsafe_locals: &mut IndexSet<u32>) {
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { call_expr: inner, .. }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
         | TirExprKind::Cast { expr: inner, .. } => {
             collect_unsafe_in_expr(inner, unsafe_locals);
         }
@@ -949,7 +959,9 @@ fn forward_in_expr(
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion { call_expr: inner, .. }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
         | TirExprKind::Cast { expr: inner, .. } => {
             changed |= forward_in_expr(inner, known, unsafe_locals, type_table, cache);
         }
