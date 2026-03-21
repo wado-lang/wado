@@ -1,0 +1,27 @@
+use { println, Stdout } from "core:cli";
+
+fn check_i32_eqz(x: i32) -> bool {
+    return x == 0;
+}
+
+fn check_i32_neqz(x: i32) -> bool {
+    return x != 0;
+}
+
+fn check_i64_eqz(x: i64) -> bool {
+    return x == 0 as i64;
+}
+
+fn check_i64_neqz(x: i64) -> bool {
+    return x != 0 as i64;
+}
+
+export fn run() with Stdout {
+    println(`i32 eqz: {check_i32_eqz(0)} {check_i32_eqz(42)}`);
+    println(`i32 neqz: {check_i32_neqz(0)} {check_i32_neqz(42)}`);
+    println(`i64 eqz: {check_i64_eqz(0 as i64)} {check_i64_eqz(42 as i64)}`);
+    println(`i64 neqz: {check_i64_neqz(0 as i64)} {check_i64_neqz(42 as i64)}`);
+}
+
+__DATA__
+{"stdout": "i32 eqz: true false\ni32 neqz: false true\ni64 eqz: true false\ni64 neqz: false true\n"}

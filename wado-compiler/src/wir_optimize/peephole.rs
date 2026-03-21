@@ -19,6 +19,7 @@ pub(super) fn run_peephole(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
         optimize_nested(instr, types);
     }
     fold_constant_comparisons(instrs);
+    fold_eqz_patterns(instrs);
     elide_redundant_value_copies(instrs);
     elide_copy_used_only_for_field_reads(instrs);
     // Cross-scope copy elision: traces LocalGet through parent scope definitions.
@@ -206,6 +207,65 @@ fn fold_constant_comparisons_in_instr(instr: &mut WirInstr) {
 
     if let Some(val) = result {
         *instr = WirInstr::I32Const(val);
+    }
+}
+
+/// Replace `I32Eq(expr, I32Const(0))` with `I32Eqz(expr)` (and i64 variant).
+/// Also replace `I32Ne(expr, I32Const(0))` with `I32Eqz(I32Eqz(expr))` — this
+/// is not done because it's not a win. Instead, only `== 0` patterns are folded.
+fn fold_eqz_patterns(instrs: &mut [WirInstr]) {
+    for instr in instrs.iter_mut() {
+        fold_eqz_in_instr(instr);
+    }
+}
+
+fn fold_eqz_in_instr(instr: &mut WirInstr) {
+    // Recurse into children first (bottom-up)
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            fold_eqz_patterns(body);
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            fold_eqz_in_instr(condition);
+            fold_eqz_patterns(then_body);
+            if let Some(eb) = else_body {
+                fold_eqz_patterns(eb);
+            }
+        }
+        _ => {
+            instr.for_each_boxed_child_mut(&mut |child| {
+                fold_eqz_in_instr(child);
+            });
+        }
+    }
+
+    // i32.eq(expr, 0) → i32.eqz(expr)
+    // i32.eq(0, expr) → i32.eqz(expr)
+    match instr {
+        WirInstr::I32Eq(l, r) => {
+            if matches!(r.as_ref(), WirInstr::I32Const(0)) {
+                let operand = std::mem::replace(l, Box::new(WirInstr::Nop));
+                *instr = WirInstr::I32Eqz(operand);
+            } else if matches!(l.as_ref(), WirInstr::I32Const(0)) {
+                let operand = std::mem::replace(r, Box::new(WirInstr::Nop));
+                *instr = WirInstr::I32Eqz(operand);
+            }
+        }
+        WirInstr::I64Eq(l, r) => {
+            if matches!(r.as_ref(), WirInstr::I64Const(0)) {
+                let operand = std::mem::replace(l, Box::new(WirInstr::Nop));
+                *instr = WirInstr::I64Eqz(operand);
+            } else if matches!(l.as_ref(), WirInstr::I64Const(0)) {
+                let operand = std::mem::replace(r, Box::new(WirInstr::Nop));
+                *instr = WirInstr::I64Eqz(operand);
+            }
+        }
+        _ => {}
     }
 }
 
