@@ -3457,7 +3457,26 @@ impl Monomorphizer {
                         }
                         let mangled = type_table.mangle_type_name_resolving_newtypes(inner);
                         let base = type_table.base_type_name(inner);
-                        info.with_substituted_struct_name(&mangled, &base)
+                        let mut substituted =
+                            info.with_substituted_struct_name(&mangled, &base);
+                        // Also substitute method-level type args (e.g. W in process<W>)
+                        if let FunctionRef {
+                            monomorph_info: Some(mi),
+                            ..
+                        } = &*method_func
+                        {
+                            let new_method_type_args: Vec<String> = mi
+                                .type_args
+                                .iter()
+                                .map(|&tid| {
+                                    let sub =
+                                        self.substitute_type(tid, substitution, type_table);
+                                    type_table.mangle_type_name(sub)
+                                })
+                                .collect();
+                            substituted.method_type_args = new_method_type_args;
+                        }
+                        substituted
                     } else if needs_struct_type_args {
                         info.with_struct_type_args(&type_names)
                     } else {
