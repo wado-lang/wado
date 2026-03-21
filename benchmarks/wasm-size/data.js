@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774100022210,
+  "lastUpdate": 1774102950677,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5639,6 +5639,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bf6da7f1811447d83e70a5a3b2c0b898e6b71724"
         },
         "date": 1774100022135,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22175,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "946f44f8e82623f5ae5ba5a476c3eff443771726",
+          "message": "Merge pull request #644 from wado-lang/claude/update-rust-dependencies-hePU3\n\nUpdate dependencies and adapt code to API changes",
+          "timestamp": "2026-03-21T23:17:06+09:00",
+          "tree_id": "4468507fdc0b4d9ecff84acc34bb0983c49b30c8",
+          "url": "https://github.com/wado-lang/wado/commit/946f44f8e82623f5ae5ba5a476c3eff443771726"
+        },
+        "date": 1774102950453,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
