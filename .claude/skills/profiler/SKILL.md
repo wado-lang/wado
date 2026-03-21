@@ -106,5 +106,5 @@ rm -f profile.json
 
 ## Notes
 
-- For instruction-level profiling on Linux, use `--profile jitdump` with `perf`. See `docs/research/jitdump-profiling.md`.
+- For instruction-level profiling on Linux, use `--profile jitdump` with `perf`. See `docs/jitdump-profiling.md`.
 - The `--profile perfmap` mode is also available for Linux `perf` integration without the `perf inject` step, but provides function-level granularity only.
