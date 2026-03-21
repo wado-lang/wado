@@ -81,7 +81,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | CopyProp        | `optimize/copy_prop.rs`              | Copy propagation for trivial bindings                       |
 | SROA            | `optimize/sroa.rs`                   | Scalar replacement of aggregates (struct/tuple elim)        |
 | LICM            | `optimize/licm.rs`                   | Loop-invariant code motion                                  |
-| SelectLower     | `optimize/select_lowering.rs`        | if/else → Wasm `select` instruction                        |
+| SelectLower     | `optimize/select_lowering.rs`        | if/else → Wasm `select` instruction                         |
 | FieldScalarize  | `optimize/field_scalarize.rs`        | Hot field scalarization from GC structs                     |
 | BlockFusion     | `optimize/labeled_block_fusion.rs`   | Labeled block fusion                                        |
 | StoreLoadFwd    | `optimize/store_load_forward.rs`     | Store-load forwarding for literal values                    |
