@@ -5,8 +5,8 @@ use std::cell::RefCell;
 use anyhow::Result;
 use indexmap::IndexMap;
 use wit_parser::{
-    Function, FunctionKind, Handle, InterfaceId, Resolve, Type, TypeDefKind, TypeId, TypeOwner,
-    WorldId, WorldItem, WorldKey,
+    Function, FunctionKind, Handle, InterfaceId, Param, Resolve, Type, TypeDefKind, TypeId,
+    TypeOwner, WorldId, WorldItem, WorldKey,
 };
 
 use crate::ir::{
@@ -195,7 +195,7 @@ impl<'a> Transformer<'a> {
                         }
                     }
                 }
-                WorldItem::Type(_) => {}
+                WorldItem::Type { .. } => {}
             }
         }
 
@@ -286,14 +286,14 @@ impl<'a> Transformer<'a> {
         })
     }
 
-    fn transform_params(&self, params: &[(String, Type)]) -> Result<Vec<WadoParam>> {
+    fn transform_params(&self, params: &[Param]) -> Result<Vec<WadoParam>> {
         params
             .iter()
-            .map(|(name, ty)| {
+            .map(|param| {
                 Ok(WadoParam {
-                    name: to_snake_case(name),
-                    ty: self.transform_type(*ty)?,
-                    wit_name: name.clone(),
+                    name: to_snake_case(&param.name),
+                    ty: self.transform_type(param.ty)?,
+                    wit_name: param.name.clone(),
                 })
             })
             .collect()
