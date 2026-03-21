@@ -272,7 +272,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         name: mangled_func_name,
                                         monomorph_info: None,
                                         method_info: Some(method_info),
-                                        is_cm_adapter: false,
+                                        is_cm_binding: false,
                                     },
                                     type_args: vec![],
                                     args: vec![CallArg::new(inner_literal, false)],
@@ -519,7 +519,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         })
                     },
                     method_info: Some(new_method_info),
-                    is_cm_adapter: false,
+                    is_cm_binding: false,
                 },
                 type_args: vec![],
                 args: new_args
@@ -609,7 +609,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         name: insert_mangled_name.clone(),
                         monomorph_info: None,
                         method_info: Some(insert_method_info.clone()),
-                        is_cm_adapter: false,
+                        is_cm_binding: false,
                     },
                     type_args: vec![],
                     args: vec![CallArg::new(key_expr, false), CallArg::new(value, false)],
@@ -658,7 +658,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         name: build_mangled_name,
                         monomorph_info: build_monomorph,
                         method_info: Some(build_method_info),
-                        is_cm_adapter: false,
+                        is_cm_binding: false,
                     },
                     type_args: vec![],
                     args: vec![],
@@ -777,7 +777,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         })
                     },
                     method_info: Some(new_method_info),
-                    is_cm_adapter: false,
+                    is_cm_binding: false,
                 },
                 type_args: vec![],
                 args: vec![CallArg::new(
@@ -866,7 +866,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             })
                         },
                         method_info: Some(push_method_info.clone()),
-                        is_cm_adapter: false,
+                        is_cm_binding: false,
                     },
                     type_args: vec![],
                     args: vec![CallArg::new(elem_expr, false)],
@@ -910,7 +910,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         })
                     },
                     method_info: Some(build_method_info),
-                    is_cm_adapter: false,
+                    is_cm_binding: false,
                 },
                 type_args: vec![],
                 args: vec![],

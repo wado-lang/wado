@@ -60,8 +60,8 @@ pub fn analyze_project(project: &mut Project) {
 
     // Include export adapter functions as additional entry points
     // (they wrap the user's export functions with CM boundary logic)
-    for adapter_name in project.export_adapter_names.values() {
-        entry_func_names.push(adapter_name.clone());
+    for binding_name in project.export_binding_names.values() {
+        entry_func_names.push(binding_name.clone());
     }
 
     // Compute reachable functions from all entry points
@@ -124,7 +124,7 @@ pub fn analyze_project(project: &mut Project) {
     };
 
     // CM helper functions (cm_lower_string, memory_to_gc_string, etc.)
-    // are called from synthesized CM adapter functions, which are part of the TIR
+    // are called from synthesized CM binding functions, which are part of the TIR
     // and discovered through normal call graph analysis.
 
     // HTTP handler exports need cm_lower_string for ErrorCode payload lowering
@@ -220,7 +220,7 @@ pub fn analyze_project(project: &mut Project) {
             .is_some_and(crate::world_registry::WorldInfo::has_async_export);
     if has_async_export {
         // TaskReturn is always needed for async exports.
-        // For Result-returning exports (e.g., HTTP handler), synthesis::cm_adapter computes
+        // For Result-returning exports (e.g., HTTP handler), synthesis::cm_binding computes
         // the correct flattened CM ABI params. Override the builtin registry's default
         // single-i32 signature with the correct flat params.
         if let Some(flat_params) = project.task_return_flat_params.clone() {
@@ -545,7 +545,7 @@ fn analyze_expr(
                 );
 
                 let callee_module =
-                    if original_callee_module.is_entry_point() && !func.is_cm_adapter {
+                    if original_callee_module.is_entry_point() && !func.is_cm_binding {
                         current_module.clone()
                     } else {
                         original_callee_module.clone()

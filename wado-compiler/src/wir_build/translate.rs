@@ -1189,7 +1189,7 @@ impl FunctionTranslator<'_, '_> {
                     }
                 } else {
                     // Non-Option null: emit ref.null as a placeholder value.
-                    // Used by CM adapters for local initialization before conditional assignment.
+                    // Used by CM bindings for local initialization before conditional assignment.
                     WirInstr::RefNull {
                         heap_type: crate::wir::WirAbstractHeapType::None,
                     }
@@ -1671,7 +1671,7 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     // Not pre-registered — lazily register as a canonical intrinsic.
                     // This handles canonical imports (e.g., "task-return") that may not
-                    // be in TIR imports but are needed by CM adapter synthesis.
+                    // be in TIR imports but are needed by CM binding synthesis.
                     let params: Vec<WirType> = args
                         .iter()
                         .map(|a| self.ctx.type_id_to_wir_type(self.type_table, a.type_id))
@@ -4118,7 +4118,7 @@ impl FunctionTranslator<'_, '_> {
     /// Returns `Some(WirInstr)` if the method has a canonical name and was handled.
     ///
     /// Most CM methods are now handled by synthesis (rewritten to `CmRawCall` or
-    /// internal adapter calls). Only future operations remain here because they
+    /// internal binding calls). Only future operations remain here because they
     /// require payload-parameterized canonical imports.
     fn try_translate_canonical_method(
         &mut self,

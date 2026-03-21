@@ -33,11 +33,11 @@ type "functype/wasi/wasi:random/Random::get_random_u64" = fn() -> i64;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__Random_get_random_u64" = fn() -> u64;
+type "functype/__cm_binding__Random_get_random_u64" = fn() -> u64;
 
-type "functype/__cm_adapter__Insecure_get_insecure_random_u64" = fn() -> u64;
+type "functype/__cm_binding__Insecure_get_insecure_random_u64" = fn() -> u64;
 
 type "functype/__cm_export__run" = fn();
 
@@ -61,7 +61,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/__cm_adapter__InsecureSeed_get_insecure_seed" = fn() -> [u64, u64];
+type "functype/__cm_binding__InsecureSeed_get_insecure_seed" = fn() -> [u64, u64];
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -88,8 +88,8 @@ fn run() with Stdout, Random, Insecure, InsecureSeed {
     let ir2: u64;
     let seed_low: u64;
     let seed_high: u64;
-    r1 = __cm_adapter__Random_get_random_u64();
-    r2 = __cm_adapter__Random_get_random_u64();
+    r1 = __cm_binding__Random_get_random_u64();
+    r2 = __cm_binding__Random_get_random_u64();
     "core:cli/println"(String { repr: array.new_data<u8>("test: random u64 works"), used: 22 });
     if if r1 != 0_i64 -> i32 {
         1;
@@ -105,8 +105,8 @@ fn run() with Stdout, Random, Insecure, InsecureSeed {
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("test: random u64 values same (unlikely but valid)"), used: 49 });
     };
-    ir1 = __cm_adapter__Insecure_get_insecure_random_u64();
-    ir2 = __cm_adapter__Insecure_get_insecure_random_u64();
+    ir1 = __cm_binding__Insecure_get_insecure_random_u64();
+    ir2 = __cm_binding__Insecure_get_insecure_random_u64();
     "core:cli/println"(String { repr: array.new_data<u8>("test: insecure random u64 works"), used: 31 });
     if ir1 != ir2 {
         "core:cli/println"(String { repr: array.new_data<u8>("test: insecure random u64 values differ"), used: 39 });
@@ -115,7 +115,7 @@ fn run() with Stdout, Random, Insecure, InsecureSeed {
     };
     let __sroa_seed_0: u64;
     let __sroa_seed_1: u64;
-    multivalue_bind [__sroa_seed_0, __sroa_seed_1] = __cm_adapter__InsecureSeed_get_insecure_seed();
+    multivalue_bind [__sroa_seed_0, __sroa_seed_1] = __cm_binding__InsecureSeed_get_insecure_seed();
     seed_low = __sroa_seed_0;
     seed_high = __sroa_seed_1;
     "core:cli/println"(String { repr: array.new_data<u8>("test: insecure seed works"), used: 25 });
@@ -131,21 +131,21 @@ fn run() with Stdout, Random, Insecure, InsecureSeed {
     "core:cli/println"(String { repr: array.new_data<u8>("all random tests passed"), used: 23 });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__Random_get_random_u64() {
+fn __cm_binding__Random_get_random_u64() {
     return "wasi/wasi:random/Random::get_random_u64"();
 }
 
-fn __cm_adapter__Insecure_get_insecure_random_u64() {
+fn __cm_binding__Insecure_get_insecure_random_u64() {
     return "wasi/wasi:random/Insecure::get_insecure_random_u64"();
 }
 
-fn __cm_adapter__InsecureSeed_get_insecure_seed() {
+fn __cm_binding__InsecureSeed_get_insecure_seed() {
     let __outptr: i32;
     let __lifted_result_1: i64;
     let __lifted_result_2: i64;
@@ -187,7 +187,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }

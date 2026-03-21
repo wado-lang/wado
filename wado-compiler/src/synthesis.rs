@@ -4,13 +4,13 @@
 //! 1. **Enum traits** — auto-derived `Eq` and `Ord` for enum types
 //! 2. **Inspect/Display impls** — auto-generated `Inspect` and `Display` fallback impls
 //! 3. **Template expansion** — expands `TemplateString` TIR nodes into formatting code
-//! 4. **CM adapters** — Component Model boundary adapters for imports/exports
+//! 4. **CM bindings** — Component Model boundary adapters for imports/exports
 //!
 //! All synthesis runs pre-monomorphize. Template expansion emits trait method calls
 //! (`Display::fmt`, `Inspect::inspect`) that the monomorphizer resolves to concrete
 //! implementations.
 
-pub mod cm_adapter;
+pub mod cm_binding;
 pub mod common;
 pub mod from_synth;
 pub mod serde_synth;
@@ -24,7 +24,7 @@ use crate::project::Project;
 /// Execution order:
 /// 1. Traits — generates `Eq`/`Ord` for enums, `Inspect`/`Display` for all types
 /// 2. Template expansion — expands `TemplateString` nodes into trait method calls
-/// 3. CM adapters — generates Component Model boundary adapters
+/// 3. CM bindings — generates Component Model boundary adapters
 pub fn synthesize(project: Project) -> Result<Project, String> {
     let project = traits::synthesize_traits(project);
 
@@ -46,6 +46,6 @@ pub fn synthesize(project: Project) -> Result<Project, String> {
         template::expand_templates(module, &tt);
     }
 
-    let project = cm_adapter::generate_adapters(project)?;
+    let project = cm_binding::generate_adapters(project)?;
     Ok(project)
 }

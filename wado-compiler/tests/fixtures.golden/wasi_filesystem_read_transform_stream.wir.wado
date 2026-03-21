@@ -71,11 +71,11 @@ type "functype/to_upper" = fn(ref Array<u8>) -> ref Array<u8>;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__Preopens_get_directories" = fn() -> ref Array<Tuple<Descriptor,String>>;
+type "functype/__cm_binding__Preopens_get_directories" = fn() -> ref Array<Tuple<Descriptor,String>>;
 
-type "functype/__cm_adapter__Descriptor_open_at" = fn(i32, i32, ref String, i32, i32) -> ref Result<Descriptor,ErrorCode>;
+type "functype/__cm_binding__Descriptor_open_at" = fn(i32, i32, ref String, i32, i32) -> ref Result<Descriptor,ErrorCode>;
 
 type "functype/__cm_export__run" = fn();
 
@@ -119,7 +119,7 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/__cm_adapter__Descriptor_read_via_stream" = fn(i32, i64) -> [i32, i32];
+type "functype/__cm_binding__Descriptor_read_via_stream" = fn(i32, i64) -> [i32, i32];
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -194,7 +194,7 @@ fn run() with Stdout, Stderr, Preopens {
     let out_tx: i32;
     let subtask: i32;
     let chunk: ref Array<u8>;
-    dirs = __cm_adapter__Preopens_get_directories();
+    dirs = __cm_binding__Preopens_get_directories();
     if dirs.used == 0 {
         return;
     };
@@ -205,18 +205,18 @@ fn run() with Stdout, Stderr, Preopens {
         };
         break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: builtin::array_get<ref "tuple/[Descriptor, String]">(dirs.repr, 0);
     }.0;
-    open_result = __cm_adapter__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("hello.txt"), used: 9 }, 0, 1);
+    open_result = __cm_binding__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("hello.txt"), used: 9 }, 0, 1);
     if ref.test Result<Descriptor,ErrorCode>::Ok(open_result) {
         file = ref.cast Result<Descriptor,ErrorCode>::Ok(open_result).payload_0;
         let __sroa___pattern_temp_1_0: i32;
         let __sroa___pattern_temp_1_1: i32;
-        multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_adapter__Descriptor_read_via_stream(file, 0_i64);
+        multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_binding__Descriptor_read_via_stream(file, 0_i64);
         file_rx = __sroa___pattern_temp_1_0;
         let __pair_temp_1: i64;
         __pair_temp_1 = "wasi/stream-new"();
         out_rx = builtin::i32_wrap_i64(__pair_temp_1);
         out_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-        subtask = __cm_adapter__Stdout_write_via_stream(out_rx);
+        subtask = __cm_binding__Stdout_write_via_stream(out_rx);
         b8: block {
             l9: loop {
                 chunk = "core:internal/cm_stream_read_u8"(file_rx, 4096);
@@ -233,13 +233,13 @@ fn run() with Stdout, Stderr, Preopens {
     };
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__Preopens_get_directories() {
+fn __cm_binding__Preopens_get_directories() {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -283,7 +283,7 @@ fn __cm_adapter__Preopens_get_directories() {
     return __result;
 }
 
-fn __cm_adapter__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
+fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __params_buf: i32;
@@ -312,7 +312,7 @@ fn __cm_adapter__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     return __result_val;
 }
 
-fn __cm_adapter__Descriptor_read_via_stream(self, offset) {
+fn __cm_binding__Descriptor_read_via_stream(self, offset) {
     let __outptr: i32;
     let __lifted_result_3: i32;
     let __lifted_result_4: i32;

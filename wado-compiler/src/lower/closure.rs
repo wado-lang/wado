@@ -802,7 +802,7 @@ impl ClosureLowerer {
                 local_count,
                 local_types,
                 address_taken_locals: IndexSet::default(),
-                is_cm_adapter: false,
+                is_cm_binding: false,
                 inline_hint: InlineHint::Auto,
                 comp_features: 0,
                 export_name: None,
@@ -2393,7 +2393,7 @@ impl ClosureLowerer {
             local_count: callee.local_count,
             local_types: new_local_types,
             address_taken_locals: callee.address_taken_locals.clone(),
-            is_cm_adapter: false,
+            is_cm_binding: false,
             inline_hint: callee.inline_hint,
             comp_features: callee.comp_features,
             export_name: callee.export_name.clone(),
@@ -2607,7 +2607,7 @@ impl ClosureLowerer {
                                     name: call_method_name,
                                     monomorph_info: None,
                                     method_info: Some(call_method_info),
-                                    is_cm_adapter: false,
+                                    is_cm_binding: false,
                                 },
                                 args: call_args,
                                 type_args: Vec::new(),
@@ -3502,7 +3502,7 @@ impl ClosureLowerer {
             name: specialized_name.clone(),
             monomorph_info: None,
             method_info: specialized_method_info,
-            is_cm_adapter: false,
+            is_cm_binding: false,
         };
     }
 

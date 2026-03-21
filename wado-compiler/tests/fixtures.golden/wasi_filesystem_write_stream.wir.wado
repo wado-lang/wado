@@ -69,13 +69,13 @@ type "functype/wasi/wasi:filesystem/Descriptor::open_at" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__Preopens_get_directories" = fn() -> ref Array<Tuple<Descriptor,String>>;
+type "functype/__cm_binding__Preopens_get_directories" = fn() -> ref Array<Tuple<Descriptor,String>>;
 
-type "functype/__cm_adapter__Descriptor_open_at" = fn(i32, i32, ref String, i32, i32) -> ref Result<Descriptor,ErrorCode>;
+type "functype/__cm_binding__Descriptor_open_at" = fn(i32, i32, ref String, i32, i32) -> ref Result<Descriptor,ErrorCode>;
 
-type "functype/__cm_adapter__Descriptor_write_via_stream" = fn(i32, i32, i64) -> i32;
+type "functype/__cm_binding__Descriptor_write_via_stream" = fn(i32, i32, i64) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -115,7 +115,7 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/__cm_adapter__Descriptor_read_via_stream" = fn(i32, i64) -> [i32, i32];
+type "functype/__cm_binding__Descriptor_read_via_stream" = fn(i32, i64) -> [i32, i32];
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -149,7 +149,7 @@ fn run() with Stdout, Stderr, Preopens {
     let data: ref Array<u8>;
     let read_stream: i32;
     let subtask2: i32;
-    dirs = __cm_adapter__Preopens_get_directories();
+    dirs = __cm_binding__Preopens_get_directories();
     if dirs.used == 0 {
         return;
     };
@@ -160,14 +160,14 @@ fn run() with Stdout, Stderr, Preopens {
         };
         break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: builtin::array_get<ref "tuple/[Descriptor, String]">(dirs.repr, 0);
     }.0;
-    write_result = __cm_adapter__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("test_output.txt"), used: 15 }, 9, 3);
+    write_result = __cm_binding__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("test_output.txt"), used: 15 }, 9, 3);
     if ref.test Result<Descriptor,ErrorCode>::Ok(write_result) {
         file = ref.cast Result<Descriptor,ErrorCode>::Ok(write_result).payload_0;
         let __pair_temp_1: i64;
         __pair_temp_1 = "wasi/stream-new"();
         write_rx = builtin::i32_wrap_i64(__pair_temp_1);
         write_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-        subtask1 = __cm_adapter__Descriptor_write_via_stream(file, write_rx, 0_i64);
+        subtask1 = __cm_binding__Descriptor_write_via_stream(file, write_rx, 0_i64);
         data = __seq_lit: block -> ref Array<u8> {
             __local_7 = Array<u8> { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 44, 32, 83, 116, 114, 101, 97, 109, 33, 10), used: 15 };
             break __seq_lit: __local_7;
@@ -177,20 +177,20 @@ fn run() with Stdout, Stderr, Preopens {
         "core:internal/wait_for_subtask"(subtask1);
         let __sroa___pattern_temp_2_0: i32;
         let __sroa___pattern_temp_2_1: i32;
-        multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_adapter__Descriptor_read_via_stream(file, 0_i64);
+        multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_binding__Descriptor_read_via_stream(file, 0_i64);
         read_stream = __sroa___pattern_temp_2_0;
-        subtask2 = __cm_adapter__Stdout_write_via_stream(read_stream);
+        subtask2 = __cm_binding__Stdout_write_via_stream(read_stream);
         "core:internal/wait_for_subtask"(subtask2);
     };
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__Preopens_get_directories() {
+fn __cm_binding__Preopens_get_directories() {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -234,7 +234,7 @@ fn __cm_adapter__Preopens_get_directories() {
     return __result;
 }
 
-fn __cm_adapter__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
+fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __params_buf: i32;
@@ -263,13 +263,13 @@ fn __cm_adapter__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     return __result_val;
 }
 
-fn __cm_adapter__Descriptor_write_via_stream(self, data, offset) {
+fn __cm_binding__Descriptor_write_via_stream(self, data, offset) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:filesystem/Descriptor::write_via_stream"(self, data, offset, __async_outptr);
 }
 
-fn __cm_adapter__Descriptor_read_via_stream(self, offset) {
+fn __cm_binding__Descriptor_read_via_stream(self, offset) {
     let __outptr: i32;
     let __lifted_result_3: i32;
     let __lifted_result_4: i32;

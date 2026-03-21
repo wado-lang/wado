@@ -44,7 +44,7 @@ type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -88,7 +88,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/__cm_adapter__Stdin_read_via_stream" = fn() -> [i32, i32];
+type "functype/__cm_binding__Stdin_read_via_stream" = fn() -> [i32, i32];
 
 type "functype/core:internal/cm_stream_read_u8" = fn(i32, i32) -> [ref array<u8>, i32];
 
@@ -121,7 +121,7 @@ fn run() with Stdout, Stdin {
     let __local_13: ref Formatter;
     let __sroa___pattern_temp_0_0: i32;
     let __sroa___pattern_temp_0_1: i32;
-    multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1] = __cm_adapter__Stdin_read_via_stream();
+    multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1] = __cm_binding__Stdin_read_via_stream();
     stdin_stream = __sroa___pattern_temp_0_0;
     total = 0;
     b0: block {
@@ -160,13 +160,13 @@ fn run() with Stdout, Stdin {
     });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__Stdin_read_via_stream() {
+fn __cm_binding__Stdin_read_via_stream() {
     let __outptr: i32;
     let __lifted_result_1: i32;
     let __lifted_result_2: i32;
@@ -208,7 +208,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }

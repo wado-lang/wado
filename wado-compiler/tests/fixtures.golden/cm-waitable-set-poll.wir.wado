@@ -224,7 +224,7 @@ type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
 type "functype/handle" = fn(i32);
 
-type "functype/__cm_adapter__Fields_new" = fn() -> i32;
+type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_export__handle" = fn(i32);
 
@@ -246,7 +246,7 @@ type "functype/wasi/waitable-join" = fn(i32, i32);
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 import fn realloc from "mem/realloc";
 import fn task-return from "wasi/task-return";
@@ -549,10 +549,10 @@ fn handle(request) {
         __pair_temp_1 = "wasi/future-new"();
         trailers_future_3 = builtin::i32_wrap_i64(__pair_temp_1);
         trailers_tx_4 = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-        headers_5 = __cm_adapter__Fields_new();
+        headers_5 = __cm_binding__Fields_new();
         let __sroa___pattern_temp_2_0: i32;
         let __sroa___pattern_temp_2_1: i32;
-        multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_adapter__Response_new(headers_5, 0, 0, trailers_future_3);
+        multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_binding__Response_new(headers_5, 0, 0, trailers_future_3);
         response_6 = __sroa___pattern_temp_2_0;
         __task_ret_13 = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response_6 };
         __tv_1_15 = 0;
@@ -882,10 +882,10 @@ fn handle(request) {
     __pair_temp_3 = "wasi/future-new"();
     trailers_future_8 = builtin::i32_wrap_i64(__pair_temp_3);
     trailers_tx_9 = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
-    headers_10 = __cm_adapter__Fields_new();
+    headers_10 = __cm_binding__Fields_new();
     let __sroa___pattern_temp_4_0: i32;
     let __sroa___pattern_temp_4_1: i32;
-    multivalue_bind [__sroa___pattern_temp_4_0, __sroa___pattern_temp_4_1] = __cm_adapter__Response_new(headers_10, 0, 0, trailers_future_8);
+    multivalue_bind [__sroa___pattern_temp_4_0, __sroa___pattern_temp_4_1] = __cm_binding__Response_new(headers_10, 0, 0, trailers_future_8);
     response_11 = __sroa___pattern_temp_4_0;
     __task_ret_164 = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response_11 };
     __tv_1_166 = 0;
@@ -1211,11 +1211,11 @@ fn handle(request) {
     drop("mem/realloc"(__fw_write_ptr_4, 40, 8, 0));
 }
 
-fn __cm_adapter__Fields_new() {
+fn __cm_binding__Fields_new() {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers) {
+fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
     let __outptr: i32;
     let __lifted_result_5: i32;
     let __lifted_result_6: i32;

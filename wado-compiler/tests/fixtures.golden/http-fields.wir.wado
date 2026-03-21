@@ -260,15 +260,15 @@ type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
 type "functype/handle" = fn(i32);
 
-type "functype/__cm_adapter__Fields_new" = fn() -> i32;
+type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
-type "functype/__cm_adapter__Fields_has" = fn(i32, ref String) -> bool;
+type "functype/__cm_binding__Fields_has" = fn(i32, ref String) -> bool;
 
-type "functype/__cm_adapter__Fields_append" = fn(i32, ref String, ref Array<u8>) -> ref null "wasi:http/types.wado/HeaderError";
+type "functype/__cm_binding__Fields_append" = fn(i32, ref String, ref Array<u8>) -> ref null "wasi:http/types.wado/HeaderError";
 
-type "functype/__cm_adapter__Fields_clone" = fn(i32) -> i32;
+type "functype/__cm_binding__Fields_clone" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__Fields_delete" = fn(i32, ref String) -> ref null "wasi:http/types.wado/HeaderError";
+type "functype/__cm_binding__Fields_delete" = fn(i32, ref String) -> ref null "wasi:http/types.wado/HeaderError";
 
 type "functype/__cm_export__handle" = fn(i32);
 
@@ -322,7 +322,7 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
-type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -532,8 +532,8 @@ fn handle(request) {
     let __local_255: ref Formatter;
     let __local_258: ref String;
     let __local_260: ref Formatter;
-    fields = __cm_adapter__Fields_new();
-    has_before = __cm_adapter__Fields_has(fields, String { repr: array.new_data<u8>("x-test"), used: 6 });
+    fields = __cm_binding__Fields_new();
+    has_before = __cm_binding__Fields_has(fields, String { repr: array.new_data<u8>("x-test"), used: 6 });
     __cond_4 = has_before == 0;
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -581,12 +581,12 @@ condition: !has_before
         break __seq_lit: __local_5;
     };
     value = value_copy Array<u8>(bytes);
-    append_result = __cm_adapter__Fields_append(fields, String { repr: array.new_data<u8>("x-test"), used: 6 }, value);
+    append_result = __cm_binding__Fields_append(fields, String { repr: array.new_data<u8>("x-test"), used: 6 }, value);
     if ref.is_null(append_result) == 0 {
         "core:internal/panic"(String { repr: array.new_data<u8>("append failed"), used: 13 });
         unreachable;
     };
-    has_after = __cm_adapter__Fields_has(fields, String { repr: array.new_data<u8>("x-test"), used: 6 });
+    has_after = __cm_binding__Fields_has(fields, String { repr: array.new_data<u8>("x-test"), used: 6 });
     if has_after == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_32 = String { repr: builtin::array_new<u8>(123), used: 0 };
@@ -628,8 +628,8 @@ condition: has_after
         });
         unreachable;
     };
-    cloned = __cm_adapter__Fields_clone(fields);
-    cloned_has = __cm_adapter__Fields_has(cloned, String { repr: array.new_data<u8>("x-test"), used: 6 });
+    cloned = __cm_binding__Fields_clone(fields);
+    cloned_has = __cm_binding__Fields_has(cloned, String { repr: array.new_data<u8>("x-test"), used: 6 });
     if cloned_has == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_34 = String { repr: builtin::array_new<u8>(125), used: 0 };
@@ -671,12 +671,12 @@ condition: cloned_has
         });
         unreachable;
     };
-    delete_result = __cm_adapter__Fields_delete(fields, String { repr: array.new_data<u8>("x-test"), used: 6 });
+    delete_result = __cm_binding__Fields_delete(fields, String { repr: array.new_data<u8>("x-test"), used: 6 });
     if ref.is_null(delete_result) == 0 {
         "core:internal/panic"(String { repr: array.new_data<u8>("delete failed"), used: 13 });
         unreachable;
     };
-    has_deleted = __cm_adapter__Fields_has(fields, String { repr: array.new_data<u8>("x-test"), used: 6 });
+    has_deleted = __cm_binding__Fields_has(fields, String { repr: array.new_data<u8>("x-test"), used: 6 });
     __cond_21 = has_deleted == 0;
     if __cond_21 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -719,7 +719,7 @@ condition: !has_deleted
         });
         unreachable;
     };
-    cloned_still_has = __cm_adapter__Fields_has(cloned, String { repr: array.new_data<u8>("x-test"), used: 6 });
+    cloned_still_has = __cm_binding__Fields_has(cloned, String { repr: array.new_data<u8>("x-test"), used: 6 });
     if cloned_still_has == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_38 = String { repr: builtin::array_new<u8>(137), used: 0 };
@@ -765,10 +765,10 @@ condition: cloned_still_has
     __pair_temp_1 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
     trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    response_headers = __cm_adapter__Fields_new();
+    response_headers = __cm_binding__Fields_new();
     let __sroa___pattern_temp_3_0: i32;
     let __sroa___pattern_temp_3_1: i32;
-    multivalue_bind [__sroa___pattern_temp_3_0, __sroa___pattern_temp_3_1] = __cm_adapter__Response_new(response_headers, 0, 0, trailers_future);
+    multivalue_bind [__sroa___pattern_temp_3_0, __sroa___pattern_temp_3_1] = __cm_binding__Response_new(response_headers, 0, 0, trailers_future);
     response = __sroa___pattern_temp_3_0;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -1094,17 +1094,17 @@ condition: cloned_still_has
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 
-fn __cm_adapter__Fields_new() {
+fn __cm_binding__Fields_new() {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn __cm_adapter__Fields_has(self, name) {
+fn __cm_binding__Fields_has(self, name) {
     let __name_packed: i64;
     __name_packed = "core:internal/cm_lower_string"(name);
     return "wasi/wasi:http/Fields::has"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64));
 }
 
-fn __cm_adapter__Fields_append(self, name, value) {
+fn __cm_binding__Fields_append(self, name, value) {
     let __name_packed: i64;
     let __value_packed: i64;
     let __outptr: i32;
@@ -1142,11 +1142,11 @@ fn __cm_adapter__Fields_append(self, name, value) {
     return __result_val;
 }
 
-fn __cm_adapter__Fields_clone(self) {
+fn __cm_binding__Fields_clone(self) {
     return "wasi/wasi:http/Fields::clone"(self);
 }
 
-fn __cm_adapter__Fields_delete(self, name) {
+fn __cm_binding__Fields_delete(self, name) {
     let __name_packed: i64;
     let __outptr: i32;
     let __disc: i32;
@@ -1176,7 +1176,7 @@ fn __cm_adapter__Fields_delete(self, name) {
     return __result_val;
 }
 
-fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers) {
+fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
     let __outptr: i32;
     let __lifted_result_5: i32;
     let __lifted_result_6: i32;

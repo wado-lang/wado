@@ -29,9 +29,9 @@ type "functype/wasi/wasi:clocks/MonotonicClock::now" = fn() -> i64;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__MonotonicClock_now" = fn() -> u64;
+type "functype/__cm_binding__MonotonicClock_now" = fn() -> u64;
 
 type "functype/__cm_export__run" = fn();
 
@@ -76,9 +76,9 @@ fn run() with Stdout, MonotonicClock {
     let t2: u64;
     let t3: u64;
     let elapsed: u64;
-    t1 = __cm_adapter__MonotonicClock_now();
-    t2 = __cm_adapter__MonotonicClock_now();
-    t3 = __cm_adapter__MonotonicClock_now();
+    t1 = __cm_binding__MonotonicClock_now();
+    t2 = __cm_binding__MonotonicClock_now();
+    t3 = __cm_binding__MonotonicClock_now();
     if t2 >=u t1 {
         "core:cli/println"(String { repr: array.new_data<u8>("test: monotonic clock t2 >= t1"), used: 30 });
     } else {
@@ -111,13 +111,13 @@ fn run() with Stdout, MonotonicClock {
     "core:cli/println"(String { repr: array.new_data<u8>("all clocks tests passed"), used: 23 });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__MonotonicClock_now() {
+fn __cm_binding__MonotonicClock_now() {
     return "wasi/wasi:clocks/MonotonicClock::now"();
 }
 
@@ -151,7 +151,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }

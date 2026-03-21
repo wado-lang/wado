@@ -254,9 +254,9 @@ type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
 type "functype/handle" = fn(i32);
 
-type "functype/__cm_adapter__Request_get_scheme" = fn(i32) -> ref null "wasi:http/types.wado/Scheme";
+type "functype/__cm_binding__Request_get_scheme" = fn(i32) -> ref null "wasi:http/types.wado/Scheme";
 
-type "functype/__cm_adapter__Fields_new" = fn() -> i32;
+type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_export__handle" = fn(i32);
 
@@ -306,7 +306,7 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
-type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -476,7 +476,7 @@ fn handle(request) {
     let __len_161: i32;
     let __local_166: ref String;
     let __local_168: ref Formatter;
-    scheme = __cm_adapter__Request_get_scheme(request);
+    scheme = __cm_binding__Request_get_scheme(request);
     if ref.is_null(scheme) == 0 {
         s = value_copy "wasi:http/types.wado/Scheme"(ref.as_non_null(scheme));
         let __match_scrut_0: ref "wasi:http/types.wado/Scheme";
@@ -520,10 +520,10 @@ condition: s matches { Http }
     __pair_temp_1 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
     trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    headers = __cm_adapter__Fields_new();
+    headers = __cm_binding__Fields_new();
     let __sroa___pattern_temp_2_0: i32;
     let __sroa___pattern_temp_2_1: i32;
-    multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
+    multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_binding__Response_new(headers, 0, 0, trailers_future);
     response = __sroa___pattern_temp_2_0;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -849,7 +849,7 @@ condition: s matches { Http }
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 
-fn __cm_adapter__Request_get_scheme(self) {
+fn __cm_binding__Request_get_scheme(self) {
     let __outptr: i32;
     let __disc: i32;
     let __option_result: ref null "wasi:http/types.wado/Scheme";
@@ -883,11 +883,11 @@ fn __cm_adapter__Request_get_scheme(self) {
     return __option_result;
 }
 
-fn __cm_adapter__Fields_new() {
+fn __cm_binding__Fields_new() {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers) {
+fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
     let __outptr: i32;
     let __lifted_result_5: i32;
     let __lifted_result_6: i32;

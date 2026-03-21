@@ -73,17 +73,17 @@ type "functype/__test_7_system_clock__resolution_is_positive" = fn();
 
 type "functype/__test_8_system_clock__two_reads_are_consistent" = fn();
 
-type "functype/__cm_adapter__MonotonicClock_now" = fn() -> u64;
+type "functype/__cm_binding__MonotonicClock_now" = fn() -> u64;
 
-type "functype/__cm_adapter__MonotonicClock_get_resolution" = fn() -> u64;
+type "functype/__cm_binding__MonotonicClock_get_resolution" = fn() -> u64;
 
-type "functype/__cm_adapter__MonotonicClock_wait_for" = fn(i64);
+type "functype/__cm_binding__MonotonicClock_wait_for" = fn(i64);
 
-type "functype/__cm_adapter__MonotonicClock_wait_until" = fn(i64);
+type "functype/__cm_binding__MonotonicClock_wait_until" = fn(i64);
 
-type "functype/__cm_adapter__SystemClock_now" = fn() -> ref "wasi:clocks/system-clock.wado/Instant";
+type "functype/__cm_binding__SystemClock_now" = fn() -> ref "wasi:clocks/system-clock.wado/Instant";
 
-type "functype/__cm_adapter__SystemClock_get_resolution" = fn() -> u64;
+type "functype/__cm_binding__SystemClock_get_resolution" = fn() -> u64;
 
 type "functype/__cm_export____test_0_monotonic__now_is_non_decreasing" = fn();
 
@@ -184,8 +184,8 @@ fn __test_0_monotonic__now_is_non_decreasing() {
     let __local_23: ref String;
     let __local_25: ref Formatter;
     let __local_31: ref String;
-    t1 = __cm_adapter__MonotonicClock_now();
-    t2 = __cm_adapter__MonotonicClock_now();
+    t1 = __cm_binding__MonotonicClock_now();
+    t2 = __cm_binding__MonotonicClock_now();
     __cond = t2 >=u t1;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -249,7 +249,7 @@ fn __test_1_monotonic__resolution_is_positive() {
     let __local_12: ref String;
     let __local_14: ref Formatter;
     let __local_20: ref String;
-    res = __cm_adapter__MonotonicClock_get_resolution();
+    res = __cm_binding__MonotonicClock_get_resolution();
     __cond = res >u 0_i64;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -305,9 +305,9 @@ fn __test_2_monotonic__wait_for_advances_clock() {
     let __local_23: ref String;
     let __local_25: ref Formatter;
     let __local_31: ref String;
-    before = __cm_adapter__MonotonicClock_now();
-    __cm_adapter__MonotonicClock_wait_for(1000000_i64);
-    after = __cm_adapter__MonotonicClock_now();
+    before = __cm_binding__MonotonicClock_now();
+    __cm_binding__MonotonicClock_wait_for(1000000_i64);
+    after = __cm_binding__MonotonicClock_now();
     __cond = after >=u before;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -383,10 +383,10 @@ fn __test_3_monotonic__wait_until_reaches_target() {
     let __local_24: ref String;
     let __local_26: ref Formatter;
     let __local_32: ref String;
-    now = __cm_adapter__MonotonicClock_now();
+    now = __cm_binding__MonotonicClock_now();
     target = now + 1000000_i64;
-    __cm_adapter__MonotonicClock_wait_until(target);
-    after = __cm_adapter__MonotonicClock_now();
+    __cm_binding__MonotonicClock_wait_until(target);
+    after = __cm_binding__MonotonicClock_now();
     __cond = after >=u target;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -461,9 +461,9 @@ fn __test_4_monotonic__wait_for_zero_returns_immediately() {
     let __local_23: ref String;
     let __local_25: ref Formatter;
     let __local_31: ref String;
-    before = __cm_adapter__MonotonicClock_now();
-    __cm_adapter__MonotonicClock_wait_for(0_i64);
-    after = __cm_adapter__MonotonicClock_now();
+    before = __cm_binding__MonotonicClock_now();
+    __cm_binding__MonotonicClock_wait_for(0_i64);
+    after = __cm_binding__MonotonicClock_now();
     __cond = after >=u before;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -534,8 +534,8 @@ fn __test_5_monotonic__wait_until_past_returns_immediately() {
     let __local_12: ref String;
     let __local_14: ref Formatter;
     let __local_20: ref String;
-    __cm_adapter__MonotonicClock_wait_until(0_i64);
-    after = __cm_adapter__MonotonicClock_now();
+    __cm_binding__MonotonicClock_wait_until(0_i64);
+    after = __cm_binding__MonotonicClock_now();
     __cond = after >u 0_i64;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -597,7 +597,7 @@ fn __test_6_system_clock__now_returns_valid_instant() {
     let __local_24: ref Formatter;
     let __local_27: ref String;
     let __local_29: ref Formatter;
-    instant = __cm_adapter__SystemClock_now();
+    instant = __cm_binding__SystemClock_now();
     __v0_1 = instant.seconds;
     __cond_2 = __v0_1 > 0_i64;
     if __cond_2 == 0 {
@@ -678,7 +678,7 @@ fn __test_7_system_clock__resolution_is_positive() {
     let __local_12: ref String;
     let __local_14: ref Formatter;
     let __local_20: ref String;
-    res = __cm_adapter__SystemClock_get_resolution();
+    res = __cm_binding__SystemClock_get_resolution();
     __cond = res >u 0_i64;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -734,8 +734,8 @@ fn __test_8_system_clock__two_reads_are_consistent() {
     let __local_25: ref Formatter;
     let __local_28: ref String;
     let __local_30: ref Formatter;
-    t1 = __cm_adapter__SystemClock_now();
-    t2 = __cm_adapter__SystemClock_now();
+    t1 = __cm_binding__SystemClock_now();
+    t2 = __cm_binding__SystemClock_now();
     if t2.seconds > t1.seconds {
     } else if t2.seconds == t1.seconds {
         __v0 = t2.nanoseconds;
@@ -784,27 +784,27 @@ condition: t2.nanoseconds >= t1.nanoseconds
     };
 }
 
-fn __cm_adapter__MonotonicClock_now() {
+fn __cm_binding__MonotonicClock_now() {
     return "wasi/wasi:clocks/MonotonicClock::now"();
 }
 
-fn __cm_adapter__MonotonicClock_get_resolution() {
+fn __cm_binding__MonotonicClock_get_resolution() {
     return "wasi/wasi:clocks/MonotonicClock::get_resolution"();
 }
 
-fn __cm_adapter__MonotonicClock_wait_for(how_long) {
+fn __cm_binding__MonotonicClock_wait_for(how_long) {
     let __subtask: i32;
     __subtask = "wasi/wasi:clocks/MonotonicClock::wait_for"(how_long);
     "core:internal/wait_for_subtask"(__subtask);
 }
 
-fn __cm_adapter__MonotonicClock_wait_until(when) {
+fn __cm_binding__MonotonicClock_wait_until(when) {
     let __subtask: i32;
     __subtask = "wasi/wasi:clocks/MonotonicClock::wait_until"(when);
     "core:internal/wait_for_subtask"(__subtask);
 }
 
-fn __cm_adapter__SystemClock_now() {
+fn __cm_binding__SystemClock_now() {
     let __outptr: i32;
     let __lifted_result_1: i64;
     let __lifted_result_2: i32;
@@ -818,7 +818,7 @@ fn __cm_adapter__SystemClock_now() {
     return __struct_result;
 }
 
-fn __cm_adapter__SystemClock_get_resolution() {
+fn __cm_binding__SystemClock_get_resolution() {
     return "wasi/wasi:clocks/SystemClock::get_resolution"();
 }
 

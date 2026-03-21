@@ -1,4 +1,4 @@
-# WEP: TIR-Level CM Adapter Synthesis
+# WEP: TIR-Level CM Binding Synthesis
 
 ## Context
 
@@ -6,7 +6,7 @@ The compiler needs to cross the Component Model (CM) boundary at two points: **i
 
 Previously, this logic was scattered across codegen (raw Wasm instruction emission), per-type converter functions in `internal.wado`, and pattern-matching convention structs. Every new WIT type shape required hand-coded support in multiple places.
 
-CM adapter synthesis replaces all of that with a single **type-driven recursive synthesizer** that generates adapter functions as TIR. Adapters flow through the normal compiler pipeline (monomorphize → lower → optimize → codegen) like any other function.
+CM binding synthesis replaces all of that with a single **type-driven recursive synthesizer** that generates binding functions as TIR. Adapters flow through the normal compiler pipeline (monomorphize → lower → optimize → codegen) like any other function.
 
 ## Architecture
 
@@ -15,12 +15,12 @@ CM adapter synthesis replaces all of that with a single **type-driven recursive 
 ```
 load → analyze → resolve (TIR) → effect_check
                                        ↓
-                                   synthesis (traits + inspect + cm_adapter)
+                                   synthesis (traits + inspect + cm_binding)
                                        ↓
                     monomorphize → lower → optimize → wir_build → wir_optimize → codegen
 ```
 
-The CM adapter synthesis runs as part of the `synthesis` phase (alongside trait synthesis and
+The CM binding synthesis runs as part of the `synthesis` phase (alongside trait synthesis and
 inspect synthesis), after effect checking and before monomorphize. Adapter functions go through
 monomorphization, optimization, WIR translation, and codegen like user code.
 
@@ -29,7 +29,7 @@ Note: `wasm_plan` (component planning) is now integrated into the `wir_build` ph
 
 ### Import Adapters
 
-For each WASI function used by the program, `cm_adapter_gen` synthesizes an adapter that:
+For each WASI function used by the program, `cm_binding_gen` synthesizes an binding that:
 
 1. Accepts Wado-typed parameters (String, Array, structs, etc.)
 2. Lowers parameters to CM flat ABI (linear memory via builtins)
@@ -37,11 +37,11 @@ For each WASI function used by the program, `cm_adapter_gen` synthesizes an adap
 4. Lifts the result from CM flat ABI back to Wado types
 5. Returns the Wado-typed result
 
-All call sites are rewritten from the original WASI call to the adapter call.
+All call sites are rewritten from the original WASI call to the binding call.
 
 ### Export Adapters
 
-For each world export, `cm_adapter_gen` synthesizes an adapter that wraps the user's function. The adapter is what the component actually exports — it handles CM ABI translation and calls the user function internally.
+For each world export, `cm_binding_gen` synthesizes an binding that wraps the user's function. The binding is what the component actually exports — it handles CM ABI translation and calls the user function internally.
 
 ### Type-Driven Synthesis
 
@@ -79,7 +79,7 @@ Codegen resolves `local_name` to the imported function index. This node is also 
 
 ### Import Adapters — Complete
 
-All WASI interfaces (cli, clocks, random, http, sockets) use adapter synthesis. Both instance method calls (MethodCall, e.g., `fields.append(name, value)`) and resource static method calls (StaticCall, e.g., `Response::new(headers, null, trailers)`) are rewritten to adapter calls. The old codegen CM paths (`generate_cm_effect_call`, `generate_cm_resource_method_call`) and per-type converters (`cm_list_string_to_array`, `cm_option_string_to_option`, etc.) have been deleted.
+All WASI interfaces (cli, clocks, random, http, sockets) use binding synthesis. Both instance method calls (MethodCall, e.g., `fields.append(name, value)`) and resource static method calls (StaticCall, e.g., `Response::new(headers, null, trailers)`) are rewritten to binding calls. The old codegen CM paths (`generate_cm_effect_call`, `generate_cm_resource_method_call`) and per-type converters (`cm_list_string_to_array`, `cm_option_string_to_option`, etc.) have been deleted.
 
 ### Export Adapters — Async Only
 
@@ -87,11 +87,11 @@ Export adapters currently handle two cases:
 
 #### Void exports (`() -> ()`)
 
-Used by Command world's `run()` and test functions. The adapter calls the user function, then calls `task-return(0)`.
+Used by Command world's `run()` and test functions. The binding calls the user function, then calls `task-return(0)`.
 
 #### Result-returning exports (`(...) -> Result<T, E>`)
 
-Used by Service world's `handle()`. The adapter:
+Used by Service world's `handle()`. The binding:
 
 1. Calls the user function (passing through parameters)
 2. Tests the Result discriminant
@@ -115,7 +115,7 @@ The lowering is fully generic — `synthesize_lower_to_flat` recurses into any t
 
 ## Remaining Work: Generic CM Exports
 
-The current export adapter synthesis works for the two hosted worlds (Command, Service). To support **arbitrary world exports** — including publishing Wado libraries as `.wasm` components — the following work is needed.
+The current export binding synthesis works for the two hosted worlds (Command, Service). To support **arbitrary world exports** — including publishing Wado libraries as `.wasm` components — the following work is needed.
 
 ### Parameter Lifting
 
@@ -124,7 +124,7 @@ Current adapters pass user function parameters through unchanged. This works bec
 - Command world `run()` takes no parameters
 - Service world `handle(request: Request)` receives a resource handle (i32), which needs no lifting
 
-For generic exports with composite parameters, the adapter must **lift flat CM params to Wado types**:
+For generic exports with composite parameters, the binding must **lift flat CM params to Wado types**:
 
 ```wado
 // User writes:
@@ -141,10 +141,10 @@ fn __cm_export__greet(name_ptr: i32, name_len: i32) {
 This requires:
 
 - [x] Compute flat parameter types from the world export's WIT signature
-- [x] Generate `synthesize_lift_from_flat_params` for each parameter in the export adapter
-- [x] Map flat params to adapter function parameters
+- [x] Generate `synthesize_lift_from_flat_params` for each parameter in the export binding
+- [x] Map flat params to binding function parameters
 
-Implemented via `synthesize_lift_from_flat_params` which lifts flat CM params (i32/i64/f32/f64) to Wado-typed values. Handles primitives, bool, char, String, resources, Array, Option, and tuples. The export adapter now detects when param lifting is needed (via `export_needs_param_lifting`) and generates flat-typed adapter params with lifting code.
+Implemented via `synthesize_lift_from_flat_params` which lifts flat CM params (i32/i64/f32/f64) to Wado-typed values. Handles primitives, bool, char, String, resources, Array, Option, and tuples. The export binding now detects when param lifting is needed (via `export_needs_param_lifting`) and generates flat-typed binding params with lifting code.
 
 ### Non-Result Return Types
 
@@ -161,17 +161,17 @@ This requires:
 - [x] `synthesize_lower_to_flat` for non-Result returns (the function exists, just not wired for direct returns)
 - [ ] Handle return-via-flat-params vs return-via-outptr (CM spec: if flat count > `MAX_FLAT_RESULTS`, use an outptr)
 
-Implemented via `synthesize_general_export_adapter` which handles non-Result return types. The adapter calls the user function, lowers the return value to flat CM values, and calls `task-return(0, ...flat_values)` — wrapping in Ok since CM exports wrap returns in `result<T, error-context>`.
+Implemented via `synthesize_general_export_adapter` which handles non-Result return types. The binding calls the user function, lowers the return value to flat CM values, and calls `task-return(0, ...flat_values)` — wrapping in Ok since CM exports wrap returns in `result<T, error-context>`.
 
 ### Sync Export Support
 
 All current adapters assume WASI P3 async semantics (`task-return`). For publishing `.wasm` components consumed by non-async hosts, sync exports are needed:
 
 ```
-// Async (current): adapter calls task-return with flat values
+// Async (current): binding calls task-return with flat values
 cm_raw_call task-return(disc, val1, val2, ...);
 
-// Sync: adapter returns flat values directly
+// Sync: binding returns flat values directly
 return (val1, val2, ...);
 ```
 
@@ -183,10 +183,10 @@ This requires:
 
 ### Trailers Future Decoupling
 
-The trailers future post-return logic uses a Wasm global (`__pending_trailers_tx`) to pass the tx handle from the user's `Future::new()` call to the adapter's post-task-return code. This is HTTP-specific and guarded by `is_http_handler` in `synthesize_result_export_adapter`. The global approach avoids magic memory offsets. Potential improvements:
+The trailers future post-return logic uses a Wasm global (`__pending_trailers_tx`) to pass the tx handle from the user's `Future::new()` call to the binding's post-task-return code. This is HTTP-specific and guarded by `is_http_handler` in `synthesize_result_export_adapter`. The global approach avoids magic memory offsets. Potential improvements:
 
-- [ ] Move trailers future resolution into the user-visible `Response` construction (stdlib level) rather than the export adapter
-- [ ] Or make trailers resolution part of the world-specific adapter template, not embedded in `synthesize_result_export_adapter`
+- [ ] Move trailers future resolution into the user-visible `Response` construction (stdlib level) rather than the export binding
+- [ ] Or make trailers resolution part of the world-specific binding template, not embedded in `synthesize_result_export_adapter`
 
 ### Export Validation
 
@@ -227,7 +227,7 @@ These gaps are safe for current worlds (Command, Service) but would need to be a
 
 - `task-return(0, ...T_flat)` provides `1 + |T_flat|` args
 - The CM expects `1 + max(|T_flat|, |E_flat|)` args (union of Ok and Err payloads)
-- If `error-context` has more flat slots than the Ok payload, the adapter may provide too few args
+- If `error-context` has more flat slots than the Ok payload, the binding may provide too few args
 
 In practice this is safe because:
 
@@ -248,23 +248,23 @@ For `Array<T>` where T is not u8, `synthesize_lift_from_flat_params` writes flat
 
 Import adapters use two strategies depending on the parameter type:
 
-- **Adapter-internal lowering** (String, Array\<u8\>): The adapter accepts a single Wado-level parameter and lowers it internally to multiple flat CM args (ptr + len). This works because String and Array have well-defined Wado TypeIds that codegen can convert to Wasm types.
-- **Call-site flattening** (Option\<T\>, other multi-flat types): The adapter accepts pre-flattened i32 params, and the call-site rewrite transforms Wado-level args into flat values before passing them.
+- **Adapter-internal lowering** (String, Array\<u8\>): The binding accepts a single Wado-level parameter and lowers it internally to multiple flat CM args (ptr + len). This works because String and Array have well-defined Wado TypeIds that codegen can convert to Wasm types.
+- **Call-site flattening** (Option\<T\>, other multi-flat types): The binding accepts pre-flattened i32 params, and the call-site rewrite transforms Wado-level args into flat values before passing them.
 
-The call-site flattening approach was chosen for Option\<T\> because adapter-internal lowering faces a fundamental type mismatch: Wado's `null` literal generates `ref.null` (a GC nullable reference) at the Wasm level, but the adapter would need to accept it as a parameter and extract an i32 discriminant + payload. Converting between GC references and i32 scalars requires non-trivial unwrapping logic (pattern matching, unboxing) that the TIR synthesizer cannot easily generate for all Option\<T\> instantiations.
+The call-site flattening approach was chosen for Option\<T\> because binding-internal lowering faces a fundamental type mismatch: Wado's `null` literal generates `ref.null` (a GC nullable reference) at the Wasm level, but the binding would need to accept it as a parameter and extract an i32 discriminant + payload. Converting between GC references and i32 scalars requires non-trivial unwrapping logic (pattern matching, unboxing) that the TIR synthesizer cannot easily generate for all Option\<T\> instantiations.
 
 By flattening at the call site:
 
 - `null` → `[i32(0), i32(0), ...]` (discriminant=0, zero payload)
 - `OptionSome(value)` → `[i32(1), value, ...]` (discriminant=1, inner value)
 
-The adapter body becomes a simple pass-through for these parameters. This avoids the GC-to-scalar type mismatch entirely.
+The binding body becomes a simple pass-through for these parameters. This avoids the GC-to-scalar type mismatch entirely.
 
 Current limitation: only literal `null` and `OptionSome` expressions are supported at call sites. Arbitrary `Option<T>` variables would require runtime null-check logic at the rewrite site, which is not yet implemented.
 
 #### No Type-Level Validation
 
-Parameter count is validated, but parameter types and return type compatibility are not checked. For example, the compiler won't error if the user declares `export fn run(x: String)` but the world expects `run(x: i32)`. The adapter would generate incorrect lifting code (treating i32 as String).
+Parameter count is validated, but parameter types and return type compatibility are not checked. For example, the compiler won't error if the user declares `export fn run(x: String)` but the world expects `run(x: i32)`. The binding would generate incorrect lifting code (treating i32 as String).
 
 ## Consequences
 
@@ -273,8 +273,8 @@ Parameter count is validated, but parameter types and return type compatibility 
 - **Extensibility**: Any Canonical ABI type is supported by the recursive synthesizer — no per-type hand-coding.
 - **Optimization**: Adapter functions go through lower → optimize → wir_optimize, so the optimizer can inline small adapters, eliminate dead branches, and propagate constants.
 - **Debuggability**: `wado dump --tir-resolved` and `wado dump --tir-lowered` show the full CM glue as Wado code.
-- **Simpler codegen**: Codegen no longer needs to know about CM lifting/lowering. It compiles adapter functions like any other function.
-- **WIR-compatible**: CM adapters are ordinary TIR functions that translate to WIR without special handling in `wir_build`.
+- **Simpler codegen**: Codegen no longer needs to know about CM lifting/lowering. It compiles binding functions like any other function.
+- **WIR-compatible**: CM bindings are ordinary TIR functions that translate to WIR without special handling in `wir_build`.
 
 ### Risks
 
@@ -283,5 +283,5 @@ Parameter count is validated, but parameter types and return type compatibility 
 
 ## Related WEPs
 
-- [WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md) — Moves stream/future/waitable-set canonical operations from `builtin.wado` to `#[canonical]` attributes on resource methods, complementing the import/export adapter synthesis here.
-- [WEP: WASI HTTP Integration](wep-2026-02-21-wasi-http.md) — HTTP handler patterns built on the export adapter synthesis and CM async primitives.
+- [WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md) — Moves stream/future/waitable-set canonical operations from `builtin.wado` to `#[canonical]` attributes on resource methods, complementing the import/export binding synthesis here.
+- [WEP: WASI HTTP Integration](wep-2026-02-21-wasi-http.md) — HTTP handler patterns built on the export binding synthesis and CM async primitives.

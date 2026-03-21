@@ -46,7 +46,7 @@ type "functype/loop_nested_mixed" = fn();
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -348,7 +348,7 @@ fn run() with Stdout {
     loop_nested_mixed();
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
+fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
@@ -386,7 +386,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }

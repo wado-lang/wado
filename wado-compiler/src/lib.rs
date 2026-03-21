@@ -298,7 +298,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 8a: Effect Check ===
     // Runs after synthesis so synthesized functions (trait impls, Inspect, Display, serde, etc.)
     // are also validated. Runs before monomorphize so effect params are still present.
-    // CM adapters are skipped (they are boundary code with special effect semantics).
+    // CM bindings are skipped (they are boundary code with special effect semantics).
     {
         let _span = logger.span("effect-check");
         check_effects(&project.tir_modules, &logger)?;
@@ -521,7 +521,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         tir_modules.as_ref().map(snapshot_tir_modules);
 
     // === Phase 7b+8+9+10: Build Project and run remaining phases ===
-    // Create Project early so CM adapter synthesis runs before monomorphize,
+    // Create Project early so CM binding synthesis runs before monomorphize,
     // matching the compile_with_options pipeline.
     let (
         monomorphized_tir_modules_by_source,
