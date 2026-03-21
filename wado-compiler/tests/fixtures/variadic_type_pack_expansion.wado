@@ -1,0 +1,44 @@
+// Type pack expansion: [..T::method(args)]
+// Constructs a tuple by calling a static method on each type in the pack.
+
+trait MyDefault {
+    fn my_default() -> Self;
+}
+
+impl MyDefault for i32 {
+    fn my_default() -> i32 {
+        return 0;
+    }
+}
+
+impl MyDefault for String {
+    fn my_default() -> String {
+        return "hello";
+    }
+}
+
+impl MyDefault for bool {
+    fn my_default() -> bool {
+        return true;
+    }
+}
+
+fn make_defaults<..T: MyDefault>() -> [..T] {
+    return [..T::my_default()];
+}
+
+test "type pack expansion basic" {
+    let t = make_defaults::<[i32, String, bool]>();
+    assert t.0 == 0;
+    assert t.1 == "hello";
+    assert t.2 == true;
+}
+
+test "type pack expansion pair" {
+    let t = make_defaults::<[i32, i32]>();
+    assert t.0 == 0;
+    assert t.1 == 0;
+}
+
+__DATA__
+{"test": {}}

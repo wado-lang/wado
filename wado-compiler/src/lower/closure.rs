@@ -307,7 +307,8 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
                 self.collect_closures_in_expr(inner);
             }
             TirExprKind::Call { args, .. } => {
@@ -555,7 +556,8 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
                 self.analyze_closure_safety_expr(inner, false);
             }
             TirExprKind::Block(block) => {
@@ -917,7 +919,8 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
                 Self::collect_locals_from_expr(inner, locals);
             }
             TirExprKind::Call { args, .. } => {
@@ -1765,7 +1768,8 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
                 self.fn_param_in_struct_field_expr(inner, fn_param_indices)
             }
             TirExprKind::Call { args, .. } => args
@@ -2018,7 +2022,8 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
                 self.collect_fn_param_specs_expr(inner, func_by_name, type_table, requests);
             }
             TirExprKind::CmRawCall { args, .. } => {
@@ -2199,7 +2204,8 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
                 self.count_closures_in_expr(inner, counter);
             }
             TirExprKind::Call { args, .. } => {
@@ -2931,6 +2937,14 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
+            TirExprKind::TypePackExpansion { expr: inner, pack_param_index } => TirExpr::new(
+                TirExprKind::TypePackExpansion {
+                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
+                    pack_param_index: *pack_param_index,
+                },
+                expr.type_id,
+                expr.span,
+            ),
             TirExprKind::VariantConstruct {
                 variant_type,
                 case_index,
@@ -3328,7 +3342,8 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
                 self.transform_expr(inner, type_table);
             }
             TirExprKind::Call { func, args, .. } => {
@@ -3700,7 +3715,8 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
                 self.transform_remaining_closures_expr(inner);
             }
             TirExprKind::Assign { target, value } => {

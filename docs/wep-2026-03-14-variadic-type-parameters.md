@@ -377,7 +377,7 @@ where T: Reflect<Fields = [..F]>
 - [x] Value spread: lower `[..a, ..b]` into concatenated tuple literal
 - [x] Standard library: add variadic impls for `Inspect`, `InspectAlt`, `Display`,
       `DisplayAlt` in `core:prelude/tuple.wado`; remove hardcoded tuple synthesis
-- [ ] Type pack expansion: lower `[..T::method()]` to a tuple literal at monomorphization
+- [x] Type pack expansion: lower `[..T::method()]` to a tuple literal at monomorphization
 - [ ] Coherence: implement Rule 1 (non-VG wins) and Rule 2 (VG overlap forbidden)
 - [ ] `Reflect` trait: synthesize per-struct impl in the lowering pass
 - [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`

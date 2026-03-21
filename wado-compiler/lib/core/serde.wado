@@ -315,6 +315,30 @@ impl<T: Serialize> Serialize for Array<T> {
 }
 
 
+// Variadic tuple Serialize/Deserialize impls require compiler support for
+// variadic trait impls with method-level type params (S in serialize<S>, D in deserialize<D>).
+// Currently, the compiler cannot resolve method calls on variadic tuple types when the
+// method has its own generic parameters. Until this is fixed, tuple serde remains
+// compiler-synthesized.
+//
+// impl<..T: Serialize> Serialize for [..T] {
+//     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+//         let mut len = 0;
+//         for let _v of *self { len += 1; }
+//         let seq_r = s.begin_seq(len);
+//         if let Ok(mut seq) = seq_r {
+//             for let v of *self {
+//                 v.__serialize_seq_element(&mut seq);
+//             }
+//             return seq.end();
+//         }
+//         if let Err(e) = seq_r {
+//             return Result::<(), SerializeError>::Err(e);
+//         }
+//         unreachable();
+//     }
+// }
+
 impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         if let Ok(v) = self {
@@ -551,6 +575,18 @@ impl<T: Deserialize> Deserialize for Array<T> {
         unreachable();
     }
 }
+
+// Variadic tuple Deserialize: blocked by same limitation as Serialize above.
+//
+// impl<..T: Deserialize> Deserialize for [..T] {
+//     fn deserialize<D: Deserializer>(d: &mut D) -> Result<[..T], DeserializeError> {
+//         let seq_r = d.begin_seq();
+//         if let Ok(mut seq) = seq_r {
+//             let result = [..T::__seq_next(&mut seq)];
+//             ...
+//         }
+//     }
+// }
 
 impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Result<T, E>, DeserializeError> {

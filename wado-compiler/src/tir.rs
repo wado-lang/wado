@@ -1792,6 +1792,17 @@ pub enum TirExprKind {
         expr: Box<TirExpr>,
     },
 
+    /// Type pack method expansion: `[..T::method(args)]` inside a `TupleLiteral`.
+    /// Created by the resolver when a spread expression calls a static method on a TypePack.
+    /// Expanded by monomorphizer into N calls: `[T_0::method(args), T_1::method(args), ...]`.
+    TypePackExpansion {
+        /// The call expression template (with TypePack-based receiver type).
+        /// Cloned and type-substituted per element during expansion.
+        expr: Box<TirExpr>,
+        /// The TypePack parameter index for per-element substitution override.
+        pack_param_index: u32,
+    },
+
     /// Access to a captured variable inside a closure body
     Capture {
         /// Index into the closure's captures array

@@ -240,7 +240,8 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, in_loop: bool, in_c
         TirExprKind::ClosureToCanonical { functor, .. } => {
             analyze_expr(functor, result, in_loop, in_condition);
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
+        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion { expr: inner, .. } => {
             analyze_expr(inner, result, in_loop, in_condition);
         }
         TirExprKind::Index {
@@ -552,6 +553,7 @@ fn apply_in_expr(
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. } => {
             apply_in_expr(inner, substitutions, dead_locals);
         }

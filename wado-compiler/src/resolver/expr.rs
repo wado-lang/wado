@@ -2320,6 +2320,50 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
+    /// Check if a resolved expression is a static call on a TypePack parameter,
+    /// returning the pack parameter index if so.
+    /// Also handles `?` (TryOp) wrapping: `T::method(args)?` desugars into a Match
+    /// whose scrutinee is the original Call.
+    fn find_type_pack_call_index(&self, expr: &TirExpr) -> Option<u32> {
+        // Direct call: T::method(args)
+        let call_expr = match &expr.kind {
+            TirExprKind::Call { .. } => Some(expr),
+            // TryOp desugars to Match { expr: Call, arms: [Ok(v)=>v, Err(e)=>return] }
+            TirExprKind::Match {
+                expr: scrutinee, ..
+            } => {
+                if let TirExprKind::Call { .. } = scrutinee.kind {
+                    Some(scrutinee.as_ref())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        let call_expr = call_expr?;
+        if let TirExprKind::Call { ref func, .. } = call_expr.kind
+            && let Some(ref method_info) = func.method_info
+            && method_info.is_type_param_receiver
+        {
+            let receiver_name = &method_info.struct_name;
+            self.trait_ctx
+                .type_params
+                .get(receiver_name)
+                .and_then(|&(idx, tid)| {
+                    if matches!(
+                        self.type_table.borrow().get(tid),
+                        ResolvedType::TypePack { .. }
+                    ) {
+                        Some(idx)
+                    } else {
+                        None
+                    }
+                })
+        } else {
+            None
+        }
+    }
+
     /// Resolve a tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`
     pub(super) fn resolve_tuple_literal(
         &mut self,
@@ -2337,15 +2381,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let contains_pack = self.type_contains_pack(spread_expr.type_id);
                 let spread_type = self.type_table.borrow().get(spread_expr.type_id).clone();
                 if contains_pack {
-                    // Keep as TupleSpread for monomorphization to expand later
-                    elem_types.push(spread_expr.type_id);
-                    elements.push(TirExpr::new(
-                        TirExprKind::TupleSpread {
-                            expr: Box::new(spread_expr),
-                        },
-                        *elem_types.last().unwrap(),
-                        elem.span(),
-                    ));
+                    // Check if this is a static method call on a type pack: [..T::method(args)]
+                    // Also handles [..T::method(args)?] where ? desugars to a Match wrapping Call
+                    let pack_index = self.find_type_pack_call_index(&spread_expr);
+
+                    if let Some(pack_idx) = pack_index {
+                        // Type pack expansion: [..T::method(args)]
+                        elem_types.push(spread_expr.type_id);
+                        elements.push(TirExpr::new(
+                            TirExprKind::TypePackExpansion {
+                                expr: Box::new(spread_expr),
+                                pack_param_index: pack_idx,
+                            },
+                            *elem_types.last().unwrap(),
+                            elem.span(),
+                        ));
+                    } else {
+                        // Keep as TupleSpread for monomorphization to expand later
+                        elem_types.push(spread_expr.type_id);
+                        elements.push(TirExpr::new(
+                            TirExprKind::TupleSpread {
+                                expr: Box::new(spread_expr),
+                            },
+                            *elem_types.last().unwrap(),
+                            elem.span(),
+                        ));
+                    }
                 } else if let ResolvedType::Tuple(inner_elems) = spread_type {
                     // For concrete tuples, expand inline via FieldAccess.
                     // If the expression is non-trivial (not a local), bind it to a
