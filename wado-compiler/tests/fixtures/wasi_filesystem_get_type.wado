@@ -1,0 +1,106 @@
+// Tests: Descriptor::get_type and Descriptor::get_flags
+//
+// Verifies that:
+// - get_type() on a directory descriptor returns Directory
+// - get_type() on a file descriptor returns RegularFile
+// - get_flags() returns the flags the file was opened with
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, DescriptorType, DescriptorFlags, PathFlags, OpenFlags } from "wasi:filesystem";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Test get_type on directory descriptor
+    let dir_type_result = dir.get_type();
+    if let Ok(dt) = dir_type_result {
+        if dt == DescriptorType::Directory {
+            println("get_type: directory descriptor is Directory (correct)");
+        } else {
+            eprintln("get_type: directory descriptor has wrong type");
+        }
+    } else {
+        eprintln("get_type: failed on directory descriptor");
+    }
+
+    // Test get_type on file descriptor
+    let open_result = dir.open_at(
+        PathFlags::none(),
+        "hello.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+
+    if let Ok(file) = open_result {
+        let file_type_result = file.get_type();
+        if let Ok(ft) = file_type_result {
+            if ft == DescriptorType::RegularFile {
+                println("get_type: file descriptor is RegularFile (correct)");
+            } else {
+                eprintln("get_type: file descriptor has wrong type");
+            }
+        } else {
+            eprintln("get_type: failed on file descriptor");
+        }
+
+        // Test get_flags on file opened with Read
+        let flags_result = file.get_flags();
+        if let Ok(flags) = flags_result {
+            if flags & DescriptorFlags::Read == DescriptorFlags::Read {
+                println("get_flags: Read flag is set (correct)");
+            } else {
+                eprintln("get_flags: Read flag not set");
+            }
+        } else {
+            eprintln("get_flags: failed on file descriptor");
+        }
+    } else {
+        eprintln("failed to open hello.txt");
+        return;
+    }
+
+    // Test get_flags on file opened with Read|Write
+    let rw_result = dir.open_at(
+        PathFlags::none(),
+        "hello.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    );
+
+    if let Ok(rw_file) = rw_result {
+        let rw_flags_result = rw_file.get_flags();
+        if let Ok(rw_flags) = rw_flags_result {
+            if rw_flags & DescriptorFlags::Read == DescriptorFlags::Read
+                && rw_flags & DescriptorFlags::Write == DescriptorFlags::Write
+            {
+                println("get_flags: Read|Write flags are set (correct)");
+            } else {
+                eprintln("get_flags: Read|Write flags not both set");
+            }
+        } else {
+            eprintln("get_flags: failed on rw file descriptor");
+        }
+    } else {
+        eprintln("failed to open hello.txt for read/write");
+    }
+
+    println("all get_type/get_flags tests passed");
+}
+
+__DATA__
+{
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout_contains": [
+        "get_type: directory descriptor is Directory (correct)",
+        "get_type: file descriptor is RegularFile (correct)",
+        "get_flags: Read flag is set (correct)",
+        "get_flags: Read|Write flags are set (correct)",
+        "all get_type/get_flags tests passed"
+    ]
+}

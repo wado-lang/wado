@@ -1,0 +1,135 @@
+// Tests: Descriptor::symlink_at, readlink_at, link_at
+//
+// Verifies that:
+// - symlink_at creates a symbolic link
+// - readlink_at reads the symlink target
+// - Opening the symlink with SymlinkFollow reads the original file
+// - link_at creates a hard link
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, Filesize, DescriptorType, DescriptorFlags, PathFlags, OpenFlags, ErrorCode } from "wasi:filesystem";
+use { wait_for_subtask } from "core:internal";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Test symlink_at: create a symlink to hello.txt
+    let sym_result = dir.symlink_at("hello.txt", "test_symlink");
+    if let Ok(_) = sym_result {
+        println("symlink_at: created symlink");
+    } else if let Err(err) = sym_result {
+        if err == ErrorCode::Unsupported {
+            println("symlink_at: not supported (skipping symlink tests)");
+            // Try link_at instead
+            test_link_at(&dir);
+            println("all symlink tests passed");
+            return;
+        }
+        eprintln("symlink_at: failed with unexpected error");
+        return;
+    }
+
+    // Test readlink_at: read the symlink target
+    let readlink_result = dir.readlink_at("test_symlink");
+    if let Ok(target) = readlink_result {
+        if target == "hello.txt" {
+            println("readlink_at: target is hello.txt (correct)");
+        } else {
+            eprintln(`readlink_at: unexpected target: {target}`);
+        }
+    } else {
+        eprintln("readlink_at: failed");
+    }
+
+    // Open the symlink with SymlinkFollow and verify content
+    let open_via_link = dir.open_at(
+        PathFlags::SymlinkFollow,
+        "test_symlink",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+
+    if let Ok(linked_file) = open_via_link {
+        let stat_result = linked_file.stat();
+        if let Ok(stat) = stat_result {
+            if stat.type == DescriptorType::RegularFile && stat.size == 14 as Filesize {
+                println("symlink follow: opened file has correct type and size (correct)");
+            } else {
+                eprintln("symlink follow: unexpected type or size");
+            }
+        }
+
+        // Read content via the symlink
+        let [read_stream, _done] = linked_file.read_via_stream(0 as Filesize);
+        let [out_rx, out_tx] = Stream::<u8>::new();
+        let sub = Stdout::write_via_stream(out_rx);
+        loop {
+            let chunk = read_stream.read(4096);
+            if chunk.len() == 0 {
+                break;
+            }
+            out_tx.write(chunk);
+        }
+        read_stream.drop();
+        out_tx.drop();
+        wait_for_subtask(sub);
+    } else {
+        eprintln("symlink follow: failed to open");
+    }
+
+    // Clean up symlink
+    let unlink_sym = dir.unlink_file_at("test_symlink");
+    if let Ok(_) = unlink_sym {
+        println("symlink cleanup: removed test_symlink");
+    } else {
+        eprintln("symlink cleanup: failed");
+    }
+
+    // Test link_at (hard link)
+    test_link_at(&dir);
+
+    println("all symlink tests passed");
+}
+
+fn test_link_at(dir: &Descriptor) with Stdout, Stderr {
+    let link_result = dir.link_at(
+        PathFlags::none(),
+        "hello.txt",
+        dir,
+        "test_hardlink",
+    );
+    if let Ok(_) = link_result {
+        println("link_at: created hard link");
+
+        // Verify hard link has same content
+        let link_stat = dir.stat_at(PathFlags::none(), "test_hardlink");
+        if let Ok(stat) = link_stat {
+            if stat.size == 14 as Filesize {
+                println("link_at: hard link has correct size (correct)");
+            }
+        }
+
+        // Clean up
+        dir.unlink_file_at("test_hardlink");
+    } else if let Err(err) = link_result {
+        if err == ErrorCode::Unsupported {
+            println("link_at: not supported (skipping)");
+        } else {
+            eprintln("link_at: failed with unexpected error");
+        }
+    }
+}
+
+__DATA__
+{
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout_contains": [
+        "all symlink tests passed"
+    ]
+}

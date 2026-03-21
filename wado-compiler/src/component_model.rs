@@ -2085,6 +2085,10 @@ pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
             if let Some(members) = registry.get_flags_members(&named.name) {
                 return crate::synthesis::cm_binding::cm_flags_byte_size(members.len());
             }
+            // Check variants (e.g., NewTimestamp)
+            if let Some(sa) = wasi_variant_cm_size_align(&named.name, registry) {
+                return sa.0;
+            }
             crate::cm_abi::cm_size(ty)
         }
         Type::Generic(g) => match g.name.as_str() {
@@ -2133,6 +2137,10 @@ pub fn cm_align_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
             if let Some(members) = registry.get_flags_members(&named.name) {
                 return crate::synthesis::cm_binding::cm_flags_byte_align(members.len());
             }
+            // Check variants
+            if let Some(sa) = wasi_variant_cm_size_align(&named.name, registry) {
+                return sa.1;
+            }
             crate::cm_abi::cm_align(ty)
         }
         Type::Generic(g) => match g.name.as_str() {
@@ -2163,8 +2171,8 @@ pub fn wasi_variant_cm_size_align(name: &str, registry: &WasiRegistry) -> Option
     let mut max_payload_align = 1u32;
     for case in cases {
         if let Some(ty) = &case.payload {
-            max_payload_size = max_payload_size.max(crate::cm_abi::cm_size(ty));
-            max_payload_align = max_payload_align.max(crate::cm_abi::cm_align(ty));
+            max_payload_size = max_payload_size.max(cm_size_with_registry(ty, registry));
+            max_payload_align = max_payload_align.max(cm_align_with_registry(ty, registry));
         }
     }
     let disc_size = 1u32; // u8 for n ≤ 256 cases

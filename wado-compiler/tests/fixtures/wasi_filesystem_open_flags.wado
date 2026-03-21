@@ -1,0 +1,105 @@
+// Tests: OpenFlags::Exclusive, OpenFlags::Directory, unlink_file_at
+//
+// Verifies that:
+// - Create|Exclusive on a new file succeeds
+// - Create|Exclusive on an existing file returns Exist error
+// - Directory flag on a directory succeeds
+// - Directory flag on a file returns NotDirectory error
+// - unlink_file_at removes a file
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, DescriptorType, DescriptorFlags, PathFlags, OpenFlags, ErrorCode } from "wasi:filesystem";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Test Create|Exclusive on a new file
+    let excl_result = dir.open_at(
+        PathFlags::none(),
+        "exclusive_test.txt",
+        OpenFlags::Create | OpenFlags::Exclusive,
+        DescriptorFlags::Write,
+    );
+
+    if let Ok(_file) = excl_result {
+        println("exclusive: new file created successfully");
+    } else {
+        eprintln("exclusive: failed to create new file");
+        return;
+    }
+
+    // Test Create|Exclusive on existing file should fail with Exist
+    let excl_dup_result = dir.open_at(
+        PathFlags::none(),
+        "exclusive_test.txt",
+        OpenFlags::Create | OpenFlags::Exclusive,
+        DescriptorFlags::Write,
+    );
+
+    if let Err(err) = excl_dup_result {
+        if err == ErrorCode::Exist {
+            println("exclusive: existing file returns Exist error (correct)");
+        } else {
+            eprintln("exclusive: existing file returned wrong error");
+        }
+    } else {
+        eprintln("exclusive: existing file should have returned error");
+    }
+
+    // Test OpenFlags::Directory on a directory (open the subdir)
+    let dir_result = dir.open_at(
+        PathFlags::none(),
+        "subdir",
+        OpenFlags::Directory,
+        DescriptorFlags::Read,
+    );
+
+    if let Ok(_d) = dir_result {
+        println("directory: opened directory successfully");
+    } else {
+        eprintln("directory: failed to open directory");
+    }
+
+    // Test OpenFlags::Directory on a regular file should fail
+    let dir_on_file = dir.open_at(
+        PathFlags::none(),
+        "hello.txt",
+        OpenFlags::Directory,
+        DescriptorFlags::Read,
+    );
+
+    if let Err(_err) = dir_on_file {
+        println("directory: file returns error (correct)");
+    } else {
+        eprintln("directory: file should have returned error");
+    }
+
+    // Clean up: unlink the exclusive test file
+    let unlink_result = dir.unlink_file_at("exclusive_test.txt");
+    if let Ok(_) = unlink_result {
+        println("unlink: cleaned up exclusive_test.txt");
+    } else {
+        eprintln("unlink: failed to clean up");
+    }
+
+    println("all open_flags tests passed");
+}
+
+__DATA__
+{
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout_contains": [
+        "exclusive: new file created successfully",
+        "exclusive: existing file returns Exist error (correct)",
+        "directory: opened directory successfully",
+        "directory: file returns error (correct)",
+        "unlink: cleaned up exclusive_test.txt",
+        "all open_flags tests passed"
+    ]
+}

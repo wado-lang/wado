@@ -1,0 +1,118 @@
+// Tests: Descriptor::advise, sync_data, sync
+//
+// Verifies that:
+// - advise() with various Advice values succeeds
+// - sync_data() succeeds on an open file
+// - sync() succeeds on an open file
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, Filesize, DescriptorFlags, PathFlags, OpenFlags, Advice } from "wasi:filesystem";
+use { wait_for_subtask } from "core:internal";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Open hello.txt for reading to test advise
+    let read_result = dir.open_at(
+        PathFlags::none(),
+        "hello.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+
+    if let Ok(file) = read_result {
+        // Get file size for advise calls
+        let stat_result = file.stat();
+        let file_size = if let Ok(stat) = stat_result {
+            stat.size
+        } else {
+            14 as Filesize // fallback: hello.txt is 14 bytes
+        };
+
+        // Test advise with Sequential
+        let adv1 = file.advise(0 as Filesize, file_size, Advice::Sequential);
+        if let Ok(_) = adv1 {
+            println("advise: Sequential succeeded");
+        } else {
+            eprintln("advise: Sequential failed");
+        }
+
+        // Test advise with Random
+        let adv2 = file.advise(0 as Filesize, file_size, Advice::Random);
+        if let Ok(_) = adv2 {
+            println("advise: Random succeeded");
+        } else {
+            eprintln("advise: Random failed");
+        }
+
+        // Test advise with Normal
+        let adv3 = file.advise(0 as Filesize, file_size, Advice::Normal);
+        if let Ok(_) = adv3 {
+            println("advise: Normal succeeded");
+        } else {
+            eprintln("advise: Normal failed");
+        }
+    } else {
+        eprintln("failed to open hello.txt for advise test");
+    }
+
+    // Create a writable file for sync tests
+    let write_result = dir.open_at(
+        PathFlags::none(),
+        "sync_test.txt",
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    );
+
+    if let Ok(wfile) = write_result {
+        // Write some data
+        let [w_rx, w_tx] = Stream::<u8>::new();
+        let sub = wfile.write_via_stream(w_rx, 0 as Filesize);
+        let data: Array<u8> = [116, 101, 115, 116]; // "test"
+        w_tx.write(data);
+        w_tx.drop();
+        wait_for_subtask(sub);
+
+        // Test sync_data
+        let sd_result = wfile.sync_data();
+        if let Ok(_) = sd_result {
+            println("sync_data: succeeded");
+        } else {
+            eprintln("sync_data: failed");
+        }
+
+        // Test sync
+        let sync_result = wfile.sync();
+        if let Ok(_) = sync_result {
+            println("sync: succeeded");
+        } else {
+            eprintln("sync: failed");
+        }
+
+        // Clean up
+        dir.unlink_file_at("sync_test.txt");
+    } else {
+        eprintln("failed to create sync_test.txt");
+    }
+
+    println("all advise/sync tests passed");
+}
+
+__DATA__
+{
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout_contains": [
+        "advise: Sequential succeeded",
+        "advise: Random succeeded",
+        "advise: Normal succeeded",
+        "sync_data: succeeded",
+        "sync: succeeded",
+        "all advise/sync tests passed"
+    ]
+}
