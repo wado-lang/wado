@@ -42,10 +42,11 @@ mise run benchmark-sieve
 
 ### zlib Compression (`zlib/`)
 
-Compresses and decompresses 100KB of patterned data (bytes `i % 256`) for 10 iterations.
+Compresses and decompresses `twitter.json` (~631KB of real JSON data) for 10 iterations.
 
 - **Use case**: Compression library performance, byte array throughput
 - **Operations**: zlib compress/decompress, large byte array manipulation
+- **Data**: `json_twitter/twitter.json` — realistic JSON from Twitter API (better than synthetic patterns)
 - **Comparison**: Wado (`core:zlib`, pure Wado) vs C zlib-1.3.1 (Wasm/wasmtime) vs zlib-rs (native Rust)
 
 ```bash
@@ -150,23 +151,23 @@ All implementations produce the same result: 664,579 primes.
 
 All implementations produce the same result: 664,579 primes.
 
-### zlib Compress (100KB x 10 iterations)
+### zlib Compress (twitter.json 631KB x 10 iterations)
 
 | Runtime               | Time (ms) | Relative |
 | --------------------- | --------- | -------- |
-| zlib-rs (native Rust) | 0.926     | 1.00x    |
-| C zlib (Wasm)         | 5.698     | 6.15x    |
-| **Wado** (pure Wado)  | 30        | 32.40x   |
+| zlib-rs (native Rust) | 28        | 1.00x    |
+| C zlib (Wasm)         | 70        | 2.50x    |
+| **Wado** (pure Wado)  | 476       | 17.00x   |
 
-### zlib Decompress (100KB x 10 iterations)
+### zlib Decompress (twitter.json 631KB x 10 iterations)
 
 | Runtime               | Time (ms) | Relative |
 | --------------------- | --------- | -------- |
-| zlib-rs (native Rust) | 0.171     | 1.00x    |
-| C zlib (Wasm)         | 1.174     | 6.87x    |
-| **Wado** (pure Wado)  | 16        | 93.57x   |
+| zlib-rs (native Rust) | 4         | 1.00x    |
+| C zlib (Wasm)         | 10        | 2.50x    |
+| **Wado** (pure Wado)  | 97        | 24.25x   |
 
-zlib-rs runs natively; C zlib and Wado are compiled to Wasm and run on wasmtime. Wado's `core:zlib` is a pure Wado implementation, so significant overhead is expected.
+zlib-rs runs natively; C zlib and Wado are compiled to Wasm and run on wasmtime. Wado's `core:zlib` is a pure Wado implementation. Compression ratio: ~8–9% (631KB → ~52KB).
 
 ### Float-to-String (500,000 conversions, 6 decimal places)
 
@@ -301,7 +302,7 @@ samply record wado run --profile perfmap benchmark/count_prime/count_prime.wado
 - Times include program initialization overhead
 - Wado CLI is built with `--release` for fair comparison with natively-compiled competitors
 - Wado benchmarks use `MonotonicClock::now()` from `wasi:clocks` for timing
-- zlib benchmark compares Wado's pure Wado zlib, C zlib-1.3.1 (Wasm/wasmtime), and native zlib-rs (Rust)
+- zlib benchmark uses `twitter.json` (~631KB) as input; compares Wado's pure Wado zlib, C zlib-1.3.1 (Wasm/wasmtime), and native zlib-rs (Rust)
 - fts benchmark compares Wado, C (`snprintf`), Rust (`write!`), and Zig (`std.fmt`)
 - Rust benchmarks use `rustc -O` (release optimization)
 - Zig benchmarks use `-OReleaseFast`

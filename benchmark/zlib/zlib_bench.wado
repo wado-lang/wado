@@ -1,15 +1,38 @@
 // zlib compression benchmark for Wado
-// Compresses and decompresses 100KB of patterned data x10 iterations
+// Compresses and decompresses twitter.json (~631KB) x10 iterations
 //
 // How to run:
 //   mise run benchmark-zlib
 //
-// Or manually:
-//   cargo run --bin wado -- run -O2 benchmark/zlib_bench.wado
+// Or manually (from benchmark/ directory):
+//   cargo run --bin wado -- run -O2 --dir .::. zlib/zlib_bench.wado
 
 use { println, Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { zlib_compress, inflate_zlib } from "core:zlib";
+use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+fn read_file_bytes(path: String) -> Array<u8> with Preopens {
+    let dirs = Preopens::get_directories();
+    let root = dirs[0].0;
+    let file = match root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read) {
+        Ok(f) => f,
+        Err(_) => panic(`failed to open {path}`),
+    };
+    let [stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut buf: Array<u8> = [];
+    loop {
+        let chunk = stream.read(65536);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let mut i = 0; i < chunk.len(); i += 1 {
+            buf.append(chunk[i]);
+        }
+    }
+    stream.drop();
+    return buf;
+}
 
 test "compression round-trip" {
     let mut data: Array<u8> = [];
@@ -23,17 +46,11 @@ test "compression round-trip" {
     assert decompressed[99] == 99;
 }
 
-export fn run() with Stdout, MonotonicClock {
-    let size = 100000;
+export fn run() with Stdout, MonotonicClock, Preopens {
+    let data = read_file_bytes("json_twitter/twitter.json");
     let iterations = 10;
 
-    // Generate 100KB of patterned data: bytes (i % 256)
-    let mut data = Array::<u8>::with_capacity(size);
-    for let mut i = 0; i < size; i += 1 {
-        data.append((i % 256) as u8);
-    }
-
-    println(`zlib {size} bytes x {iterations} iterations`);
+    println(`zlib {data.len()} bytes x {iterations} iterations`);
 
     // Benchmark compression (10 iterations)
     let t0 = MonotonicClock::now();
@@ -61,7 +78,7 @@ export fn run() with Stdout, MonotonicClock {
     println(`Decompress: {decompress_ms} ms`);
 
     // Verify round-trip
-    assert decompressed.len() == size, "decompressed size mismatch";
+    assert decompressed.len() == data.len(), "decompressed size mismatch";
 
     let total_ns = (t1 - t0 + t3 - t2) as u64;
     let total_ms = total_ns / 1000000;

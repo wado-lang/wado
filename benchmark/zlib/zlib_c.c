@@ -1,7 +1,6 @@
 // zlib C benchmark for comparison with Wado and zlib-rs
 //
-// Compresses and decompresses 100KB of patterned data x10 iterations,
-// using the same data pattern as zlib_bench.wado and zlib_rs.rs.
+// Compresses and decompresses twitter.json (~631KB) x10 iterations.
 //
 // Compiled to Wasm with:
 //   clang --target=wasm32-wasi -O3 ...
@@ -18,17 +17,31 @@ static long long now_ns(void) {
     return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 
+static unsigned char *read_file(const char *path, size_t *out_size) {
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "failed to open %s\n", path);
+        exit(1);
+    }
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    unsigned char *buf = (unsigned char *)malloc(len);
+    if (fread(buf, 1, len, f) != (size_t)len) {
+        fprintf(stderr, "failed to read %s\n", path);
+        exit(1);
+    }
+    fclose(f);
+    *out_size = (size_t)len;
+    return buf;
+}
+
 int main(void) {
-    int size = 100000;
+    size_t size;
+    unsigned char *data = read_file("json_twitter/twitter.json", &size);
     int iterations = 10;
 
-    // Generate 100KB of patterned data: bytes (i % 256)
-    unsigned char *data = (unsigned char *)malloc(size);
-    for (int i = 0; i < size; i++) {
-        data[i] = (unsigned char)(i % 256);
-    }
-
-    printf("zlib %d bytes x %d iterations\n", size, iterations);
+    printf("zlib %zu bytes x %d iterations\n", size, iterations);
 
     // Benchmark compression (10 iterations)
     uLong bound = compressBound((uLong)size);
@@ -50,7 +63,7 @@ int main(void) {
     long long compress_ns = t1 - t0;
     long long compress_ms = compress_ns / 1000000;
     long long compress_us_rem = (compress_ns / 1000) % 1000;
-    printf("Compressed: %d -> %lu bytes\n", size, (unsigned long)compressed_len);
+    printf("Compressed: %zu -> %lu bytes\n", size, (unsigned long)compressed_len);
     printf("Compress: %lld.%03lld ms\n", compress_ms, compress_us_rem);
 
     // Benchmark decompression (10 iterations)
