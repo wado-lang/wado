@@ -12,7 +12,6 @@
 //! | `elide_struct`    | Struct local elimination (single + multi)   |
 //! | `array`           | Append collapse / data promotion / splitting|
 //! | `const_forward`   | Struct field constant forwarding            |
-//! | `bounds_check`    | Loop-guarded bounds check elimination       |
 //! | `string`          | Short string append simplification          |
 //! | `peephole`        | Constant folding, copy elision, MV elision  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
@@ -22,7 +21,6 @@
 //! | `dce`             | Dead code / type / global elimination       |
 
 mod array;
-mod bounds_check;
 mod cleanup;
 mod const_forward;
 mod dce;
@@ -46,7 +44,6 @@ pub use dce::{dce_unreachable_functions, dce_unreachable_types};
 use array::{
     collapse_array_append_sequences, promote_constant_arrays_to_data, split_large_array_literals,
 };
-use bounds_check::eliminate_loop_guarded_bounds_checks;
 use cleanup::cleanup;
 use const_forward::forward_struct_field_constants;
 use drve::eliminate_dead_return_values;
@@ -102,13 +99,14 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel, profiler: &dyn 
 
     // Phase 3: Data flow
     //
-    // Collapse inlined append sequences, forward constants, and eliminate
-    // redundant bounds checks. Order matters: append collapse exposes StructNew
-    // nodes that field forwarding then uses for bounds check elimination.
+    // Collapse inlined append sequences and forward constants.
+    // Order matters: append collapse exposes StructNew nodes that field
+    // forwarding then uses for constant index bounds check elimination.
+    // Loop-guarded bounds checks are eliminated at TIR level by the
+    // condition_implication pass.
     profiler.span_start("wir/phase3_data_flow");
     collapse_array_append_sequences(module);
     forward_struct_field_constants(module);
-    eliminate_loop_guarded_bounds_checks(module);
     profiler.span_end("wir/phase3_data_flow");
 
     // Phase 4: Library-specific rewrites
