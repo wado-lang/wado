@@ -1098,6 +1098,8 @@ pub enum Type {
     Tuple(Vec<Type>),
     Reference(Box<Type>),
     MutReference(Box<Type>),
+    /// Type pack spread inside a tuple: `..T` in `[i32, ..T, bool]`
+    TypePackSpread(String, Span),
 }
 
 #[derive(Debug, Clone)]
@@ -1195,6 +1197,8 @@ pub struct GenericParam {
     pub name: String,
     /// Whether this is an effect parameter (`effect E`)
     pub is_effect: bool,
+    /// Whether this is a type pack parameter (`..T`)
+    pub is_pack: bool,
     /// Trait bounds (e.g., `Ord`, `Builder<Output = T>`)
     pub bounds: Vec<TraitBound>,
     /// Default type (e.g., `T = []` or `Effects = []`)

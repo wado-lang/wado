@@ -280,19 +280,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
                     let old_type_param_bounds =
                         std::mem::take(&mut self.trait_ctx.type_param_bounds);
-                    for (i, param) in func.type_params.iter().enumerate() {
-                        let type_id = self
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(param.name.clone(), i as u32);
+                    let mut real_idx = 0u32;
+                    for param in &func.type_params {
+                        if param.is_effect {
+                            continue;
+                        }
+                        let type_id = if param.is_pack {
+                            self.type_table
+                                .borrow_mut()
+                                .make_type_pack(param.name.clone(), real_idx)
+                        } else {
+                            self.type_table
+                                .borrow_mut()
+                                .make_type_param(param.name.clone(), real_idx)
+                        };
                         self.trait_ctx
                             .type_params
-                            .insert(param.name.clone(), (i as u32, type_id));
+                            .insert(param.name.clone(), (real_idx, type_id));
                         if !param.bounds.is_empty() {
                             self.trait_ctx
                                 .type_param_bounds
                                 .insert(param.name.clone(), param.bounds.clone());
                         }
+                        real_idx += 1;
                     }
                     let return_type = func
                         .return_type

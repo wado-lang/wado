@@ -1229,8 +1229,8 @@ impl Monomorphizer {
         type_table: &mut TypeTable,
     ) -> TypeId {
         match type_table.get(type_id).clone() {
-            ResolvedType::TypeParam { index, .. } => {
-                // Direct substitution
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                // Direct substitution (for TypePack, the substituted type is typically a tuple)
                 *substitution.get(&index).unwrap_or(&type_id)
             }
             ResolvedType::BuiltinArray(elem) => {
@@ -1246,10 +1246,28 @@ impl Monomorphizer {
                 type_table.make_mut_ref(new_inner)
             }
             ResolvedType::Tuple(elems) => {
-                let new_elems: Vec<TypeId> = elems
-                    .iter()
-                    .map(|&e| self.substitute_type(e, substitution, type_table))
-                    .collect();
+                let mut new_elems: Vec<TypeId> = Vec::new();
+                for &e in &elems {
+                    match type_table.get(e).clone() {
+                        ResolvedType::TypePack { index, .. } => {
+                            // Splice: the substituted type for a pack is a tuple; expand its elements
+                            if let Some(&pack_type) = substitution.get(&index) {
+                                match type_table.get(pack_type).clone() {
+                                    ResolvedType::Tuple(pack_elems) => {
+                                        new_elems.extend_from_slice(&pack_elems);
+                                    }
+                                    _ => {
+                                        // Single type (not a tuple) — treat as one-element pack
+                                        new_elems.push(pack_type);
+                                    }
+                                }
+                            }
+                        }
+                        _ => {
+                            new_elems.push(self.substitute_type(e, substitution, type_table));
+                        }
+                    }
+                }
                 type_table.make_tuple(new_elems)
             }
             ResolvedType::Function {

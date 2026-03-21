@@ -736,7 +736,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> TypeId {
         let resolved_type = self.type_table.borrow().get(type_id).clone();
         match resolved_type {
-            ResolvedType::TypeParam { index, .. } => {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
                 // Direct substitution: T -> type_args[index]
                 type_args.get(index as usize).copied().unwrap_or(type_id)
             }
@@ -755,10 +755,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.type_table.borrow_mut().make_mut_ref(new_inner)
             }
             ResolvedType::Tuple(elems) => {
-                let new_elems: Vec<TypeId> = elems
-                    .iter()
-                    .map(|&e| self.substitute_type_params(e, type_args))
-                    .collect();
+                // Expand TypePack elements: splice the pack's concrete types into the tuple
+                let mut new_elems: Vec<TypeId> = Vec::new();
+                for &e in &elems {
+                    let e_type = self.type_table.borrow().get(e).clone();
+                    if let ResolvedType::TypePack { index, .. } = e_type {
+                        // The substituted type for a pack is a tuple; expand its elements
+                        if let Some(&pack_type) = type_args.get(index as usize) {
+                            let pack_resolved = self.type_table.borrow().get(pack_type).clone();
+                            if let ResolvedType::Tuple(pack_elems) = pack_resolved {
+                                new_elems.extend_from_slice(&pack_elems);
+                            } else {
+                                new_elems.push(pack_type);
+                            }
+                        } else {
+                            new_elems.push(e);
+                        }
+                    } else {
+                        new_elems.push(self.substitute_type_params(e, type_args));
+                    }
+                }
                 self.type_table.borrow_mut().make_tuple(new_elems)
             }
             ResolvedType::GenericResource {
@@ -2210,7 +2226,60 @@ impl<H: CompilerHost> Resolver<'_, H> {
             | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner)) => {
                 self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
             }
-            // Tuple types
+            // Tuple types with type pack: e.g., [A, ..T, B] matched against [i32, String, f64, bool]
+            (ResolvedType::Tuple(expected_elems), ResolvedType::Tuple(actual_elems))
+                if expected_elems.iter().any(|e| {
+                    matches!(
+                        self.type_table.borrow().get(*e),
+                        ResolvedType::TypePack { .. }
+                    )
+                }) =>
+            {
+                // Find the pack index
+                let pack_idx = expected_elems
+                    .iter()
+                    .position(|e| {
+                        matches!(
+                            self.type_table.borrow().get(*e),
+                            ResolvedType::TypePack { .. }
+                        )
+                    })
+                    .unwrap();
+
+                let fixed_before = pack_idx;
+                let fixed_after = expected_elems.len() - pack_idx - 1;
+                let total_fixed = fixed_before + fixed_after;
+
+                if actual_elems.len() >= total_fixed {
+                    // Unify fixed elements before the pack
+                    for i in 0..fixed_before {
+                        self.unify_types_for_inference(
+                            expected_elems[i],
+                            actual_elems[i],
+                            type_param_map,
+                        );
+                    }
+                    // Unify fixed elements after the pack
+                    for i in 0..fixed_after {
+                        self.unify_types_for_inference(
+                            expected_elems[pack_idx + 1 + i],
+                            actual_elems[actual_elems.len() - fixed_after + i],
+                            type_param_map,
+                        );
+                    }
+                    // Map the TypePack to a tuple of the middle elements
+                    let pack_elements: Vec<TypeId> =
+                        actual_elems[fixed_before..actual_elems.len() - fixed_after].to_vec();
+                    let pack_tuple = self
+                        .type_table
+                        .borrow_mut()
+                        .make_tuple(pack_elements);
+                    type_param_map
+                        .entry(expected_elems[pack_idx])
+                        .or_insert(pack_tuple);
+                }
+            }
+            // Tuple types (exact match)
             (ResolvedType::Tuple(expected_elems), ResolvedType::Tuple(actual_elems))
                 if expected_elems.len() == actual_elems.len() =>
             {

@@ -1700,6 +1700,7 @@ fn collect_type_dependencies(
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
+        | ResolvedType::TypePack { .. }
         | ResolvedType::AssocTypeProjection { .. } => {}
 
         // Newtype: collect dependency on base type

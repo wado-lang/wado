@@ -3006,6 +3006,18 @@ impl Parser {
         Ok(ClosureParam { name, ty, is_mut })
     }
 
+    /// Parse a type or a type pack spread (`..T`) inside a tuple type.
+    fn parse_type_or_pack(&mut self) -> ParseResult<Type> {
+        if self.check_dot_dot() {
+            let span = self.peek().span;
+            self.advance();
+            self.advance();
+            let name = self.consume_ident()?;
+            return Ok(Type::TypePackSpread(name, span));
+        }
+        self.parse_type()
+    }
+
     fn parse_type(&mut self) -> ParseResult<Type> {
         let start_span = self.peek().span;
 
@@ -3084,10 +3096,11 @@ impl Parser {
             return Ok(inner);
         }
 
-        // Tuple type: [] or [T1, T2, ...]
+        // Tuple type: [] or [T1, T2, ...] or [i32, ..T, bool]
         if self.check(&TokenKind::LBracket) {
             self.advance();
-            let types = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_type)?;
+            let types =
+                self.parse_comma_separated(&TokenKind::RBracket, Self::parse_type_or_pack)?;
             self.expect(&TokenKind::RBracket)?;
             return Ok(Type::Tuple(types));
         }
@@ -3229,6 +3242,29 @@ impl Parser {
                 false
             };
 
+            // Parse type pack parameter: `..T`
+            let is_pack = if self.check_dot_dot() {
+                self.advance();
+                self.advance();
+                true
+            } else {
+                false
+            };
+
+            if is_effect && is_pack {
+                return Err(self.error_at_span(
+                    start_span,
+                    "a parameter cannot be both an effect and a type pack",
+                ));
+            }
+
+            if is_pack && params.iter().any(|p: &crate::ast::GenericParam| p.is_pack) {
+                return Err(self.error_at_span(
+                    start_span,
+                    "only one type pack parameter is allowed per generic parameter list",
+                ));
+            }
+
             let name = self.consume_ident()?;
 
             // Parse optional trait bounds: `T: Ord`, `T: Ord + Clone`, `T: Builder<Output = T>`
@@ -3250,6 +3286,7 @@ impl Parser {
             params.push(crate::ast::GenericParam {
                 name,
                 is_effect,
+                is_pack,
                 bounds,
                 default,
                 span: start_span,
@@ -3704,6 +3741,7 @@ impl Parser {
                     type_params.push(crate::ast::GenericParam {
                         name: param_name.clone(),
                         is_effect: false,
+                        is_pack: false,
                         bounds,
                         default: None,
                         span: param_span,

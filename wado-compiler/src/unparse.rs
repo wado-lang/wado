@@ -481,6 +481,9 @@ impl<'a> Unparser<'a> {
             if param.is_effect {
                 self.output.push_str("effect ");
             }
+            if param.is_pack {
+                self.output.push_str("..");
+            }
             self.output.push_str(&param.name);
             if !param.bounds.is_empty() {
                 self.output.push_str(": ");
@@ -1158,6 +1161,10 @@ impl<'a> Unparser<'a> {
             Type::MutReference(inner) => {
                 self.output.push_str("&mut ");
                 self.unparse_type(inner);
+            }
+            Type::TypePackSpread(name, _) => {
+                self.output.push_str("..");
+                self.output.push_str(name);
             }
             Type::NamespacedGeneric(ng) => {
                 self.output.push_str(&ng.namespace);
@@ -3291,6 +3298,10 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
         Type::MutReference(inner) => {
             output.push_str("&mut ");
             unparse_type_into(inner, output);
+        }
+        Type::TypePackSpread(name, _) => {
+            output.push_str("..");
+            output.push_str(name);
         }
         Type::NamespacedGeneric(ng) => {
             output.push_str(&ng.namespace);

@@ -82,6 +82,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
                 is_effect: p.is_effect,
+                is_pack: p.is_pack,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
@@ -193,6 +194,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
                 is_effect: p.is_effect,
+                is_pack: p.is_pack,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
@@ -292,10 +294,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if param.is_effect {
                 continue;
             }
-            let type_id = self
-                .type_table
-                .borrow_mut()
-                .make_type_param(param.name.clone(), real_type_param_index);
+            let type_id = if param.is_pack {
+                self.type_table
+                    .borrow_mut()
+                    .make_type_pack(param.name.clone(), real_type_param_index)
+            } else {
+                self.type_table
+                    .borrow_mut()
+                    .make_type_param(param.name.clone(), real_type_param_index)
+            };
             self.trait_ctx
                 .type_params
                 .insert(param.name.clone(), (real_type_param_index, type_id));
@@ -405,6 +412,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
                 is_effect: p.is_effect,
+                is_pack: p.is_pack,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
@@ -554,6 +562,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         impl_type_params.push(crate::tir::TirTypeParam {
                             name: name.clone(),
                             is_effect: false,
+                            is_pack: false,
                             bounds: vec![],
                             default: None, // Impl type params don't have defaults
                             index: i as u32,
@@ -580,6 +589,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 impl_type_params.push(crate::tir::TirTypeParam {
                     name: named.name.clone(),
                     is_effect: false,
+                    is_pack: false,
                     bounds,
                     default: None,
                     index: idx,
@@ -605,6 +615,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 impl_type_params.push(crate::tir::TirTypeParam {
                     name: named.name.clone(),
                     is_effect: false,
+                    is_pack: false,
                     bounds,
                     default: None,
                     index: idx,
@@ -731,6 +742,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
                 is_effect: p.is_effect,
+                is_pack: p.is_pack,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,

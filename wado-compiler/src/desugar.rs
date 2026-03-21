@@ -128,7 +128,7 @@ fn desugar_type(ty: &Type, ctx: &DesugarContext) -> Type {
             effects: f.effects.clone(),
             stores: f.stores.clone(),
         })),
-        Type::NamespacedGeneric(_) => ty.clone(),
+        Type::NamespacedGeneric(_) | Type::TypePackSpread(..) => ty.clone(),
     }
 }
 

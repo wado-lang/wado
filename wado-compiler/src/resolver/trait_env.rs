@@ -275,8 +275,8 @@ fn classify_position(
                 PositionKind::ForeignType
             }
         }
-        // Tuples and function types have no single named head → foreign
-        Type::Tuple(_) | Type::Function(_) | Type::NamespacedGeneric(_) => {
+        // Tuples, function types, and type pack spreads have no single named head → foreign
+        Type::Tuple(_) | Type::Function(_) | Type::NamespacedGeneric(_) | Type::TypePackSpread(..) => {
             PositionKind::ForeignType
         }
     }
@@ -450,6 +450,7 @@ mod tests {
         GenericParam {
             name: name.to_string(),
             is_effect: false,
+            is_pack: false,
             bounds: vec![],
             default: None,
             span: dummy_span(),

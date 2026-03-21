@@ -402,6 +402,12 @@ pub enum ResolvedType {
         /// Index of the type parameter in the generic definition (0 for first param)
         index: u32,
     },
+    /// Type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
+    /// Used inside tuples before monomorphization; expanded to concrete types during substitution
+    TypePack {
+        name: String,
+        index: u32,
+    },
     /// Generic struct instantiation (e.g., `Box<i32>`)
     /// Used to track instantiation sites before monomorphization
     GenericInstance {
@@ -979,6 +985,11 @@ impl TypeTable {
         self.intern(ResolvedType::TypeParam { name, index })
     }
 
+    /// Create a type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
+    pub fn make_type_pack(&mut self, name: String, index: u32) -> TypeId {
+        self.intern(ResolvedType::TypePack { name, index })
+    }
+
     /// Create an associated type projection: `T::X` where T is a type parameter.
     pub fn make_assoc_type_projection(
         &mut self,
@@ -1220,6 +1231,7 @@ impl TypeTable {
                 format!("{}<{}>", name, arg_names.join(", "))
             }
             ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
+            ResolvedType::TypePack { name, .. } => format!("..{name}"),
         }
     }
 
@@ -1510,6 +1522,7 @@ impl TypeTable {
                 self.mangle_type_name(*param_id),
                 assoc_name
             )),
+            ResolvedType::TypePack { name, .. } => TypeNameInfo::Named(format!("..{name}")),
             ResolvedType::Never | ResolvedType::Unknown | ResolvedType::Error => {
                 TypeNameInfo::Unknown
             }
@@ -2122,6 +2135,8 @@ pub struct TirTypeParam {
     pub name: String,
     /// Whether this is an effect parameter (`effect E`)
     pub is_effect: bool,
+    /// Whether this is a type pack parameter (`..T`)
+    pub is_pack: bool,
     pub bounds: Vec<String>,
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,

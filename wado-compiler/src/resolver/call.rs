@@ -639,14 +639,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Set up the function's type parameters in scope so we can resolve
                 // type parameter references (like T -> TypeParam { index: 0 })
                 let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-                for (i, type_param) in type_params.iter().enumerate() {
-                    let type_id = self
-                        .type_table
-                        .borrow_mut()
-                        .make_type_param(type_param.name.clone(), i as u32);
+                let mut real_idx = 0u32;
+                for type_param in &type_params {
+                    if type_param.is_effect {
+                        continue;
+                    }
+                    let type_id = if type_param.is_pack {
+                        self.type_table
+                            .borrow_mut()
+                            .make_type_pack(type_param.name.clone(), real_idx)
+                    } else {
+                        self.type_table
+                            .borrow_mut()
+                            .make_type_param(type_param.name.clone(), real_idx)
+                    };
                     self.trait_ctx
                         .type_params
-                        .insert(type_param.name.clone(), (i as u32, type_id));
+                        .insert(type_param.name.clone(), (real_idx, type_id));
+                    real_idx += 1;
                 }
 
                 // Resolve the return type in the callee module's context, not the caller's.
@@ -1037,19 +1047,35 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Check if it's a local function (defined in this module)
                 if self.function_return_types.contains_key(&ident.name) {
-                    // Clone params to avoid borrow issues
-                    let params: Option<Vec<_>> =
+                    // Clone params and type_params to avoid borrow issues
+                    let func_info: Option<(Vec<ast::Param>, Vec<ast::GenericParam>)> =
                         self.current_module_items.iter().find_map(|item| {
                             if let Item::Function(func) = item
                                 && func.name == ident.name
                             {
-                                return Some(func.params.clone());
+                                return Some((func.params.clone(), func.type_params.clone()));
                             }
                             None
                         });
 
-                    if let Some(params) = params {
-                        return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                    if let Some((params, type_params)) = func_info {
+                        // Set up type params so resolve_type can find pack params
+                        let saved = std::mem::take(&mut self.trait_ctx.type_params);
+                        for (i, tp) in type_params.iter().filter(|p| !p.is_effect).enumerate() {
+                            let idx = i as u32;
+                            let type_id = if tp.is_pack {
+                                self.type_table.borrow_mut().make_type_pack(tp.name.clone(), idx)
+                            } else {
+                                self.type_table.borrow_mut().make_type_param(tp.name.clone(), idx)
+                            };
+                            self.trait_ctx
+                                .type_params
+                                .insert(tp.name.clone(), (idx, type_id));
+                        }
+                        let result =
+                            params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                        self.trait_ctx.type_params = saved;
+                        return result;
                     }
                 }
 
@@ -1148,7 +1174,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let all_concrete = inferred.iter().all(|&id| {
             !matches!(
                 self.type_table.borrow().get(id),
-                ResolvedType::TypeParam { .. }
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
             )
         });
         if all_concrete && !inferred.is_empty() {
@@ -1244,7 +1270,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let all_concrete = inferred.iter().all(|&id| {
             !matches!(
                 self.type_table.borrow().get(id),
-                ResolvedType::TypeParam { .. }
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
             )
         });
         if all_concrete && !inferred.is_empty() {
@@ -1300,12 +1326,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Temporarily register type params so resolve_type can find them
         let saved = std::mem::take(&mut self.trait_ctx.type_params);
-        for (i, tp) in fn_type_params.iter().enumerate() {
+        for (i, tp) in fn_type_params.iter().filter(|p| !p.is_effect).enumerate() {
             let idx = i as u32;
-            let type_id = self
-                .type_table
-                .borrow_mut()
-                .make_type_param(tp.name.clone(), idx);
+            let type_id = if tp.is_pack {
+                self.type_table
+                    .borrow_mut()
+                    .make_type_pack(tp.name.clone(), idx)
+            } else {
+                self.type_table
+                    .borrow_mut()
+                    .make_type_param(tp.name.clone(), idx)
+            };
             self.trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, type_id));
