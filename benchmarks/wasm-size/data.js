@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774106206582,
+  "lastUpdate": 1774127490008,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5756,6 +5756,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3b08ed0880d7d517c18376ed22f9ec7d60d03393"
         },
         "date": 1774106206364,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22175,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ee4725bc569d5ab799d77c578ffdf4b5d5b02cbe",
+          "message": "Merge pull request #650 from wado-lang/claude/optimize-zlib-compression-ThWeP\n\nOptimize zlib compression with SIMD-style unrolling and bitwise ops",
+          "timestamp": "2026-03-22T06:08:57+09:00",
+          "tree_id": "1171347b2e01c3916d0966ce8a217aab5dacb298",
+          "url": "https://github.com/wado-lang/wado/commit/ee4725bc569d5ab799d77c578ffdf4b5d5b02cbe"
+        },
+        "date": 1774127489789,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
