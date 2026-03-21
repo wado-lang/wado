@@ -17,7 +17,7 @@ wado run --profile guest,profile.json,1 prog.wado
 
 Parameters: `guest[,path[,interval_ms]]`
 - `path`: output file (default: `profile.json`)
-- `interval_ms`: sampling interval in milliseconds (default: 10, use 1 for short-running programs)
+- `interval_ms`: sampling interval in milliseconds (default: 10, use 1 for short-running programs, use 0 for exhaustive recording)
 
 Or with cargo during development:
 
@@ -74,8 +74,11 @@ Upload `profile.json` to `https://profiler.firefox.com/` for interactive flame g
 | < 200 ms         | 1 ms                 | ~100–200         |
 | 200 ms – 2 s     | 5 ms                 | ~40–400          |
 | > 2 s            | 10 ms (default)      | 200+             |
+| (exhaustive)     | 0 ms                 | every call       |
 
 Use shorter intervals for short-running programs to get enough samples for meaningful analysis.
+
+Setting `interval_ms` to `0` records every function entry/exit instead of sampling. This gives exact call counts but incurs ~10–15x overhead and produces large output files (~25 MB for 1M+ calls). Use only when precise call counts are needed.
 
 ## Characteristics
 
