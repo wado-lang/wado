@@ -1,0 +1,136 @@
+// End-to-end test: variadic Serialize impl for tuples.
+// Mimics the real serde pattern: begin_seq → element::<T> per element → end.
+// This tests the complete serialize pathway with variadic impls.
+
+struct Err {
+    msg: String,
+}
+
+trait SeqSer {
+    fn element<T: Ser>(&mut self, value: &T) -> Result<(), Err>;
+    fn end(&mut self) -> Result<(), Err>;
+}
+
+trait Sizer {
+    fn write_i32(&mut self, v: i32) -> Result<(), Err>;
+    fn write_str(&mut self, v: &String) -> Result<(), Err>;
+    fn write_bool(&mut self, v: bool) -> Result<(), Err>;
+    fn begin_seq(&mut self, len: i32) -> Result<TextSeq, Err>;
+}
+
+struct TextSeq {
+    buf: String,
+    first: bool,
+}
+
+impl SeqSer for TextSeq {
+    fn element<T: Ser>(&mut self, value: &T) -> Result<(), Err> {
+        if !self.first {
+            self.buf.append(",");
+        }
+        self.first = false;
+        let mut inner = TextWriter { buf: "" };
+        let r = value.ser(&mut inner);
+        if let Ok(_) = r {
+            self.buf.append(inner.buf);
+        }
+        return Result::<(), Err>::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), Err> {
+        self.buf.append("]");
+        return Result::<(), Err>::Ok(());
+    }
+}
+
+struct TextWriter {
+    buf: String,
+}
+
+impl Sizer for TextWriter {
+    fn write_i32(&mut self, v: i32) -> Result<(), Err> {
+        self.buf.append(`{v}`);
+        return Result::<(), Err>::Ok(());
+    }
+
+    fn write_str(&mut self, v: &String) -> Result<(), Err> {
+        self.buf.append(`"{*v}"`);
+        return Result::<(), Err>::Ok(());
+    }
+
+    fn write_bool(&mut self, v: bool) -> Result<(), Err> {
+        if v { self.buf.append("true"); } else { self.buf.append("false"); }
+        return Result::<(), Err>::Ok(());
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<TextSeq, Err> {
+        return Result::<TextSeq, Err>::Ok(TextSeq { buf: "[", first: true });
+    }
+}
+
+trait Ser {
+    fn ser<S: Sizer>(&self, s: &mut S) -> Result<(), Err>;
+
+    // Default method: calls element::<Self>(self) — the key pattern.
+    fn __seq_element<Q: SeqSer>(&self, seq: &mut Q) {
+        let r = seq.element::<Self>(self);
+        if let Err(e) = r {
+            panic(e.msg);
+        }
+    }
+}
+
+impl Ser for i32 {
+    fn ser<S: Sizer>(&self, s: &mut S) -> Result<(), Err> {
+        return s.write_i32(*self);
+    }
+}
+
+impl Ser for String {
+    fn ser<S: Sizer>(&self, s: &mut S) -> Result<(), Err> {
+        return s.write_str(self);
+    }
+}
+
+impl Ser for bool {
+    fn ser<S: Sizer>(&self, s: &mut S) -> Result<(), Err> {
+        return s.write_bool(*self);
+    }
+}
+
+// Variadic tuple Serialize impl — the target pattern.
+impl<..T: Ser> Ser for [..T] {
+    fn ser<S: Sizer>(&self, s: &mut S) -> Result<(), Err> {
+        let mut len = 0;
+        for let _v of *self { len += 1; }
+        let seq_r = s.begin_seq(len);
+        if let Ok(mut seq) = seq_r {
+            for let v of *self {
+                v.__seq_element::<TextSeq>(&mut seq);
+            }
+            return seq.end();
+        }
+        unreachable();
+    }
+}
+
+fn serialize<T: Ser>(value: &T) -> String {
+    let mut w = TextWriter { buf: "" };
+    let r = value.ser::<TextWriter>(&mut w);
+    return w.buf;
+}
+
+test "variadic tuple serialize [i32, String, bool]" {
+    let t = [42, "hello", true];
+    let s = serialize::<[i32, String, bool]>(&t);
+    assert s == `[42,"hello",true]`;
+}
+
+test "variadic tuple serialize pair" {
+    let t = [1, 2];
+    let s = serialize::<[i32, i32]>(&t);
+    assert s == "[1,2]";
+}
+
+__DATA__
+{"TODO": true, "test": {}}

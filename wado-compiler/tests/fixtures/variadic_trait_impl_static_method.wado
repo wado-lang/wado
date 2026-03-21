@@ -1,0 +1,43 @@
+// Variadic trait impl with a static method (no &self receiver).
+// This is the pattern used by Deserialize: fn deserialize<D>(d: &mut D) -> Result<Self, E>
+// BUG: the monomorphizer doesn't include pack elements in InstantiationKey.type_args
+// for static methods, resulting in unresolved Tuple^Trait::method instead of
+// Tuple<T1,T2>^Trait::method.
+
+trait Produce {
+    fn produce() -> Self;
+}
+
+impl Produce for i32 {
+    fn produce() -> i32 {
+        return 42;
+    }
+}
+
+impl Produce for String {
+    fn produce() -> String {
+        return "hello";
+    }
+}
+
+impl Produce for bool {
+    fn produce() -> bool {
+        return true;
+    }
+}
+
+impl<..T: Produce> Produce for [..T] {
+    fn produce() -> [..T] {
+        return [..T::produce()];
+    }
+}
+
+test "variadic trait static method" {
+    let t = [i32, String, bool]::produce();
+    assert t.0 == 42;
+    assert t.1 == "hello";
+    assert t.2 == true;
+}
+
+__DATA__
+{"TODO": true, "test": {}}

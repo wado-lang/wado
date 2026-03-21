@@ -1,0 +1,69 @@
+// Variadic trait impl with a static generic method (no &self, with method type param).
+// This is the Deserialize pattern: fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, E>
+// BUG: combines the static method bug (no pack in type_args) with method-level type param.
+
+struct BuildError {
+    message: String,
+}
+
+trait Source {
+    fn read_i32(&mut self) -> Result<i32, BuildError>;
+    fn read_string(&mut self) -> Result<String, BuildError>;
+    fn read_bool(&mut self) -> Result<bool, BuildError>;
+}
+
+struct MockSource {
+    counter: i32,
+}
+
+impl Source for MockSource {
+    fn read_i32(&mut self) -> Result<i32, BuildError> {
+        self.counter += 1;
+        return Result::<i32, BuildError>::Ok(self.counter);
+    }
+
+    fn read_string(&mut self) -> Result<String, BuildError> {
+        self.counter += 1;
+        return Result::<String, BuildError>::Ok(`item{self.counter}`);
+    }
+
+    fn read_bool(&mut self) -> Result<bool, BuildError> {
+        return Result::<bool, BuildError>::Ok(true);
+    }
+}
+
+trait Build {
+    fn build<S: Source>(s: &mut S) -> Result<Self, BuildError>;
+}
+
+impl Build for i32 {
+    fn build<S: Source>(s: &mut S) -> Result<i32, BuildError> {
+        return s.read_i32();
+    }
+}
+
+impl Build for String {
+    fn build<S: Source>(s: &mut S) -> Result<String, BuildError> {
+        return s.read_string();
+    }
+}
+
+impl<..T: Build> Build for [..T] {
+    fn build<S: Source>(s: &mut S) -> Result<[..T], BuildError> {
+        return Result::<[..T], BuildError>::Ok([..T::build::<S>(s)]);
+    }
+}
+
+test "variadic trait static generic method" {
+    let mut src = MockSource { counter: 0 };
+    let r = [i32, String]::build::<MockSource>(&mut src);
+    if let Ok(t) = r {
+        assert t.0 == 1;
+        assert t.1 == "item2";
+    } else {
+        panic("build failed");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}

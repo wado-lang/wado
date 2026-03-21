@@ -1,0 +1,108 @@
+// End-to-end test: variadic Deserialize impl for tuples.
+// Mimics the real serde pattern: static method + type pack expansion.
+// BUG: static method instantiation doesn't include pack elements in type_args.
+
+struct Err {
+    msg: String,
+}
+
+trait SeqAcc {
+    fn next<T: Deser>(&mut self) -> Result<T, Err>;
+}
+
+trait Reader {
+    fn read_i32(&mut self) -> Result<i32, Err>;
+    fn read_str(&mut self) -> Result<String, Err>;
+    fn begin_seq(&mut self) -> Result<MockSeqAcc, Err>;
+}
+
+struct MockSeqAcc {
+    values: Array<String>,
+    pos: i32,
+}
+
+impl SeqAcc for MockSeqAcc {
+    fn next<T: Deser>(&mut self) -> Result<T, Err> {
+        // Each type deserializes from strings stored in values array
+        let mut reader = MockReader { values: [], pos: 0 };
+        if self.pos < self.values.len() as i32 {
+            reader.values.append(self.values[self.pos as u32]);
+            self.pos += 1;
+        }
+        return T::deser::<MockReader>(&mut reader);
+    }
+}
+
+struct MockReader {
+    values: Array<String>,
+    pos: i32,
+}
+
+impl Reader for MockReader {
+    fn read_i32(&mut self) -> Result<i32, Err> {
+        return Result::<i32, Err>::Ok(42);
+    }
+
+    fn read_str(&mut self) -> Result<String, Err> {
+        return Result::<String, Err>::Ok("hello");
+    }
+
+    fn begin_seq(&mut self) -> Result<MockSeqAcc, Err> {
+        let mut acc = MockSeqAcc { values: [], pos: 0 };
+        acc.values.append("42");
+        acc.values.append("hello");
+        return Result::<MockSeqAcc, Err>::Ok(acc);
+    }
+}
+
+trait Deser {
+    fn deser<D: Reader>(d: &mut D) -> Result<Self, Err>;
+
+    // Default static helper: read one element from a seq
+    fn __seq_next<A: SeqAcc>(seq: &mut A) -> Self {
+        let r = seq.next::<Self>();
+        if let Ok(v) = r {
+            return v;
+        }
+        panic("seq next failed");
+    }
+}
+
+impl Deser for i32 {
+    fn deser<D: Reader>(d: &mut D) -> Result<i32, Err> {
+        return d.read_i32();
+    }
+}
+
+impl Deser for String {
+    fn deser<D: Reader>(d: &mut D) -> Result<String, Err> {
+        return d.read_str();
+    }
+}
+
+// Variadic tuple Deserialize impl — the target pattern.
+// Uses [..T::__seq_next(...)] type pack expansion with a static method.
+impl<..T: Deser> Deser for [..T] {
+    fn deser<D: Reader>(d: &mut D) -> Result<[..T], Err> {
+        let seq_r = d.begin_seq();
+        if let Ok(mut seq) = seq_r {
+            let result = [..T::__seq_next::<MockSeqAcc>(&mut seq)];
+            return Result::<[..T], Err>::Ok(result);
+        }
+        unreachable();
+    }
+}
+
+test "variadic tuple deserialize [i32, String]" {
+    let mut reader = MockReader { values: [], pos: 0 };
+    let r = [i32, String]::deser::<MockReader>(&mut reader);
+    if let Ok(t) = r {
+        assert t.0 == 42;
+        assert t.1 == "hello";
+    } else {
+        panic("deser failed");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}

@@ -1,0 +1,91 @@
+// Variadic trait impl where the trait method has its own bounded type param.
+// This is the pattern used by Serialize: fn serialize<S: Serializer>(&self, s: &mut S)
+// Tests: trait bound on method-level type param + variadic for-of dispatch.
+
+trait Sink {
+    fn accept_i32(&mut self, v: i32);
+    fn accept_string(&mut self, v: &String);
+    fn accept_bool(&mut self, v: bool);
+}
+
+struct TextSink {
+    buf: String,
+}
+
+impl Sink for TextSink {
+    fn accept_i32(&mut self, v: i32) {
+        if !self.buf.is_empty() {
+            self.buf.append(",");
+        }
+        self.buf.append(`{v}`);
+    }
+
+    fn accept_string(&mut self, v: &String) {
+        if !self.buf.is_empty() {
+            self.buf.append(",");
+        }
+        self.buf.append(`"{*v}"`);
+    }
+
+    fn accept_bool(&mut self, v: bool) {
+        if !self.buf.is_empty() {
+            self.buf.append(",");
+        }
+        if v {
+            self.buf.append("true");
+        } else {
+            self.buf.append("false");
+        }
+    }
+}
+
+trait Emit {
+    fn emit<S: Sink>(&self, s: &mut S);
+}
+
+impl Emit for i32 {
+    fn emit<S: Sink>(&self, s: &mut S) {
+        s.accept_i32(*self);
+    }
+}
+
+impl Emit for String {
+    fn emit<S: Sink>(&self, s: &mut S) {
+        s.accept_string(self);
+    }
+}
+
+impl Emit for bool {
+    fn emit<S: Sink>(&self, s: &mut S) {
+        if *self {
+            s.accept_bool(true);
+        } else {
+            s.accept_bool(false);
+        }
+    }
+}
+
+impl<..T: Emit> Emit for [..T] {
+    fn emit<S: Sink>(&self, s: &mut S) {
+        for let v of *self {
+            v.emit::<S>(s);
+        }
+    }
+}
+
+test "variadic trait impl with bounded method type param" {
+    let t = [42, "hello", true];
+    let mut sink = TextSink { buf: "" };
+    t.emit::<TextSink>(&mut sink);
+    assert sink.buf == `42,"hello",true`;
+}
+
+test "variadic trait impl pair" {
+    let t = [1, 2];
+    let mut sink = TextSink { buf: "" };
+    t.emit::<TextSink>(&mut sink);
+    assert sink.buf == "1,2";
+}
+
+__DATA__
+{"test": {}}

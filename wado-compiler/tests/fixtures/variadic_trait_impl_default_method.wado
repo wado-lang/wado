@@ -1,0 +1,67 @@
+// Variadic trait impl that uses a default method on the trait.
+// This is the pattern used by Serialize's __serialize_seq_element:
+// the default method calls a generic method with Self as turbofish.
+// Tests that Self turbofish in a default method resolves correctly per element type.
+
+trait Accumulator {
+    fn add<T: Collector>(&mut self, value: &T);
+}
+
+struct ListAccumulator {
+    items: Array<String>,
+}
+
+impl Accumulator for ListAccumulator {
+    fn add<T: Collector>(&mut self, value: &T) {
+        self.items.append(value.collect_value());
+    }
+}
+
+trait Collector {
+    fn collect_value(&self) -> String;
+
+    // Default method: calls a generic method with Self as turbofish.
+    // This is the problematic pattern — Self resolves differently per element type.
+    fn add_to<A: Accumulator>(&self, acc: &mut A) {
+        acc.add::<Self>(self);
+    }
+}
+
+impl Collector for i32 {
+    fn collect_value(&self) -> String {
+        return `{*self}`;
+    }
+}
+
+impl Collector for String {
+    fn collect_value(&self) -> String {
+        return *self;
+    }
+}
+
+impl<..T: Collector> Collector for [..T] {
+    fn collect_value(&self) -> String {
+        let mut acc = ListAccumulator { items: [] };
+        for let v of *self {
+            v.add_to::<ListAccumulator>(&mut acc);
+        }
+        let mut result = "[";
+        for let mut i = 0; i < acc.items.len(); i += 1 {
+            if i > 0 {
+                result.append(",");
+            }
+            result.append(acc.items[i]);
+        }
+        result.append("]");
+        return result;
+    }
+}
+
+test "variadic trait with default method using Self turbofish" {
+    let t = [42, "hello"];
+    let result = t.collect_value();
+    assert result == "[42,hello]";
+}
+
+__DATA__
+{"test": {}}

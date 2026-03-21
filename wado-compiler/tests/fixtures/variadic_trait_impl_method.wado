@@ -1,0 +1,56 @@
+// Variadic trait impl: method dispatch on tuple elements via for-of.
+// Each element type has its own impl, and the variadic impl delegates.
+
+use { println, Stdout } from "core:cli";
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl Describe for i32 {
+    fn describe(&self) -> String {
+        return `int({*self})`;
+    }
+}
+
+impl Describe for String {
+    fn describe(&self) -> String {
+        return `str({*self})`;
+    }
+}
+
+impl Describe for bool {
+    fn describe(&self) -> String {
+        if *self {
+            return "bool(true)";
+        }
+        return "bool(false)";
+    }
+}
+
+impl<..T: Describe> Describe for [..T] {
+    fn describe(&self) -> String {
+        let mut result = "[";
+        let mut first = true;
+        for let v of *self {
+            if !first {
+                result.append(", ");
+            }
+            result.append(v.describe());
+            first = false;
+        }
+        result.append("]");
+        return result;
+    }
+}
+
+export fn run() with Stdout {
+    let t = [42, "hello", true];
+    println(t.describe());
+
+    let pair = [1, 2];
+    println(pair.describe());
+}
+
+__DATA__
+{"stdout": "[int(42), str(hello), bool(true)]\n[int(1), int(2)]\n"}
