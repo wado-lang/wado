@@ -159,6 +159,11 @@ impl TraitEnv {
                             .entry(n.name.clone())
                             .or_insert_with(|| module_source.clone());
                     }
+                    Item::TupleTypeDecl(_) => {
+                        type_decl_index
+                            .entry("Tuple".to_string())
+                            .or_insert_with(|| module_source.clone());
+                    }
                     _ => {}
                 }
             }
@@ -275,9 +280,15 @@ fn classify_position(
                 PositionKind::ForeignType
             }
         }
-        // Tuples, function types, and type pack spreads have no single named head → foreign
-        Type::Tuple(_)
-        | Type::Function(_)
+        // Tuples are local if the current crate owns them (via `pub type [..T];`)
+        Type::Tuple(_) => {
+            if type_decl_index.contains_key("Tuple") {
+                PositionKind::LocalType
+            } else {
+                PositionKind::ForeignType
+            }
+        }
+        Type::Function(_)
         | Type::NamespacedGeneric(_)
         | Type::TypePackSpread(..) => PositionKind::ForeignType,
     }
@@ -404,6 +415,7 @@ fn get_type_name_static(ty: &ast::Type) -> String {
         ast::Type::Generic(generic) => generic.name.clone(),
         ast::Type::Reference(_) => "&".to_string(),
         ast::Type::MutReference(_) => "&mut".to_string(),
+        ast::Type::Tuple(_) => "Tuple".to_string(),
         _ => "Unknown".to_string(),
     }
 }
