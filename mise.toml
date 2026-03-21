@@ -41,7 +41,7 @@ run = """
 set -xe -o pipefail
 mise run clippy-fix
 mise run update-bundled
-cargo build --profile dev-optimized --bin wado --bin wado-dev-tools --quiet
+cargo build --profile dev-optimized --bin wado --bin wado-dev-tools
 mise run update-golden-fixtures
 mise run update-golden-format-fixtures
 mise run doc-stdlib
@@ -247,7 +247,16 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release && cd ..
-cargo run --bin wado-dev-tools -- wasm2wat target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > wado-compiler/lib/builtins/wado-bundled-libm.wat
+WAT_FILE="wado-compiler/lib/builtins/wado-bundled-libm.wat"
+WAT_TMP="${WAT_FILE}.tmp"
+cargo run --bin wado-dev-tools -- wasm2wat target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > "$WAT_TMP"
+if cmp -s "$WAT_TMP" "$WAT_FILE"; then
+  rm "$WAT_TMP"
+  echo "  bundled libm WAT unchanged, skipping update"
+else
+  mv "$WAT_TMP" "$WAT_FILE"
+  echo "  bundled libm WAT updated"
+fi
 """
 
 [tasks.list-todo]
