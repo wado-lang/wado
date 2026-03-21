@@ -2968,8 +2968,8 @@ impl Monomorphizer {
                 // pack-typed tuples (a spread that was resolved as field 0 on a
                 // TypePack tuple, now the source tuple has more elements).
                 let new_type = self.substitute_type(expr.type_id, substitution, type_table);
-                if let ResolvedType::Tuple(expected_elems) = type_table.get(new_type).clone() {
-                    if expected_elems.len() != elements.len() {
+                if let ResolvedType::Tuple(expected_elems) = type_table.get(new_type).clone()
+                    && expected_elems.len() != elements.len() {
                         let old_elements = std::mem::take(elements);
                         for elem in old_elements {
                             if let TirExprKind::FieldAccess {
@@ -2997,7 +2997,6 @@ impl Monomorphizer {
                             elements.push(elem);
                         }
                     }
-                }
             }
             TirExprKind::Assign { target, value } => {
                 self.substitute_types_in_expr(target, substitution, type_table);
