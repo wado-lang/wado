@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774127490008,
+  "lastUpdate": 1774134245894,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5795,6 +5795,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ee4725bc569d5ab799d77c578ffdf4b5d5b02cbe"
         },
         "date": 1774127489789,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22175,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bc1823793396fda44a1ca0104662dbe2bb84a29e",
+          "message": "Merge pull request #652 from wado-lang/claude/profile-benchmark-fts-2VeQi\n\nRefactor profiling documentation: promote guest profiler as primary method",
+          "timestamp": "2026-03-22T08:01:29+09:00",
+          "tree_id": "dfd1bb2609a15310d3189233915c541757d3ab9f",
+          "url": "https://github.com/wado-lang/wado/commit/bc1823793396fda44a1ca0104662dbe2bb84a29e"
+        },
+        "date": 1774134245674,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
