@@ -363,13 +363,13 @@ where T: Reflect<Fields = [..F]>
 
 ## Implementation Plan
 
-- [ ] Parser: recognize `..T` in generic parameter lists and `[..T]` in type position
-- [ ] AST/TIR: add `TypePackParam`, `TypePackExpansion` nodes; track pack bounds
+- [x] Parser: recognize `..T` in generic parameter lists and `[..T]` in type position
+- [x] AST/TIR: add `TypePackSpread`, `TupleSpread` nodes; track pack bounds
 - [ ] Prelude: add `pub type [...T]` declaration; register tuples' owning module
-- [ ] Resolver: at monomorphization, substitute concrete types for packs; extend existing
+- [x] Resolver: at monomorphization, substitute concrete types for packs; extend existing
       tuple-enumeration unrolling to handle `[for let v of tuple { }]` construction form
 - [ ] Type pack expansion: lower `[..T::method()]` to a tuple literal at monomorphization
-- [ ] Value spread: lower `[..a, ..b]` into concatenated tuple literal
+- [x] Value spread: lower `[..a, ..b]` into concatenated tuple literal
 - [ ] Coherence: implement Rule 1 (non-VG wins) and Rule 2 (VG overlap forbidden)
 - [ ] `Reflect` trait: synthesize per-struct impl in the lowering pass
 - [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
