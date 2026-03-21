@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774103032463,
+  "lastUpdate": 1774106206582,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5717,6 +5717,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1ecb052d644bcb276d198e5661ecb8342000f36e"
         },
         "date": 1774103032277,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22175,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3b08ed0880d7d517c18376ed22f9ec7d60d03393",
+          "message": "Merge pull request #649 from wado-lang/claude/fix-benchmark-zlib-2ozjT\n\nAdd support for extra arguments in WADO benchmark runner",
+          "timestamp": "2026-03-22T00:14:16+09:00",
+          "tree_id": "fe70961415faea36c1915cb13ebb8643b7ffd2e1",
+          "url": "https://github.com/wado-lang/wado/commit/3b08ed0880d7d517c18376ed22f9ec7d60d03393"
+        },
+        "date": 1774106206364,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
