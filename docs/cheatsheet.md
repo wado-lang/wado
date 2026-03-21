@@ -1004,6 +1004,11 @@ fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
 let a = [1, "hello"];
 let b = [..a, true];   // [i32, String, bool]
 
+// Type pack expansion: call a static method on each type in the pack
+fn make_defaults<..T: Default>() -> [..T] {
+    return [..T::default()];   // expands to [T_0::default(), T_1::default(), ...]
+}
+
 // Note: `...` (three dots) is not valid; use `..` (two dots)
 ```
 
@@ -1113,7 +1118,6 @@ See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for design and rationale. In
 
 - Effect handlers
 - `reactive` values and `observe()`
-- postfix `?` operator (error propagation)
 - JSX
 - Generic function/method call type inference
 

@@ -896,7 +896,10 @@ impl Monomorphizer {
                 self.rewrite_types_in_expr(inner, type_table);
             }
             TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } => {
                 self.rewrite_types_in_expr(inner, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -2016,7 +2019,10 @@ impl Monomorphizer {
                 self.collect_func_instantiation_sites_in_expr(inner, generic_functions, type_table);
             }
             TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } => {
                 self.collect_func_instantiation_sites_in_expr(inner, generic_functions, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -2903,6 +2909,159 @@ impl Monomorphizer {
         }
     }
 
+    /// Fix up Return statements inside a type pack expansion element.
+    ///
+    /// The per-element substitution turns `[..T]` into `[elem_type]` (a single-element
+    /// tuple) in Return statements, but it should be `concrete_pack` (the full tuple).
+    /// This walks the expression tree and replaces the wrong type in Return values.
+    fn fixup_return_types_in_expr(
+        expr: &mut TirExpr,
+        wrong_type: TypeId,
+        correct_type: TypeId,
+        type_table: &mut TypeTable,
+    ) {
+        match &mut expr.kind {
+            TirExprKind::Match { expr: scrutinee, arms } => {
+                Self::fixup_return_types_in_expr(scrutinee, wrong_type, correct_type, type_table);
+                for arm in arms {
+                    Self::fixup_return_types_in_expr(
+                        &mut arm.body,
+                        wrong_type,
+                        correct_type,
+                        type_table,
+                    );
+                }
+            }
+            TirExprKind::Block(block) => {
+                Self::fixup_return_types_in_block(block, wrong_type, correct_type, type_table);
+            }
+            _ => {}
+        }
+    }
+
+    fn fixup_return_types_in_block(
+        block: &mut TirBlock,
+        wrong_type: TypeId,
+        correct_type: TypeId,
+        type_table: &mut TypeTable,
+    ) {
+        for stmt in &mut block.stmts {
+            match &mut stmt.kind {
+                TirStmtKind::Return { value: Some(value) } => {
+                    Self::fixup_return_value_type(value, wrong_type, correct_type, type_table);
+                }
+                TirStmtKind::Expr(expr) => {
+                    Self::fixup_return_types_in_expr(expr, wrong_type, correct_type, type_table);
+                }
+                TirStmtKind::If {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    Self::fixup_return_types_in_block(
+                        then_block,
+                        wrong_type,
+                        correct_type,
+                        type_table,
+                    );
+                    if let Some(else_blk) = else_block {
+                        Self::fixup_return_types_in_block(
+                            else_blk,
+                            wrong_type,
+                            correct_type,
+                            type_table,
+                        );
+                    }
+                }
+                TirStmtKind::LabeledBlock { block, .. } | TirStmtKind::Loop { body: block } => {
+                    Self::fixup_return_types_in_block(
+                        block,
+                        wrong_type,
+                        correct_type,
+                        type_table,
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Replace the wrong single-element tuple type with the correct full tuple type
+    /// inside a Return statement's value expression (recursively in type_ids).
+    fn fixup_return_value_type(
+        expr: &mut TirExpr,
+        wrong_type: TypeId,
+        correct_type: TypeId,
+        type_table: &mut TypeTable,
+    ) {
+        expr.type_id =
+            Self::replace_type_in_generic(expr.type_id, wrong_type, correct_type, type_table);
+        match &mut expr.kind {
+            TirExprKind::VariantConstruct {
+                variant_type,
+                payload,
+                ..
+            } => {
+                *variant_type = Self::replace_type_in_generic(
+                    *variant_type,
+                    wrong_type,
+                    correct_type,
+                    type_table,
+                );
+                if let Some(p) = payload {
+                    Self::fixup_return_value_type(p, wrong_type, correct_type, type_table);
+                }
+            }
+            TirExprKind::Call { args, .. } => {
+                for arg in args {
+                    Self::fixup_return_value_type(
+                        &mut arg.expr,
+                        wrong_type,
+                        correct_type,
+                        type_table,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Replace `old_type` with `new_type` inside generic instances.
+    /// For example, Result<[i32], String> → Result<[i32,String,bool], String>
+    /// when old_type = [i32] and new_type = [i32,String,bool].
+    fn replace_type_in_generic(
+        type_id: TypeId,
+        old_type: TypeId,
+        new_type: TypeId,
+        type_table: &mut TypeTable,
+    ) -> TypeId {
+        if type_id == old_type {
+            return new_type;
+        }
+        match type_table.get(type_id).clone() {
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&arg| Self::replace_type_in_generic(arg, old_type, new_type, type_table))
+                    .collect();
+                if new_args == type_args {
+                    type_id
+                } else {
+                    type_table.intern(ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        type_args: new_args,
+                    })
+                }
+            }
+            _ => type_id,
+        }
+    }
+
     /// Fix up local indices in expanded `VariadicForOf` blocks.
     ///
     /// After expansion, each element iteration uses the same `binding_local` index.
@@ -3617,15 +3776,21 @@ impl Monomorphizer {
                 }
             }
             TirExprKind::TupleLiteral { elements } => {
-                // First pass: substitute types in all elements
+                // First pass: substitute types in all elements (skip TypePackExpansion —
+                // those are expanded with per-element substitution in the second pass)
                 for elem in elements.iter_mut() {
-                    self.substitute_types_in_expr(elem, substitution, type_table);
+                    if !matches!(elem.kind, TirExprKind::TypePackExpansion { .. }) {
+                        self.substitute_types_in_expr(elem, substitution, type_table);
+                    }
                 }
-                // Second pass: expand TupleSpread nodes into FieldAccess elements
-                let has_spread = elements
-                    .iter()
-                    .any(|e| matches!(e.kind, TirExprKind::TupleSpread { .. }));
-                if has_spread {
+                // Second pass: expand TupleSpread and TypePackExpansion nodes
+                let has_expansion = elements.iter().any(|e| {
+                    matches!(
+                        e.kind,
+                        TirExprKind::TupleSpread { .. } | TirExprKind::TypePackExpansion { .. }
+                    )
+                });
+                if has_expansion {
                     let old_elements = std::mem::take(elements);
                     for elem in old_elements {
                         if let TirExprKind::TupleSpread { ref expr } = elem.kind {
@@ -3645,6 +3810,48 @@ impl Monomorphizer {
                             } else {
                                 // Single-type spread (not a tuple), keep as-is
                                 elements.push(*expr.clone());
+                            }
+                        } else if let TirExprKind::TypePackExpansion {
+                            ref call_expr,
+                            pack_type_id,
+                        } = elem.kind
+                        {
+                            // Expand type pack: for each concrete type in the pack,
+                            // clone the expression and substitute with per-element types.
+                            let pack_index = match type_table.get(pack_type_id) {
+                                ResolvedType::TypePack { index, .. } => *index,
+                                _ => 0,
+                            };
+                            let concrete_pack =
+                                self.substitute_type(pack_type_id, substitution, type_table);
+                            let pack_elems = match type_table.get(concrete_pack) {
+                                ResolvedType::Tuple(elems) => elems.clone(),
+                                _ => vec![concrete_pack],
+                            };
+                            for &elem_type in &pack_elems {
+                                let mut elem_call = call_expr.as_ref().clone();
+                                // Per-element substitution: pack → single element type.
+                                // This correctly rewrites the static call (T::method → i32::method)
+                                // and the expression's own type (TypePack → i32).
+                                let mut elem_sub = substitution.clone();
+                                elem_sub.insert(pack_index, elem_type);
+                                self.substitute_types_in_expr(
+                                    &mut elem_call,
+                                    &elem_sub,
+                                    type_table,
+                                );
+                                // Fix up Return statements: the per-element substitution turned
+                                // [..T] in return types into [elem_type], but it should be the
+                                // full concrete tuple. Replace the incorrect single-element tuple
+                                // with the full tuple in all Return statement value types.
+                                let wrong_tuple = type_table.make_tuple(vec![elem_type]);
+                                Self::fixup_return_types_in_expr(
+                                    &mut elem_call,
+                                    wrong_tuple,
+                                    concrete_pack,
+                                    type_table,
+                                );
+                                elements.push(elem_call);
                             }
                         } else {
                             elements.push(elem);
@@ -3669,6 +3876,18 @@ impl Monomorphizer {
             TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table);
+            }
+            TirExprKind::TypePackExpansion {
+                call_expr,
+                pack_type_id,
+            } => {
+                // Don't substitute inside call_expr here — it's expanded in TupleLiteral.
+                // But do substitute the pack_type_id so we can look it up later.
+                *pack_type_id = self.substitute_type(*pack_type_id, substitution, type_table);
+                // Note: call_expr substitution happens during TupleLiteral expansion
+                // with per-element substitutions. We still need to handle it if somehow
+                // encountered outside TupleLiteral context.
+                self.substitute_types_in_expr(call_expr, substitution, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
                 self.substitute_types_in_expr(array, substitution, type_table);
@@ -3986,7 +4205,10 @@ impl Monomorphizer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } => {
                 Self::update_local_expr_types_in_expr(inner, local_types);
             }
             TirExprKind::Block(block) => {
@@ -4477,7 +4699,10 @@ impl Monomorphizer {
                 self.rewrite_function_calls_in_expr(inner, type_table);
             }
             TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } => {
                 self.rewrite_function_calls_in_expr(inner, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -4887,6 +5112,9 @@ impl Monomorphizer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            }
             | TirExprKind::GlobalVarSet { value: inner, .. }
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }

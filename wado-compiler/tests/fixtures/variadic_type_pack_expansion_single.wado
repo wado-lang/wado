@@ -1,0 +1,22 @@
+// Type pack expansion with single-element pack
+trait MakeDefault {
+    fn make_default() -> Self;
+}
+
+impl MakeDefault for i32 {
+    fn make_default() -> i32 {
+        return 42;
+    }
+}
+
+fn make_defaults<..T: MakeDefault>() -> [..T] {
+    return [..T::make_default()];
+}
+
+export fn run() {
+    let result = make_defaults::<[i32]>();
+    assert result.0 == 42;
+}
+
+__DATA__
+{"stdout": ""}

@@ -641,7 +641,8 @@ impl BoxLowerer {
                 }
             }
             TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
                 self.transform_expr(inner, address_taken, type_table);
             }
             TirExprKind::Index { expr: e, index, .. } => {

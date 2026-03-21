@@ -1,0 +1,16 @@
+// Type pack expansion with empty pack: [..T::method()] where T = []
+trait MakeDefault {
+    fn make_default() -> Self;
+}
+
+fn make_defaults<..T: MakeDefault>() -> [..T] {
+    return [..T::make_default()];
+}
+
+export fn run() {
+    let result = make_defaults::<[]>();
+    // empty tuple - nothing to assert
+}
+
+__DATA__
+{"stdout": ""}
