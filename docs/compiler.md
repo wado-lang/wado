@@ -7,7 +7,7 @@ This document describes the Wado compiler architecture and implementation status
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → Stores Check → Synthesis → Erase Newtypes/Flags → Monomorphize → Lower → Optimize → WIR Build → WIR Optimize → Codegen
+Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Synthesis → Effect Check → Stores Check → Erase Newtypes/Flags → Monomorphize → Lower → Optimize → WIR Build → WIR Optimize → Codegen
 ```
 
 ### Compilation Pipeline
@@ -20,9 +20,9 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Load         | AST           | All modules     | Load dependencies; each module: parse → bind → desugar    |
 | Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                      |
 | Resolve      | AST + Symbols | Project         | Type resolution, produce Project                          |
+| Synthesis    | Project       | Project         | Enum/serde/CM binding/template/inspect synthesis          |
 | Effect Check | Project       | Project         | Validate function effect requirements                     |
 | Stores Check | Project       | Project         | Validate reference storage declarations                   |
-| Synthesis    | Project       | Project         | Enum/serde/CM binding/template/inspect synthesis          |
 | Erase Types  | Project       | Project         | Erase newtypes and flags to base types                    |
 | Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
 | Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
@@ -523,19 +523,7 @@ The module loader loads all modules and applies the frontend pipeline to each:
 3. **Bind**: Validate local scopes, detect use-before-define and duplicate definitions
 4. **Desugar**: Transform syntactic sugar (compound assignment, comparison chains, loops)
 
-**Namespace Validation:**
-
-```rust
-pub enum ModuleSource {
-    Core { name: String },      // core:prelude, core:cli
-    Wasi { interface: String }, // wasi:cli, wasi:io
-    Local { path: String },     // ./module.wado, ../lib.wado
-    Remote { url: String },     // https://example.com/lib.wado
-    EntryPoint,                 // The main entry module
-}
-```
-
-**Resolution Rules:**
+**Resolution Rules** (based on `ModuleSource`, see [ModuleSource](#modulesource)):
 
 1. `core:*` → `ModuleSource::Core` → embedded stdlib
 2. `wasi:*` → `ModuleSource::Wasi` → embedded stdlib
