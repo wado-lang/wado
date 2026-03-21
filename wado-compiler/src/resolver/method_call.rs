@@ -416,7 +416,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Build method_info with base struct name, then apply impl and method type args
         let is_type_param_receiver = matches!(
             self.type_table.borrow().get(base_type_id),
-            ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. }
+            ResolvedType::TypeParam { .. }
+                | ResolvedType::TypePack { .. }
+                | ResolvedType::AssocTypeProjection { .. }
         );
         let param_is_mut = self.lookup_method_param_is_mut(&base_struct_name, &method_call.method);
         let mut method_info = LocalMethodName::new(

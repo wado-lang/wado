@@ -2212,6 +2212,9 @@ impl Monomorphizer {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => Some((name.clone(), type_args.clone())),
+            ResolvedType::Tuple(elems) => {
+                Some(("Tuple".to_string(), elems.clone()))
+            }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.get_struct_info_from_type(*inner, type_table)
             }
@@ -2318,7 +2321,13 @@ impl Monomorphizer {
         // Use param.index for lookup so that impls with concrete type args at earlier positions
         // (e.g., `impl Trait for Foo<ConcreteType, V>` where V has index 1) work correctly.
         for param in &generic.impl_type_params {
-            if let Some(&arg) = key.type_args.get(param.index as usize) {
+            if param.is_pack {
+                // Variadic pack: map the pack index to a tuple of ALL type args.
+                // e.g., impl<..T> Inspect for [..T] with type_args=[i32, String]
+                //        → ..T maps to Tuple(i32, String)
+                let pack_type = type_table.make_tuple(key.type_args.clone());
+                substitution.insert(param.index, pack_type);
+            } else if let Some(&arg) = key.type_args.get(param.index as usize) {
                 substitution.insert(param.index, arg);
             }
         }

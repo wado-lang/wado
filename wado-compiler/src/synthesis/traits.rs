@@ -23,8 +23,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::common::{
-    deref_expr, field_access, make_synthetic_method, ref_expr, synth_span, trait_method_call,
-    write_str_stmt,
+    deref_expr, make_synthetic_method, ref_expr, synth_span, trait_method_call, write_str_stmt,
 };
 
 /// Run trait synthesis on the entire project.
@@ -386,18 +385,9 @@ fn generate_inspect_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
         match resolved {
-            ResolvedType::Tuple(elements) => {
-                generated.push(Rc::new(RefCell::new(generate_tuple_inspect_fn(
-                    &type_arg_names,
-                    &elements,
-                    type_id,
-                    ref_type,
-                    fmt_type,
-                    string_type,
-                    &module_source,
-                    &mut tt,
-                    span,
-                ))));
+            ResolvedType::Tuple(_) => {
+                // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
+                continue;
             }
             ResolvedType::Function {
                 params,
@@ -1488,59 +1478,6 @@ fn generate_flags_inspect_fn(
     )
 }
 
-/// Generate `Tuple<A,B,...>^Inspect::inspect(&self, &mut Formatter)` for a concrete tuple type.
-///
-/// Body: writes `[elem0, elem1, ...]` by accessing each tuple field and calling inspect.
-fn generate_tuple_inspect_fn(
-    type_arg_names: &[String],
-    elements: &[TypeId],
-    tuple_type: TypeId,
-    ref_tuple_type: TypeId,
-    fmt_type: TypeId,
-    string_type: TypeId,
-    module_source: &ModuleSource,
-    tt: &mut TypeTable,
-    span: Span,
-) -> TirFunction {
-    let method_info = LocalMethodName::new(
-        "Tuple".to_string(),
-        Some("Inspect".to_string()),
-        "inspect".to_string(),
-    )
-    .with_struct_type_args(type_arg_names);
-    let qualified_name = method_info.to_mangled_name();
-
-    let self_ref = || local_expr(0, "self", ref_tuple_type, span);
-    let deref_self = || deref_expr(self_ref(), tuple_type, span);
-    let fmt = || local_expr(1, "f", fmt_type, span);
-
-    let mut stmts = Vec::new();
-    stmts.push(write_str_stmt("[", fmt(), string_type, span));
-    for (i, elem_type) in elements.iter().enumerate() {
-        if i > 0 {
-            stmts.push(write_str_stmt(", ", fmt(), string_type, span));
-        }
-        stmts.push(inspect_call(
-            field_access(deref_self(), i as u32, i.to_string(), *elem_type, span),
-            *elem_type,
-            fmt(),
-            module_source,
-            tt,
-            span,
-        ));
-    }
-    stmts.push(write_str_stmt("]", fmt(), string_type, span));
-
-    make_synthetic_method(
-        qualified_name,
-        method_info,
-        inspect_params(ref_tuple_type, fmt_type, span),
-        TypeTable::UNIT,
-        TirBlock::new(stmts, span),
-        vec![ref_tuple_type, fmt_type],
-    )
-}
-
 /// Generate `Fn<N,Ret>^Inspect::inspect(&self, &mut Formatter)` for a concrete function type.
 ///
 /// Body: writes the function type signature, e.g., `|i32, String| -> bool`.
@@ -1960,18 +1897,9 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         }
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
-        if let ResolvedType::Tuple(elements) = resolved {
-            generated.push(Rc::new(RefCell::new(generate_tuple_inspect_alt_fn(
-                &type_arg_names,
-                &elements,
-                type_id,
-                ref_type,
-                fmt_type,
-                string_type,
-                &module_source,
-                &mut tt,
-                span,
-            ))));
+        if let ResolvedType::Tuple(_) = resolved {
+            // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
+            continue;
         } else {
             // Function types, opaque types: delegate to Inspect
             let di = LocalMethodName::new(
@@ -2413,60 +2341,6 @@ fn build_variant_inspect_alt_body(
     chain.map_or_else(Vec::new, |e| vec![TirStmt::new(TirStmtKind::Expr(e), span)])
 }
 
-/// Generate `Tuple<...>^InspectAlt::inspect_alt` for a concrete tuple type (pretty-print).
-fn generate_tuple_inspect_alt_fn(
-    type_arg_names: &[String],
-    elements: &[TypeId],
-    tuple_type: TypeId,
-    ref_tuple_type: TypeId,
-    fmt_type: TypeId,
-    string_type: TypeId,
-    module_source: &ModuleSource,
-    tt: &mut TypeTable,
-    span: Span,
-) -> TirFunction {
-    let method_info = LocalMethodName::new(
-        "Tuple".to_string(),
-        Some("InspectAlt".to_string()),
-        "inspect_alt".to_string(),
-    )
-    .with_struct_type_args(type_arg_names);
-    let qualified_name = method_info.to_mangled_name();
-
-    let deref_self = || {
-        deref_expr(
-            local_expr(0, "self", ref_tuple_type, span),
-            tuple_type,
-            span,
-        )
-    };
-    let fmt = || local_expr(1, "f", fmt_type, span);
-
-    let mut stmts = Vec::new();
-    stmts.push(formatter_call("open_brace", fmt(), "[", string_type, span));
-    for (i, elem_type) in elements.iter().enumerate() {
-        stmts.push(formatter_call_no_arg("write_newline_indent", fmt(), span));
-        stmts.push(inspect_alt_call(
-            field_access(deref_self(), i as u32, i.to_string(), *elem_type, span),
-            *elem_type,
-            fmt(),
-            module_source,
-            tt,
-            span,
-        ));
-        stmts.push(write_str_stmt(",", fmt(), string_type, span));
-    }
-    stmts.push(formatter_call("close_brace", fmt(), "]", string_type, span));
-
-    make_synthetic_method(
-        qualified_name,
-        method_info,
-        inspect_params(ref_tuple_type, fmt_type, span),
-        TypeTable::UNIT,
-        TirBlock::new(stmts, span),
-        vec![ref_tuple_type, fmt_type],
-    )
-}
 
 /// Build a `value.inspect_alt(f)` method call statement.
 ///
@@ -2861,8 +2735,12 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
         ))));
     }
 
-    // Parameterized types (tuples, function types) — Display fallback
+    // Parameterized types (function types, opaque types) — Display fallback
+    // Tuples: Display is provided by variadic impl in core:prelude/tuple.wado
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
+        if base_name == "Tuple" {
+            continue;
+        }
         let mangled = format_parameterized_name(&base_name, &type_arg_names);
         let display_key = format!("{mangled}^Display::fmt");
         let inspect_key = format!("{mangled}^Inspect::inspect");
