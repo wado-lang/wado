@@ -7898,24 +7898,24 @@ pub fn "StrCharIter^Iterator::next"(self: &mut StrCharIter) -> Option<char> {
         return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32));
     }
     if (b0 < 0xE0) {
-        let b1: u8 = core::builtin::array_get_u8(self.repr, self.byte_index);
+        let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
         self.byte_index = (self.byte_index + 1);
-        let code: u8 = (((b0 & 0x1F) << 6) | (b1 & 0x3F));
-        return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code as u32));
+        let code: u32 = (((b0 as u32 & 0x1F) << 6) | (b1 & 0x3F));
+        return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
     }
     if (b0 < 0xF0) {
-        let b1: u8 = core::builtin::array_get_u8(self.repr, self.byte_index);
-        let b2: u8 = core::builtin::array_get_u8(self.repr, (self.byte_index + 1));
+        let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
+        let b2: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 1)) as u32;
         self.byte_index = (self.byte_index + 2);
-        let code: u8 = ((((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6)) | (b2 & 0x3F));
-        return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code as u32));
+        let code: u32 = ((((b0 as u32 & 0x0F) << 12) | ((b1 & 0x3F) << 6)) | (b2 & 0x3F));
+        return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
     }
-    let b1: u8 = core::builtin::array_get_u8(self.repr, self.byte_index);
-    let b2: u8 = core::builtin::array_get_u8(self.repr, (self.byte_index + 1));
-    let b3: u8 = core::builtin::array_get_u8(self.repr, (self.byte_index + 2));
+    let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
+    let b2: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 1)) as u32;
+    let b3: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 2)) as u32;
     self.byte_index = (self.byte_index + 3);
-    let code: u8 = (((((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
-    return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code as u32));
+    let code: u32 = (((((b0 as u32 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
+    return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
 }
 
 pub fn "StrCharIter^Iterator::collect"(self: &mut StrCharIter) -> Array<char> {
