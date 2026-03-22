@@ -255,7 +255,11 @@ The `#[expect_trap]` and `#[TODO]` attributes mark tests as expected to trap. Th
 test-0-simple            # normal test export
 test-trap-1-panics       # #[expect_trap]: passes when body traps
 test-todo-2-wip          # #[TODO]: passes when body traps; distinct failure message when it doesn't
+test-tm5000-0-slow       # #[timeout_ms(5000)]: custom timeout in ms
+test-trap-tm500-1-panic  # combined: expect_trap + custom timeout
 ```
+
+The `tm{N}` segment encodes a custom timeout in milliseconds (default: 1000ms). It appears after the `test-`/`test-trap-`/`test-todo-` prefix.
 
 Both `wado test` and the e2e test runner detect these prefixes and handle pass/fail accordingly.
 

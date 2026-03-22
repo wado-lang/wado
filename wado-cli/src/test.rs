@@ -216,14 +216,6 @@ struct TestResult {
     duration: Duration,
 }
 
-/// Extract display name from test export name.
-///
-/// - `test-0-simple` → `"simple"`
-/// - `test-1` → `"<test 1>"`
-/// - `test-trap-0-panics` → `"panics"` (`expect_trap` tests use the same display convention)
-/// - `test-trap-3` → `"<test 3>"`
-/// - `test-todo-0-not-yet` → `"not_yet"` (`TODO` tests use the same display convention)
-/// - `test-todo-2` → `"<test 2>"`
 /// Parse per-test timeout from export name.
 ///
 /// Export names with custom timeout contain a `tm{N}` segment:
@@ -242,14 +234,22 @@ fn parse_timeout_ms(test_name: &str) -> Option<u64> {
 
 /// Strip the `tm{N}-` segment from the name part for display purposes.
 fn strip_timeout_segment(name_part: &str) -> &str {
-    if let Some(rest) = name_part.strip_prefix("tm") {
-        if let Some(idx) = rest.find('-') {
-            return &rest[idx + 1..];
-        }
+    if let Some(rest) = name_part.strip_prefix("tm")
+        && let Some(idx) = rest.find('-')
+    {
+        return &rest[idx + 1..];
     }
     name_part
 }
 
+/// Extract display name from test export name.
+///
+/// - `test-0-simple` → `"simple"`
+/// - `test-1` → `"<test 1>"`
+/// - `test-trap-0-panics` → `"panics"` (`expect_trap` tests use the same display convention)
+/// - `test-trap-3` → `"<test 3>"`
+/// - `test-todo-0-not-yet` → `"not_yet"` (`TODO` tests use the same display convention)
+/// - `test-todo-2` → `"<test 2>"`
 fn extract_display_name(test_name: &str) -> String {
     // Strip "test-trap-", "test-todo-", or "test-" prefix to get the "index[-name]" part
     let name_part = test_name
@@ -644,10 +644,7 @@ mod tests {
     #[test]
     fn test_extract_display_name_with_timeout() {
         assert_eq!(extract_display_name("test-tm2000-0-slow"), "slow");
-        assert_eq!(
-            extract_display_name("test-trap-tm500-0-panics"),
-            "panics"
-        );
+        assert_eq!(extract_display_name("test-trap-tm500-0-panics"), "panics");
         assert_eq!(extract_display_name("test-todo-tm3000-1"), "<test 1>");
         // Existing behavior preserved
         assert_eq!(extract_display_name("test-0-simple"), "simple");

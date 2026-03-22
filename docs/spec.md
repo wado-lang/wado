@@ -3401,11 +3401,8 @@ Test functions are exported at the Component Model level with kebab-case names:
 
 - `test "simple addition"` → exported as `test-0-simple-addition`
 - `test { ... }` (unnamed, line 10) → exported as `test-1`
-- `#[expect_trap] test "panics"` → exported as `test-trap-0-panics`
-- `#[TODO] test "future"` → exported as `test-todo-0-future`
-- `#[timeout_ms(5000)] test "slow"` → exported as `test-tm5000-0-slow`
 
-The numeric prefix preserves declaration order for deterministic execution. The `tm{N}` segment encodes the custom timeout in milliseconds.
+The numeric prefix preserves declaration order for deterministic execution.
 
 **Async Support:**
 
