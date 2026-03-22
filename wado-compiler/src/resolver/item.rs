@@ -465,7 +465,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let is_todo = test_decl.attributes.iter().any(|a| a.name == "TODO");
         let timeout_ms = test_decl.attributes.iter().find_map(|a| {
             if a.name == "timeout_ms" {
-                a.args.first().and_then(|arg| arg.as_str().parse::<u64>().ok())
+                a.args
+                    .first()
+                    .and_then(|arg| arg.as_str().parse::<u64>().ok())
             } else {
                 None
             }
