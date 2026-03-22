@@ -1,0 +1,113 @@
+struct BoxTrait<T> {
+    value: T,
+}
+
+impl<T> BoxTrait<T> {
+    fn get(&self) -> T {
+        return self.value;
+    }
+    fn set(&mut self, v: T) {
+        self.value = v;
+    }
+}
+
+struct BTPoint {
+    x: i32,
+    y: i32,
+}
+
+impl Eq for BTPoint {
+    fn eq(&self, other: &Self) -> bool {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+
+test "box with trait method" {
+    let mut b = BoxTrait { value: BTPoint { x: 10, y: 20 } };
+    let p = b.get();
+    assert p.x == 10;
+    assert p.y == 20;
+
+    b.set(BTPoint { x: 99, y: 99 });
+    assert p.x == 10; // copy, not affected
+    assert b.value.x == 99;
+
+    let b1 = BoxTrait { value: 42 };
+    let b2 = b1; // deep-copy
+    assert b1.get() == 42;
+    assert b2.get() == 42;
+
+    let pa = BoxTrait { value: BTPoint { x: 1, y: 2 } };
+    let pb = BoxTrait { value: BTPoint { x: 1, y: 2 } };
+    assert pa.get() == pb.get();
+}
+
+struct MonoContainer<T> {
+    items: Array<T>,
+}
+
+impl<T> MonoContainer<T> {
+    fn new() -> MonoContainer<T> {
+        return MonoContainer { items: [] as Array<T> };
+    }
+    fn add(&mut self, item: T) {
+        self.items.append(item);
+    }
+    fn len(&self) -> i32 {
+        return self.items.len();
+    }
+    fn get(&self, index: i32) -> T {
+        return self.items[index];
+    }
+}
+
+test "field monomorphization" {
+    let mut container = MonoContainer::<i32>::new();
+    container.add(10);
+    container.add(20);
+    container.add(30);
+    assert container.len() == 3;
+    assert container.get(0) == 10;
+    assert container.get(1) == 20;
+    assert container.get(2) == 30;
+}
+
+fn partition(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> bool) -> i32 {
+    let pivot = arr[high];
+    let mut i = low - 1;
+    for let mut j = low; j < high; j += 1 {
+        if cmp(&arr[j], &pivot) {
+            i += 1;
+            let tmp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = tmp;
+        }
+    }
+    let tmp = arr[i + 1];
+    arr[i + 1] = arr[high];
+    arr[high] = tmp;
+    return i + 1;
+}
+
+fn quicksort(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> bool) {
+    if low < high {
+        let pi = partition(arr, low, high, cmp);
+        quicksort(arr, low, pi - 1, cmp);
+        quicksort(arr, pi + 1, high, cmp);
+    }
+}
+
+test "quicksort with closure param" {
+    let mut arr: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+    quicksort(&mut arr, 0, arr.len() - 1, |a: &i32, b: &i32| *a < *b);
+    assert arr[0] == 1;
+    assert arr[4] == 5;
+    assert arr[8] == 9;
+
+    quicksort(&mut arr, 0, arr.len() - 1, |a: &i32, b: &i32| *a > *b);
+    assert arr[0] == 9;
+    assert arr[8] == 1;
+}
+
+__DATA__
+{"test": {}}

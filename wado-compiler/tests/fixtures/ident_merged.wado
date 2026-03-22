@@ -1,0 +1,99 @@
+struct ident_point {
+    x: i32,
+    y: i32,
+}
+
+impl ident_point {
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+}
+
+enum ident_color {
+    red,
+    green,
+    blue,
+}
+
+variant ident_maybe {
+    just(i32),
+    nothing,
+}
+
+fn Double(n: i32) -> i32 {
+    return n * 2;
+}
+
+test "uppercase local" {
+    let FOO = 42;
+    assert FOO == 42;
+    let mut BAR = 0;
+    BAR = BAR + 1;
+    assert BAR == 1;
+    let [A, B] = [10, 20];
+    assert A == 10;
+    assert B == 20;
+}
+
+test "lowercase type" {
+    let p = ident_point { x: 3, y: 4 };
+    assert p.x == 3;
+    let ident_point { x, y } = p;
+    assert x == 3;
+    assert y == 4;
+
+    let c = ident_color::red;
+    let name = match c {
+        red => "red",
+        green => "green",
+        blue => "blue",
+    };
+    assert name == "red";
+
+    let v: ident_maybe = ident_maybe::just(10);
+    if let just(n) = v {
+        assert n == 10;
+    }
+}
+
+test "case independence" {
+    let FOO = 42;
+    assert FOO == 42;
+
+    let p = ident_point { x: 3, y: 4 };
+    assert p.sum() == 7;
+
+    let ident_point { x: X, y: Y } = p;
+    assert X == 3;
+    assert Y == 4;
+
+    let c = ident_color::red;
+    if c matches { red } {
+        assert true;
+    }
+
+    let v: ident_maybe = ident_maybe::just(10);
+    if let just(N) = v {
+        assert N == 10;
+    }
+
+    let opt = Option::<i32>::Some(99);
+    if let VAL = opt && VAL matches { Some(_) } {
+        assert true;
+    }
+
+    assert Double(21) == 42;
+}
+
+test "iflet uppercase binding" {
+    let opt = Option::<i32>::Some(42);
+    if let VAL = opt && VAL matches { Some(_) } {
+        assert true;
+    }
+    if let N = 10 && N > 5 {
+        assert true;
+    }
+}
+
+__DATA__
+{"test": {}}

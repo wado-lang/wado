@@ -1,0 +1,387 @@
+use { println, Stdout } from "core:cli";
+
+fn fmt_with(value: &i32, sign_plus: bool, zero_pad: bool, width: i32, align: Alignment) -> String {
+    let mut buf = String::with_capacity(64);
+    let fill = if zero_pad {
+        '0';
+    } else {
+        ' ';
+    };
+    let mut f = Formatter {
+        fill,
+        align,
+        sign_plus,
+        zero_pad,
+        width,
+        precision: -1,
+        indent: 0,
+        buf: &mut buf,
+    };
+    value.fmt(&mut f);
+    return buf;
+}
+
+fn fmt_int(value: &i32, fill: char, align: Alignment, sign_plus: bool, zero_pad: bool, width: i32) -> String {
+    let mut buf = String::with_capacity(64);
+    let mut f = Formatter {
+        fill,
+        align,
+        sign_plus,
+        zero_pad,
+        width,
+        precision: -1,
+        indent: 0,
+        buf: &mut buf,
+    };
+    value.fmt(&mut f);
+    return buf;
+}
+
+fn test_format_base() with Stdout {
+    let x: i32 = 42;
+    let neg: i32 = -42;
+    assert fmt_with(&x, true, false, -1, Alignment::Right) == "+42";
+    assert fmt_with(&neg, true, false, -1, Alignment::Right) == "-42";
+    assert fmt_with(&x, true, true, 8, Alignment::Right) == "+0000042";
+    assert fmt_with(&neg, false, true, 8, Alignment::Right) == "-0000042";
+    assert fmt_with(&x, true, false, 10, Alignment::Right) == "       +42";
+    assert fmt_with(&neg, false, false, 10, Alignment::Left) == "-42       ";
+    println("ok");
+}
+
+fn test_format_padding() with Stdout {
+    let x: i32 = 42;
+    let neg: i32 = -42;
+    let big: i32 = 12345;
+    assert fmt_int(&x, ' ', Alignment::Right, false, false, 10) == "        42";
+    assert fmt_int(&x, ' ', Alignment::Left, false, false, 10) == "42        ";
+    assert fmt_int(&x, ' ', Alignment::Center, false, false, 10) == "    42    ";
+    assert fmt_int(&x, '0', Alignment::Right, false, true, 8) == "00000042";
+    assert fmt_int(&neg, '0', Alignment::Right, false, true, 8) == "-0000042";
+    assert fmt_int(&x, ' ', Alignment::Right, true, false, -1) == "+42";
+    assert fmt_int(&x, '*', Alignment::Center, false, false, 10) == "****42****";
+    let mut buf = String::with_capacity(64);
+    let mut f = Formatter {
+        fill: ' ',
+        align: Alignment::Left,
+        sign_plus: false,
+        zero_pad: false,
+        width: 8,
+        precision: -1,
+        indent: 0,
+        buf: &mut buf,
+    };
+    true.fmt(&mut f);
+    assert buf == "true    ";
+    assert fmt_int(&big, ' ', Alignment::Right, false, false, 2) == "12345";
+    println("ok");
+}
+
+fn test_template_specifiers() with Stdout {
+    let i = 42;
+    assert `{i}` == "42";
+    assert `{-1}` == "-1";
+    let s = "hello";
+    assert `{s}` == "hello";
+    assert `{i:10}` == "        42";
+    assert `{i:<10}` == "42        ";
+    assert `{i:^10}` == "    42    ";
+    assert `{i:*^10}` == "****42****";
+    assert `{i:0>8}` == "00000042";
+    assert `{i:-<8}` == "42------";
+    assert `{i:+}` == "+42";
+    let neg = -42;
+    assert `{neg:+}` == "-42";
+    assert `{neg}` == "-42";
+    assert `{i:08}` == "00000042";
+    assert `{neg:08}` == "-0000042";
+    assert `{i:+08}` == "+0000042";
+    assert `{i:b}` == "101010";
+    let byte: u8 = 255;
+    assert `{byte:b}` == "11111111";
+    assert `{byte:#b}` == "0b11111111";
+    assert `{i:08b}` == "00101010";
+    assert `{i:#010b}` == "0b00101010";
+    assert `{i:o}` == "52";
+    let oct_val = 511;
+    assert `{oct_val:o}` == "777";
+    assert `{oct_val:#o}` == "0o777";
+    assert `{i:x}` == "2a";
+    assert `{i:X}` == "2A";
+    let hex_val = 255;
+    assert `{hex_val:x}` == "ff";
+    assert `{hex_val:X}` == "FF";
+    assert `{hex_val:#x}` == "0xff";
+    assert `{hex_val:#X}` == "0XFF";
+    assert `{hex_val:#010x}` == "0x000000ff";
+    let u32_max: u32 = 4294967295;
+    assert `{u32_max:x}` == "ffffffff";
+    assert `{u32_max:b}` == "11111111111111111111111111111111";
+    let big_i64: i64 = 9223372036854775807;
+    assert `{big_i64:x}` == "7fffffffffffffff";
+    let neg_i64: i64 = -1;
+    assert `{neg_i64}` == "-1";
+    assert `{neg_i64:x}` == "-1";
+    let u64_max: u64 = 18446744073709551615;
+    assert `{u64_max:x}` == "ffffffffffffffff";
+    assert `{u64_max:X}` == "FFFFFFFFFFFFFFFF";
+    assert `{u64_max:o}` == "1777777777777777777777";
+    let u64_one: u64 = 1;
+    assert `{u64_one:b}` == "1";
+    assert `{u64_one:#x}` == "0x1";
+    let i128_val: i128 = 255;
+    assert `{i128_val:x}` == "ff";
+    assert `{i128_val:X}` == "FF";
+    assert `{i128_val:b}` == "11111111";
+    assert `{i128_val:o}` == "377";
+    assert `{i128_val:#x}` == "0xff";
+    let neg_i128: i128 = -1;
+    assert `{neg_i128:x}` == "-1";
+    assert `{neg_i128:b}` == "-1";
+    let u128_val: u128 = 256;
+    assert `{u128_val:x}` == "100";
+    assert `{u128_val:b}` == "100000000";
+    assert `{u128_val:o}` == "400";
+    assert `{u128_val:#X}` == "0X100";
+    assert `{i:+010}` == "+000000042";
+    assert `{i:#010x}` == "0x0000002a";
+    assert `{i:<10x}` == "2a        ";
+    assert `{s:>10}` == "     hello";
+    assert `{s:<10}` == "hello     ";
+    assert `{s:^10}` == "  hello   ";
+    assert `{true}` == "true";
+    assert `{false}` == "false";
+    let neg_i32 = -42;
+    assert `{neg_i32:b}` == "-101010";
+    assert `{neg_i32:o}` == "-52";
+    assert `{neg_i32:x}` == "-2a";
+    assert `{neg_i32:#x}` == "-0x2a";
+    println("ok");
+}
+
+fn test_template_specifiers_float() with Stdout {
+    let pi = 3.14159;
+    let neg = -2.71828;
+    assert `{pi}` == "3.14159";
+    assert `{neg}` == "-2.71828";
+    assert `{0.0}` == "0";
+    assert `{1.0}` == "1";
+    assert `{0.5}` == "0.5";
+    assert `{-0.5}` == "-0.5";
+    assert `{100.0}` == "100";
+    assert `{pi:.1}` == "3.1";
+    assert `{pi:.2}` == "3.14";
+    assert `{pi:.3}` == "3.142";
+    assert `{pi:.4}` == "3.1416";
+    assert `{pi:.5}` == "3.14159";
+    assert `{pi:.6}` == "3.141590";
+    assert `{neg:.2}` == "-2.72";
+    assert `{neg:.4}` == "-2.7183";
+    assert `{0.0:.2}` == "0.00";
+    assert `{100.0:.2}` == "100.00";
+    assert `{pi:e}` == "3.14159e0";
+    assert `{neg:e}` == "-2.71828e0";
+    assert `{0.0:e}` == "0e0";
+    assert `{1.0:e}` == "1e0";
+    assert `{100.0:e}` == "1e2";
+    let big = 1.23e15;
+    assert `{big:e}` == "1.23e15";
+    let small = 1.5e-10;
+    assert `{small:e}` == "1.5e-10";
+    assert `{pi:E}` == "3.14159E0";
+    assert `{neg:E}` == "-2.71828E0";
+    assert `{0.0:E}` == "0E0";
+    assert `{big:E}` == "1.23E15";
+    assert `{small:E}` == "1.5E-10";
+    assert `{pi:.1e}` == "3.1e0";
+    assert `{pi:.2e}` == "3.14e0";
+    assert `{pi:.4e}` == "3.1416e0";
+    assert `{pi:.1E}` == "3.1E0";
+    assert `{pi:.2E}` == "3.14E0";
+    assert `{neg:.2e}` == "-2.72e0";
+    assert `{big:.1e}` == "1.2e15";
+    assert `{big:.2e}` == "1.23e15";
+    assert `{small:.3e}` == "1.500e-10";
+    assert `{0.0:.2e}` == "0.00e0";
+    let large = 123456.789;
+    assert `{large:e}` == "1.23456789e5";
+    assert `{large:.1e}` == "1.2e5";
+    assert `{large:.4e}` == "1.2346e5";
+    assert `{pi:10.2}` == "      3.14";
+    assert `{pi:<10.2}` == "3.14      ";
+    assert `{pi:^10.2}` == "   3.14   ";
+    assert `{pi:*>10.2}` == "******3.14";
+    assert `{pi:*<10.2}` == "3.14******";
+    assert `{pi:*^10.2}` == "***3.14***";
+    assert `{pi:>15}` == "        3.14159";
+    assert `{pi:<15}` == "3.14159        ";
+    assert `{pi:>15e}` == "      3.14159e0";
+    assert `{pi:<15e}` == "3.14159e0      ";
+    assert `{neg:>15e}` == "     -2.71828e0";
+    assert `{neg:<15e}` == "-2.71828e0     ";
+    let f: f32 = 3.14 as f32;
+    assert `{f:.2}` == "3.14";
+    assert `{f:.4}` == "3.1400";
+    let f2: f32 = 2.5 as f32;
+    assert `{f2:.1}` == "2.5";
+    assert `{f2:.3}` == "2.500";
+    assert `{f2:.1e}` == "2.5e0";
+    assert `{f2:.1E}` == "2.5E0";
+    assert `{f2:e}` == "2.5e0";
+    let fz: f32 = 0.0 as f32;
+    assert `{fz:.2}` == "0.00";
+    assert `{fz:e}` == "0e0";
+    assert `{pi:.0e}` == "3e0";
+    assert `{large:.0e}` == "1e5";
+    assert `{-0.0:.2}` == "-0.00";
+    assert `{1.0:.10}` == "1.0000000000";
+    println("ok");
+}
+
+fn test_fts_precision() with Stdout {
+    let a = 0.582307589706;
+    let b = 0.001234567;
+    let c = 3.14159265358979;
+    let d = 99.999999;
+    let e = 0.9999995;
+    let f = 0.5;
+    let g = 0.000009876;
+    let h = -0.582307589706;
+    let i = -3.14159265358979;
+    let j = -0.001234567;
+    println(`a_1: {a:0.1f}`);
+    println(`a_2: {a:0.2f}`);
+    println(`a_3: {a:0.3f}`);
+    println(`a_4: {a:0.4f}`);
+    println(`a_5: {a:0.5f}`);
+    println(`a_6: {a:0.6f}`);
+    println(`a_7: {a:0.7f}`);
+    println(`a_8: {a:0.8f}`);
+    println(`a_9: {a:0.9f}`);
+    println(`a_10: {a:0.10f}`);
+    println(`b_1: {b:0.1f}`);
+    println(`b_2: {b:0.2f}`);
+    println(`b_3: {b:0.3f}`);
+    println(`b_4: {b:0.4f}`);
+    println(`b_5: {b:0.5f}`);
+    println(`b_6: {b:0.6f}`);
+    println(`b_7: {b:0.7f}`);
+    println(`b_8: {b:0.8f}`);
+    println(`b_9: {b:0.9f}`);
+    println(`b_10: {b:0.10f}`);
+    println(`c_1: {c:0.1f}`);
+    println(`c_2: {c:0.2f}`);
+    println(`c_3: {c:0.3f}`);
+    println(`c_4: {c:0.4f}`);
+    println(`c_5: {c:0.5f}`);
+    println(`c_6: {c:0.6f}`);
+    println(`c_7: {c:0.7f}`);
+    println(`c_8: {c:0.8f}`);
+    println(`c_9: {c:0.9f}`);
+    println(`c_10: {c:0.10f}`);
+    println(`d_1: {d:0.1f}`);
+    println(`d_2: {d:0.2f}`);
+    println(`d_3: {d:0.3f}`);
+    println(`d_4: {d:0.4f}`);
+    println(`d_5: {d:0.5f}`);
+    println(`d_6: {d:0.6f}`);
+    println(`d_7: {d:0.7f}`);
+    println(`d_8: {d:0.8f}`);
+    println(`d_9: {d:0.9f}`);
+    println(`d_10: {d:0.10f}`);
+    println(`e_1: {e:0.1f}`);
+    println(`e_2: {e:0.2f}`);
+    println(`e_3: {e:0.3f}`);
+    println(`e_4: {e:0.4f}`);
+    println(`e_5: {e:0.5f}`);
+    println(`e_6: {e:0.6f}`);
+    println(`e_7: {e:0.7f}`);
+    println(`e_8: {e:0.8f}`);
+    println(`e_9: {e:0.9f}`);
+    println(`e_10: {e:0.10f}`);
+    println(`f_1: {f:0.1f}`);
+    println(`f_2: {f:0.2f}`);
+    println(`f_3: {f:0.3f}`);
+    println(`f_4: {f:0.4f}`);
+    println(`f_5: {f:0.5f}`);
+    println(`f_6: {f:0.6f}`);
+    println(`f_7: {f:0.7f}`);
+    println(`f_8: {f:0.8f}`);
+    println(`f_9: {f:0.9f}`);
+    println(`f_10: {f:0.10f}`);
+    println(`g_1: {g:0.1f}`);
+    println(`g_2: {g:0.2f}`);
+    println(`g_3: {g:0.3f}`);
+    println(`g_4: {g:0.4f}`);
+    println(`g_5: {g:0.5f}`);
+    println(`g_6: {g:0.6f}`);
+    println(`g_7: {g:0.7f}`);
+    println(`g_8: {g:0.8f}`);
+    println(`g_9: {g:0.9f}`);
+    println(`g_10: {g:0.10f}`);
+    println(`h_1: {h:0.1f}`);
+    println(`h_2: {h:0.2f}`);
+    println(`h_3: {h:0.3f}`);
+    println(`h_4: {h:0.4f}`);
+    println(`h_5: {h:0.5f}`);
+    println(`h_6: {h:0.6f}`);
+    println(`h_7: {h:0.7f}`);
+    println(`h_8: {h:0.8f}`);
+    println(`h_9: {h:0.9f}`);
+    println(`h_10: {h:0.10f}`);
+    println(`i_1: {i:0.1f}`);
+    println(`i_2: {i:0.2f}`);
+    println(`i_3: {i:0.3f}`);
+    println(`i_4: {i:0.4f}`);
+    println(`i_5: {i:0.5f}`);
+    println(`i_6: {i:0.6f}`);
+    println(`i_7: {i:0.7f}`);
+    println(`i_8: {i:0.8f}`);
+    println(`i_9: {i:0.9f}`);
+    println(`i_10: {i:0.10f}`);
+    println(`j_1: {j:0.1f}`);
+    println(`j_2: {j:0.2f}`);
+    println(`j_3: {j:0.3f}`);
+    println(`j_4: {j:0.4f}`);
+    println(`j_5: {j:0.5f}`);
+    println(`j_6: {j:0.6f}`);
+    println(`j_7: {j:0.7f}`);
+    println(`j_8: {j:0.8f}`);
+    println(`j_9: {j:0.9f}`);
+    println(`j_10: {j:0.10f}`);
+}
+
+export fn run() with Stdout {
+    test_format_base();
+    test_format_padding();
+    test_template_specifiers();
+    test_template_specifiers_float();
+    test_fts_precision();
+}
+
+__DATA__
+{
+    "stdout_contains": [
+        "ok",
+        "a_1: 0.6",
+        "a_10: 0.5823075897",
+        "b_1: 0.0",
+        "b_10: 0.0012345670",
+        "c_1: 3.1",
+        "c_10: 3.1415926536",
+        "d_1: 100.0",
+        "d_6: 99.999999",
+        "e_1: 1.0",
+        "e_7: 0.9999995",
+        "f_1: 0.5",
+        "f_10: 0.5000000000",
+        "g_5: 0.00001",
+        "g_10: 0.0000098760",
+        "h_1: -0.6",
+        "h_10: -0.5823075897",
+        "i_1: -3.1",
+        "i_10: -3.1415926536",
+        "j_1: -0.0",
+        "j_10: -0.0012345670"
+    ]
+}

@@ -1,0 +1,61 @@
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+fn run_with<effect E>(f: fn() with E) with E {
+    f();
+}
+
+fn combine<effect E>(f: fn() with E, g: fn() with E) with E {
+    f();
+    g();
+}
+
+fn transform<T, effect E>(
+    f: fn(T) -> T with E,
+    g: fn(T) -> T with E,
+    x: T,
+) -> T with E {
+    let y = f(x);
+    return g(y);
+}
+
+fn effect_poly_multi() with Stdout, Stderr {
+    run_with(|| { println("stdout effect"); });
+    run_with(|| { eprintln("stderr effect"); });
+    run_with(|| {
+        println("both stdout");
+        eprintln("both stderr");
+    });
+    println("done");
+}
+
+fn effect_poly_multi_param() with Stdout, Stderr {
+    combine(
+        || { println("from f"); },
+        || { eprintln("from g"); },
+    );
+    combine(
+        || { println("effectful"); },
+        || { },
+    );
+    combine(|| { }, || { });
+    let result = transform(
+        |x: i32| {
+            println(`step1: {x}`);
+            return x + 1;
+        },
+        |x: i32| {
+            eprintln(`step2: {x}`);
+            return x * 2;
+        },
+        10,
+    );
+    println(`result: {result}`);
+}
+
+export fn run() with Stdout, Stderr {
+    effect_poly_multi();
+    effect_poly_multi_param();
+}
+
+__DATA__
+{"stdout": "stdout effect\nboth stdout\ndone\nfrom f\neffectful\nstep1: 10\nresult: 22\n", "stderr_contains": ["stderr effect", "both stderr", "from g", "step2: 11"]}

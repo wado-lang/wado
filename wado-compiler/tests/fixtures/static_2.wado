@@ -1,0 +1,162 @@
+struct WrapBox<T> {
+    value: T,
+}
+
+impl<T> WrapBox<T> {
+    pub fn new(value: T) -> WrapBox<T> {
+        return WrapBox { value };
+    }
+
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+
+    pub fn wrap_other<U>(value: U) -> WrapBox<U> {
+        return WrapBox { value };
+    }
+}
+
+struct Wrapper<T> {
+    value: T,
+}
+
+impl<T> Wrapper<T> {
+    pub fn new(value: T) -> Wrapper<T> {
+        return Wrapper { value };
+    }
+
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+
+    pub fn wrap_as<U>(value: U) -> Wrapper<U> {
+        return Wrapper { value };
+    }
+}
+
+struct Converter<T> {
+    _phantom: T,
+}
+
+impl<T> Converter<T> {
+    pub fn convert<U>(value: U) -> U {
+        return value;
+    }
+}
+
+struct Container<T> {
+    value: T,
+}
+
+impl<T> Container<T> {
+    pub fn make(value: T) -> Container<T> {
+        return Container { value };
+    }
+
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+}
+
+struct Factory<T> {
+    _phantom: T,
+}
+
+impl<T> Factory<T> {
+    pub fn make_array<U>(first: U, second: U) -> Array<U> {
+        let mut arr: Array<U> = [];
+        arr.append(first);
+        arr.append(second);
+        return arr;
+    }
+}
+
+impl<T> Factory<T> {
+    pub fn wrap_array(arr: Array<T>) -> Array<T> {
+        return arr;
+    }
+}
+
+struct Utils {
+    dummy: i32,
+}
+
+impl Utils {
+    pub fn identity<U>(value: U) -> U {
+        return value;
+    }
+}
+
+fn make_wrapper<V>(value: V) -> Wrapper<V> {
+    return Wrapper::<i32>::wrap_as::<V>(value);
+}
+
+fn do_convert<A, B>(value: B) -> B {
+    return Converter::<A>::convert::<B>(value);
+}
+
+test "generic static method on generic type" {
+    let b = WrapBox::<i32>::wrap_other::<String>("hello");
+    assert b.get() == "hello";
+
+    let c = WrapBox::<String>::wrap_other::<i32>(42);
+    assert c.get() == 42;
+}
+
+test "generic static method called from generic function" {
+    let w = make_wrapper::<String>("hello");
+    assert w.get() == "hello";
+
+    let w2 = make_wrapper::<i32>(42);
+    assert w2.get() == 42;
+}
+
+test "both type params from outer generic context" {
+    let result = do_convert::<i32, String>("test");
+    assert result == "test";
+
+    let result2 = do_convert::<String, i32>(99);
+    assert result2 == 99;
+}
+
+test "literal coercion with generic static method" {
+    let c = Container::<i64>::make(42);
+    assert c.get() == 42 as i64;
+
+    let arr = Factory::<String>::make_array::<i64>(10, 20);
+    let sum = arr[0] + arr[1];
+    assert sum == 30 as i64;
+
+    let arr2 = Factory::<i64>::wrap_array([100, 200, 300]);
+    assert arr2.len() == 3;
+    assert arr2[0] == 100 as i64;
+}
+
+test "nested generic types with static methods" {
+    let arr: Array<i32> = [1, 2, 3];
+    let boxed_arr = WrapBox::<Array<i32>>::new(arr);
+    let inner = boxed_arr.get();
+    assert inner.len() == 3;
+    assert inner[0] == 1;
+
+    let inner_box = WrapBox::<i32>::new(42);
+    let outer_box = WrapBox::<WrapBox<i32>>::new(inner_box);
+    let unwrapped = outer_box.get();
+    assert unwrapped.get() == 42;
+}
+
+test "turbofish on non-generic struct" {
+    let s = Utils::identity::<String>("hello");
+    assert s == "hello";
+
+    let n = Utils::identity::<i32>(42);
+    assert n == 42;
+}
+
+test "user-defined generic struct with static method" {
+    let b = WrapBox::<i32>::new(42);
+    assert b.get() == 42;
+}
+
+__DATA__
+{"test": {}}

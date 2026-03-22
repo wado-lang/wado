@@ -1,0 +1,85 @@
+struct PrettyPoint {
+    x: i32,
+    y: i32,
+}
+
+struct PrettyLine {
+    start: PrettyPoint,
+    end: PrettyPoint,
+}
+
+test "pretty array" {
+    let empty: Array<i32> = [];
+    assert `{empty:#?}` == "[]";
+
+    let nums: Array<i32> = [1, 2, 3];
+    assert `{nums:#?}` == "[\n  1,\n  2,\n  3,\n]";
+
+    let points: Array<PrettyPoint> = [
+        PrettyPoint { x: 1, y: 2 },
+        PrettyPoint { x: 3, y: 4 },
+    ] as Array<PrettyPoint>;
+    assert `{points:#?}` == "[\n  PrettyPoint {\n    x: 1,\n    y: 2,\n  },\n  PrettyPoint {\n    x: 3,\n    y: 4,\n  },\n]";
+}
+
+test "pretty struct" {
+    let p = PrettyPoint { x: 1, y: 2 };
+    assert `{p:#?}` == "PrettyPoint {\n  x: 1,\n  y: 2,\n}";
+
+    let line = PrettyLine {
+        start: PrettyPoint { x: 10, y: 20 },
+        end: PrettyPoint { x: 30, y: 40 },
+    };
+    assert `{line:#?}` == "PrettyLine {\n  start: PrettyPoint {\n    x: 10,\n    y: 20,\n  },\n  end: PrettyPoint {\n    x: 30,\n    y: 40,\n  },\n}";
+}
+
+test "pretty variant" {
+    let some_val = Option::Some(42);
+    assert `{some_val:#?}` == "Option::Some(\n  42,\n)";
+    let none_val: Option<i32> = null;
+    assert `{none_val:#?}` == "Option::None";
+
+    let nested = Option::Some(PrettyPoint { x: 1, y: 2 });
+    assert `{nested:#?}` == "Option::Some(\n  PrettyPoint {\n    x: 1,\n    y: 2,\n  },\n)";
+}
+
+// inspect_no_display tests
+enum NDColor {
+    Red,
+    Green,
+    Blue,
+}
+
+variant NDShape {
+    Circle(f64),
+    NDPoint,
+}
+
+pub flags NDMode {
+    Read,
+    Write,
+}
+
+test "no display" {
+    let p = PrettyPoint { x: 1, y: 2 };
+    assert `{p:?}` == "PrettyPoint { x: 1, y: 2 }";
+    let c = NDColor::Red;
+    assert `{c:?}` == "NDColor::Red";
+    let s = NDShape::Circle(3.14);
+    assert `{s:?}` == "NDShape::Circle(3.14)";
+    let m = NDMode::Read | NDMode::Write;
+    assert `{m:?}` == "NDMode::Read | NDMode::Write";
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    assert `{opt:?}` == "Option::Some(42)";
+    let none: Option<i32> = null;
+    assert `{none:?}` == "Option::None";
+    let opt_p: Option<PrettyPoint> = Option::<PrettyPoint>::Some(PrettyPoint { x: 10, y: 20 });
+    assert `{opt_p:?}` == "Option::Some(PrettyPoint { x: 10, y: 20 })";
+    let arr: Array<PrettyPoint> = [PrettyPoint { x: 1, y: 2 }, PrettyPoint { x: 3, y: 4 }];
+    assert `{arr:?}` == "[PrettyPoint { x: 1, y: 2 }, PrettyPoint { x: 3, y: 4 }]";
+    let f = |x: i32| x * 2;
+    assert `{f:?}` == "|i32| -> i32";
+}
+
+__DATA__
+{"test": {}}

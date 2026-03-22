@@ -1,0 +1,137 @@
+struct Box<T> {
+    value: T,
+}
+
+struct Pair<A, B> {
+    first: A,
+    second: B,
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "basic usage" {
+    let b = Box { value: 42 };
+    assert b.value == 42;
+}
+
+test "different types" {
+    let int_box = Box { value: 42 };
+    let float_box = Box { value: 3.14 };
+    let str_box = Box { value: "hello" };
+    let bool_box = Box { value: true };
+    let char_box = Box { value: 'A' };
+    assert int_box.value == 42;
+    assert float_box.value == 3.14;
+    assert str_box.value == "hello";
+    assert bool_box.value == true;
+    assert char_box.value == 'A';
+}
+
+test "explicit type annotations" {
+    let i32_box: Box<i32> = Box { value: 42 };
+    let i64_box: Box<i64> = Box { value: 9999999999 as i64 };
+    let f32_box: Box<f32> = Box { value: 2.5 as f32 };
+    let f64_box: Box<f64> = Box { value: 3.14159 };
+    let bool_box: Box<bool> = Box { value: false };
+    let char_box: Box<char> = Box { value: 'Z' };
+    let str_box: Box<String> = Box { value: "world" };
+    assert i32_box.value == 42;
+    assert i64_box.value == 9999999999 as i64;
+    assert f32_box.value == 2.5 as f32;
+    assert f64_box.value == 3.14159;
+    assert bool_box.value == false;
+    assert char_box.value == 'Z';
+    assert str_box.value == "world";
+}
+
+test "multi params" {
+    let p = Pair { first: 42, second: "hello" };
+    assert p.first == 42;
+    assert p.second == "hello";
+}
+
+test "mutable field" {
+    let mut b = Box { value: 10 };
+    assert b.value == 10;
+    b.value = 42;
+    assert b.value == 42;
+}
+
+test "nested" {
+    let inner = Box { value: 42 };
+    let outer = Box { value: inner };
+    assert outer.value.value == 42;
+}
+
+fn make_box_i32(v: i32) -> Box<i32> {
+    return Box { value: v };
+}
+
+fn get_box_value(b: Box<i32>) -> i32 {
+    return b.value;
+}
+
+test "func param and return" {
+    let b = make_box_i32(42);
+    assert get_box_value(b) == 42;
+}
+
+impl<i32> Box<i32> {
+    fn get(&self) -> i32 {
+        return self.value;
+    }
+}
+
+test "impl block" {
+    let b = Box { value: 42 };
+    assert b.get() == 42;
+}
+
+test "with struct type params" {
+    let point_box = Box { value: Point { x: 10, y: 20 } };
+    assert point_box.value.x == 10;
+    assert point_box.value.y == 20;
+
+    let pair_box = Box { value: Pair { first: 1, second: "one" } };
+    assert pair_box.value.first == 1;
+    assert pair_box.value.second == "one";
+}
+
+test "array of generic struct" {
+    let pairs: Array<Pair<i32, String>> = [
+        Pair { first: 1, second: "one" },
+        Pair { first: 2, second: "two" },
+    ];
+    assert pairs[0].first == 1;
+    assert pairs[0].second == "one";
+    assert pairs[1].first == 2;
+    assert pairs[1].second == "two";
+}
+
+test "array of non-generic struct" {
+    let points: Array<Point> = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    assert points[0].x == 1;
+    assert points[0].y == 2;
+    assert points[1].x == 3;
+    assert points[1].y == 4;
+}
+
+test "array direct" {
+    let mut arr: Array<i32> = [];
+    arr.append(42);
+    assert arr.len() == 1;
+}
+
+use { TreeMap } from "core:collections";
+
+test "struct import from collections" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["hello"] = 42;
+    assert map["hello"] == 42;
+}
+
+__DATA__
+{"test": {}}

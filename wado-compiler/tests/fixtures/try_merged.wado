@@ -1,0 +1,254 @@
+use { println } from "core:cli";
+
+fn test_try_from_narrowing() with Stdout {
+    let big: i64 = 42;
+    let r1 = i32::try_from(big);
+    if let Ok(n) = r1 {
+        assert n == 42;
+    } else {
+        panic("expected Ok");
+    }
+    let too_big: i64 = 3000000000;
+    let r2 = i32::try_from(too_big);
+    if let Err(msg) = r2 {
+        assert msg.message == "3000000000 out of range for i32";
+    } else {
+        panic("expected Err");
+    }
+    let negative: i32 = -1;
+    let r3 = u32::try_from(negative);
+    if let Err(_) = r3 {
+    } else {
+        panic("expected Err for negative -> u32");
+    }
+    let fits: i32 = 100;
+    let r4 = u32::try_from(fits);
+    if let Ok(n) = r4 {
+        assert n == 100 as u32;
+    } else {
+        panic("expected Ok");
+    }
+    let small: u32 = 200;
+    let r5 = u8::try_from(small);
+    if let Ok(n) = r5 {
+        assert n == 200 as u8;
+    } else {
+        panic("expected Ok");
+    }
+    let overflow: u32 = 300;
+    let r6 = u8::try_from(overflow);
+    if let Err(_) = r6 {
+    } else {
+        panic("expected Err for 300 -> u8");
+    }
+    println("try_from ok");
+}
+
+fn step1(x: i32) -> Result<i32, String> {
+    if x < 0 {
+        return Result::<i32, String>::Err("step1: negative");
+    }
+    return Result::<i32, String>::Ok(x + 1);
+}
+
+fn step2(x: i32) -> Result<i32, String> {
+    if x > 100 {
+        return Result::<i32, String>::Err("step2: too large");
+    }
+    return Result::<i32, String>::Ok(x * 2);
+}
+
+fn step3(x: i32) -> Result<i32, String> {
+    if x == 0 {
+        return Result::<i32, String>::Err("step3: zero");
+    }
+    return Result::<i32, String>::Ok(x - 1);
+}
+
+fn pipeline(x: i32) -> Result<i32, String> {
+    let a = step1(x)?;
+    let b = step2(a)?;
+    let c = step3(b)?;
+    return Result::<i32, String>::Ok(c);
+}
+
+fn test_try_op_chained() with Stdout {
+    assert pipeline(5) matches { Ok(n) && n == 11 };
+    assert pipeline(-1) matches { Err(e) && e == "step1: negative" };
+    assert pipeline(100) matches { Err(e) && e == "step2: too large" };
+    println("chained ok");
+}
+
+fn first_positive(arr: Array<i32>) -> Option<i32> {
+    let mut i = 0;
+    while i < arr.len() {
+        if arr[i] > 0 {
+            return Option::<i32>::Some(arr[i]);
+        }
+        i += 1;
+    }
+    return null;
+}
+
+fn first_positive_doubled(arr: Array<i32>) -> Option<i32> {
+    let n = first_positive(arr)?;
+    return Option::<i32>::Some(n * 2);
+}
+
+fn test_try_op_option_basic() with Stdout {
+    assert first_positive_doubled([1, 2, 3] as Array<i32>) matches { Some(n) && n == 2 };
+    assert first_positive_doubled([-1, -2] as Array<i32>) matches { None };
+    println("option ok");
+}
+
+fn safe_div(a: i32, b: i32) -> Result<i32, String> {
+    if b == 0 {
+        return Result::<i32, String>::Err("division by zero");
+    }
+    return Result::<i32, String>::Ok(a / b);
+}
+
+fn compute_div(a: i32, b: i32) -> Result<i32, String> {
+    let q = safe_div(a, b)?;
+    return Result::<i32, String>::Ok(q * 2);
+}
+
+fn test_try_op_result_basic() with Stdout {
+    assert compute_div(10, 2) matches { Ok(n) && n == 10 };
+    assert compute_div(10, 0) matches { Err(msg) && msg == "division by zero" };
+    println("result basic ok");
+}
+
+struct LowError {
+    code: i32,
+}
+
+variant HighError {
+    Low(LowError),
+    Other(String),
+}
+
+impl From<LowError> for HighError;
+
+fn low_op(fail: bool) -> Result<i32, LowError> {
+    if fail {
+        return Result::<i32, LowError>::Err(LowError { code: 42 });
+    }
+    return Result::<i32, LowError>::Ok(100);
+}
+
+fn high_op(fail: bool) -> Result<i32, HighError> {
+    let n = low_op(fail)?;
+    return Result::<i32, HighError>::Ok(n + 1);
+}
+
+fn test_try_op_result_from() with Stdout {
+    assert high_op(false) matches { Ok(n) && n == 101 };
+    let r2 = high_op(true);
+    if let Err(e) = r2 {
+        if let Low(inner) = e {
+            assert inner.code == 42;
+        } else {
+            panic("expected Low variant");
+        }
+    } else {
+        panic("expected Err");
+    }
+    println("result from ok");
+}
+
+fn may_fail() -> Result<(), String> {
+    return Result::<(), String>::Ok(());
+}
+
+fn caller_unit() -> Result<(), String> {
+    may_fail()?;
+    may_fail()?;
+    return Result::<(), String>::Ok(());
+}
+
+fn test_try_op_unit_result() with Stdout {
+    let result = caller_unit();
+    if let Ok(_) = result {
+        println("unit result ok");
+    }
+}
+
+struct IoError {
+    message: String,
+}
+
+struct ParseError {
+    input: String,
+}
+
+variant AppError {
+    Io(IoError),
+    Parse(ParseError),
+}
+
+impl From<IoError> for AppError;
+impl From<ParseError> for AppError;
+
+fn read_data(ok: bool) -> Result<String, IoError> {
+    if ok {
+        return Result::<String, IoError>::Ok("42");
+    }
+    return Result::<String, IoError>::Err(IoError { message: "disk error" });
+}
+
+fn parse_number(s: String) -> Result<i32, ParseError> {
+    if s == "42" {
+        return Result::<i32, ParseError>::Ok(42);
+    }
+    return Result::<i32, ParseError>::Err(ParseError { input: s });
+}
+
+fn process(io_ok: bool, valid: bool) -> Result<i32, AppError> {
+    let raw = read_data(io_ok)?;
+    let n = parse_number(if valid { raw } else { "bad" })?;
+    return Result::<i32, AppError>::Ok(n);
+}
+
+fn test_try_op_variant_from() with Stdout {
+    let r1 = process(true, true);
+    if let Ok(n) = r1 {
+        assert n == 42;
+    } else {
+        panic("expected Ok");
+    }
+    let r2 = process(false, true);
+    if let Err(e) = r2 {
+        if let Io(inner) = e {
+            assert inner.message == "disk error";
+        } else {
+            panic("expected Io variant");
+        }
+    } else {
+        panic("expected Err");
+    }
+    let r3 = process(true, false);
+    if let Err(e) = r3 {
+        if let Parse(inner) = e {
+            assert inner.input == "bad";
+        } else {
+            panic("expected Parse variant");
+        }
+    } else {
+        panic("expected Err");
+    }
+    println("variant from ok");
+}
+
+export fn run() with Stdout {
+    test_try_from_narrowing();
+    test_try_op_chained();
+    test_try_op_option_basic();
+    test_try_op_result_basic();
+    test_try_op_result_from();
+    test_try_op_unit_result();
+    test_try_op_variant_from();
+}
+
+__DATA__
+{"stdout": "try_from ok\nchained ok\noption ok\nresult basic ok\nresult from ok\nunit result ok\nvariant from ok\n"}

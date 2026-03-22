@@ -1,0 +1,110 @@
+// spread basic
+test "spread append" {
+    let a = [1, "hello"];
+    let b = [..a, true];
+    assert b.0 == 1;
+    assert b.1 == "hello";
+    assert b.2 == true;
+}
+
+test "spread prepend" {
+    let a = [1, "hello"];
+    let c = [42, ..a];
+    assert c.0 == 42;
+    assert c.1 == 1;
+    assert c.2 == "hello";
+}
+
+// spread eval once
+global mut call_count: i32 = 0;
+
+fn make_pair() -> [i32, i32] {
+    call_count = call_count + 1;
+    return [10, 20];
+}
+
+fn eval_prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
+    return [a, ..rest];
+}
+
+test "spread eval once" {
+    let a = [..make_pair(), 30];
+    assert a.0 == 10;
+    assert a.1 == 20;
+    assert call_count == 1, "make_pair() should be called exactly once for concrete spread";
+
+    let b = eval_prepend(99, make_pair());
+    assert b.0 == 99;
+    assert b.1 == 10;
+    assert b.2 == 20;
+    assert call_count == 2, "make_pair() should be called exactly once for variadic spread";
+}
+
+// spread multiple
+test "spread multiple sources" {
+    let a = [1, "hello"];
+    let b = [true, 3.14];
+    let c = [..a, ..b];
+    assert c.0 == 1;
+    assert c.1 == "hello";
+    assert c.2 == true;
+    assert c.3 == 3.14;
+}
+
+test "spread with literal elements mixed" {
+    let a = [1, "hello"];
+    let d = [0, ..a, 99];
+    assert d.0 == 0;
+    assert d.1 == 1;
+    assert d.2 == "hello";
+    assert d.3 == 99;
+}
+
+// spread vs field access
+fn combine<..T>(pair: [i32, i32], rest: [..T]) -> [i32, ..T] {
+    return [pair.0, ..rest];
+}
+
+test "spread vs field access" {
+    let result = combine([10, 20], [30, 40]);
+    assert result.0 == 10;
+    assert result.1 == 30;
+}
+
+// for-of try-op
+trait Processable {
+    fn process(&self) -> Result<(), String>;
+}
+
+impl Processable for i32 {
+    fn process(&self) -> Result<(), String> {
+        return Result::<(), String>::Ok(());
+    }
+}
+
+impl Processable for String {
+    fn process(&self) -> Result<(), String> {
+        return Result::<(), String>::Ok(());
+    }
+}
+
+impl Processable for bool {
+    fn process(&self) -> Result<(), String> {
+        return Result::<(), String>::Ok(());
+    }
+}
+
+fn process_all<..T: Processable>(items: &[..T]) -> Result<(), String> {
+    for let v of *items {
+        v.process()?;
+    }
+    return Result::<(), String>::Ok(());
+}
+
+test "for-of try-op" {
+    let result = process_all(&[1, "hello", true]);
+    assert result matches { Ok(_) };
+}
+
+__DATA__
+{"test": {}}

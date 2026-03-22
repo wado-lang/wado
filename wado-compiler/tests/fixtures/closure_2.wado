@@ -1,0 +1,280 @@
+// closure_2: capture and mutation tests
+// Merged from: closure_capture, closure_mutable_capture, closure_shared_mutable_state,
+// closure_block, closure_in_loop, closure_loop_scope_c_style_for, closure_loop_scope_for_of
+
+struct CapturePoint {
+    x: i32,
+    y: i32,
+}
+
+fn apply_with_offset(x: i32, offset: i32) -> i32 {
+    let add_offset = |v: i32| v + offset;
+    return add_offset(x);
+}
+
+fn clamp(value: i32, min_val: i32, max_val: i32) -> i32 {
+    let is_above_min = |v: i32| v >= min_val;
+    let is_below_max = |v: i32| v <= max_val;
+    if !is_above_min(value) {
+        return min_val;
+    }
+    if !is_below_max(value) {
+        return max_val;
+    }
+    return value;
+}
+
+fn scale_and_add(items: Array<i32>, scale: i32, base: i32) -> i32 {
+    let mut total = 0;
+    let transform = |x: i32| x * scale + base;
+    for let item of items {
+        total += transform(item);
+    }
+    return total;
+}
+
+fn call_fn(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+test "capture fn param" {
+    let r1 = apply_with_offset(5, 10);
+    assert r1 == 15;
+
+    assert clamp(15, 0, 10) == 10;
+    assert clamp(5, 0, 10) == 5;
+    assert clamp(-5, 0, 10) == 0;
+
+    let items: Array<i32> = [1, 2, 3];
+    let r5 = scale_and_add(items, 2, 1);
+    assert r5 == 15;
+}
+
+test "capture multiple" {
+    let a = 10;
+    let b = 20;
+    let c = 30;
+    let sum = || a + b + c;
+    assert sum() == 60;
+
+    let first = 1;
+    let second = 2;
+    let third = 3;
+    let format_all = || `{first},{second},{third}`;
+    assert format_all() == "1,2,3";
+
+    let x = 100;
+    let y = 200;
+    let get_x = || x;
+    let get_y = || y;
+    let get_sum = || x + y;
+    assert get_x() == 100;
+    assert get_y() == 200;
+    assert get_sum() == 300;
+}
+
+test "capture string" {
+    let greeting = "Hello";
+    let get_greeting = || greeting;
+    assert get_greeting() == "Hello";
+
+    let name = "world";
+    let make_msg = || `{greeting}, {name}!`;
+    assert make_msg() == "Hello, world!";
+
+    let status = "ok";
+    let is_ok = || status == "ok";
+    assert is_ok() == true;
+}
+
+test "capture struct" {
+    let p = CapturePoint { x: 3, y: 4 };
+    let get_x = || p.x;
+    let get_y = || p.y;
+    let sum_coords = || p.x + p.y;
+    let manhattan = || {
+        let dx = p.x;
+        let dy = p.y;
+        return dx + dy;
+    };
+
+    assert get_x() == 3;
+    assert get_y() == 4;
+    assert sum_coords() == 7;
+    assert manhattan() == 7;
+
+    let q = CapturePoint { x: 10, y: 20 };
+    let get_qx = || q.x;
+    let get_qy = || q.y;
+    assert get_qx() == 10;
+    assert get_qy() == 20;
+}
+
+test "mutable capture" {
+    let mut count = 0;
+    let inc = &mut || {
+        count += 1;
+    };
+
+    inc();
+    inc();
+    inc();
+    assert count == 3;
+}
+
+test "shared mutable state" {
+    let mut count = 0;
+    let inc = &mut || {
+        count += 1;
+    };
+
+    let get = || count;
+
+    inc();
+    inc();
+    assert get() == 2;
+
+    inc();
+    assert get() == 3;
+}
+
+test "block body" {
+    let compute = |x: i32| {
+        let doubled = x * 2;
+        let tripled = x * 3;
+        return doubled + tripled;
+    };
+
+    assert compute(3) == 15;
+    assert compute(4) == 20;
+    assert compute(5) == 25;
+}
+
+test "block for" {
+    let factorial = |n: i32| {
+        let mut result = 1;
+        for let mut i = 1; i <= n; i = i + 1 {
+            result = result * i;
+        }
+        return result;
+    };
+
+    assert factorial(5) == 120;
+    assert factorial(3) == 6;
+    assert factorial(4) == 24;
+}
+
+test "block if" {
+    let max_of_three = |a: i32, b: i32, c: i32| {
+        let max_ab = if a > b {
+            a;
+        } else {
+            b;
+        };
+        let result = if max_ab > c {
+            max_ab;
+        } else {
+            c;
+        };
+        return result;
+    };
+
+    assert max_of_three(1, 5, 3) == 5;
+    assert max_of_three(10, 2, 8) == 10;
+    assert max_of_three(4, 7, 9) == 9;
+}
+
+test "block multi types" {
+    let mixed = |n: i32| {
+        let a: i64 = n as i64 * 1000000000 as i64;
+        let b: f64 = n as f64 * 1.5;
+        let c: bool = n > 0;
+        let d: i32 = if c {
+            n * 2;
+        } else {
+            0;
+        };
+        return d;
+    };
+
+    assert mixed(5) == 10;
+    assert mixed(-3) == 0;
+    assert mixed(7) == 14;
+}
+
+test "block nested" {
+    let compute = |x: i32| {
+        let a = x * 2;
+        scope: {
+            let b = a + 1;
+            let c = b * 3;
+            scope: {
+                let d = c - 5;
+                return d;
+            }
+        }
+    };
+
+    assert compute(3) == 16;
+    assert compute(5) == 28;
+}
+
+test "block while" {
+    let sum_to_n = |n: i32| {
+        let mut sum = 0;
+        let mut i = 1;
+        while i <= n {
+            sum = sum + i;
+            i = i + 1;
+        }
+        return sum;
+    };
+
+    assert sum_to_n(5) == 15;
+    assert sum_to_n(10) == 55;
+    assert sum_to_n(3) == 6;
+}
+
+test "closure in loop" {
+    let double = |x: i32| x * 2;
+
+    let mut sum = 0;
+    for let mut i = 1; i <= 5; i += 1 {
+        sum += double(i);
+    }
+    assert sum == 30;
+}
+
+test "loop scope c-style for" {
+    let mut closures: Array<fn(i32) -> i32> = [];
+
+    for let mut i = 0; i < 5; i += 1 {
+        let get_i = |_: i32| i;
+        closures.append(get_i);
+    }
+
+    assert call_fn(closures[0], 0) == 0;
+    assert call_fn(closures[1], 0) == 1;
+    assert call_fn(closures[2], 0) == 2;
+    assert call_fn(closures[3], 0) == 3;
+    assert call_fn(closures[4], 0) == 4;
+}
+
+test "loop scope for-of" {
+    let items: Array<i32> = [10, 20, 30, 40, 50];
+    let mut closures: Array<fn(i32) -> i32> = [];
+
+    for let item of items {
+        let get_item = |_: i32| item;
+        closures.append(get_item);
+    }
+
+    assert call_fn(closures[0], 0) == 10;
+    assert call_fn(closures[1], 0) == 20;
+    assert call_fn(closures[2], 0) == 30;
+    assert call_fn(closures[3], 0) == 40;
+    assert call_fn(closures[4], 0) == 50;
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,132 @@
+fn sum_pair(p: [i32, i32]) -> i32 {
+    return p.0 + p.1;
+}
+
+fn get_pair() -> [i32, i32] {
+    return [10, 20];
+}
+
+fn make_labeled(x: i32) -> [String, i32] {
+    return [`value={x}`, x];
+}
+
+fn swap_strings(a: String, b: String) -> [String, String] {
+    return [b, a];
+}
+
+test "basic" {
+    let t = [1, 2, 3];
+    assert t.0 == 1;
+    assert t.1 == 2;
+    assert t.2 == 3;
+}
+
+test "bracket index" {
+    let t = [10, 20, 30];
+    assert t[0] == 10;
+    assert t[1] == 20;
+    assert t[2] == 30;
+}
+
+test "empty" {
+    let t: [] = [];
+    assert true;
+}
+
+test "heterogeneous" {
+    let t = [42, "hello", true];
+    assert t.0 == 42;
+    assert t.1 == "hello";
+    assert t.2 == true;
+}
+
+test "nested" {
+    let t = [[1, 2], [3, 4]];
+    assert t.0.0 == 1;
+    assert t.0.1 == 2;
+    assert t.1.0 == 3;
+    assert t.1.1 == 4;
+}
+
+test "single" {
+    let t = [42];
+    assert t.0 == 42;
+}
+
+test "trailing comma" {
+    let t = [1, 2, 3];
+    assert t.0 == 1;
+    assert t.2 == 3;
+}
+
+test "type annotation" {
+    let t: [i32, String, bool] = [42, "hello", true];
+    assert t.0 == 42;
+    assert t.1 == "hello";
+    assert t.2 == true;
+}
+
+test "unit element" {
+    let t: [i32, ()] = [42, ()];
+    assert t.0 == 42;
+}
+
+test "len" {
+    let t = [1, "hello", true];
+    assert t.len() == 3;
+    let pair = [42, 99];
+    assert pair.len() == 2;
+    let single = [42];
+    assert single.len() == 1;
+    let empty = [];
+    assert empty.len() == 0;
+}
+
+test "param" {
+    assert sum_pair([10, 20]) == 30;
+}
+
+test "return" {
+    let p = get_pair();
+    assert p.0 == 10;
+    assert p.1 == 20;
+}
+
+test "struct field in tuple" {
+    let [s, n] = make_labeled(42);
+    assert s == "value=42";
+    assert n == 42;
+    let [a, b] = swap_strings("hello", "world");
+    assert a == "world";
+    assert b == "hello";
+    let result = make_labeled(99);
+    assert result.0 == "value=99";
+    assert result.1 == 99;
+}
+
+test "elision multivalue" {
+    let [lo1, hi1] = builtin::i64_add128(100 as i64, 200 as i64, 50 as i64, 25 as i64);
+    assert lo1 == 150 as i64;
+    assert hi1 == 225 as i64;
+
+    let [lo2, hi2] = builtin::i64_sub128(150 as i64, 225 as i64, 50 as i64, 25 as i64);
+    assert lo2 == 100 as i64;
+    assert hi2 == 200 as i64;
+
+    let [lo3, hi3] = builtin::i64_mul_wide_u(10 as i64, 20 as i64);
+    assert lo3 == 200 as i64;
+    assert hi3 == 0 as i64;
+
+    let [lo4, hi4] = builtin::i64_mul_wide_s(0 as i64 - 10, 20 as i64);
+    assert lo4 == 0 as i64 - 200;
+    assert hi4 == 0 as i64 - 1;
+
+    let [lo5, _] = builtin::i64_mul_wide_u(100 as i64, 100 as i64);
+    assert lo5 == 10000 as i64;
+
+    let [_, hi6] = builtin::i64_mul_wide_u(1 as i64 << 63, 2 as i64);
+    assert hi6 == 1 as i64;
+}
+
+__DATA__
+{"test": {}}

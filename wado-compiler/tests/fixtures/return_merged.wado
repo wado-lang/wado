@@ -1,0 +1,45 @@
+fn get_numbers() -> Array<i32> {
+    let arr: Array<i32> = [1, 2, 3];
+    return arr;
+}
+
+fn get_empty() -> Array<i32> {
+    return [];
+}
+
+fn get_triple(a: i32) -> [i32, i32, i32] {
+    return [a, 1, 2];
+}
+
+fn get_pair() -> [i32, String] {
+    let t: [i32, String] = [42, "hello"];
+    return t;
+}
+
+test "array var" {
+    let nums = get_numbers();
+    assert nums.len() == 3;
+    assert nums[0] == 1;
+    assert nums[2] == 3;
+}
+
+test "empty array" {
+    let arr = get_empty();
+    assert arr.len() == 0;
+}
+
+test "tuple literal" {
+    let t = get_triple(42);
+    assert t.0 == 42;
+    assert t.1 == 1;
+    assert t.2 == 2;
+}
+
+test "tuple var" {
+    let pair = get_pair();
+    assert pair.0 == 42;
+    assert pair.1 == "hello";
+}
+
+__DATA__
+{"test": {}}

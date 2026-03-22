@@ -1,0 +1,321 @@
+use { println, Stdout } from "core:cli";
+
+struct DisplayPoint {
+    x: i32,
+    y: i32,
+}
+
+impl Display for DisplayPoint {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_char('(');
+        f.write_str(self.x.to_string());
+        f.write_str(", ");
+        f.write_str(self.y.to_string());
+        f.write_char(')');
+    }
+}
+
+fn test_all_primitives() with Stdout {
+    assert (127 as i8).to_string() == "127";
+    assert (-128 as i8).to_string() == "-128";
+    assert (255 as u8).to_string() == "255";
+    assert (0 as u8).to_string() == "0";
+    assert (32767 as i16).to_string() == "32767";
+    assert (-32768 as i16).to_string() == "-32768";
+    assert (65535 as u16).to_string() == "65535";
+    assert 2147483647.to_string() == "2147483647";
+    assert (-2147483648).to_string() == "-2147483648";
+    assert 0.to_string() == "0";
+    let j: u32 = 4294967295;
+    assert j.to_string() == "4294967295";
+    let k: i64 = 9223372036854775807;
+    assert k.to_string() == "9223372036854775807";
+    let l: i64 = -9223372036854775808;
+    assert l.to_string() == "-9223372036854775808";
+    let m: u64 = 18446744073709551615;
+    assert m.to_string() == "18446744073709551615";
+    let n: f32 = 3.14;
+    assert n.to_string() == "3.14";
+    let o: f64 = 3.141592653589793;
+    assert o.to_string() == "3.141592653589793";
+    assert true.to_string() == "true";
+    assert false.to_string() == "false";
+    assert 'Z'.to_string() == "Z";
+    println("ok");
+}
+
+fn test_custom() with Stdout {
+    let p = DisplayPoint { x: 10, y: 20 };
+    let mut buf = String::with_capacity(64);
+    let mut f = Formatter::new(&mut buf);
+    p.fmt(&mut f);
+    println(buf);
+    let o = DisplayPoint { x: 0, y: 0 };
+    buf = String::with_capacity(64);
+    f = Formatter::new(&mut buf);
+    o.fmt(&mut f);
+    println(buf);
+}
+
+fn test_primitives() with Stdout {
+    let mut buf = String::with_capacity(64);
+    let mut f = Formatter::new(&mut buf);
+    let x: i32 = 42;
+    x.fmt(&mut f);
+    println(buf);
+    buf = String::with_capacity(64);
+    f = Formatter::new(&mut buf);
+    true.fmt(&mut f);
+    println(buf);
+    buf = String::with_capacity(64);
+    f = Formatter::new(&mut buf);
+    false.fmt(&mut f);
+    println(buf);
+    buf = String::with_capacity(64);
+    f = Formatter::new(&mut buf);
+    let c = 'A';
+    c.fmt(&mut f);
+    println(buf);
+    buf = String::with_capacity(64);
+    f = Formatter::new(&mut buf);
+    let neg: i32 = -123;
+    neg.fmt(&mut f);
+    println(buf);
+}
+
+fn test_string() with Stdout {
+    let mut buf = String::with_capacity(64);
+    let mut f = Formatter::new(&mut buf);
+    let s = "Hello, World!";
+    s.fmt(&mut f);
+    println(buf);
+    buf = String::with_capacity(64);
+    f = Formatter::new(&mut buf);
+    let empty = "";
+    empty.fmt(&mut f);
+    println(`[{buf}]`);
+}
+
+fn test_formatter_methods() with Stdout {
+    let mut buf = String::with_capacity(64);
+    let f = Formatter::new(&mut buf);
+    println(`width: {f.width}`);
+    println(`precision: {f.precision}`);
+    println(`indent: {f.indent}`);
+    println(`sign_plus: {f.sign_plus}`);
+}
+
+fn test_template_specifiers_i128() with Stdout {
+    let i: i128 = 42;
+    let neg: i128 = -42;
+    assert `{i:10}` == "        42";
+    assert `{i:<10}` == "42        ";
+    assert `{i:^10}` == "    42    ";
+    assert `{i:*^10}` == "****42****";
+    assert `{i:0>8}` == "00000042";
+    assert `{i:-<8}` == "42------";
+    assert `{i:+}` == "+42";
+    assert `{neg:+}` == "-42";
+    assert `{neg}` == "-42";
+    assert `{i:08}` == "00000042";
+    assert `{neg:08}` == "-0000042";
+    assert `{i:+08}` == "+0000042";
+    assert `{i:+010}` == "+000000042";
+    assert `{i:2}` == "42";
+    assert `{i:b}` == "101010";
+    assert `{i:08b}` == "00101010";
+    assert `{i:#b}` == "0b101010";
+    assert `{i:#010b}` == "0b00101010";
+    assert `{i:<10b}` == "101010    ";
+    assert `{i:>10b}` == "    101010";
+    assert `{neg:b}` == "-101010";
+    assert `{neg:#b}` == "-0b101010";
+    assert `{i:o}` == "52";
+    assert `{i:#o}` == "0o52";
+    assert `{i:#010o}` == "0o00000052";
+    assert `{i:<10o}` == "52        ";
+    assert `{neg:o}` == "-52";
+    assert `{neg:#o}` == "-0o52";
+    assert `{i:x}` == "2a";
+    assert `{i:#x}` == "0x2a";
+    assert `{i:#010x}` == "0x0000002a";
+    assert `{i:<10x}` == "2a        ";
+    assert `{i:>10x}` == "        2a";
+    assert `{i:^10x}` == "    2a    ";
+    assert `{i:X}` == "2A";
+    assert `{i:#X}` == "0X2A";
+    assert `{i:#010X}` == "0X0000002A";
+    assert `{neg:x}` == "-2a";
+    assert `{neg:#x}` == "-0x2a";
+    assert `{neg:X}` == "-2A";
+    assert `{neg:#X}` == "-0X2A";
+    let zero: i128 = 0;
+    assert `{zero}` == "0";
+    assert `{zero:+}` == "+0";
+    assert `{zero:b}` == "0";
+    assert `{zero:o}` == "0";
+    assert `{zero:x}` == "0";
+    assert `{zero:#x}` == "0x0";
+    assert `{zero:#b}` == "0b0";
+    assert `{zero:#o}` == "0o0";
+    assert `{zero:05}` == "00000";
+    assert `{zero:^5}` == "  0  ";
+    let u: u128 = 42;
+    assert `{u:10}` == "        42";
+    assert `{u:<10}` == "42        ";
+    assert `{u:^10}` == "    42    ";
+    assert `{u:*^10}` == "****42****";
+    assert `{u:08}` == "00000042";
+    assert `{u:b}` == "101010";
+    assert `{u:08b}` == "00101010";
+    assert `{u:#b}` == "0b101010";
+    assert `{u:#010b}` == "0b00101010";
+    assert `{u:o}` == "52";
+    assert `{u:#o}` == "0o52";
+    assert `{u:#010o}` == "0o00000052";
+    assert `{u:x}` == "2a";
+    assert `{u:X}` == "2A";
+    assert `{u:#x}` == "0x2a";
+    assert `{u:#X}` == "0X2A";
+    assert `{u:#010x}` == "0x0000002a";
+    assert `{u:<10x}` == "2a        ";
+    let uzero: u128 = 0;
+    assert `{uzero}` == "0";
+    assert `{uzero:b}` == "0";
+    assert `{uzero:#x}` == "0x0";
+    assert `{uzero:05}` == "00000";
+    let i128_max: i128 = 170141183460469231731687303715884105727;
+    assert `{i128_max}` == "170141183460469231731687303715884105727";
+    assert `{i128_max:x}` == "7fffffffffffffffffffffffffffffff";
+    assert `{i128_max:X}` == "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
+    assert `{i128_max:#x}` == "0x7fffffffffffffffffffffffffffffff";
+    let i128_min: i128 = -170141183460469231731687303715884105728;
+    assert `{i128_min}` == "-170141183460469231731687303715884105728";
+    assert `{i128_min:x}` == "-80000000000000000000000000000000";
+    assert `{i128_min:#x}` == "-0x80000000000000000000000000000000";
+    let u128_max: u128 = 340282366920938463463374607431768211455;
+    assert `{u128_max}` == "340282366920938463463374607431768211455";
+    assert `{u128_max:x}` == "ffffffffffffffffffffffffffffffff";
+    assert `{u128_max:X}` == "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
+    assert `{u128_max:#x}` == "0xffffffffffffffffffffffffffffffff";
+    let u128_one: u128 = 1;
+    assert `{u128_one:b}` == "1";
+    assert `{u128_one:#b}` == "0b1";
+    assert `{u128_one:#x}` == "0x1";
+    let u128_256: u128 = 256;
+    assert `{u128_256:b}` == "100000000";
+    assert `{u128_256:o}` == "400";
+    assert `{u128_256:x}` == "100";
+    assert `{u128_256:#x}` == "0x100";
+    println("i128 ok");
+}
+
+fn test_template_specifiers_inspect() with Stdout {
+    let i: i32 = 42;
+    assert `{i:?}` == "42";
+    assert `{i:?}` == `{i}`;
+    let neg: i32 = -42;
+    assert `{neg:?}` == "-42";
+    let i64_max: i64 = 9223372036854775807;
+    assert `{i64_max:?}` == "9223372036854775807";
+    let u32_max: u32 = 4294967295;
+    assert `{u32_max:?}` == "4294967295";
+    let u64_max: u64 = 18446744073709551615;
+    assert `{u64_max:?}` == "18446744073709551615";
+    let i128_val: i128 = -170141183460469231731687303715884105728;
+    assert `{i128_val:?}` == "-170141183460469231731687303715884105728";
+    let u128_val: u128 = 340282366920938463463374607431768211455;
+    assert `{u128_val:?}` == "340282366920938463463374607431768211455";
+    let i8_val: i8 = -128 as i8;
+    assert `{i8_val:?}` == "-128";
+    let u8_val: u8 = 255 as u8;
+    assert `{u8_val:?}` == "255";
+    let i16_val: i16 = -32768 as i16;
+    assert `{i16_val:?}` == "-32768";
+    let u16_val: u16 = 65535 as u16;
+    assert `{u16_val:?}` == "65535";
+    let pi = 3.14;
+    assert `{pi:?}` == "3.14";
+    let zero = 0.0;
+    assert `{zero:?}` == "0.0";
+    let neg_zero = -0.0;
+    assert `{neg_zero:?}` == "-0.0";
+    let f32_val: f32 = 2.5 as f32;
+    assert `{f32_val:?}` == "2.5";
+    assert `{true:?}` == "true";
+    assert `{false:?}` == "false";
+    let c = 'A';
+    assert `{c}` == "A";
+    assert `{c:?}` == "'A'";
+    let digit = '0';
+    assert `{digit}` == "0";
+    assert `{digit:?}` == "'0'";
+    let space = ' ';
+    assert `{space}` == " ";
+    assert `{space:?}` == "' '";
+    let newline = '\n';
+    assert `{newline:?}` == "'\\n'";
+    let tab = '\t';
+    assert `{tab:?}` == "'\\t'";
+    let cr = '\r';
+    assert `{cr:?}` == "'\\r'";
+    let single_quote = '\'';
+    assert `{single_quote:?}` == "'\\''";
+    let backslash = '\\';
+    assert `{backslash:?}` == "'\\\\'";
+    let z = 'Z';
+    assert `{z:?}` == "'Z'";
+    let s = "hello";
+    assert `{s}` == "hello";
+    assert `{s:?}` == "\"hello\"";
+    let empty = "";
+    assert `{empty}` == "";
+    assert `{empty:?}` == "\"\"";
+    let with_quote = "say \"hi\"";
+    assert `{with_quote:?}` == "\"say \\\"hi\\\"\"";
+    let with_newline = "line1\nline2";
+    assert `{with_newline:?}` == "\"line1\\nline2\"";
+    let some_i32: Option<i32> = Option::<i32>::Some(42);
+    assert `{some_i32:?}` == "Option::Some(42)";
+    assert `{some_i32}` == "Option::Some(42)";
+    let none_i32: Option<i32> = null;
+    assert `{none_i32:?}` == "Option::None";
+    assert `{none_i32}` == "Option::None";
+    let some_str: Option<String> = Option::<String>::Some("world");
+    assert `{some_str:?}` == "Option::Some(\"world\")";
+    let some_some: Option<Option<i32>> = Option::<Option<i32>>::Some(Option::<i32>::Some(7));
+    assert `{some_some:?}` == "Option::Some(Option::Some(7))";
+    let some_none: Option<Option<i32>> = Option::<Option<i32>>::Some(null);
+    assert `{some_none:?}` == "Option::Some(Option::None)";
+    let ok_val: Result<i32, String> = Result::<i32, String>::Ok(42);
+    assert `{ok_val:?}` == "Result::Ok(42)";
+    assert `{ok_val}` == "Result::Ok(42)";
+    let err_val: Result<i32, String> = Result::<i32, String>::Err("fail");
+    assert `{err_val:?}` == "Result::Err(\"fail\")";
+    let err_int: Result<String, i32> = Result::<String, i32>::Err(-1);
+    assert `{err_int:?}` == "Result::Err(-1)";
+    let x: i32 = 42;
+    assert `{x:10?}` == "        42";
+    assert `{x:<10?}` == "42        ";
+    assert `{x:^10?}` == "    42    ";
+    assert `{x:*^10?}` == "****42****";
+    let i128_pos: i128 = 42;
+    assert `{i128_pos:10?}` == "        42";
+    assert `{i128_pos:<10?}` == "42        ";
+    assert `{true:10?}` == "      true";
+    assert `{false:<10?}` == "false     ";
+    println("inspect ok");
+}
+
+export fn run() with Stdout {
+    test_all_primitives();
+    test_custom();
+    test_primitives();
+    test_string();
+    test_formatter_methods();
+    test_template_specifiers_i128();
+    test_template_specifiers_inspect();
+}
+
+__DATA__
+{"stdout": "ok\n(10, 20)\n(0, 0)\n42\ntrue\nfalse\nA\n-123\nHello, World!\n[]\nwidth: -1\nprecision: -1\nindent: 0\nsign_plus: false\ni128 ok\ninspect ok\n"}

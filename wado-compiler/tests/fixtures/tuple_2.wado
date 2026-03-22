@@ -1,0 +1,191 @@
+use { println, Stdout } from "core:cli";
+
+fn make_pair_si() -> [i32, String] {
+    return [42, "hello"];
+}
+
+fn make_pair_ii() -> [i32, i32] {
+    return [10, 20];
+}
+
+fn make_nested() -> [[i32, i32], String] {
+    return [[1, 2], "nested"];
+}
+
+fn make_triple() -> [i32, i32, i32] {
+    return [1, 2, 3];
+}
+
+fn make_pair_n(n: i32) -> [i32, i32] {
+    return [n, n * 2];
+}
+
+variant TupleValue {
+    Null,
+    Bool(bool),
+    Number(i32),
+    Text(String),
+}
+
+fn describe(a: TupleValue, b: TupleValue) -> String {
+    return match [a, b] {
+        [Null, Null] => "both null",
+        [Bool(x), Bool(y)] => `bools: {x} {y}`,
+        [Number(x), Number(y)] => `nums: {x} {y}`,
+        [Text(x), Text(y)] => `texts: {x} {y}`,
+        _ => "mismatch",
+    };
+}
+
+fn destruct_basic() with Stdout {
+    let [a, b] = make_pair_si();
+    println(`{a}, {b}`);
+}
+
+fn destruct_for_of() with Stdout {
+    let pairs: Array<[i32, String]> = [[1, "one"], [2, "two"], [3, "three"]];
+    for let [num, name] of pairs {
+        println(`{num}: {name}`);
+    }
+    for let [_, name] of pairs {
+        println(name);
+    }
+}
+
+fn destruct_if_let() with Stdout {
+    let opt: Option<[i32, i32]> = Option::<[i32, i32]>::Some([10, 20]);
+    if let Some([x, y]) = opt {
+        println(`{x}, {y}`);
+    }
+    let none: Option<[i32, i32]> = null;
+    if let Some([x, y]) = none {
+        println(`{x}, {y}`);
+    } else {
+        println("none");
+    }
+    if let Some([_, y]) = opt {
+        println(`{y}`);
+    }
+}
+
+fn destruct_matches() with Stdout {
+    let pair = [10, 20];
+    if pair matches { [x, y] && x + y > 25 } {
+        println("large pair");
+    }
+    if pair matches { [_, y] && y == 20 } {
+        println("y is 20");
+    }
+    let is_small = pair matches { [x, y] && x + y < 5 };
+    if is_small {
+        println("small");
+    } else {
+        println("not small");
+    }
+    let opt: Option<[i32, i32]> = Option::<[i32, i32]>::Some([1, 2]);
+    if opt matches { Some([a, b]) && a + b == 3 } {
+        println("sum is 3");
+    }
+}
+
+fn destruct_mut() with Stdout {
+    let mut [a, b] = make_pair_ii();
+    println(`before: {a}, {b}`);
+    a = 100;
+    b = 200;
+    println(`after: {a}, {b}`);
+}
+
+fn destruct_nested() with Stdout {
+    let [[a, b], c] = make_nested();
+    println(`{a}, {b}, {c}`);
+}
+
+fn destruct_wildcard() with Stdout {
+    let [first, _, third] = make_triple();
+    println(`{first}, {third}`);
+}
+
+fn destruct_literal() with Stdout {
+    let pair = [42, 10];
+    let result = match pair {
+        [a, 10] => `matched int: {a}`,
+        _ => "no match",
+    };
+    println(result);
+
+    let bpair = ["yes", true];
+    let result3 = match bpair {
+        [s, true] => `matched bool: {s}`,
+        [s, false] => `not matched: {s}`,
+    };
+    println(result3);
+
+    let cpair = [99, 'X'];
+    let result4 = match cpair {
+        [n, 'X'] => `matched char: {n}`,
+        _ => "no match",
+    };
+    println(result4);
+
+    let spair = [7, "hello"];
+    let result5 = match spair {
+        [n, "hello"] => `matched string: {n}`,
+        _ => "no match",
+    };
+    println(result5);
+
+    let ipair = [100, 0];
+    if let [x, 0] = ipair {
+        println(`if-let int: {x}`);
+    }
+
+    let bpair2 = [42, false];
+    if bpair2 matches { [_, false] } {
+        println("matches bool");
+    }
+}
+
+fn destruct_match() with Stdout {
+    let pair = make_pair_n(5);
+    let label = match pair {
+        [x, y] && x + y > 20 => "large",
+        [x, y] && x == y => "equal",
+        [x, y] => `{x}, {y}`,
+    };
+    println(label);
+    let first = match pair {
+        [x, _] => x,
+    };
+    println(`{first}`);
+    let opt: Option<[i32, i32]> = Option::<[i32, i32]>::Some([3, 4]);
+    let sum = match opt {
+        Some([a, b]) => a + b,
+        None => 0,
+    };
+    println(`{sum}`);
+}
+
+fn destruct_variant() with Stdout {
+    println(describe(TupleValue::Bool(true), TupleValue::Bool(false)));
+    println(describe(TupleValue::Number(1), TupleValue::Number(2)));
+    println(describe(TupleValue::Null, TupleValue::Null));
+    println(describe(TupleValue::Text("hi"), TupleValue::Text("bye")));
+    println(describe(TupleValue::Bool(true), TupleValue::Number(1)));
+}
+
+export fn run() with Stdout {
+    destruct_basic();
+    destruct_for_of();
+    destruct_if_let();
+    destruct_matches();
+    destruct_mut();
+    destruct_nested();
+    destruct_wildcard();
+    destruct_literal();
+    destruct_match();
+    destruct_variant();
+}
+
+__DATA__
+{"stdout": "42, hello\n1: one\n2: two\n3: three\none\ntwo\nthree\n10, 20\nnone\n20\nlarge pair\ny is 20\nnot small\nsum is 3\nbefore: 10, 20\nafter: 100, 200\n1, 2, nested\n1, 3\nmatched int: 42\nmatched bool: yes\nmatched char: 99\nmatched string: 7\nif-let int: 100\nmatches bool\n5, 10\n5\n7\nbools: true false\nnums: 1 2\nboth null\ntexts: hi bye\nmismatch\n"}

@@ -1,0 +1,137 @@
+use { println, Stdout } from "core:cli";
+
+global BASE: i32 = 10;
+global STEP: i32 = BASE + 5;
+global DOUBLED_PROMO: i32 = STEP * 2;
+global COMBINED: i32 = BASE + DOUBLED_PROMO;
+global PRODUCT: i32 = 7 * 6;
+global LONG: i64 = 1000 as i64 + 234 as i64;
+global mut PROMO_COUNTER: i32 = 0;
+
+global MAX_SIZE: i32 = 100;
+global HALF_SIZE: i32 = MAX_SIZE / 2;
+global mut total: i32 = 0;
+global mut call_count: i32 = 0;
+global GREETING: String = "hello";
+global PI_APPROX: f64 = 355.0 / 113.0;
+
+global mut shared: i32 = 100;
+global MULTIPLIER: i32 = 2;
+
+global mut ITEMS: Array<i32> = [1, 2, 3];
+global mut MESSAGE: String = "Hello, World!";
+
+struct GPoint {
+    x: i32,
+    y: i32,
+}
+
+global mut ORIGIN: GPoint = GPoint { x: 0, y: 0 };
+
+global C_TOPO: i32 = B_TOPO * 2;
+global B_TOPO: i32 = A_TOPO + 10;
+global A_TOPO: i32 = 5;
+
+fn compute_x() -> i32 {
+    return A_TOPO * 3;
+}
+
+global X_TOPO: i32 = compute_x();
+global Y_TOPO: i32 = X_TOPO + C_TOPO;
+
+fn accumulate(n: i32) {
+    total += n;
+    call_count += 1;
+}
+
+fn get_total() -> i32 {
+    return total;
+}
+
+fn get_call_count() -> i32 {
+    return call_count;
+}
+
+fn increment_shared() {
+    shared = shared + 1;
+}
+
+fn double_shared() {
+    shared = shared * MULTIPLIER;
+}
+
+fn get_shared() -> i32 {
+    return shared;
+}
+
+fn test_const_promotion() with Stdout {
+    println(`BASE={BASE}`);
+    println(`STEP={STEP}`);
+    println(`DOUBLED={DOUBLED_PROMO}`);
+    println(`COMBINED={COMBINED}`);
+    println(`PRODUCT={PRODUCT}`);
+    println(`LONG={LONG}`);
+    PROMO_COUNTER = PROMO_COUNTER + 1;
+    println(`COUNTER={PROMO_COUNTER}`);
+}
+
+fn test_expressions() with Stdout {
+    println(`MAX_SIZE={MAX_SIZE}`);
+    println(`HALF_SIZE={HALF_SIZE}`);
+    println(`GREETING={GREETING}`);
+    println(`PI_APPROX={PI_APPROX}`);
+    for let mut i = 0; i < 5; i += 1 {
+        accumulate(i * 10);
+    }
+    println(`total={get_total()}`);
+    println(`calls={get_call_count()}`);
+    let size = HALF_SIZE;
+    if size <= MAX_SIZE {
+        println("within bounds");
+    } else {
+        println("out of bounds");
+    }
+}
+
+fn test_functions() with Stdout {
+    println(`initial={get_shared()}`);
+    increment_shared();
+    println(`after increment={get_shared()}`);
+    double_shared();
+    println(`after double={get_shared()}`);
+    increment_shared();
+    increment_shared();
+    println(`after two increments={get_shared()}`);
+}
+
+fn test_object() with Stdout {
+    println(`len={ITEMS.len()}`);
+    println(`item0={ITEMS[0]}`);
+    ITEMS.append(4);
+    println(`after append len={ITEMS.len()}`);
+    println(MESSAGE);
+    MESSAGE = "Updated!";
+    println(MESSAGE);
+    println(`x={ORIGIN.x} y={ORIGIN.y}`);
+    ORIGIN = GPoint { x: 10, y: 20 };
+    println(`x={ORIGIN.x} y={ORIGIN.y}`);
+}
+
+fn test_topological_sort() with Stdout {
+    println(`A={A_TOPO}`);
+    println(`B={B_TOPO}`);
+    println(`C={C_TOPO}`);
+    println(`X={X_TOPO}`);
+    println(`Y={Y_TOPO}`);
+}
+
+export fn run() with Stdout {
+    test_const_promotion();
+    test_expressions();
+    test_functions();
+    test_object();
+    test_topological_sort();
+}
+
+__DATA__
+{"stdout": "BASE=10\nSTEP=15\nDOUBLED=30\nCOMBINED=40\nPRODUCT=42\nLONG=1234\nCOUNTER=1\nMAX_SIZE=100\nHALF_SIZE=50\nGREETING=hello\nPI_APPROX=3.1415929203539825\ntotal=100\ncalls=5\nwithin bounds\ninitial=100\nafter increment=101\nafter double=202\nafter two increments=204\nlen=3\nitem0=1\nafter append len=4\nHello, World!\nUpdated!\nx=0 y=0\nx=10 y=20\nA=5\nB=15\nC=30\nX=15\nY=45\n"}

@@ -1,0 +1,316 @@
+// MakeDefault trait for type pack expansion
+trait MakeDefault {
+    fn make_default() -> Self;
+}
+
+impl MakeDefault for i32 {
+    fn make_default() -> i32 {
+        return 0;
+    }
+}
+
+impl MakeDefault for String {
+    fn make_default() -> String {
+        return "";
+    }
+}
+
+impl MakeDefault for bool {
+    fn make_default() -> bool {
+        return false;
+    }
+}
+
+fn make_defaults<..T: MakeDefault>() -> [..T] {
+    return [..T::make_default()];
+}
+
+test "type pack expansion" {
+    let result = make_defaults::<[i32, String, bool]>();
+    assert result.0 == 0;
+    assert result.1 == "";
+    assert result.2 == false;
+
+    let single = make_defaults::<[i32]>();
+    assert single.0 == 0;
+}
+
+test "type pack expansion empty" {
+    let result = make_defaults::<[]>();
+}
+
+// single element with non-zero default
+fn make_defaults_42<..T: MakeDefault42>() -> [..T] {
+    return [..T::make_default_42()];
+}
+
+trait MakeDefault42 {
+    fn make_default_42() -> Self;
+}
+
+impl MakeDefault42 for i32 {
+    fn make_default_42() -> i32 {
+        return 42;
+    }
+}
+
+test "type pack expansion single" {
+    let result = make_defaults_42::<[i32]>();
+    assert result.0 == 42;
+}
+
+// mixed with regular elements
+fn make_with_bookends<..T: MakeDefault>() -> [i32, ..T, bool] {
+    return [42, ..T::make_default(), true];
+}
+
+test "type pack expansion mixed" {
+    let result = make_with_bookends::<[i32, String]>();
+    assert result.0 == 42;
+    assert result.1 == 0;
+    assert result.2 == "";
+    assert result.3 == true;
+}
+
+// method with own type param
+trait Source {
+    fn read_from<R: Reader>(r: &mut R) -> Self;
+}
+
+trait Reader {
+    fn read_i32(&mut self) -> i32;
+    fn read_string(&mut self) -> String;
+}
+
+struct FixedReader {
+    value: i32,
+}
+
+impl Reader for FixedReader {
+    fn read_i32(&mut self) -> i32 {
+        return self.value;
+    }
+
+    fn read_string(&mut self) -> String {
+        return `{self.value}`;
+    }
+}
+
+impl Source for i32 {
+    fn read_from<R: Reader>(r: &mut R) -> i32 {
+        return r.read_i32();
+    }
+}
+
+impl Source for String {
+    fn read_from<R: Reader>(r: &mut R) -> String {
+        return r.read_string();
+    }
+}
+
+fn read_all<..T: Source>(r: &mut FixedReader) -> [..T] {
+    return [..T::read_from(r)];
+}
+
+test "type pack expansion method type param" {
+    let mut reader = FixedReader { value: 42 };
+    let result = read_all::<[i32, String]>(&mut reader);
+    assert result.0 == 42;
+    assert result.1 == "42";
+}
+
+// TryDefault trait for try-op tests
+trait TryDefault {
+    fn try_default() -> Result<Self, String>;
+}
+
+impl TryDefault for i32 {
+    fn try_default() -> Result<i32, String> {
+        return Result::<i32, String>::Ok(0);
+    }
+}
+
+impl TryDefault for String {
+    fn try_default() -> Result<String, String> {
+        return Result::<String, String>::Ok("default");
+    }
+}
+
+impl TryDefault for bool {
+    fn try_default() -> Result<bool, String> {
+        return Result::<bool, String>::Ok(false);
+    }
+}
+
+fn try_make_defaults<..T: TryDefault>() -> Result<[..T], String> {
+    return Result::<[..T], String>::Ok([..T::try_default()?]);
+}
+
+test "type pack expansion try-op" {
+    let result = try_make_defaults::<[i32, String, bool]>();
+    if let Ok(t) = result {
+        assert t.0 == 0;
+        assert t.1 == "default";
+        assert t.2 == false;
+    }
+}
+
+// try-op error path
+trait TryDefaultErr {
+    fn try_default_err() -> Result<Self, String>;
+}
+
+impl TryDefaultErr for i32 {
+    fn try_default_err() -> Result<i32, String> {
+        return Result::<i32, String>::Ok(0);
+    }
+}
+
+impl TryDefaultErr for String {
+    fn try_default_err() -> Result<String, String> {
+        return Result::<String, String>::Err("string failed");
+    }
+}
+
+impl TryDefaultErr for bool {
+    fn try_default_err() -> Result<bool, String> {
+        return Result::<bool, String>::Ok(false);
+    }
+}
+
+fn try_make_defaults_err<..T: TryDefaultErr>() -> Result<[..T], String> {
+    return Result::<[..T], String>::Ok([..T::try_default_err()?]);
+}
+
+test "type pack expansion try-op err" {
+    let result = try_make_defaults_err::<[i32, String, bool]>();
+    assert result matches { Err(_) };
+    if let Err(e) = result {
+        assert e == "string failed";
+    }
+}
+
+// try-op mixed with non-pack elements
+trait TryDefaultMixed {
+    fn try_default_mixed() -> Result<Self, String>;
+}
+
+impl TryDefaultMixed for i32 {
+    fn try_default_mixed() -> Result<i32, String> {
+        return Result::<i32, String>::Ok(10);
+    }
+}
+
+impl TryDefaultMixed for bool {
+    fn try_default_mixed() -> Result<bool, String> {
+        return Result::<bool, String>::Ok(true);
+    }
+}
+
+fn make_with_prefix<..T: TryDefaultMixed>(prefix: String) -> Result<[String, ..T], String> {
+    return Result::<[String, ..T], String>::Ok([prefix, ..T::try_default_mixed()?]);
+}
+
+test "type pack expansion try-op mixed" {
+    let result = make_with_prefix::<[i32, bool]>("header");
+    if let Ok(t) = result {
+        assert t.0 == "header";
+        assert t.1 == 10;
+        assert t.2 == true;
+    }
+}
+
+// try-op with Option
+trait TryDefaultOption {
+    fn try_default_option() -> Option<Self>;
+}
+
+impl TryDefaultOption for i32 {
+    fn try_default_option() -> Option<i32> {
+        return Option::<i32>::Some(42);
+    }
+}
+
+impl TryDefaultOption for String {
+    fn try_default_option() -> Option<String> {
+        return Option::<String>::Some("hello");
+    }
+}
+
+fn make_defaults_option<..T: TryDefaultOption>() -> Option<[..T]> {
+    return Option::<[..T]>::Some([..T::try_default_option()?]);
+}
+
+test "type pack expansion try-op option" {
+    let result = make_defaults_option::<[i32, String]>();
+    if let Some(t) = result {
+        assert t.0 == 42;
+        assert t.1 == "hello";
+    }
+}
+
+// try-op two elements
+trait TryDefaultTwo {
+    fn try_default_two() -> Result<Self, String>;
+}
+
+impl TryDefaultTwo for i32 {
+    fn try_default_two() -> Result<i32, String> {
+        return Result::<i32, String>::Ok(99);
+    }
+}
+
+impl TryDefaultTwo for bool {
+    fn try_default_two() -> Result<bool, String> {
+        return Result::<bool, String>::Ok(true);
+    }
+}
+
+fn try_make_defaults_two<..T: TryDefaultTwo>() -> Result<[..T], String> {
+    return Result::<[..T], String>::Ok([..T::try_default_two()?]);
+}
+
+test "type pack expansion try-op two" {
+    let result = try_make_defaults_two::<[i32, bool]>();
+    if let Ok(t) = result {
+        assert t.0 == 99;
+        assert t.1 == true;
+    }
+}
+
+// with args
+trait FromInt {
+    fn from_int(n: i32) -> Self;
+}
+
+impl FromInt for i32 {
+    fn from_int(n: i32) -> i32 {
+        return n;
+    }
+}
+
+impl FromInt for String {
+    fn from_int(n: i32) -> String {
+        return `{n}`;
+    }
+}
+
+impl FromInt for f64 {
+    fn from_int(n: i32) -> f64 {
+        return n as f64;
+    }
+}
+
+fn from_int_all<..T: FromInt>(n: i32) -> [..T] {
+    return [..T::from_int(n)];
+}
+
+test "type pack expansion with args" {
+    let result = from_int_all::<[i32, String, f64]>(42);
+    assert result.0 == 42;
+    assert result.1 == "42";
+    assert result.2 == 42.0;
+}
+
+__DATA__
+{"test": {}}

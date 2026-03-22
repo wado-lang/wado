@@ -1,0 +1,186 @@
+use { println, Stdout } from "core:cli";
+
+// ref_mut
+fn append_elements(arr: &mut Array<i32>) {
+    arr.append(4);
+    arr.append(5);
+}
+
+fn double_all(arr: &mut Array<i32>) {
+    for let mut i = 0; i < arr.len(); i += 1 {
+        arr[i] = arr[i] * 2;
+    }
+}
+
+fn append_world(s: &mut String) {
+    s.append(", World!");
+}
+
+fn append_twice(s: &mut String, suffix: String) {
+    s.append(suffix);
+    s.append(suffix);
+}
+
+// ref_loop_mut
+fn accumulate(target: &mut i32, n: i32) {
+    for let mut i = 0; i < n; i += 1 {
+        *target = *target + i;
+    }
+}
+
+// ref_conditional_mut
+fn clamp(r: &mut i32, min: i32, max: i32) {
+    if *r < min {
+        *r = min;
+    } else if *r > max {
+        *r = max;
+    }
+}
+
+// ref_mut_while_condition
+fn advance(pos: &mut i32) {
+    *pos += 1;
+}
+
+// ref_nested_mut_write
+struct Inner {
+    value: i32,
+}
+
+struct Middle {
+    inner: Inner,
+    label: String,
+}
+
+struct Outer {
+    middle: Middle,
+    id: i32,
+}
+
+fn set_inner_value(o: &mut Outer, v: i32) {
+    o.middle.inner.value = v;
+}
+
+fn set_label(o: &mut Outer, s: String) {
+    o.middle.label = s;
+}
+
+fn get_inner_value(o: &Outer) -> i32 {
+    return o.middle.inner.value;
+}
+
+// ref_mut_array_append_complex
+fn process(arr: &mut Array<u8>, input: &Array<u8>, count: i32) {
+    let mut i = 0;
+    while i < count {
+        let val = input[i];
+        if val < 128 {
+            arr.append(val);
+        } else {
+            let dist = (val - 128) as i32;
+            let src = arr.len() - dist;
+            arr.append(arr[src]);
+            arr.append(arr[src + 1]);
+        }
+        i += 1;
+    }
+}
+
+fn ref_mut_array_ops() with Stdout {
+    let mut nums: Array<i32> = [1, 2, 3];
+    println(`len: {nums.len()}`);
+
+    append_elements(&mut nums);
+    println(`len: {nums.len()}`);
+
+    double_all(&mut nums);
+    for let mut i = 0; i < nums.len(); i += 1 {
+        println(`{nums[i]}`);
+    }
+}
+
+fn ref_mut_string() with Stdout {
+    let mut msg = "Hello";
+    append_world(&mut msg);
+    println(msg);
+
+    let mut s = "a";
+    append_twice(&mut s, "b");
+    println(s);
+}
+
+fn ref_loop_mut_test() with Stdout {
+    let mut sum = 0;
+
+    accumulate(&mut sum, 5);
+    println(`sum 0..4: {sum}`);
+
+    let mut count = 0;
+    let r = &mut count;
+    while *r < 5 {
+        *r = *r + 1;
+    }
+    println(`count: {count}`);
+}
+
+fn ref_conditional_mut_test() with Stdout {
+    let mut a = 50;
+    clamp(&mut a, 0, 100);
+    println(`clamped 50: {a}`);
+
+    let mut b = -10;
+    clamp(&mut b, 0, 100);
+    println(`clamped -10: {b}`);
+
+    let mut c = 200;
+    clamp(&mut c, 0, 100);
+    println(`clamped 200: {c}`);
+}
+
+fn ref_mut_while_condition_test() with Stdout {
+    let mut pos = 0;
+    while pos < 3 {
+        advance(&mut pos);
+    }
+    println(`pos: {pos}`);
+}
+
+fn ref_nested_mut_write_test() with Stdout {
+    let mut data = Outer {
+        middle: Middle {
+            inner: Inner { value: 0 },
+            label: "initial",
+        },
+        id: 1,
+    };
+
+    println(`before: {get_inner_value(&data)}, {data.middle.label}`);
+
+    set_inner_value(&mut data, 42);
+    set_label(&mut data, "updated");
+
+    println(`after: {get_inner_value(&data)}, {data.middle.label}`);
+}
+
+fn ref_mut_array_append_complex_test() with Stdout {
+    let mut out: Array<u8> = [];
+    let input: Array<u8> = [65, 66, 67, 130];
+    process(&mut out, &input, 4);
+    println(`len: {out.len()}`);
+    for let mut i = 0; i < out.len(); i += 1 {
+        println(`{out[i]}`);
+    }
+}
+
+export fn run() with Stdout {
+    ref_mut_array_ops();
+    ref_mut_string();
+    ref_loop_mut_test();
+    ref_conditional_mut_test();
+    ref_mut_while_condition_test();
+    ref_nested_mut_write_test();
+    ref_mut_array_append_complex_test();
+}
+
+__DATA__
+{"stdout": "len: 3\nlen: 5\n2\n4\n6\n8\n10\nHello, World!\nabb\nsum 0..4: 10\ncount: 5\nclamped 50: 50\nclamped -10: 0\nclamped 200: 100\npos: 3\nbefore: 0, initial\nafter: 42, updated\nlen: 5\n65\n66\n67\n66\n67\n"}

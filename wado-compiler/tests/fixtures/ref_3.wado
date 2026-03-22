@@ -1,0 +1,224 @@
+use { println, Stdout } from "core:cli";
+
+// ref_struct_basic
+struct BasicPoint {
+    x: i32,
+    y: i32,
+}
+
+fn print_basic_point(p: &BasicPoint) with Stdout {
+    println(`{p.x},{p.y}`);
+}
+
+// ref_struct
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn move_point(p: &mut Point) {
+    p.x = p.x + 10;
+    p.y = p.y + 20;
+}
+
+struct Inner {
+    value: i32,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn get_inner_value(o: &Outer) -> i32 {
+    return o.inner.value;
+}
+
+fn set_inner_value(o: &mut Outer, v: i32) {
+    o.inner.value = v;
+}
+
+struct User {
+    name: String,
+    age: i32,
+}
+
+fn rename(user: &mut User, new_name: String) {
+    user.name = new_name;
+}
+
+fn birthday(user: &mut User) {
+    user.age = user.age + 1;
+}
+
+// ref_array
+fn modify_array(arr: &mut Array<i32>) {
+    arr[0] = 100;
+}
+
+// ref_closure
+fn apply_to_ref(r: &i32, f: fn(&i32) -> i32) -> i32 {
+    return f(r);
+}
+
+fn modify_via_closure(r: &mut i32, f: fn(&mut i32) -> ()) {
+    f(r);
+}
+
+// ref_method_receivers
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn get(&self) -> i32 {
+        return self.value;
+    }
+
+    fn increment(&mut self) {
+        self.value = self.value + 1;
+    }
+
+    fn new(v: i32) -> Counter {
+        return Counter { value: v };
+    }
+}
+
+// ref_edge
+fn read_value(x: &i32) -> i32 {
+    return *x;
+}
+
+fn increment(x: &mut i32) {
+    *x = *x + 1;
+}
+
+fn ref_struct_basic_test() with Stdout {
+    let p = BasicPoint { x: 10, y: 20 };
+    print_basic_point(&p);
+}
+
+fn ref_struct_mut() with Stdout {
+    let mut p = Point { x: 1, y: 2 };
+    move_point(&mut p);
+    println(`{p.x},{p.y}`);
+}
+
+fn ref_struct_nested() with Stdout {
+    let mut o = Outer { inner: Inner { value: 42 } };
+    println(`{get_inner_value(&o)}`);
+    set_inner_value(&mut o, 100);
+    println(`{get_inner_value(&o)}`);
+}
+
+fn ref_struct_string_field() with Stdout {
+    let mut u = User { name: "Alice", age: 30 };
+    println(`{u.name}, {u.age}`);
+
+    rename(&mut u, "Bob");
+    birthday(&mut u);
+    println(`{u.name}, {u.age}`);
+}
+
+fn ref_array_basic() with Stdout {
+    let mut nums: Array<i32> = [1, 2, 3];
+    let before = nums[0];
+    println(`before: {before}`);
+    modify_array(&mut nums);
+    let after = nums[0];
+    println(`after: {after}`);
+}
+
+fn ref_array_ref_element() with Stdout {
+    let mut arr: Array<i32> = [10, 20, 30];
+
+    let r = &arr[1];
+    println(`ref element: {*r}`);
+
+    arr[1] = 999;
+    println(`arr[1]: {arr[1]}`);
+    println(`ref still: {*r}`);
+}
+
+fn ref_closure_capture() with Stdout {
+    let x = 42;
+    let result = apply_to_ref(&x, |r: &i32| *r * 2);
+    println(`doubled: {result}`);
+
+    let multiplier = 3;
+    let result2 = apply_to_ref(&x, |r: &i32| *r * multiplier);
+    println(`tripled: {result2}`);
+}
+
+fn ref_closure_mut_param() with Stdout {
+    let mut y = 10;
+    modify_via_closure(&mut y, |r: &mut i32| {
+        *r = *r + 5;
+    });
+
+    println(`modified: {y}`);
+}
+
+fn ref_method_receivers_test() with Stdout {
+    let mut c = Counter::new(0);
+
+    println(`get: {c.get()}`);
+
+    c.increment();
+    c.increment();
+    c.increment();
+    println(`after increment: {c.get()}`);
+}
+
+fn ref_edge_coercion() with Stdout {
+    let mut a = 42;
+    let result = read_value(&mut a);
+    println(`{result}`);
+}
+
+fn ref_edge_double_deref() with Stdout {
+    let mut a = 42;
+    let mut r = &mut a;
+    let rr = &mut r;
+    **rr = 99;
+    println(`{a}`);
+}
+
+fn ref_edge_multi_mut() with Stdout {
+    let mut a = 10;
+    increment(&mut a);
+    increment(&mut a);
+    increment(&mut a);
+    println(`{a}`);
+}
+
+fn ref_edge_nested() with Stdout {
+    let mut a = 42;
+    let r = &mut a;
+    let rr = &r;
+    println(`{**rr}`);
+}
+
+fn ref_edge_temp() with Stdout {
+    let r = &(1 + 2);
+    println(`{*r}`);
+}
+
+export fn run() with Stdout {
+    ref_struct_basic_test();
+    ref_struct_mut();
+    ref_struct_nested();
+    ref_struct_string_field();
+    ref_array_basic();
+    ref_array_ref_element();
+    ref_closure_capture();
+    ref_closure_mut_param();
+    ref_method_receivers_test();
+    ref_edge_coercion();
+    ref_edge_double_deref();
+    ref_edge_multi_mut();
+    ref_edge_nested();
+    ref_edge_temp();
+}
+
+__DATA__
+{"stdout": "10,20\n11,22\n42\n100\nAlice, 30\nBob, 31\nbefore: 1\nafter: 100\nref element: 20\narr[1]: 999\nref still: 20\ndoubled: 84\ntripled: 126\nmodified: 15\nget: 0\nafter increment: 3\n42\n99\n13\n42\n3\n"}

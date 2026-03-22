@@ -1,0 +1,44 @@
+variant MatchShape {
+    Circle(f64),
+    MatchPoint,
+}
+
+test "basic" {
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    let none: Option<i32> = null;
+
+    assert opt matches { Some(_) };
+    assert none matches { None };
+    assert !opt matches { None };
+}
+
+test "guard" {
+    let opt1: Option<i32> = Option::<i32>::Some(10);
+    let opt2: Option<i32> = Option::<i32>::Some(3);
+    let none: Option<i32> = null;
+
+    assert opt1 matches { Some(x) && x > 5 };
+    assert !opt2 matches { Some(x) && x > 5 };
+    assert !none matches { Some(x) && x > 5 };
+}
+
+test "option guard char" {
+    let c = char::from_i32(46);  // '.'
+    assert c matches { Some(ch) && ch == '.' };
+
+    let d = char::from_i32(65);  // 'A'
+    assert !d matches { Some(ch) && ch == '.' };
+}
+
+test "variant" {
+    let circle = MatchShape::Circle(5.0);
+    let point = MatchShape::MatchPoint;
+
+    assert circle matches { Circle(_) };
+    assert circle matches { Circle(r) && r > 3.0 };
+    assert !point matches { Circle(_) };
+    assert point matches { MatchPoint };
+}
+
+__DATA__
+{"test": {}}
