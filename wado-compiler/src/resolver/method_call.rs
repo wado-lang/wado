@@ -948,35 +948,57 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
         }
 
-        // If we have type arguments from a generic type, substitute type parameters in the return type
-        if !struct_type_args.is_empty() {
-            return_type = self.substitute_type_params(return_type, &struct_type_args);
+        // Resolve method-level type arguments (e.g., Box::<i32>::wrap_other::<String>(...))
+        let method_type_args: Vec<TypeId> = static_call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+
+        // Substitute type parameters in the return type using SubstitutionContext
+        {
+            let mut subst_ctx = SubstitutionContext::new();
+            if !struct_type_args.is_empty() {
+                subst_ctx = subst_ctx.with_impl_args(&struct_type_args);
+            }
+            let impl_offset = struct_type_args.len() as u32;
+            if !method_type_args.is_empty() {
+                subst_ctx = subst_ctx.with_method_args(&method_type_args, impl_offset);
+            }
+            if !subst_ctx.is_empty() {
+                return_type = subst_ctx.substitute(return_type, &mut self.type_table.borrow_mut());
+            }
         }
 
         // Build monomorph_info for generic instantiations
-        let (monomorph_info, impl_type_arg_names): (Option<MonomorphInfo>, Vec<String>) =
-            if struct_type_args.is_empty() {
-                (None, vec![])
-            } else {
-                // Generic static method: track the original generic name (with trait if applicable)
-                let generic_name = MethodName::format_local(
-                    &struct_name,
-                    trait_name_opt.as_deref(),
-                    &static_call.method,
-                );
-                let type_arg_names: Vec<String> = struct_type_args
-                    .iter()
-                    .map(|t| self.type_table.borrow().mangle_type_name(*t))
-                    .collect();
-                (
-                    Some(MonomorphInfo {
-                        generic_name,
-                        type_args: struct_type_args,
-                        is_blanket: false,
-                    }),
-                    type_arg_names,
-                )
-            };
+        let all_type_args: Vec<TypeId> = struct_type_args
+            .iter()
+            .chain(method_type_args.iter())
+            .copied()
+            .collect();
+        let monomorph_info = if all_type_args.is_empty() {
+            None
+        } else {
+            let generic_name = MethodName::format_local(
+                &struct_name,
+                trait_name_opt.as_deref(),
+                &static_call.method,
+            );
+            Some(MonomorphInfo {
+                generic_name,
+                type_args: all_type_args,
+                is_blanket: false,
+            })
+        };
+
+        let method_type_arg_names: Vec<String> = method_type_args
+            .iter()
+            .map(|t| self.type_table.borrow().mangle_type_name(*t))
+            .collect();
+        let impl_only_type_arg_names: Vec<String> = struct_type_args
+            .iter()
+            .map(|t| self.type_table.borrow().mangle_type_name(*t))
+            .collect();
 
         let param_is_mut = struct_name_for_lookup
             .as_deref()
@@ -989,7 +1011,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             trait_name_opt,
             static_call.method.clone(),
         )
-        .with_struct_type_args(&impl_type_arg_names);
+        .with_type_args(&impl_only_type_arg_names, &method_type_arg_names);
 
         // Propagate #[cm("...")] from resource static methods for CM binding synthesis.
         method_info.cm_name =
@@ -1004,7 +1026,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     method_info: Some(method_info),
                     is_cm_binding: false,
                 },
-                type_args: vec![],
+                type_args: method_type_args,
                 args: args
                     .into_iter()
                     .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))

@@ -2540,6 +2540,17 @@ impl Parser {
                     if spec_ok && self.check(&TokenKind::ColonColon) {
                         self.advance(); // consume ::
                         let method = self.consume_ident()?;
+
+                        // Check for method-level turbofish: method::<U>(...)
+                        let method_type_args = if self.check(&TokenKind::ColonColon)
+                            && self.peek_nth(1).kind == TokenKind::Lt
+                        {
+                            self.advance(); // consume ::
+                            self.parse_call_type_args()?
+                        } else {
+                            Vec::new()
+                        };
+
                         self.expect(&TokenKind::LParen)?;
                         let (args, has_trailing_comma) = self.parse_arg_list()?;
                         let end_span = self.expect(&TokenKind::RParen)?.span;
@@ -2551,6 +2562,7 @@ impl Parser {
                                 span: start_span,
                             }),
                             method,
+                            type_args: method_type_args,
                             args,
                             has_trailing_comma,
                             span: start_span.merge(&end_span),

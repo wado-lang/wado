@@ -450,6 +450,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         Expr::StaticMethodCall(s) => Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
             target_type: s.target_type.clone(),
             method: s.method.clone(),
+            type_args: s.type_args.clone(),
             args: s.args.iter().map(desugar_expr).collect(),
             has_trailing_comma: s.has_trailing_comma,
             span: s.span,
@@ -1619,6 +1620,7 @@ fn strip_ns_from_expr(expr: Expr, ctx: &DesugarContext) -> Expr {
         }
         Expr::StaticMethodCall(mut s) => {
             s.target_type = desugar_type(&s.target_type, ctx);
+            s.type_args = s.type_args.iter().map(|t| desugar_type(t, ctx)).collect();
             s.args = s
                 .args
                 .into_iter()

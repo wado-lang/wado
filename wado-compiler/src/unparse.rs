@@ -1948,6 +1948,16 @@ impl<'a> Unparser<'a> {
         }
         self.output.push_str("::");
         self.output.push_str(&s.method);
+        if !s.type_args.is_empty() {
+            self.output.push_str("::<");
+            for (i, arg) in s.type_args.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.unparse_type(arg);
+            }
+            self.output.push('>');
+        }
         self.unparse_call_args(&s.args, s.has_trailing_comma);
     }
 
@@ -2888,6 +2898,16 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
             unparse_type_into(&s.target_type, output);
             output.push_str("::");
             output.push_str(&s.method);
+            if !s.type_args.is_empty() {
+                output.push_str("::<");
+                for (i, arg) in s.type_args.iter().enumerate() {
+                    if i > 0 {
+                        output.push_str(", ");
+                    }
+                    unparse_type_into(arg, output);
+                }
+                output.push('>');
+            }
             output.push('(');
             for (i, arg) in s.args.iter().enumerate() {
                 if i > 0 {
