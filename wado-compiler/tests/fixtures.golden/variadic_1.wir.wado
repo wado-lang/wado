@@ -148,8 +148,6 @@ type "functype/__cm_export____test_12_nested_call" = fn();
 
 type "functype/__cm_export____test_13_nested_call_single" = fn();
 
-type "functype/collect_for_of<Tuple<i32,String,bool>>" = fn(ref "tuple/[i32, String, bool]") -> ref "tuple/[i32, String, bool]";
-
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
 type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
@@ -180,9 +178,9 @@ type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
-
 type "functype/Array<String>::grow" = fn(ref Array<String>);
+
+type "functype/Array<String,String>::append" = fn(ref Array<String>, ref String);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -201,6 +199,8 @@ type "functype/wasi/stream-new" = fn() -> i64;
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
+type "functype/collect_for_of<Tuple<i32,String,bool>>" = fn(ref "tuple/[i32, String, bool]");
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -1089,7 +1089,7 @@ condition: empty_mid.1 == \"end\"
 }
 
 fn __test_11_for_of_variadic() {
-    drop(collect_for_of<Tuple<i32,String,bool>>("tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 }));
+    collect_for_of<Tuple<i32,String,bool>>("tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 });
 }
 
 fn __test_12_nested_call() {
@@ -1322,7 +1322,7 @@ fn __cm_export____test_10_surround_empty_middle() {
 }
 
 fn __cm_export____test_11_for_of_variadic() {
-    drop(collect_for_of<Tuple<i32,String,bool>>("tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 }));
+    collect_for_of<Tuple<i32,String,bool>>("tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 });
     "wasi/task-return"(0);
 }
 
@@ -1338,158 +1338,11 @@ fn __cm_export____test_13_nested_call_single() {
 
 fn collect_for_of<Tuple<i32,String,bool>>(items) {
     let __local_1: ref Array<String>;
-    let result: ref Array<String>;
-    let __v0_4: ref String;
-    let __cond_5: bool;
-    let __v0_6: ref String;
-    let __cond_7: bool;
-    let __v0_8: ref String;
-    let __cond_9: bool;
-    let __local_10: ref String;
-    let __local_11: ref Formatter;
-    let __local_12: ref String;
-    let __local_13: ref Formatter;
-    let __local_14: ref String;
-    let __local_15: ref Formatter;
-    let __local_16: ref String;
-    let __local_17: ref Formatter;
-    let __tuple_3: ref "tuple/[i32, String, bool]";
-    let item_19: i32;
-    let item_20: ref String;
-    let item_21: bool;
-    let __local_46: ref Formatter;
-    let __local_55: ref Formatter;
-    let __local_64: ref Formatter;
-    result = __seq_lit: block -> ref Array<String> {
+    drop(__seq_lit: block -> ref Array<String> {
         __local_1 = Array<String> { repr: builtin::array_new<ref String>(0), used: 0 };
         break __seq_lit: __local_1;
-    };
-    __tuple_3 = items;
-    item_19 = __tuple_3.0;
-    Array<String>::append(result, __tmpl: block -> ref String {
-        __local_10 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
-        i32::fmt_decimal(item_19, __local_11);
-        break __tmpl: __local_10;
     });
-    item_20 = __tuple_3.1;
-    Array<String>::append(result, __tmpl: block -> ref String {
-        __local_10 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
-        Formatter::pad(__local_11, item_20);
-        break __tmpl: __local_10;
-    });
-    item_21 = __tuple_3.2;
-    Array<String>::append(result, __tmpl: block -> ref String {
-        __local_10 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
-        Formatter::pad(__local_11, if item_21 -> ref String {
-            String { repr: array.new_data<u8>("true"), used: 4 };
-        } else {
-            String { repr: array.new_data<u8>("false"), used: 5 };
-        });
-        break __tmpl: __local_10;
-    });
-    __v0_4 = __inline_Array_String__IndexValue__index_value_14: block -> ref String {
-        if 0 >= result.used {
-            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        };
-        break __inline_Array_String__IndexValue__index_value_14: builtin::array_get<ref String>(result.repr, 0);
-    };
-    __cond_5 = String^Eq::eq(__v0_4, String { repr: array.new_data<u8>("1"), used: 1 });
-    if __cond_5 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_12 = String { repr: builtin::array_new<u8>(130), used: 0 };
-            String::append(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_12, String { repr: array.new_data<u8>("collect_for_of"), used: 14 });
-            String::append_char(__local_12, 32);
-            String::append_char(__local_12, 97);
-            String::append_char(__local_12, 116);
-            String::append_char(__local_12, 32);
-            String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_1.wado"), used: 44 });
-            String::append_char(__local_12, 58);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
-            __local_46 = __local_13;
-            i32::fmt_decimal(103, __local_46);
-            String::append(__local_12, String { repr: array.new_data<u8>("
-condition: result[0] == \"1\"
-"), used: 29 });
-            String::append(__local_12, String { repr: array.new_data<u8>("result[0]: "), used: 11 });
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
-            String^Inspect::inspect(__v0_4, __local_13);
-            String::append_char(__local_12, 10);
-            break __tmpl: __local_12;
-        });
-        unreachable;
-    };
-    __v0_6 = __inline_Array_String__IndexValue__index_value_20: block -> ref String {
-        if 1 >= result.used {
-            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        };
-        break __inline_Array_String__IndexValue__index_value_20: builtin::array_get<ref String>(result.repr, 1);
-    };
-    __cond_7 = String^Eq::eq(__v0_6, String { repr: array.new_data<u8>("hello"), used: 5 });
-    if __cond_7 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_14 = String { repr: builtin::array_new<u8>(134), used: 0 };
-            String::append(__local_14, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_14, String { repr: array.new_data<u8>("collect_for_of"), used: 14 });
-            String::append_char(__local_14, 32);
-            String::append_char(__local_14, 97);
-            String::append_char(__local_14, 116);
-            String::append_char(__local_14, 32);
-            String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_1.wado"), used: 44 });
-            String::append_char(__local_14, 58);
-            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
-            __local_55 = __local_15;
-            i32::fmt_decimal(104, __local_55);
-            String::append(__local_14, String { repr: array.new_data<u8>("
-condition: result[1] == \"hello\"
-"), used: 33 });
-            String::append(__local_14, String { repr: array.new_data<u8>("result[1]: "), used: 11 });
-            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
-            String^Inspect::inspect(__v0_6, __local_15);
-            String::append_char(__local_14, 10);
-            break __tmpl: __local_14;
-        });
-        unreachable;
-    };
-    __v0_8 = __inline_Array_String__IndexValue__index_value_26: block -> ref String {
-        if 2 >= result.used {
-            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        };
-        break __inline_Array_String__IndexValue__index_value_26: builtin::array_get<ref String>(result.repr, 2);
-    };
-    __cond_9 = String^Eq::eq(__v0_8, String { repr: array.new_data<u8>("true"), used: 4 });
-    if __cond_9 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_16 = String { repr: builtin::array_new<u8>(133), used: 0 };
-            String::append(__local_16, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_16, String { repr: array.new_data<u8>("collect_for_of"), used: 14 });
-            String::append_char(__local_16, 32);
-            String::append_char(__local_16, 97);
-            String::append_char(__local_16, 116);
-            String::append_char(__local_16, 32);
-            String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_1.wado"), used: 44 });
-            String::append_char(__local_16, 58);
-            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
-            __local_64 = __local_17;
-            i32::fmt_decimal(105, __local_64);
-            String::append(__local_16, String { repr: array.new_data<u8>("
-condition: result[2] == \"true\"
-"), used: 32 });
-            String::append(__local_16, String { repr: array.new_data<u8>("result[2]: "), used: 11 });
-            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
-            String^Inspect::inspect(__v0_8, __local_17);
-            String::append_char(__local_16, 10);
-            break __tmpl: __local_16;
-        });
-        unreachable;
-    };
-    return items;
+    unreachable;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
@@ -1497,13 +1350,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l39: loop {
+            l32: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l39;
+                continue l32;
             };
         };
     };
@@ -1618,13 +1471,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l46: loop {
+            l39: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l46;
+                continue l39;
             };
         };
     };
@@ -1641,14 +1494,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l50: loop {
+                l43: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l50;
+                    continue l43;
                 };
             };
         };
@@ -1740,7 +1593,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l59: loop {
+            l52: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1748,7 +1601,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l59;
+                continue l52;
             };
         };
     };
@@ -1826,16 +1679,6 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Array<String>::append(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<String>::grow(self);
-    };
-    builtin::array_set<ref String>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn Array<String>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
@@ -1855,17 +1698,27 @@ fn Array<String>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l72: loop {
+            l64: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
                 i = i + 1;
-                continue l72;
+                continue l64;
             };
         };
     };
     self.repr = ref.as_non_null(new_repr);
+}
+
+fn Array<String,String>::append(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<String>::grow(self);
+    };
+    builtin::array_set<ref String>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -1875,13 +1728,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l75: loop {
+            l68: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l75;
+                continue l68;
             };
         };
     };
@@ -2018,8 +1871,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b98: block {
-        l99: loop {
+    b91: block {
+        l92: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -2044,9 +1897,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b98;
+                break b91;
             };
-            continue l99;
+            continue l92;
         };
     };
     String::append_char(f.buf, 34);
