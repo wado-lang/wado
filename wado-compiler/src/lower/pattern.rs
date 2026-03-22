@@ -2036,8 +2036,10 @@ impl<'a> PatternLowerer<'a> {
 
                 // Lower top-level string literal patterns into binding + guard
                 for arm in arms.iter_mut() {
-                    if matches!(&arm.pattern, TirPattern::Literal(TirLiteralPattern::String(_)))
-                    {
+                    if matches!(
+                        &arm.pattern,
+                        TirPattern::Literal(TirLiteralPattern::String(_))
+                    ) {
                         let span = arm.span;
                         let temp_index = self.alloc_local(scrutinee_type_id);
                         let lit = match &arm.pattern {
