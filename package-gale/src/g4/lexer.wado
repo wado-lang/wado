@@ -38,8 +38,7 @@ impl G4Lexer {
 
     fn skip_whitespace(&mut self) {
         while !self.at_end() {
-            let c = self.chars[self.pos];
-            if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+            if self.chars[self.pos].is_ascii_whitespace() {
                 self.pos += 1;
             } else {
                 break;
@@ -180,25 +179,29 @@ impl G4Lexer {
             return self.read_identifier();
         }
         self.pos += 1;
-        return match c {
-            ':' => make_token(G4Token::Colon, ":", start, self.pos),
-            ';' => make_token(G4Token::Semicolon, ";", start, self.pos),
-            '|' => make_token(G4Token::Pipe, "|", start, self.pos),
-            '(' => make_token(G4Token::LParen, "(", start, self.pos),
-            ')' => make_token(G4Token::RParen, ")", start, self.pos),
-            '*' => make_token(G4Token::Star, "*", start, self.pos),
-            '+' => make_token(G4Token::Plus, "+", start, self.pos),
-            '?' => make_token(G4Token::Question, "?", start, self.pos),
-            '.' => make_token(G4Token::Dot, ".", start, self.pos),
-            '~' => make_token(G4Token::Tilde, "~", start, self.pos),
-            '=' => make_token(G4Token::Assign, "=", start, self.pos),
-            '#' => make_token(G4Token::Hash, "#", start, self.pos),
+        let text = String::from(c);
+        let kind = match c {
+            ':' => G4Token::Colon,
+            ';' => G4Token::Semicolon,
+            '|' => G4Token::Pipe,
+            '(' => G4Token::LParen,
+            ')' => G4Token::RParen,
+            '*' => G4Token::Star,
+            '+' => G4Token::Plus,
+            '?' => G4Token::Question,
+            '.' => G4Token::Dot,
+            '~' => G4Token::Tilde,
+            '=' => G4Token::Assign,
+            '#' => G4Token::Hash,
             '-' && !self.at_end() && self.chars[self.pos] == '>' => {
                 self.pos += 1;
-                make_token(G4Token::Arrow, "->", start, self.pos)
+                return make_token(G4Token::Arrow, "->", start, self.pos);
             },
-            _ => make_token(G4Token::Error, `unexpected char: {c}`, start, self.pos),
+            _ => {
+                return make_token(G4Token::Error, `unexpected char: {c}`, start, self.pos);
+            },
         };
+        return make_token(kind, text, start, self.pos);
     }
 }
 
