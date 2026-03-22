@@ -180,12 +180,18 @@ impl G4Parser {
     fn parse_postfix(&mut self, elem: Element) -> Result<Element, ParseError> {
         if self.is_kind(G4Token::Star) {
             self.advance();
+            if self.is_kind(G4Token::Question) {
+                self.advance();
+            }
             return Result::<Element, ParseError>::Ok(
                 Element::Repeat(RepeatElement { kind: RepeatKind::Star, element: elem }),
             );
         }
         if self.is_kind(G4Token::Plus) {
             self.advance();
+            if self.is_kind(G4Token::Question) {
+                self.advance();
+            }
             return Result::<Element, ParseError>::Ok(
                 Element::Repeat(RepeatElement { kind: RepeatKind::Plus, element: elem }),
             );
@@ -209,6 +215,10 @@ impl G4Parser {
             let action_tok = self.advance();
             if action_tok.text == "skip" {
                 skip = true;
+            } else if action_tok.text == "channel" {
+                self.expect(G4Token::LParen)?;
+                self.advance();
+                self.expect(G4Token::RParen)?;
             }
         }
 
@@ -322,12 +332,18 @@ impl G4Parser {
     fn parse_lexer_postfix(&mut self, elem: LexerElement) -> Result<LexerElement, ParseError> {
         if self.is_kind(G4Token::Star) {
             self.advance();
+            if self.is_kind(G4Token::Question) {
+                self.advance();
+            }
             return Result::<LexerElement, ParseError>::Ok(
                 LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Star, element: elem }),
             );
         }
         if self.is_kind(G4Token::Plus) {
             self.advance();
+            if self.is_kind(G4Token::Question) {
+                self.advance();
+            }
             return Result::<LexerElement, ParseError>::Ok(
                 LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Plus, element: elem }),
             );
