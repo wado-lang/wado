@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774178367728,
+  "lastUpdate": 1774179635735,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6302,6 +6302,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a01a3d461a051398b965334ddaf69db539815723"
         },
         "date": 1774178367505,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "40830ed140c4b3118a2b679be631e9d39df2f8a9",
+          "message": "Merge pull request #665 from wado-lang/claude/variadic-generics-tuple-synthesis-DLJsg\n\nFix variadic impl method type parameter handling in monomorphizer",
+          "timestamp": "2026-03-22T20:38:07+09:00",
+          "tree_id": "edde7ebcf86449035f4553cb5637bf47d53fcd5c",
+          "url": "https://github.com/wado-lang/wado/commit/40830ed140c4b3118a2b679be631e9d39df2f8a9"
+        },
+        "date": 1774179635509,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
