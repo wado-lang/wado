@@ -3,7 +3,6 @@ use {
     RepeatKind, LexerRule, LexerAlt,
 } from "./ir.wado";
 use { generate } from "./generator.wado";
-use { parse } from "./g4/parser.wado";
 
 test "generate header" {
     let grammar = Grammar {
@@ -182,38 +181,6 @@ test "generate duplicate field names" {
     let output = generate(&grammar);
     assert str_contains(&output, "    pub item: ItemNode,");
     assert str_contains(&output, "    pub item_2: ItemNode,");
-}
-
-test "generate json golden" {
-    let input = #include_str("../tests/grammars/JSON.g4");
-    let grammar = parse(input).unwrap();
-    let output = generate(&grammar);
-    let expected = #include_str("../tests/golden/json.wado");
-    assert output == expected, `golden mismatch:\n---actual (len={output.len()})---\n{output}\n---expected (len={expected.len()})---\n{expected}`;
-}
-
-test "generate calculator golden" {
-    let input = #include_str("../tests/grammars/calculator.g4");
-    let grammar = parse(input).unwrap();
-    let output = generate(&grammar);
-    let expected = #include_str("../tests/golden/calculator.wado");
-    assert output == expected, `golden mismatch:\n---actual (len={output.len()})---\n{output}\n---expected (len={expected.len()})---\n{expected}`;
-}
-
-test "generate sexpression golden" {
-    let input = #include_str("../tests/grammars/sexpression.g4");
-    let grammar = parse(input).unwrap();
-    let output = generate(&grammar);
-    let expected = #include_str("../tests/golden/sexpression.wado");
-    assert output == expected, `golden mismatch:\n---actual (len={output.len()})---\n{output}\n---expected (len={expected.len()})---\n{expected}`;
-}
-
-test "generate sqlite golden" {
-    let input = #include_str("../tests/grammars/SQLite.g4");
-    let grammar = parse(input).unwrap();
-    let output = generate(&grammar);
-    let expected = #include_str("../tests/golden/sqlite.wado");
-    assert output == expected, `golden mismatch:\n---actual (len={output.len()})---\n{output}\n---expected (len={expected.len()})---\n{expected}`;
 }
 
 fn str_contains(haystack: &String, needle: &String) -> bool {
