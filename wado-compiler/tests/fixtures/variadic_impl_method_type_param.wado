@@ -1,0 +1,35 @@
+// Bug repro: variadic impl<..T> with a method that has its own type param <F>.
+// Tests that the monomorphizer correctly splits type_args between ..T and F.
+use { println, Stdout } from "core:cli";
+
+trait Countable {
+    fn count(&self) -> i32;
+}
+
+impl Countable for i32 {
+    fn count(&self) -> i32 { return 1; }
+}
+
+impl Countable for bool {
+    fn count(&self) -> i32 { return 2; }
+}
+
+impl<..T: Countable> Countable for [..T] {
+    fn count(&self) -> i32 {
+        let mut total: i32 = 0;
+        for let v of *self {
+            total = total + v.count();
+        }
+        return total;
+    }
+}
+
+export fn run() with Stdout {
+    let t = [42, true];
+    let c = t.count();
+    assert c == 3;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

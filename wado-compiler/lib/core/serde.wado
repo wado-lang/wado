@@ -190,6 +190,16 @@ pub trait Deserializer {
 
 pub trait Deserialize {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>;
+
+    /// Deserialize the next element from a sequence access.
+    /// Used by variadic tuple deserialization via type pack expansion.
+    fn deserialize_next_element_from_seq<S: DeserializeSeq>(seq: &mut S) -> Result<Self, DeserializeError> {
+        let opt = seq.next_element::<Self>()?;
+        if let Some(v) = opt {
+            return Result::<Self, DeserializeError>::Ok(v);
+        }
+        return Result::<Self, DeserializeError>::Err(DeserializeError::eof(-1));
+    }
 }
 
 
@@ -598,5 +608,26 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
             return Result::<Result<T, E>, DeserializeError>::Err(e);
         }
         unreachable();
+    }
+}
+
+/// Serialize for tuples: `[1, "hello", true]` → `[1,"hello",true]`
+impl<..T: Serialize> Serialize for [..T] {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut seq = s.begin_seq((*self).len())?;
+        for let v of *self {
+            seq.element(&v);
+        }
+        return seq.end();
+    }
+}
+
+/// Deserialize for tuples: `[1,"hello",true]` → `[1, "hello", true]`
+impl<..T: Deserialize> Deserialize for [..T] {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<[..T], DeserializeError> {
+        let mut seq = d.begin_seq()?;
+        let tuple = [..T::deserialize_next_element_from_seq(&mut seq)?];
+        seq.end()?;
+        return Result::<[..T], DeserializeError>::Ok(tuple);
     }
 }

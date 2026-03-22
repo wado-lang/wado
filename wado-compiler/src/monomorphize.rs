@@ -1921,9 +1921,76 @@ impl Monomorphizer {
                 {
                     let generic_func = generic_func_rc.borrow();
                     let method_info = generic_func.method_info.clone();
+                    // Compute the correct type_args for the callee. mono.type_args may
+                    // contain the caller's full substitution map, which is wrong when the
+                    // callee has fewer type params (e.g., element<T> has 1 type param but
+                    // the caller's substitution has 2+ entries). Compute from the MethodCall's
+                    // type_args field plus receiver type args.
+                    let expected_count = generic_func.impl_type_params.len()
+                        + generic_func.type_params.len();
+                    let corrected_type_args = if mono.type_args.len() != expected_count {
+                        // Build from receiver type args + method type args
+                        let mut corrected = Vec::new();
+                        // impl type args: from receiver's struct type args (if generic)
+                        if let Some(struct_name) =
+                            self.get_struct_name_from_type(receiver.type_id, type_table)
+                            && let Some(struct_key) = self.mangled_struct_to_key.get(&struct_name)
+                        {
+                            corrected.extend(struct_key.type_args.iter().copied());
+                        }
+                        // Method type args: from the MethodCall's type_args field.
+                        // If those are empty (inferred), try to infer from argument types
+                        // by matching each generic param against the call args.
+                        if !type_args.is_empty() {
+                            corrected.extend(type_args.iter().copied());
+                        } else if generic_func.has_real_type_params() {
+                            // Infer type args from argument types. For each method type param,
+                            // find which argument uses that param and extract its concrete type.
+                            let method_params = &generic_func.params;
+                            for param in &generic_func.type_params {
+                                let param_idx = generic_func.impl_type_params.len() as u32
+                                    + param.index;
+                                // Search params (skip self at index 0) for a ref/value of this type param
+                                let mut inferred = None;
+                                for (pi, mp) in method_params.iter().enumerate().skip(1) {
+                                    let inner = match type_table.get(mp.type_id) {
+                                        ResolvedType::Ref(t) | ResolvedType::MutRef(t) => *t,
+                                        _ => mp.type_id,
+                                    };
+                                    if matches!(type_table.get(inner), ResolvedType::TypeParam { index, .. } if *index == param_idx) {
+                                        // This param uses the type param — infer from the arg
+                                        let arg_idx = pi - 1; // args are offset by 1 (no self)
+                                        if let Some(arg) = args.get(arg_idx) {
+                                            let mut arg_type = arg.expr.type_id;
+                                            // Unwrap ref/mut ref to get the inner type
+                                            while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                                                type_table.get(arg_type).clone()
+                                            {
+                                                arg_type = t;
+                                            }
+                                            // For Box<T> (auto-boxed primitive ref), unwrap
+                                            if let ResolvedType::GenericInstance { name, type_args: ta, .. } = type_table.get(arg_type) {
+                                                if name == "Box" && ta.len() == 1 {
+                                                    arg_type = ta[0];
+                                                }
+                                            }
+                                            inferred = Some(arg_type);
+                                        }
+                                        break;
+                                    }
+                                }
+                                if let Some(tid) = inferred {
+                                    corrected.push(tid);
+                                }
+                            }
+                        }
+                        corrected
+                    } else {
+                        mono.type_args.clone()
+                    };
                     let key = InstantiationKey {
                         name: mono.generic_name.clone(),
-                        type_args: mono.type_args.clone(),
+                        type_args: corrected_type_args,
                         method_info,
                     };
                     if !self.function_instantiated.contains_key(&key) {
@@ -2327,15 +2394,33 @@ impl Monomorphizer {
         // Include both method-level type params AND impl block type params
         let mut substitution: IndexMap<u32, TypeId> = IndexMap::default();
 
+        // Count how many type_args belong to impl params vs method params.
+        // When a variadic pack is present, the pack consumes a variable number of args,
+        // so we compute: pack_args = total_args - method_type_params - non_pack_impl_params
+        let method_type_params_count = generic.type_params.len();
+        let non_pack_impl_params_count = generic
+            .impl_type_params
+            .iter()
+            .filter(|p| !p.is_pack)
+            .count();
+        let impl_args_count = key
+            .type_args
+            .len()
+            .saturating_sub(method_type_params_count);
+
         // Add impl block type params first (e.g., T from impl Counter<T>)
         // Use param.index for lookup so that impls with concrete type args at earlier positions
         // (e.g., `impl Trait for Foo<ConcreteType, V>` where V has index 1) work correctly.
         for param in &generic.impl_type_params {
             if param.is_pack {
-                // Variadic pack: map the pack index to a tuple of ALL type args.
-                // e.g., impl<..T> Inspect for [..T] with type_args=[i32, String]
-                //        → ..T maps to Tuple(i32, String)
-                let pack_type = type_table.make_tuple(key.type_args.clone());
+                // Variadic pack: map the pack index to a tuple of the impl-level type args,
+                // excluding non-pack impl params (which are handled by the else branch).
+                // e.g., impl<..T> Serialize for [..T] { fn serialize<S>() }
+                //        with type_args=[i32, String, bool, JsonSerializer]
+                //        → ..T maps to Tuple(i32, String, bool), S maps to JsonSerializer
+                let pack_args_count = impl_args_count - non_pack_impl_params_count;
+                let pack_args: Vec<TypeId> = key.type_args.iter().take(pack_args_count).copied().collect();
+                let pack_type = type_table.make_tuple(pack_args);
                 substitution.insert(param.index, pack_type);
             } else if let Some(&arg) = key.type_args.get(param.index as usize) {
                 substitution.insert(param.index, arg);
@@ -2350,7 +2435,7 @@ impl Monomorphizer {
         for (i, (param, &arg)) in generic
             .type_params
             .iter()
-            .zip(key.type_args.iter().skip(offset as usize))
+            .zip(key.type_args.iter().skip(impl_args_count))
             .enumerate()
         {
             // Use offset + param.index to get the correct index in the type table
@@ -2683,6 +2768,11 @@ impl Monomorphizer {
                     type_table,
                 );
             }
+            // Populate type_args on MethodCall nodes that have inferred generic params.
+            // Inside variadic for-of, method calls like `seq.element(&v)` have empty type_args
+            // because T was inferred from a TypePack at resolution time. Now that types are
+            // concrete, fill in type_args so the monomorphizer can instantiate the generic method.
+            Self::infer_method_call_type_args(&mut elem_body, type_table);
             iter_stmts.extend(elem_body.stmts);
 
             let label = format!("__tuple_iter_{uid}_{i}");
@@ -2703,6 +2793,102 @@ impl Monomorphizer {
             },
             span,
         )]
+    }
+
+    /// After variadic for-of expansion, method calls that had inferred type params
+    /// (empty type_args) need their type_args populated from the concrete argument types.
+    /// e.g., `seq.element(&v)` where element<T: Serialize> — infer T from the arg type.
+    fn infer_method_call_type_args(block: &mut TirBlock, type_table: &TypeTable) {
+        for stmt in &mut block.stmts {
+            match &mut stmt.kind {
+                TirStmtKind::Expr(expr) => {
+                    Self::infer_method_call_type_args_in_expr(expr, type_table);
+                }
+                TirStmtKind::Let { value, .. } => {
+                    Self::infer_method_call_type_args_in_expr(value, type_table);
+                }
+                TirStmtKind::LabeledBlock { block, .. } => {
+                    Self::infer_method_call_type_args(block, type_table);
+                }
+                TirStmtKind::If { condition, then_block, else_block, .. } => {
+                    Self::infer_method_call_type_args_in_expr(condition, type_table);
+                    Self::infer_method_call_type_args(then_block, type_table);
+                    if let Some(eb) = else_block {
+                        Self::infer_method_call_type_args(eb, type_table);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn infer_method_call_type_args_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
+        match &mut expr.kind {
+            TirExprKind::MethodCall {
+                receiver,
+                func,
+                type_args,
+                args,
+                ..
+            } => {
+                Self::infer_method_call_type_args_in_expr(receiver, type_table);
+                for arg in args.iter_mut() {
+                    Self::infer_method_call_type_args_in_expr(&mut arg.expr, type_table);
+                }
+                // If type_args is empty and the method has monomorph_info or method_info
+                // suggesting it's generic, infer type_args from argument types.
+                if type_args.is_empty() {
+                    if let Some(ref info) = func.method_info {
+                        // Check if method_type_args is empty (meaning inferred type args)
+                        if info.method_type_args.is_empty() {
+                            // Try to infer from first non-self arg's inner type.
+                            // For element<T: Serialize>(&mut self, value: &T), the first
+                            // arg is &T, so T is the inner type of the first arg.
+                            if let Some(first_arg) = args.first() {
+                                let mut arg_type = first_arg.expr.type_id;
+                                // Unwrap references
+                                while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                                    type_table.get(arg_type).clone()
+                                {
+                                    arg_type = t;
+                                }
+                                // Unwrap Box<T> (auto-boxed primitive ref)
+                                if let ResolvedType::GenericInstance {
+                                    name,
+                                    type_args: ta,
+                                    ..
+                                } = type_table.get(arg_type)
+                                {
+                                    if name == "Box" && ta.len() == 1 {
+                                        arg_type = ta[0];
+                                    }
+                                }
+                                // Only set if arg_type is concrete (not a type param)
+                                if !matches!(
+                                    type_table.get(arg_type),
+                                    ResolvedType::TypeParam { .. }
+                                        | ResolvedType::TypePack { .. }
+                                        | ResolvedType::Unknown
+                                ) {
+                                    type_args.push(arg_type);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                Self::infer_method_call_type_args(block, type_table);
+            }
+            TirExprKind::If { condition, then_branch, else_branch, .. } => {
+                Self::infer_method_call_type_args_in_expr(condition, type_table);
+                Self::infer_method_call_type_args(then_branch, type_table);
+                if let Some(eb) = else_branch {
+                    Self::infer_method_call_type_args(eb, type_table);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Rewrite types in the body of a variadic for-of iteration.
@@ -4371,9 +4557,14 @@ impl Monomorphizer {
                                     // Generic impl (e.g., Array<T>) — handled by receiver scan
                                     None
                                 } else {
-                                    // Potential blanket impl method — mark for blanket instantiation
+                                    // Potential blanket impl method — mark for blanket instantiation.
+                                    // Use new_func_name (resolved) as generic_name so the monomorphizer
+                                    // can find the concrete generic function template. The old_func_name
+                                    // may still contain unresolved type param projections (e.g.,
+                                    // "S::SeqSerializer^SerializeSeq::element") that don't match any
+                                    // key in generic_functions.
                                     Some(MonomorphInfo {
-                                        generic_name: old_func_name,
+                                        generic_name: new_func_name.clone(),
                                         type_args,
                                         is_blanket: true,
                                     })

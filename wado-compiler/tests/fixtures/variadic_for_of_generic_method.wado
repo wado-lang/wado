@@ -1,0 +1,47 @@
+// Bug repro: generic method call inside variadic for-of body.
+// `seq.add(&v)` where add<T> has inferred type arg T from &v.
+use { println, Stdout } from "core:cli";
+
+trait Addable {
+    fn value(&self) -> i32;
+}
+
+impl Addable for i32 {
+    fn value(&self) -> i32 { return *self; }
+}
+
+impl Addable for bool {
+    fn value(&self) -> i32 {
+        if *self { return 1; }
+        return 0;
+    }
+}
+
+struct Accumulator {
+    total: i32,
+}
+
+impl Accumulator {
+    fn add<T: Addable>(&mut self, v: &T) {
+        self.total = self.total + v.value();
+    }
+}
+
+impl<..T: Addable> Addable for [..T] {
+    fn value(&self) -> i32 {
+        let mut acc = Accumulator { total: 0 };
+        for let v of *self {
+            acc.add(&v);
+        }
+        return acc.total;
+    }
+}
+
+export fn run() with Stdout {
+    let t = [42, true];
+    assert t.value() == 43;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

@@ -82,6 +82,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone()),
+            // Tuple types use "Tuple" as the struct name for method/trait impl lookup,
+            // matching how impl<..T> Trait for [..T] is indexed under "Tuple".
+            ResolvedType::Tuple(_) => (
+                "Tuple".to_string(),
+                self.current_module_source.clone(),
+            ),
             _ => (
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 self.current_module_source.clone(),
@@ -99,6 +105,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     Some(type_args)
                 }
+                // Tuple types: element types are the type args for variadic impl matching
+                ResolvedType::Tuple(elems) if !elems.is_empty() => Some(elems),
                 _ => None,
             };
 
