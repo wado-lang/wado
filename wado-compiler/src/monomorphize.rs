@@ -4605,13 +4605,29 @@ impl Monomorphizer {
                                     None
                                 } else {
                                     // Potential blanket impl method — mark for blanket instantiation.
-                                    // Use new_func_name (resolved) as generic_name so the monomorphizer
-                                    // can find the concrete generic function template. The old_func_name
-                                    // may still contain unresolved type param projections (e.g.,
-                                    // "S::SeqSerializer^SerializeSeq::element") that don't match any
-                                    // key in generic_functions.
+                                    // The generic_name must match the key in generic_functions.
+                                    //
+                                    // For blanket impls with a type param receiver (e.g.,
+                                    // impl<I: Iterator> IntoIterator for I), the template key is
+                                    // "I^IntoIterator::into_iter" — use old_func_name which
+                                    // preserves the type param name.
+                                    //
+                                    // For methods on associated type projections (e.g.,
+                                    // S::SeqSerializer^SerializeSeq::element), old_func_name has
+                                    // the unresolved projection which doesn't match any key —
+                                    // use new_func_name (resolved to e.g.,
+                                    // NsdSeqSerializer^SerializeSeq::element).
+                                    let blanket_name = if old_func_name
+                                        .split('^')
+                                        .next()
+                                        .is_some_and(|struct_part| struct_part.contains("::"))
+                                    {
+                                        new_func_name.clone()
+                                    } else {
+                                        old_func_name.clone()
+                                    };
                                     Some(MonomorphInfo {
-                                        generic_name: new_func_name.clone(),
+                                        generic_name: blanket_name,
                                         type_args,
                                         is_blanket: true,
                                     })
