@@ -180,23 +180,25 @@ impl G4Lexer {
             return self.read_identifier();
         }
         self.pos += 1;
-        if c == ':' { return make_token(G4Token::Colon, ":", start, self.pos); }
-        if c == ';' { return make_token(G4Token::Semicolon, ";", start, self.pos); }
-        if c == '|' { return make_token(G4Token::Pipe, "|", start, self.pos); }
-        if c == '(' { return make_token(G4Token::LParen, "(", start, self.pos); }
-        if c == ')' { return make_token(G4Token::RParen, ")", start, self.pos); }
-        if c == '*' { return make_token(G4Token::Star, "*", start, self.pos); }
-        if c == '+' { return make_token(G4Token::Plus, "+", start, self.pos); }
-        if c == '?' { return make_token(G4Token::Question, "?", start, self.pos); }
-        if c == '.' { return make_token(G4Token::Dot, ".", start, self.pos); }
-        if c == '~' { return make_token(G4Token::Tilde, "~", start, self.pos); }
-        if c == '=' { return make_token(G4Token::Assign, "=", start, self.pos); }
-        if c == '#' { return make_token(G4Token::Hash, "#", start, self.pos); }
-        if c == '-' && !self.at_end() && self.chars[self.pos] == '>' {
-            self.pos += 1;
-            return make_token(G4Token::Arrow, "->", start, self.pos);
-        }
-        return make_token(G4Token::Error, `unexpected char: {c}`, start, self.pos);
+        return match c {
+            ':' => make_token(G4Token::Colon, ":", start, self.pos),
+            ';' => make_token(G4Token::Semicolon, ";", start, self.pos),
+            '|' => make_token(G4Token::Pipe, "|", start, self.pos),
+            '(' => make_token(G4Token::LParen, "(", start, self.pos),
+            ')' => make_token(G4Token::RParen, ")", start, self.pos),
+            '*' => make_token(G4Token::Star, "*", start, self.pos),
+            '+' => make_token(G4Token::Plus, "+", start, self.pos),
+            '?' => make_token(G4Token::Question, "?", start, self.pos),
+            '.' => make_token(G4Token::Dot, ".", start, self.pos),
+            '~' => make_token(G4Token::Tilde, "~", start, self.pos),
+            '=' => make_token(G4Token::Assign, "=", start, self.pos),
+            '#' => make_token(G4Token::Hash, "#", start, self.pos),
+            '-' && !self.at_end() && self.chars[self.pos] == '>' => {
+                self.pos += 1;
+                make_token(G4Token::Arrow, "->", start, self.pos)
+            },
+            _ => make_token(G4Token::Error, `unexpected char: {c}`, start, self.pos),
+        };
     }
 }
 

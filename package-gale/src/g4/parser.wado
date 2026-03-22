@@ -185,25 +185,18 @@ impl G4Parser {
     }
 
     fn parse_postfix(&mut self, elem: Element) -> Result<Element, ParseError> {
-        if self.is_kind(G4Token::Star) {
-            self.advance();
-            return Result::<Element, ParseError>::Ok(
-                Element::Repeat(RepeatElement { kind: RepeatKind::Star, element: elem }),
-            );
-        }
-        if self.is_kind(G4Token::Plus) {
-            self.advance();
-            return Result::<Element, ParseError>::Ok(
-                Element::Repeat(RepeatElement { kind: RepeatKind::Plus, element: elem }),
-            );
-        }
-        if self.is_kind(G4Token::Question) {
-            self.advance();
-            return Result::<Element, ParseError>::Ok(
-                Element::Repeat(RepeatElement { kind: RepeatKind::Optional, element: elem }),
-            );
-        }
-        return Result::<Element, ParseError>::Ok(elem);
+        let kind = match self.peek_kind() {
+            _ && self.is_kind(G4Token::Star) => RepeatKind::Star,
+            _ && self.is_kind(G4Token::Plus) => RepeatKind::Plus,
+            _ && self.is_kind(G4Token::Question) => RepeatKind::Optional,
+            _ => {
+                return Result::<Element, ParseError>::Ok(elem);
+            },
+        };
+        self.advance();
+        return Result::<Element, ParseError>::Ok(
+            Element::Repeat(RepeatElement { kind, element: elem }),
+        );
     }
 
     fn parse_lexer_rule(&mut self, name: String, is_fragment: bool) -> Result<LexerRule, ParseError> {
@@ -329,25 +322,18 @@ impl G4Parser {
     }
 
     fn parse_lexer_postfix(&mut self, elem: LexerElement) -> Result<LexerElement, ParseError> {
-        if self.is_kind(G4Token::Star) {
-            self.advance();
-            return Result::<LexerElement, ParseError>::Ok(
-                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Star, element: elem }),
-            );
-        }
-        if self.is_kind(G4Token::Plus) {
-            self.advance();
-            return Result::<LexerElement, ParseError>::Ok(
-                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Plus, element: elem }),
-            );
-        }
-        if self.is_kind(G4Token::Question) {
-            self.advance();
-            return Result::<LexerElement, ParseError>::Ok(
-                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Optional, element: elem }),
-            );
-        }
-        return Result::<LexerElement, ParseError>::Ok(elem);
+        let kind = match self.peek_kind() {
+            _ && self.is_kind(G4Token::Star) => RepeatKind::Star,
+            _ && self.is_kind(G4Token::Plus) => RepeatKind::Plus,
+            _ && self.is_kind(G4Token::Question) => RepeatKind::Optional,
+            _ => {
+                return Result::<LexerElement, ParseError>::Ok(elem);
+            },
+        };
+        self.advance();
+        return Result::<LexerElement, ParseError>::Ok(
+            LexerElement::Repeat(LexerRepeatElement { kind, element: elem }),
+        );
     }
 }
 
@@ -359,24 +345,26 @@ fn advance_char(chars: &Array<char>, pos: &mut i32) -> char {
 
 fn resolve_char(chars: &Array<char>, pos: &mut i32) -> char {
     let c = advance_char(chars, pos);
-    if c == '\\' {
-        let ec = advance_char(chars, pos);
-        if ec == 'n' { return '\n'; }
-        if ec == 'r' { return '\r'; }
-        if ec == 't' { return '\t'; }
-        if ec == '\\' { return '\\'; }
-        if ec == ']' { return ']'; }
-        if ec == '-' { return '-'; }
-        if ec == 'u' {
+    if c != '\\' {
+        return c;
+    }
+    let ec = advance_char(chars, pos);
+    return match ec {
+        'n' => '\n',
+        'r' => '\r',
+        't' => '\t',
+        '\\' => '\\',
+        ']' => ']',
+        '-' => '-',
+        'u' => {
             let mut val = 0;
             for let mut i = 0; i < 4; i += 1 {
                 val = val * 16 + hex_digit_value(advance_char(chars, pos));
             }
-            return char::from_i32(val).unwrap();
-        }
-        return ec;
-    }
-    return c;
+            char::from_i32(val).unwrap()
+        },
+        _ => ec,
+    };
 }
 
 fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
@@ -406,10 +394,12 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
 }
 
 fn hex_digit_value(c: char) -> i32 {
-    if c >= '0' && c <= '9' { return c as i32 - '0' as i32; }
-    if c >= 'a' && c <= 'f' { return c as i32 - 'a' as i32 + 10; }
-    if c >= 'A' && c <= 'F' { return c as i32 - 'A' as i32 + 10; }
-    return 0;
+    return match c {
+        _ && c >= '0' && c <= '9' => c as i32 - '0' as i32,
+        _ && c >= 'a' && c <= 'f' => c as i32 - 'a' as i32 + 10,
+        _ && c >= 'A' && c <= 'F' => c as i32 - 'A' as i32 + 10,
+        _ => 0,
+    };
 }
 
 pub fn parse(input: String) -> Result<Grammar, ParseError> {
