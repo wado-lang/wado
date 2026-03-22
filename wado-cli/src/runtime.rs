@@ -99,6 +99,17 @@ pub fn create_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engin
     Ok(Engine::new(&create_config(opt_level, profile))?)
 }
 
+/// Create a wasmtime Engine for test execution with epoch interruption enabled.
+///
+/// # Errors
+///
+/// Returns an error if the engine cannot be created with the given configuration.
+pub fn create_test_engine(opt_level: OptLevel) -> Result<Engine> {
+    let mut config = create_config(opt_level, &ProfileMode::None);
+    config.epoch_interruption(true);
+    Ok(Engine::new(&config)?)
+}
+
 /// Create a Store with WASI state, preopened directories, and program arguments.
 /// `preopened_dirs`: `(host_path, guest_path)` pairs.
 /// `args`: arguments passed to the guest via `wasi:cli/environment.get-arguments`.

@@ -463,16 +463,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> Option<(TirFunction, TirTest)> {
         let expect_trap = test_decl.attributes.iter().any(|a| a.name == "expect_trap");
         let is_todo = test_decl.attributes.iter().any(|a| a.name == "TODO");
+        let timeout_ms = test_decl.attributes.iter().find_map(|a| {
+            if a.name == "timeout_ms" {
+                a.args.first().and_then(|arg| arg.as_str().parse::<u64>().ok())
+            } else {
+                None
+            }
+        });
 
         // Generate function name: __test_{index} or __test_{name_snake_case}
         // For expect_trap tests: __test_trap_{index} or __test_trap_{index}_{name_snake_case}
         // For TODO tests:        __test_todo_{index} or __test_todo_{index}_{name_snake_case}
-        let prefix = if is_todo {
-            "__test_todo"
-        } else if expect_trap {
-            "__test_trap"
-        } else {
-            "__test"
+        // For custom timeout:    __test_tm{ms}_{index} or __test_trap_tm{ms}_{index}_{name}
+        let prefix = match (is_todo, expect_trap, timeout_ms) {
+            (true, _, Some(ms)) => format!("__test_todo_tm{ms}"),
+            (true, _, None) => "__test_todo".to_string(),
+            (_, true, Some(ms)) => format!("__test_trap_tm{ms}"),
+            (_, true, None) => "__test_trap".to_string(),
+            (_, _, Some(ms)) => format!("__test_tm{ms}"),
+            (_, _, None) => "__test".to_string(),
         };
         let function_name = match &test_decl.name {
             Some(name) => {
@@ -526,6 +535,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             span: test_decl.span,
             expect_trap,
             is_todo,
+            timeout_ms,
         };
 
         Some((tir_func, tir_test))
