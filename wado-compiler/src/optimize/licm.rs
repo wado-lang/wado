@@ -17,12 +17,18 @@ use crate::tir::{
 /// Distinguishes between full-object modification (e.g., `buf = new_string`, `&mut buf`)
 /// and field-level modification (e.g., `buf.len = buf.len + 1`), enabling LICM to
 /// hoist field accesses like `buf.repr` even when `buf.len` is modified.
+///
+/// Also tracks GC reference aliases: when `let a = b` copies a GC struct reference,
+/// `a` and `b` point to the same heap object. Modifications through one alias must
+/// prevent hoisting field accesses on the other.
 #[derive(Default)]
 struct ModifiedVars {
     /// Locals that are fully modified (assigned as a whole, passed as &mut, etc.).
     fully: IndexSet<u32>,
     /// (`local_index`, `field_index`) pairs where only a specific field is modified.
     fields: IndexSet<(u32, u32)>,
+    /// GC alias pairs: if `(a, b)` is present, `a` and `b` may point to the same object.
+    aliases: Vec<(u32, u32)>,
 }
 
 impl ModifiedVars {
@@ -38,10 +44,40 @@ impl ModifiedVars {
         self.fully.extend(other.iter().copied());
     }
 
+    fn add_alias(&mut self, a: u32, b: u32) {
+        self.aliases.push((a, b));
+    }
+
+    /// Collect all locals that alias with `local_idx` (transitively).
+    fn alias_set(&self, local_idx: u32) -> IndexSet<u32> {
+        let mut set = IndexSet::default();
+        set.insert(local_idx);
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for &(a, b) in &self.aliases {
+                if set.contains(&a) && set.insert(b) {
+                    changed = true;
+                }
+                if set.contains(&b) && set.insert(a) {
+                    changed = true;
+                }
+            }
+        }
+        set
+    }
+
     /// Returns true if the given local is not fully modified AND
-    /// the specific field of that local is not field-modified.
+    /// the specific field of that local is not field-modified,
+    /// considering all aliases of the local.
     fn is_field_hoistable(&self, local_idx: u32, field_idx: u32) -> bool {
-        !self.fully.contains(&local_idx) && !self.fields.contains(&(local_idx, field_idx))
+        let aliases = self.alias_set(local_idx);
+        for &idx in &aliases {
+            if self.fully.contains(&idx) || self.fields.contains(&(idx, field_idx)) {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -358,6 +394,13 @@ fn collect_modified_vars_in_stmt(
             // Let statements define new variables, mark them as modified
             // (they're not invariant within the loop where they're defined)
             modified.insert_full(*local_index);
+            // Track GC aliases: `let a = b` where b is a local with GC type
+            // means a and b point to the same heap object.
+            if let TirExprKind::Local { index: src_idx, .. } = &value.kind {
+                if is_gc_heap_type(value.type_id, type_table) {
+                    modified.add_alias(*local_index, *src_idx);
+                }
+            }
             // Also check the value expression for mutable references
             collect_modified_vars_in_expr(value, modified, type_table);
         }

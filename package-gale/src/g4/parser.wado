@@ -351,82 +351,58 @@ impl G4Parser {
     }
 }
 
-struct CharClassParser {
-    chars: Array<char>,
-    pos: i32,
-    end: i32,
+fn advance_char(chars: &Array<char>, pos: &mut i32) -> char {
+    let c = chars[*pos];
+    *pos += 1;
+    return c;
 }
 
-impl CharClassParser {
-    fn new(text: &String) -> CharClassParser {
-        let chars = text.chars().collect();
-        let end = chars.len() - 1;
-        return CharClassParser { chars, pos: 1, end };
-    }
-
-    fn at_end(&self) -> bool {
-        return self.pos >= self.end;
-    }
-
-    fn peek(&self) -> char {
-        return self.chars[self.pos];
-    }
-
-    fn advance(&mut self) -> char {
-        let c = self.chars[self.pos];
-        self.pos += 1;
-        return c;
-    }
-
-    fn resolve_char(&mut self) -> char {
-        let c = self.advance();
-        if c == '\\' {
-            let ec = self.advance();
-            if ec == 'n' { return '\n'; }
-            if ec == 'r' { return '\r'; }
-            if ec == 't' { return '\t'; }
-            if ec == '\\' { return '\\'; }
-            if ec == ']' { return ']'; }
-            if ec == '-' { return '-'; }
-            if ec == 'u' {
-                let mut val = 0;
-                for let mut i = 0; i < 4; i += 1 {
-                    val = val * 16 + hex_digit_value(self.advance());
-                }
-                return char::from_i32(val).unwrap();
+fn resolve_char(chars: &Array<char>, pos: &mut i32) -> char {
+    let c = advance_char(chars, pos);
+    if c == '\\' {
+        let ec = advance_char(chars, pos);
+        if ec == 'n' { return '\n'; }
+        if ec == 'r' { return '\r'; }
+        if ec == 't' { return '\t'; }
+        if ec == '\\' { return '\\'; }
+        if ec == ']' { return ']'; }
+        if ec == '-' { return '-'; }
+        if ec == 'u' {
+            let mut val = 0;
+            for let mut i = 0; i < 4; i += 1 {
+                val = val * 16 + hex_digit_value(advance_char(chars, pos));
             }
-            return ec;
+            return char::from_i32(val).unwrap();
         }
-        return c;
+        return ec;
     }
-
-    fn parse(&mut self) -> CharClass {
-        let mut negated = false;
-        let mut ranges: Array<CharRange> = [];
-
-        if !self.at_end() && self.peek() == '^' {
-            negated = true;
-            self.advance();
-        }
-
-        while !self.at_end() {
-            let c = self.resolve_char();
-            if !self.at_end() && self.peek() == '-' && self.pos + 1 < self.end {
-                self.advance();
-                let c2 = self.resolve_char();
-                ranges.append(CharRange::range(c, c2));
-            } else {
-                ranges.append(CharRange::single(c));
-            }
-        }
-
-        return CharClass { ranges, negated };
-    }
+    return c;
 }
 
 fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
-    let mut parser = CharClassParser::new(text);
-    return Result::<CharClass, ParseError>::Ok(parser.parse());
+    let chars = text.chars().collect();
+    let end = chars.len() - 1;
+    let mut pos = 1;
+    let mut negated = false;
+    let mut ranges: Array<CharRange> = [];
+
+    if pos < end && chars[pos] == '^' {
+        negated = true;
+        pos += 1;
+    }
+
+    while pos < end {
+        let c = resolve_char(&chars, &mut pos);
+        if pos < end && chars[pos] == '-' && pos + 1 < end {
+            advance_char(&chars, &mut pos);
+            let c2 = resolve_char(&chars, &mut pos);
+            ranges.append(CharRange::range(c, c2));
+        } else {
+            ranges.append(CharRange::single(c));
+        }
+    }
+
+    return Result::<CharClass, ParseError>::Ok(CharClass { ranges, negated });
 }
 
 fn hex_digit_value(c: char) -> i32 {
