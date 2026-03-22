@@ -69,6 +69,8 @@ struct LocalUsage {
     read_count: u32,
     /// Whether the local is ever assigned to (after initialization)
     is_assigned: bool,
+    /// Whether a field of this local is ever assigned (e.g., `x.field = ...`)
+    has_field_mutation: bool,
     /// Whether the local is used in a loop condition (risky to propagate)
     #[allow(dead_code)]
     in_loop_condition: bool,
@@ -235,6 +237,12 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, in_loop: bool, in_c
         TirExprKind::Assign { target, value } => {
             if let TirExprKind::Local { index, .. } = &target.kind {
                 result.usage.entry(*index).or_default().is_assigned = true;
+            }
+            // Track field mutations: `x.field = ...` where x is a local
+            if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind
+                && let TirExprKind::Local { index, .. } = &inner.kind
+            {
+                result.usage.entry(*index).or_default().has_field_mutation = true;
             }
             analyze_expr(target, result, in_loop, in_condition);
             analyze_expr(value, result, in_loop, in_condition);
@@ -408,6 +416,15 @@ fn can_propagate_copy(
 
     // Don't propagate if target is assigned to after initialization
     if target_usage.is_assigned {
+        return false;
+    }
+
+    // Don't propagate if target has field mutations and the type needs value copy.
+    // In Wasm GC, `let q = p` for a struct type creates a reference alias, not a
+    // value copy. The WIR translator inserts value_copy for mutable Let bindings.
+    // Eliminating the binding would lose this copy, causing field mutations on the
+    // target to incorrectly affect the source.
+    if target_usage.has_field_mutation && needs_value_copy(binding.type_id, type_table) {
         return false;
     }
 

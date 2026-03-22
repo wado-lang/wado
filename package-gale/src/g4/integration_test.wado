@@ -1,0 +1,78 @@
+use {
+    Grammar, ParserRule, Alternative, Element, RepeatElement,
+    RepeatKind, LexerRule, LexerAlt, LexerElement, CharClass, CharRange,
+} from "../ir.wado";
+use { parse } from "./parser.wado";
+
+test "parse JSON.g4" {
+    let input = #include_str("../../tests/grammars/JSON.g4");
+    let result = parse(input);
+    if let Err(e) = result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let g = result.unwrap();
+    assert g.name == "JSON";
+
+    // Parser rules: json, obj, pair, arr, value
+    assert g.parser_rules.len() == 5;
+    assert g.parser_rules[0].name == "json";
+    assert g.parser_rules[1].name == "obj";
+    assert g.parser_rules[2].name == "pair";
+    assert g.parser_rules[3].name == "arr";
+    assert g.parser_rules[4].name == "value";
+
+    // json : value EOF ;
+    assert g.parser_rules[0].alternatives.len() == 1;
+    assert g.parser_rules[0].alternatives[0].elements.len() == 2;
+
+    // obj has 2 alternatives: '{' pair (',' pair)* '}' | '{' '}'
+    assert g.parser_rules[1].alternatives.len() == 2;
+
+    // value has 7 alternatives
+    assert g.parser_rules[4].alternatives.len() == 7;
+
+    // Lexer rules: STRING, ESC(frag), UNICODE(frag), HEX(frag), SAFECODEPOINT(frag), NUMBER, INT(frag), EXP(frag), WS
+    assert g.lexer_rules.len() == 9;
+    assert g.lexer_rules[0].name == "STRING";
+    assert g.lexer_rules[0].is_fragment == false;
+
+    // ESC is fragment
+    assert g.lexer_rules[1].name == "ESC";
+    assert g.lexer_rules[1].is_fragment == true;
+
+    // WS has skip
+    assert g.lexer_rules[8].name == "WS";
+    assert g.lexer_rules[8].skip == true;
+}
+
+test "parse sexpression.g4" {
+    let input = #include_str("../../tests/grammars/sexpression.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "sexpression";
+
+    // Parser rules: sexpr, item, list_, atom
+    assert g.parser_rules.len() == 4;
+    assert g.parser_rules[0].name == "sexpr";
+
+    // Lexer rules: STRING, WHITESPACE, NUMBER, SYMBOL, LPAREN, RPAREN, DOT, SYMBOL_START(frag), DIGIT(frag)
+    assert g.lexer_rules.len() == 9;
+    assert g.lexer_rules[1].name == "WHITESPACE";
+    assert g.lexer_rules[1].skip == true;
+}
+
+test "parse calculator.g4" {
+    let input = #include_str("../../tests/grammars/calculator.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "calculator";
+
+    // Has many parser rules: equation, expression, multiplyingExpression, etc.
+    assert g.parser_rules.len() > 5;
+
+    // Has many lexer rules
+    assert g.lexer_rules.len() > 10;
+
+    // WS should have skip
+    let last_rule = &g.lexer_rules[g.lexer_rules.len() - 1];
+    assert last_rule.name == "WS";
+    assert last_rule.skip == true;
+}

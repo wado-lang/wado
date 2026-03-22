@@ -194,11 +194,16 @@ fn run() with Stdout {
     let __cond_12: bool;
     let __v0_13: i32;
     let __cond_14: bool;
+    let r: ref Point;
     let t: ref Point;
     let __v0_17: i32;
     let __cond_18: bool;
     let __v0_19: i32;
     let __cond_20: bool;
+    let __v0_21: i32;
+    let __cond_22: bool;
+    let __v0_23: i32;
+    let __cond_24: bool;
     let s: ref String;
     let __v0_26: ref String;
     let __cond_27: bool;
@@ -244,6 +249,10 @@ fn run() with Stdout {
     let __local_91: ref Formatter;
     let __local_92: ref String;
     let __local_93: ref Formatter;
+    let __local_94: ref String;
+    let __local_95: ref Formatter;
+    let __local_96: ref String;
+    let __local_97: ref Formatter;
     let __local_98: ref String;
     let __local_99: ref Formatter;
     let __local_100: ref String;
@@ -282,6 +291,10 @@ fn run() with Stdout {
     let __local_211: ref Formatter;
     let __local_217: ref Formatter;
     let __local_222: ref Formatter;
+    let __local_228: ref Formatter;
+    let __local_233: ref Formatter;
+    let __local_239: ref Formatter;
+    let __local_244: ref Formatter;
     let __local_247: ref String;
     let __local_251: ref Formatter;
     let __local_258: ref Formatter;
@@ -482,7 +495,8 @@ condition: p.y == 10
         });
         unreachable;
     };
-    t = translate(Point { x: 1, y: 2 }, 10, 20);
+    r = Point { x: 1, y: 2 };
+    t = translate(value_copy Point(r), 10, 20);
     __v0_17 = t.x;
     __cond_18 = __v0_17 == 11;
     if __cond_18 == 0 {
@@ -548,6 +562,74 @@ condition: t.y == 22
             i32::fmt_decimal(__v0_19, __local_222);
             String::append_char(__local_92, 10);
             break __tmpl: __local_92;
+        });
+        unreachable;
+    };
+    __v0_21 = r.x;
+    __cond_22 = __v0_21 == 1;
+    if __cond_22 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_94 = String { repr: builtin::array_new<u8>(116), used: 0 };
+            String::append(__local_94, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append_char(__local_94, 114);
+            String::append_char(__local_94, 117);
+            String::append_char(__local_94, 110);
+            String::append_char(__local_94, 32);
+            String::append_char(__local_94, 97);
+            String::append_char(__local_94, 116);
+            String::append_char(__local_94, 32);
+            String::append(__local_94, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param.wado"), used: 43 });
+            String::append_char(__local_94, 58);
+            __local_95 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_94) };
+            __local_228 = __local_95;
+            i32::fmt_decimal(96, __local_228);
+            String::append(__local_94, String { repr: array.new_data<u8>("
+condition: r.x == 1
+"), used: 21 });
+            String::append_char(__local_94, 114);
+            String::append_char(__local_94, 46);
+            String::append_char(__local_94, 120);
+            String::append_char(__local_94, 58);
+            String::append_char(__local_94, 32);
+            __local_95 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_94) };
+            __local_233 = __local_95;
+            i32::fmt_decimal(__v0_21, __local_233);
+            String::append_char(__local_94, 10);
+            break __tmpl: __local_94;
+        });
+        unreachable;
+    };
+    __v0_23 = r.y;
+    __cond_24 = __v0_23 == 2;
+    if __cond_24 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_96 = String { repr: builtin::array_new<u8>(116), used: 0 };
+            String::append(__local_96, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append_char(__local_96, 114);
+            String::append_char(__local_96, 117);
+            String::append_char(__local_96, 110);
+            String::append_char(__local_96, 32);
+            String::append_char(__local_96, 97);
+            String::append_char(__local_96, 116);
+            String::append_char(__local_96, 32);
+            String::append(__local_96, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param.wado"), used: 43 });
+            String::append_char(__local_96, 58);
+            __local_97 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_96) };
+            __local_239 = __local_97;
+            i32::fmt_decimal(97, __local_239);
+            String::append(__local_96, String { repr: array.new_data<u8>("
+condition: r.y == 2
+"), used: 21 });
+            String::append_char(__local_96, 114);
+            String::append_char(__local_96, 46);
+            String::append_char(__local_96, 121);
+            String::append_char(__local_96, 58);
+            String::append_char(__local_96, 32);
+            __local_97 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_96) };
+            __local_244 = __local_97;
+            i32::fmt_decimal(__v0_23, __local_244);
+            String::append_char(__local_96, 10);
+            break __tmpl: __local_96;
         });
         unreachable;
     };
@@ -1017,13 +1099,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l29: loop {
+            l31: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l29;
+                continue l31;
             };
         };
     };
@@ -1138,13 +1220,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l36: loop {
+            l38: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l36;
+                continue l38;
             };
         };
     };
@@ -1161,14 +1243,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l40: loop {
+                l42: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l40;
+                    continue l42;
                 };
             };
         };
@@ -1260,7 +1342,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l49: loop {
+            l51: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1268,7 +1350,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l49;
+                continue l51;
             };
         };
     };
@@ -1375,13 +1457,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l62: loop {
+            l64: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l62;
+                continue l64;
             };
         };
     };
@@ -1391,14 +1473,14 @@ fn Array<i32>::grow(self) {
 fn __Closure_1::__call(self, n) {
     let total: i32;
     total = 0;
-    b64: block {
-        l65: loop {
+    b66: block {
+        l67: loop {
             if (n > 0) == 0 {
-                break b64;
+                break b66;
             };
             total = total + n;
             n = n - 1;
-            continue l65;
+            continue l67;
         };
     };
     return total;
@@ -1411,13 +1493,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l68: loop {
+            l70: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l68;
+                continue l70;
             };
         };
     };
@@ -1520,8 +1602,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b87: block {
-        l88: loop {
+    b89: block {
+        l90: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -1546,9 +1628,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b87;
+                break b89;
             };
-            continue l88;
+            continue l90;
         };
     };
     String::append_char(f.buf, 34);

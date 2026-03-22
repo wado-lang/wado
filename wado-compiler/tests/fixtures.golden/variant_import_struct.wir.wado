@@ -86,15 +86,16 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout {
+    let opts: ref "./variant_import_struct_module.wado/Options";
     let s1: ref String;
     let s2: ref String;
     let s3: ref String;
     let __local_4: ref String;
     let __local_5: ref String;
     let __local_6: ref String;
-    let __sroa_opts_align: ref "./variant_import_struct_module.wado/Align";
-    __sroa_opts_align = "./variant_import_struct_module.wado/Align" { 1 };
-    s1 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, "./variant_import_struct_module.wado/Options" { align: ref.as_non_null(__sroa_opts_align), width: 10 });
+    opts = "./variant_import_struct_module.wado/Options" { align: "./variant_import_struct_module.wado/Align" { 1 }, width: 0 };
+    opts.width = 10;
+    s1 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, opts);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append(__local_4, String { repr: array.new_data<u8>("["), used: 1 });
@@ -102,8 +103,8 @@ fn run() with Stdout {
         String::append(__local_4, String { repr: array.new_data<u8>("]"), used: 1 });
         break __tmpl: __local_4;
     });
-    __sroa_opts_align = "./variant_import_struct_module.wado/Align" { 0 };
-    s2 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, "./variant_import_struct_module.wado/Options" { align: ref.as_non_null(__sroa_opts_align), width: 10 });
+    opts.align = "./variant_import_struct_module.wado/Align" { 0 };
+    s2 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, opts);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append(__local_5, String { repr: array.new_data<u8>("["), used: 1 });
@@ -111,8 +112,8 @@ fn run() with Stdout {
         String::append(__local_5, String { repr: array.new_data<u8>("]"), used: 1 });
         break __tmpl: __local_5;
     });
-    __sroa_opts_align = "./variant_import_struct_module.wado/Align" { 2 };
-    s3 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, "./variant_import_struct_module.wado/Options" { align: ref.as_non_null(__sroa_opts_align), width: 10 });
+    opts.align = "./variant_import_struct_module.wado/Align" { 2 };
+    s3 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, opts);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append(__local_6, String { repr: array.new_data<u8>("["), used: 1 });

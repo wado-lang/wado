@@ -1,0 +1,223 @@
+use { Span, Token } from "../runtime.wado";
+use { G4Token, make_token } from "./token.wado";
+
+pub struct G4Lexer {
+    chars: Array<char>,
+    pos: i32,
+}
+
+impl G4Lexer {
+    pub fn new(input: String) -> G4Lexer {
+        return G4Lexer { chars: input.chars().collect(), pos: 0 };
+    }
+
+    fn at_end(&self) -> bool {
+        return self.pos >= self.chars.len();
+    }
+
+    fn peek_at(&self, offset: i32) -> Option<char> {
+        let i = self.pos + offset;
+        if i >= self.chars.len() {
+            return null;
+        }
+        return Option::<char>::Some(self.chars[i]);
+    }
+
+    fn advance(&mut self) -> char {
+        let c = self.chars[self.pos];
+        self.pos += 1;
+        return c;
+    }
+
+    fn skip_whitespace(&mut self) {
+        while !self.at_end() {
+            if self.chars[self.pos].is_ascii_whitespace() {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn skip_line_comment(&mut self) {
+        while !self.at_end() {
+            let c = self.advance();
+            if c == '\n' {
+                break;
+            }
+        }
+    }
+
+    fn skip_block_comment(&mut self) {
+        while !self.at_end() {
+            let c = self.advance();
+            if c == '*' && !self.at_end() && self.chars[self.pos] == '/' {
+                self.pos += 1;
+                return;
+            }
+        }
+    }
+
+    fn skip_whitespace_and_comments(&mut self) {
+        loop {
+            self.skip_whitespace();
+            if self.at_end() {
+                break;
+            }
+            let c = self.chars[self.pos];
+            if c == '/' {
+                if let Some(next) = self.peek_at(1) {
+                    if next == '/' {
+                        self.pos += 2;
+                        self.skip_line_comment();
+                        continue;
+                    } else if next == '*' {
+                        self.pos += 2;
+                        self.skip_block_comment();
+                        continue;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    fn read_string_literal(&mut self) -> Token {
+        let start = self.pos;
+        self.pos += 1;
+        let mut text = String::with_capacity(16);
+        loop {
+            if self.at_end() {
+                return make_token(G4Token::Error, "unterminated string", start, self.pos);
+            }
+            let c = self.advance();
+            match c {
+                '\'' => {
+                    return make_token(G4Token::StringLit, text, start, self.pos);
+                },
+                '\\' => {
+                    if !self.at_end() {
+                        text.append_char(self.advance());
+                    }
+                },
+                _ => text.append_char(c),
+            };
+        }
+    }
+
+    fn read_char_class(&mut self) -> Token {
+        let start = self.pos;
+        self.pos += 1;
+        let mut text = String::with_capacity(16);
+        text.append_char('[');
+        loop {
+            if self.at_end() {
+                return make_token(G4Token::Error, "unterminated char class", start, self.pos);
+            }
+            let c = self.advance();
+            match c {
+                ']' => {
+                    text.append_char(']');
+                    return make_token(G4Token::CharClass, text, start, self.pos);
+                },
+                '\\' => {
+                    text.append_char(c);
+                    if !self.at_end() {
+                        text.append_char(self.advance());
+                    }
+                },
+                _ => text.append_char(c),
+            };
+        }
+    }
+
+    fn read_identifier(&mut self) -> Token {
+        let start = self.pos;
+        let mut text = String::with_capacity(16);
+        while !self.at_end() {
+            let c = self.chars[self.pos];
+            if is_ident_char(c) {
+                text.append_char(c);
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        let kind = if text == "grammar" {
+            G4Token::Grammar
+        } else if text == "fragment" {
+            G4Token::Fragment
+        } else if text == "skip" {
+            G4Token::Skip
+        } else if text == "channel" {
+            G4Token::Channel
+        } else {
+            G4Token::Identifier
+        };
+        return make_token(kind, text, start, self.pos);
+    }
+
+    pub fn next_token(&mut self) -> Token {
+        self.skip_whitespace_and_comments();
+        if self.at_end() {
+            return make_token(G4Token::Eof, "", self.pos, self.pos);
+        }
+        let start = self.pos;
+        let c = self.chars[self.pos];
+        if c == '\'' {
+            return self.read_string_literal();
+        }
+        if c == '[' {
+            return self.read_char_class();
+        }
+        if is_ident_start(c) {
+            return self.read_identifier();
+        }
+        self.pos += 1;
+        let text = String::from(c);
+        let kind = match c {
+            ':' => G4Token::Colon,
+            ';' => G4Token::Semicolon,
+            '|' => G4Token::Pipe,
+            '(' => G4Token::LParen,
+            ')' => G4Token::RParen,
+            '*' => G4Token::Star,
+            '+' => G4Token::Plus,
+            '?' => G4Token::Question,
+            '.' => G4Token::Dot,
+            '~' => G4Token::Tilde,
+            '=' => G4Token::Assign,
+            '#' => G4Token::Hash,
+            '-' && !self.at_end() && self.chars[self.pos] == '>' => {
+                self.pos += 1;
+                return make_token(G4Token::Arrow, "->", start, self.pos);
+            },
+            _ => {
+                return make_token(G4Token::Error, `unexpected char: {c}`, start, self.pos);
+            },
+        };
+        return make_token(kind, text, start, self.pos);
+    }
+}
+
+pub fn tokenize(input: String) -> Array<Token> {
+    let mut lexer = G4Lexer::new(input);
+    let mut tokens: Array<Token> = [];
+    loop {
+        let tok = lexer.next_token();
+        let is_eof = tok.kind == G4Token::Eof as i32;
+        tokens.append(tok);
+        if is_eof {
+            break;
+        }
+    }
+    return tokens;
+}
+
+fn is_ident_start(c: char) -> bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+}
+
+fn is_ident_char(c: char) -> bool {
+    return is_ident_start(c) || (c >= '0' && c <= '9');
+}

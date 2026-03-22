@@ -891,7 +891,10 @@ fn check_soft_escape_in_stmt(
 
 /// Check if an expression's use of candidates is soft-escapable.
 /// `in_soft_context` is true when the expression result is in a reconstructible position
-/// (e.g., as a return value or call argument).
+/// where the caller will never observe the original object again (e.g., return value,
+/// break value).  Call arguments are NOT soft: in Wasm GC, structs are heap-allocated
+/// and passed by reference, so a callee receiving a reconstructed (new) object would
+/// modify that fresh copy instead of the original — losing the mutation.
 fn check_soft_escape_in_expr(
     expr: &TirExpr,
     candidates: &IndexSet<u32>,
@@ -963,21 +966,24 @@ fn check_soft_escape_in_expr(
             check_soft_escape_in_expr(body, candidates, hard_escaped, false, sl, cm);
         }
 
-        // Function call args: handle &candidate specially with stores analysis
+        // Function call args: in Wasm GC, structs are heap-allocated and passed
+        // by reference.  A callee receiving a reconstructed struct would modify
+        // a fresh copy, not the SROA'd scalars, so bare candidates as call args
+        // are hard escapes (in_soft_context = false).
+        // Exception: &candidate to non-stores callee is always safe (skip).
         TirExprKind::Call { func, args, .. } => {
             for (i, arg) in args.iter().enumerate() {
                 if is_immut_ref_to_candidate(&arg.expr, candidates)
                     && !callee_stores_param_at(func, i, cm, sl)
                 {
-                    // &candidate to non-stores callee → soft escape (skip hard marking)
                     continue;
                 }
-                check_soft_escape_in_expr(&arg.expr, candidates, hard_escaped, true, sl, cm);
+                check_soft_escape_in_expr(&arg.expr, candidates, hard_escaped, false, sl, cm);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                check_soft_escape_in_expr(arg, candidates, hard_escaped, true, sl, cm);
+                check_soft_escape_in_expr(arg, candidates, hard_escaped, false, sl, cm);
             }
         }
         TirExprKind::MethodCall {
@@ -986,29 +992,26 @@ fn check_soft_escape_in_expr(
             args,
             ..
         } => {
-            // Receiver is param 0
             if is_immut_ref_to_candidate(receiver, candidates)
                 && !callee_stores_param_at(func, 0, cm, sl)
             {
-                // &self on non-stores method → soft escape
+                // &self on non-stores method → safe, skip
             } else {
-                check_soft_escape_in_expr(receiver, candidates, hard_escaped, true, sl, cm);
+                check_soft_escape_in_expr(receiver, candidates, hard_escaped, false, sl, cm);
             }
-            // Args are params 1..n
             for (i, arg) in args.iter().enumerate() {
                 if is_immut_ref_to_candidate(&arg.expr, candidates)
                     && !callee_stores_param_at(func, i + 1, cm, sl)
                 {
                     continue;
                 }
-                check_soft_escape_in_expr(&arg.expr, candidates, hard_escaped, true, sl, cm);
+                check_soft_escape_in_expr(&arg.expr, candidates, hard_escaped, false, sl, cm);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
             check_soft_escape_in_expr(callee, candidates, hard_escaped, false, sl, cm);
             for arg in args {
-                // Unknown callee — conservative, use default recursion
-                check_soft_escape_in_expr(arg, candidates, hard_escaped, true, sl, cm);
+                check_soft_escape_in_expr(arg, candidates, hard_escaped, false, sl, cm);
             }
         }
 

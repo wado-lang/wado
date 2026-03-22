@@ -308,6 +308,31 @@ test "is_whitespace false for non-space" {
     assert !'\u{200B}'.is_whitespace();  // ZERO WIDTH SPACE is NOT whitespace
 }
 
+test "is_hexdigit true cases" {
+    assert '0'.is_hexdigit();
+    assert '9'.is_hexdigit();
+    assert 'a'.is_hexdigit();
+    assert 'f'.is_hexdigit();
+    assert 'A'.is_hexdigit();
+    assert 'F'.is_hexdigit();
+}
+
+test "is_hexdigit false cases" {
+    assert !'g'.is_hexdigit();
+    assert !'G'.is_hexdigit();
+    assert !' '.is_hexdigit();
+    assert !'z'.is_hexdigit();
+}
+
+test "hex_digit_value" {
+    assert '0'.hex_digit_value() == 0;
+    assert '9'.hex_digit_value() == 9;
+    assert 'a'.hex_digit_value() == 10;
+    assert 'f'.hex_digit_value() == 15;
+    assert 'A'.hex_digit_value() == 10;
+    assert 'F'.hex_digit_value() == 15;
+}
+
 test "trim_ascii both sides" {
     assert "  hello  ".trim_ascii() == "hello";
     assert "\t\nhello\r\n".trim_ascii() == "hello";

@@ -1,0 +1,20 @@
+// Mutating a local variable via &mut ref inside a while loop
+// that uses the same variable in its condition.
+// The mutation through the reference must be visible in the loop condition.
+
+use { println, Stdout } from "core:cli";
+
+fn advance(pos: &mut i32) {
+    *pos += 1;
+}
+
+export fn run() with Stdout {
+    let mut pos = 0;
+    while pos < 3 {
+        advance(&mut pos);
+    }
+    println(`pos: {pos}`);
+}
+
+__DATA__
+{"stdout": "pos: 3\n"}

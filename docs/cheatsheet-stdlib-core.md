@@ -800,6 +800,8 @@ impl char {
     pub fn to_string(&self) -> String;
     pub fn is_ascii_whitespace(&self) -> bool;
     pub fn is_whitespace(&self) -> bool;
+    pub fn is_hexdigit(&self) -> bool;
+    pub fn hex_digit_value(&self) -> i32;
 }
 
 impl Display for char {

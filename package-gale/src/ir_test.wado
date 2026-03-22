@@ -1,0 +1,99 @@
+use {
+    Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement,
+    RepeatKind, LexerRule, LexerAlt, LexerElement, CharClass, CharRange,
+} from "./ir.wado";
+
+test "Grammar construction" {
+    let g = Grammar {
+        name: "JSON",
+        parser_rules: [],
+        lexer_rules: [],
+    };
+    assert g.name == "JSON";
+    assert g.parser_rules.is_empty();
+    assert g.lexer_rules.is_empty();
+}
+
+test "ParserRule with alternatives" {
+    let rule = ParserRule {
+        name: "value",
+        alternatives: [
+            Alternative { label: Option::<String>::Some("Str"), elements: [Element::TokenRef("STRING")] },
+            Alternative { label: Option::<String>::Some("Num"), elements: [Element::TokenRef("NUMBER")] },
+            Alternative { label: null, elements: [Element::Literal("true")] },
+        ],
+    };
+    assert rule.name == "value";
+    assert rule.alternatives.len() == 3;
+    if let Some(label) = rule.alternatives[0].label {
+        assert label == "Str";
+    } else {
+        panic("expected label");
+    }
+}
+
+test "Element variants" {
+    let rule_ref = Element::RuleRef("expr");
+    let token_ref = Element::TokenRef("INT");
+    let literal = Element::Literal("+");
+    let repeat = Element::Repeat(RepeatElement {
+        kind: RepeatKind::Star,
+        element: Element::TokenRef("INT"),
+    });
+    let label = Element::Label(LabelElement {
+        name: "op",
+        element: Element::Literal("+"),
+    });
+
+    if let RuleRef(name) = rule_ref {
+        assert name == "expr";
+    } else {
+        panic("expected RuleRef");
+    }
+
+    if let Repeat(r) = repeat {
+        if let TokenRef(name) = r.element {
+            assert name == "INT";
+        } else {
+            panic("expected TokenRef inside Repeat");
+        }
+    } else {
+        panic("expected Repeat");
+    }
+}
+
+test "LexerRule construction" {
+    let rule = LexerRule {
+        name: "WS",
+        is_fragment: false,
+        skip: true,
+        body: [
+            LexerAlt {
+                elements: [
+                    LexerElement::CharClass(CharClass {
+                        ranges: [
+                            CharRange::single(' '),
+                            CharRange::single('\t'),
+                            CharRange::single('\n'),
+                            CharRange::single('\r'),
+                        ],
+                        negated: false,
+                    }),
+                ],
+            },
+        ],
+    };
+    assert rule.name == "WS";
+    assert rule.skip == true;
+    assert rule.is_fragment == false;
+}
+
+test "CharRange helpers" {
+    let single = CharRange::single('a');
+    assert single.start == 'a';
+    assert single.end == 'a';
+
+    let range = CharRange::range('0', '9');
+    assert range.start == '0';
+    assert range.end == '9';
+}

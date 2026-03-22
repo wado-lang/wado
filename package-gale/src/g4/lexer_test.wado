@@ -1,0 +1,138 @@
+use { Token } from "../runtime.wado";
+use { G4Token } from "./token.wado";
+use { tokenize } from "./lexer.wado";
+
+fn assert_token(tok: &Token, expected_kind: G4Token, expected_text: String) {
+    assert tok.kind == expected_kind as i32, `expected kind {expected_kind.name()}, got {tok.kind}`;
+    assert tok.text == expected_text, `expected text "{expected_text}", got "{tok.text}"`;
+}
+
+test "empty input produces EOF" {
+    let tokens = tokenize("");
+    assert tokens.len() == 1;
+    assert_token(&tokens[0], G4Token::Eof, "");
+}
+
+test "single-char tokens" {
+    let tokens = tokenize(": ; | ( ) * + ? . ~ = #");
+    assert_token(&tokens[0], G4Token::Colon, ":");
+    assert_token(&tokens[1], G4Token::Semicolon, ";");
+    assert_token(&tokens[2], G4Token::Pipe, "|");
+    assert_token(&tokens[3], G4Token::LParen, "(");
+    assert_token(&tokens[4], G4Token::RParen, ")");
+    assert_token(&tokens[5], G4Token::Star, "*");
+    assert_token(&tokens[6], G4Token::Plus, "+");
+    assert_token(&tokens[7], G4Token::Question, "?");
+    assert_token(&tokens[8], G4Token::Dot, ".");
+    assert_token(&tokens[9], G4Token::Tilde, "~");
+    assert_token(&tokens[10], G4Token::Assign, "=");
+    assert_token(&tokens[11], G4Token::Hash, "#");
+    assert_token(&tokens[12], G4Token::Eof, "");
+}
+
+test "arrow token" {
+    let tokens = tokenize("->");
+    assert_token(&tokens[0], G4Token::Arrow, "->");
+}
+
+test "keywords" {
+    let tokens = tokenize("grammar fragment skip EOF channel");
+    assert_token(&tokens[0], G4Token::Grammar, "grammar");
+    assert_token(&tokens[1], G4Token::Fragment, "fragment");
+    assert_token(&tokens[2], G4Token::Skip, "skip");
+    assert_token(&tokens[3], G4Token::Identifier, "EOF");
+    assert_token(&tokens[4], G4Token::Channel, "channel");
+}
+
+test "identifiers" {
+    let tokens = tokenize("expr INT value_type WS");
+    assert_token(&tokens[0], G4Token::Identifier, "expr");
+    assert_token(&tokens[1], G4Token::Identifier, "INT");
+    assert_token(&tokens[2], G4Token::Identifier, "value_type");
+    assert_token(&tokens[3], G4Token::Identifier, "WS");
+}
+
+test "string literals" {
+    let tokens = tokenize("'+' 'true' '\\n'");
+    assert_token(&tokens[0], G4Token::StringLit, "+");
+    assert_token(&tokens[1], G4Token::StringLit, "true");
+    assert_token(&tokens[2], G4Token::StringLit, "n");
+}
+
+test "char classes" {
+    let tokens = tokenize("[a-z] [0-9A-Fa-f] [^\"\\n]");
+    assert_token(&tokens[0], G4Token::CharClass, "[a-z]");
+    assert_token(&tokens[1], G4Token::CharClass, "[0-9A-Fa-f]");
+    assert_token(&tokens[2], G4Token::CharClass, "[^\"\\n]");
+}
+
+test "line comments are skipped" {
+    let tokens = tokenize("foo // this is a comment\nbar");
+    assert_token(&tokens[0], G4Token::Identifier, "foo");
+    assert_token(&tokens[1], G4Token::Identifier, "bar");
+    assert_token(&tokens[2], G4Token::Eof, "");
+}
+
+test "block comments are skipped" {
+    let tokens = tokenize("foo /* block\ncomment */ bar");
+    assert_token(&tokens[0], G4Token::Identifier, "foo");
+    assert_token(&tokens[1], G4Token::Identifier, "bar");
+    assert_token(&tokens[2], G4Token::Eof, "");
+}
+
+test "grammar header" {
+    let tokens = tokenize("grammar JSON;");
+    assert_token(&tokens[0], G4Token::Grammar, "grammar");
+    assert_token(&tokens[1], G4Token::Identifier, "JSON");
+    assert_token(&tokens[2], G4Token::Semicolon, ";");
+    assert_token(&tokens[3], G4Token::Eof, "");
+}
+
+test "lexer rule with skip" {
+    let tokens = tokenize("WS : [ \\t\\n\\r]+ -> skip ;");
+    assert_token(&tokens[0], G4Token::Identifier, "WS");
+    assert_token(&tokens[1], G4Token::Colon, ":");
+    assert_token(&tokens[2], G4Token::CharClass, "[ \\t\\n\\r]");
+    assert_token(&tokens[3], G4Token::Plus, "+");
+    assert_token(&tokens[4], G4Token::Arrow, "->");
+    assert_token(&tokens[5], G4Token::Skip, "skip");
+    assert_token(&tokens[6], G4Token::Semicolon, ";");
+}
+
+test "parser rule with alternatives and labels" {
+    let tokens = tokenize("value : STRING # Str | NUMBER # Num ;");
+    assert_token(&tokens[0], G4Token::Identifier, "value");
+    assert_token(&tokens[1], G4Token::Colon, ":");
+    assert_token(&tokens[2], G4Token::Identifier, "STRING");
+    assert_token(&tokens[3], G4Token::Hash, "#");
+    assert_token(&tokens[4], G4Token::Identifier, "Str");
+    assert_token(&tokens[5], G4Token::Pipe, "|");
+    assert_token(&tokens[6], G4Token::Identifier, "NUMBER");
+    assert_token(&tokens[7], G4Token::Hash, "#");
+    assert_token(&tokens[8], G4Token::Identifier, "Num");
+    assert_token(&tokens[9], G4Token::Semicolon, ";");
+}
+
+test "span positions are correct" {
+    let tokens = tokenize("ab cd");
+    assert tokens[0].span.start == 0;
+    assert tokens[0].span.end == 2;
+    assert tokens[1].span.start == 3;
+    assert tokens[1].span.end == 5;
+}
+
+test "antlr format comments are skipped" {
+    let tokens = tokenize("// $antlr-format some options\nfoo");
+    assert_token(&tokens[0], G4Token::Identifier, "foo");
+}
+
+test "label assignment" {
+    let tokens = tokenize("op=('+' | '-')");
+    assert_token(&tokens[0], G4Token::Identifier, "op");
+    assert_token(&tokens[1], G4Token::Assign, "=");
+    assert_token(&tokens[2], G4Token::LParen, "(");
+    assert_token(&tokens[3], G4Token::StringLit, "+");
+    assert_token(&tokens[4], G4Token::Pipe, "|");
+    assert_token(&tokens[5], G4Token::StringLit, "-");
+    assert_token(&tokens[6], G4Token::RParen, ")");
+}

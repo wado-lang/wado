@@ -1,0 +1,19 @@
+// Regression test: LICM must not hoist field reads on aliased GC references.
+// When `advance` is inlined, `pos_copy = pos` creates an alias.
+// Mutating `pos_copy.value` also mutates `pos.value`, so the condition
+// `pos.value < 3` must NOT be hoisted out of the loop.
+
+fn advance(pos: &mut i32) {
+    *pos += 1;
+}
+
+export fn run() {
+    let mut pos = 0;
+    while pos < 3 {
+        advance(&mut pos);
+    }
+    assert pos == 3;
+}
+
+__DATA__
+{"stdout": ""}

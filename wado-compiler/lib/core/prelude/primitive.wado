@@ -258,6 +258,22 @@ impl char {
             _ => false,
         };
     }
+
+    /// Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
+    pub fn is_hexdigit(&self) -> bool {
+        let c = *self;
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    }
+
+    /// Returns the numeric value of an ASCII hexadecimal digit (0–15).
+    /// Panics if the character is not a valid hex digit.
+    pub fn hex_digit_value(&self) -> i32 {
+        let c = *self;
+        if c >= '0' && c <= '9' { return c as i32 - '0' as i32; }
+        if c >= 'a' && c <= 'f' { return c as i32 - 'a' as i32 + 10; }
+        if c >= 'A' && c <= 'F' { return c as i32 - 'A' as i32 + 10; }
+        panic("char::hex_digit_value: not a hex digit");
+    }
 }
 
 impl i8 {
