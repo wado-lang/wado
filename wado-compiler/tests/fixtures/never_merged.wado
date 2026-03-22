@@ -1,0 +1,55 @@
+struct NPoint {
+    x: i32,
+    y: i32,
+}
+
+fn nadd(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+test "as bottom type" {
+    let opt: Option<i32> = Option::<i32>::Some(5);
+
+    // Function argument
+    let a = nadd(match opt {
+        Some(v) => v,
+        None => panic("none"),
+    }, 10);
+    assert a == 15;
+
+    // Struct field
+    let p = NPoint {
+        x: match opt {
+            Some(v) => v,
+            None => panic("none"),
+        },
+        y: 0,
+    };
+    assert p.x == 5;
+
+    // Array element
+    let arr: Array<i32> = [match opt {
+        Some(v) => v,
+        None => panic("none"),
+    }, 2];
+    assert arr[0] == 5;
+
+    // Binary operand (RHS)
+    let b: i32 = 3 + match opt {
+        Some(v) => v,
+        None => panic("none"),
+    };
+    assert b == 8;
+}
+
+test "let binding" {
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    let x: i32 = match opt {
+        Some(v) => v,
+        None => panic("none"),
+    };
+    assert x == 42;
+}
+
+__DATA__
+{"test": {}}

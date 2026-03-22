@@ -1,0 +1,208 @@
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn origin() -> Point {
+        return Point { x: 0, y: 0 };
+    }
+
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+
+    fn new(x: i32, y: i32) -> Point {
+        return Point { x, y };
+    }
+
+    fn scale(p: Point, factor: i32) -> Point {
+        return Point { x: p.x * factor, y: p.y * factor };
+    }
+
+    fn add(a: Point, b: Point) -> Point {
+        return Point { x: a.x + b.x, y: a.y + b.y };
+    }
+
+    fn distance_squared(a: Point, b: Point) -> i32 {
+        let dx = a.x - b.x;
+        let dy = a.y - b.y;
+        return dx * dx + dy * dy;
+    }
+}
+
+struct GenericBox<T> {
+    value: T,
+}
+
+impl<T> GenericBox<T> {
+    pub fn new(value: T) -> GenericBox<T> {
+        return GenericBox { value };
+    }
+
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+}
+
+struct Pair<T, U> {
+    first: T,
+    second: U,
+}
+
+impl<T, U> Pair<T, U> {
+    pub fn create(first: T, second: U) -> Pair<T, U> {
+        return Pair { first, second };
+    }
+
+    pub fn get_first(&self) -> T {
+        return self.first;
+    }
+
+    pub fn get_second(&self) -> U {
+        return self.second;
+    }
+}
+
+struct GenericCounter<T> {
+    value: T,
+}
+
+impl<T> GenericCounter<T> {
+    pub fn new(value: T) -> GenericCounter<T> {
+        return GenericCounter { value };
+    }
+
+    pub fn zero() -> i32 {
+        return 0;
+    }
+
+    pub fn default_value(v: T) -> T {
+        return v;
+    }
+
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+}
+
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    pub fn new(value: i32) -> Counter {
+        return Counter { value };
+    }
+
+    pub fn zero() -> i32 {
+        return 0;
+    }
+
+    pub fn from_pair(a: i32, b: i32) -> Counter {
+        return Counter { value: a + b };
+    }
+
+    pub fn get(&self) -> i32 {
+        return self.value;
+    }
+}
+
+test "static method basic" {
+    let p = Point::origin();
+    assert p.x == 0;
+    assert p.y == 0;
+    assert p.sum() == 0;
+}
+
+test "static method with args" {
+    let p1 = Point::new(3, 4);
+    assert p1.x == 3;
+    assert p1.y == 4;
+
+    let p2 = Point::scale(p1, 2);
+    assert p2.x == 6;
+    assert p2.y == 8;
+}
+
+test "static method nested" {
+    let p1 = Point::scale(Point::origin(), 5);
+    assert p1.x == 0;
+    assert p1.y == 0;
+
+    let p2 = Point::add(Point::new(1, 2), Point::new(3, 4));
+    assert p2.x == 4;
+    assert p2.y == 6;
+
+    let dist = Point::distance_squared(Point::origin(), Point::new(3, 4));
+    assert dist == 25;
+}
+
+test "static method chained" {
+    let p = Pair::<i32, i64>::create(10, 20 as i64);
+    let boxed = GenericBox::<i32>::new(p.get_first());
+    assert boxed.get() == 10;
+
+    let pair = Pair::<i32, i32>::create(100, 200);
+    let boxed_pair = GenericBox::<Pair<i32, i32>>::new(pair);
+    let inner_pair = boxed_pair.get();
+    assert inner_pair.get_first() == 100;
+    assert inner_pair.get_second() == 200;
+
+    let val = GenericBox::<i32>::new(Pair::<i32, i32>::create(5, 10).get_second()).get();
+    assert val == 10;
+}
+
+test "static method generic (Array::with_capacity)" {
+    let mut arr = Array::<i32>::with_capacity(10);
+    assert arr.len() == 0;
+
+    arr.append(1);
+    arr.append(2);
+    arr.append(3);
+    assert arr.len() == 3;
+    assert arr[0] == 1;
+    assert arr[1] == 2;
+    assert arr[2] == 3;
+}
+
+test "static method generic non-constructor" {
+    let z = GenericCounter::<i32>::zero();
+    assert z == 0;
+
+    let d = GenericCounter::<i32>::default_value(100);
+    assert d == 100;
+
+    let c = GenericCounter::<i32>::new(42);
+    assert c.get() == 42;
+}
+
+test "static method multi type params" {
+    let p = Pair::<i32, i64>::create(10, 20 as i64);
+    assert p.get_first() == 10;
+    assert p.get_second() == 20 as i64;
+}
+
+test "static method non-constructor" {
+    let z = Counter::zero();
+    assert z == 0;
+
+    let c1 = Counter::from_pair(10, 20);
+    assert c1.get() == 30;
+
+    let c2 = Counter::new(42);
+    assert c2.get() == 42;
+}
+
+test "static method in other module (u128/i128)" {
+    let x = 42 as u64;
+    let y = u128::from(x);
+    assert y == 42 as u128;
+
+    let x2 = -10 as i64;
+    let y2 = i128::from(x2);
+    assert y2 == -10 as i128;
+}
+
+__DATA__
+{"test": {}}

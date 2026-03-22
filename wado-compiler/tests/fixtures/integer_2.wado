@@ -1,0 +1,118 @@
+use { println, Stdout } from "core:cli";
+
+fn test_i8_overflow() with Stdout {
+    let a: i8 = 127 as i8;
+    let b: i8 = 1 as i8;
+    let sum = a + b;
+    println(`127 + 1: {sum}`);
+    if sum < 0 as i8 {
+        println("sum is negative: true");
+    } else {
+        println("sum is negative: false");
+    }
+    let min: i8 = -128 as i8;
+    let sub = min - b;
+    println(`-128 - 1: {sub}`);
+    if sub > 0 as i8 {
+        println("sub is positive: true");
+    } else {
+        println("sub is positive: false");
+    }
+    let two: i8 = 2 as i8;
+    let mul = a * two;
+    println(`127 * 2: {mul}`);
+    let neg = -min;
+    println(`-(-128): {neg}`);
+    let x: i8 = 100 as i8;
+    let y: i8 = 100 as i8;
+    let z = x + y;
+    if z < 0 as i8 {
+        println("100 + 100 < 0: true");
+    } else {
+        println("100 + 100 < 0: false");
+    }
+}
+
+fn test_i16_overflow() with Stdout {
+    let a: i16 = 32767 as i16;
+    let b: i16 = 1 as i16;
+    let sum = a + b;
+    println(`32767 + 1: {sum}`);
+    if sum < 0 as i16 {
+        println("sum is negative: true");
+    } else {
+        println("sum is negative: false");
+    }
+    let min: i16 = -32768 as i16;
+    let sub = min - b;
+    println(`-32768 - 1: {sub}`);
+    if sub > 0 as i16 {
+        println("sub is positive: true");
+    } else {
+        println("sub is positive: false");
+    }
+    let two: i16 = 2 as i16;
+    let mul = a * two;
+    println(`32767 * 2: {mul}`);
+}
+
+fn test_u8_overflow() with Stdout {
+    let a: u8 = 255 as u8;
+    let b: u8 = 1 as u8;
+    let sum = a + b;
+    println(`255 + 1: {sum}`);
+    if sum == 0 as u8 {
+        println("sum == 0: true");
+    } else {
+        println("sum == 0: false");
+    }
+    let c: u8 = 200 as u8;
+    let d: u8 = 100 as u8;
+    let sum2 = c + d;
+    println(`200 + 100: {sum2}`);
+    let zero: u8 = 0 as u8;
+    let sub = zero - b;
+    println(`0 - 1: {sub}`);
+    if sub == 255 as u8 {
+        println("sub == 255: true");
+    } else {
+        println("sub == 255: false");
+    }
+    let two: u8 = 2 as u8;
+    let mul = c * two;
+    println(`200 * 2: {mul}`);
+}
+
+fn test_u16_overflow() with Stdout {
+    let a: u16 = 65535 as u16;
+    let b: u16 = 1 as u16;
+    let sum = a + b;
+    println(`65535 + 1: {sum}`);
+    if sum == 0 as u16 {
+        println("sum == 0: true");
+    } else {
+        println("sum == 0: false");
+    }
+    let zero: u16 = 0 as u16;
+    let sub = zero - b;
+    println(`0 - 1: {sub}`);
+    if sub == 65535 as u16 {
+        println("sub == 65535: true");
+    } else {
+        println("sub == 65535: false");
+    }
+    let c: u16 = 60000 as u16;
+    let two: u16 = 2 as u16;
+    let mul = c * two;
+    println(`60000 * 2: {mul}`);
+}
+
+export fn run() with Stdout {
+    test_i8_overflow();
+    test_i16_overflow();
+    test_u8_overflow();
+    test_u16_overflow();
+}
+
+__DATA__
+{"stdout": "127 + 1: -128\nsum is negative: true\n-128 - 1: 127\nsub is positive: true\n127 * 2: -2\n-(-128): -128\n100 + 100 < 0: true\n32767 + 1: -32768\nsum is negative: true\n-32768 - 1: 32767\nsub is positive: true\n32767 * 2: -2\n255 + 1: 0\nsum == 0: true\n200 + 100: 44\n0 - 1: 255\nsub == 255: true\n200 * 2: 144\n65535 + 1: 0\nsum == 0: true\n0 - 1: 65535\nsub == 65535: true\n60000 * 2: 54464\n"}

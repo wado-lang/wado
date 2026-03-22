@@ -1,0 +1,185 @@
+use { println, Stdout } from "core:cli";
+
+variant MGuardShape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    MGuardPoint,
+}
+
+variant MWildColor {
+    Red,
+    Green,
+    Blue,
+}
+
+fn describe_br(n: i32) -> String {
+    return match n {
+        0 => "zero",
+        1 => "one",
+        2 => "two",
+        3 => "three",
+        4 => "four",
+        5 => "five",
+        6 => "six",
+        7 => "seven",
+        8 => "eight",
+        9 => "nine",
+        _ => "other",
+    };
+}
+
+fn match_guard_basic() with Stdout {
+    let x = 15;
+    let result = match x {
+        0 => "zero",
+        n && n < 10 => "small",
+        n && n < 20 => "medium",
+        _ => "large",
+    };
+    println(result);
+    let y = 5;
+    let result2 = match y {
+        n && n > 100 => "huge",
+        n && n > 50 => "big",
+        n && n > 10 => "medium",
+        _ => "small",
+    };
+    println(result2);
+}
+
+fn match_guard_custom_variant() with Stdout {
+    let s1 = MGuardShape::Circle(5.0);
+    let s2 = MGuardShape::Circle(0.5);
+    let s3 = MGuardShape::MGuardPoint;
+    let desc1 = match s1 {
+        Circle(r) && r > 1.0 => "big circle",
+        Circle(_) => "small circle",
+        Rectangle(_) => "rectangle",
+        MGuardPoint => "point",
+    };
+    println(desc1);
+    let desc2 = match s2 {
+        Circle(r) && r > 1.0 => "big circle",
+        Circle(_) => "small circle",
+        Rectangle(_) => "rectangle",
+        MGuardPoint => "point",
+    };
+    println(desc2);
+    let desc3 = match s3 {
+        Circle(r) && r > 1.0 => "big circle",
+        Circle(_) => "small circle",
+        Rectangle(_) => "rectangle",
+        MGuardPoint => "point",
+    };
+    println(desc3);
+}
+
+fn match_guard_variant() with Stdout {
+    let opt1: Option<i32> = Option::<i32>::Some(42);
+    let opt2: Option<i32> = Option::<i32>::Some(3);
+    let none: Option<i32> = null;
+    let msg1 = match opt1 {
+        Some(x) && x > 10 => "large value",
+        Some(_) => "small value",
+        None => "no value",
+    };
+    println(msg1);
+    let msg2 = match opt2 {
+        Some(x) && x > 10 => "large value",
+        Some(_) => "small value",
+        None => "no value",
+    };
+    println(msg2);
+    let msg3 = match none {
+        Some(x) && x > 10 => "large value",
+        Some(_) => "small value",
+        None => "no value",
+    };
+    println(msg3);
+}
+
+enum MExhDir {
+    North,
+    South,
+    East,
+    West,
+}
+
+fn dir_name(d: MExhDir) -> String {
+    return match d {
+        North => "north",
+        South => "south",
+        East => "east",
+        West => "west",
+    };
+}
+
+enum MExhColor {
+    Red,
+    Green,
+    Blue,
+}
+
+fn match_exhaustive() with Stdout {
+    println(dir_name(MExhDir::North));
+    println(dir_name(MExhDir::West));
+    let opt: Option<i32> = null;
+    let val = match opt {
+        Some(x) => x,
+        null => 0,
+    };
+    println(`{val}`);
+    let c = MExhColor::Green;
+    let name = match c {
+        Red => "red",
+        _ => "other",
+    };
+    println(name);
+}
+
+fn match_wildcard() with Stdout {
+    let red = MWildColor::Red;
+    let green = MWildColor::Green;
+    let blue = MWildColor::Blue;
+    let name1 = match red { Red => "red", _ => "other" };
+    println(name1);
+    let name2 = match green { Red => "red", _ => "other" };
+    println(name2);
+    let name3 = match blue { Red => "red", Green => "green", _ => "other" };
+    println(name3);
+}
+
+fn match_switch_br_table() with Stdout {
+    for let mut i = 0; i <= 10; i += 1 {
+        println(describe_br(i));
+    }
+}
+
+variant MTupleShape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    MTuplePoint,
+}
+
+fn match_variant_tuple_payload() with Stdout {
+    let rect = MTupleShape::Rectangle([3.0, 4.0]);
+    let area = match rect {
+        Circle(r) => 3.14159 * r * r,
+        Rectangle([w, h]) => w * h,
+        MTuplePoint => 0.0,
+    };
+    println(`Rectangle area: {area}`);
+}
+
+export fn run() with Stdout {
+    match_guard_basic();
+    match_guard_custom_variant();
+    match_guard_variant();
+    match_exhaustive();
+    match_wildcard();
+    match_switch_br_table();
+    match_variant_tuple_payload();
+}
+
+__DATA__
+{"stdout": "medium\nsmall\nbig circle\nsmall circle\npoint\nlarge value\nsmall value\nno value\nnorth\nwest\n0\nother\nred\nother\nother\nzero\none\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nother\nRectangle area: 12\n"}

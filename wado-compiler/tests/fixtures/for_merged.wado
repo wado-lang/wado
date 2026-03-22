@@ -1,0 +1,44 @@
+test "c-style loop" {
+    let mut count = 0;
+    for let mut i = 0; i < 3; i = i + 1 {
+        count += 1;
+    }
+    assert count == 3;
+}
+
+test "break" {
+    let mut count = 0;
+    for let mut i = 0; i < 10; i = i + 1 {
+        count += 1;
+        if i >= 2 {
+            break;
+        }
+    }
+    assert count == 3;
+}
+
+test "continue" {
+    let mut sum = 0;
+    for let mut i = 0; i < 5; i = i + 1 {
+        if i == 2 {
+            continue;
+        }
+        sum += i;
+    }
+    assert sum == 0 + 1 + 3 + 4;
+}
+
+test "for let pattern" {
+    let items: Array<i32> = [10, 20, 30];
+    let mut iter = items.iter();
+    let mut count = 0;
+    let mut sum = 0;
+    for ; let Some(x) = iter.next(); count += 1 {
+        sum += x;
+    }
+    assert count == 3;
+    assert sum == 60;
+}
+
+__DATA__
+{"test": {}}

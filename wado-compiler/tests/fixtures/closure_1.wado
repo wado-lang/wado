@@ -1,0 +1,187 @@
+// closure_1: basic closure tests
+// Merged from: closure_call, closure_create_only, closure_fn, closure_fn_param,
+// closure_fn_param_static, closure_no_params, closure_return, closure_struct_literal,
+// closure_function_factory
+
+struct ClosurePoint {
+    x: i32,
+    y: i32,
+}
+
+struct ClosureBox<T> {
+    value: T,
+}
+
+impl<T> ClosureBox<T> {
+    fn apply(&self, f: fn(T) -> T) -> T {
+        return f(self.value);
+    }
+}
+
+struct Transform {
+    dummy: i32,
+}
+
+impl Transform {
+    fn apply_static(value: i32, f: fn(i32) -> i32) -> i32 {
+        return f(value);
+    }
+}
+
+fn for_each_item(items: Array<i32>, f: fn(i32) -> i32) -> Array<i32> {
+    let mut result: Array<i32> = [];
+    for let item of items {
+        result.append(f(item));
+    }
+    return result;
+}
+
+fn combine(x: i32, f: fn(i32) -> i32, g: fn(i32) -> i32) -> i32 {
+    return g(f(x));
+}
+
+fn call_twice(f: fn() -> i32) -> i32 {
+    return f() + f();
+}
+
+fn call_and_get_bool(f: fn() -> bool) -> bool {
+    return f();
+}
+
+fn make_adder(n: i32) -> fn(i32) -> i32 {
+    return |x: i32| x + n;
+}
+
+fn make_multiplier(factor: i32) -> fn(i32) -> i32 {
+    return |x: i32| x * factor;
+}
+
+test "closure call basic" {
+    let add_one = |x: i32| x + 1;
+    let result = add_one(5);
+    assert result == 6;
+}
+
+test "closure call multi args" {
+    let add = |a: i32, b: i32| a + b;
+    let mul = |x: i32, y: i32| x * y;
+    let result = add(mul(2, 3), mul(4, 5));
+    assert result == 26;
+}
+
+test "closure call multiple" {
+    let double = |x: i32| x * 2;
+    let a = double(3);
+    let b = double(5);
+    let c = double(7);
+    assert a == 6;
+    assert b == 10;
+    assert c == 14;
+}
+
+test "closure create only" {
+    let a = 10;
+    let f = |x: i32| x + a;
+    // f is created but not called - just verify no crash
+    assert a == 10;
+}
+
+test "closure fn param capture" {
+    let b = ClosureBox { value: 5 };
+    let multiplier = 3;
+    let result = b.apply(|x: i32| x * multiplier);
+    assert result == 15;
+}
+
+test "closure fn param effectful" {
+    let items: Array<i32> = [1, 2, 3];
+    let result = for_each_item(items, |x: i32| x * 10);
+    assert result[0] == 10;
+    assert result[1] == 20;
+    assert result[2] == 30;
+}
+
+test "closure fn param multiple" {
+    let result = combine(5, |x: i32| x + 1, |x: i32| x * 2);
+    assert result == 12;
+}
+
+test "closure fn param no args" {
+    let value = 21;
+    let result = call_twice(|| value);
+    assert result == 42;
+
+    let flag = true;
+    let b = call_and_get_bool(|| flag);
+    assert b == true;
+}
+
+test "closure fn param static method" {
+    let result = Transform::apply_static(5, |x: i32| x * 3);
+    assert result == 15;
+}
+
+test "closure fn param on generic struct" {
+    let b = ClosureBox { value: 5 };
+    let result = b.apply(|x: i32| x * 2);
+    assert result == 10;
+}
+
+test "closure no params expression body" {
+    let get_value = || 42;
+    assert get_value() == 42;
+}
+
+test "closure no params block body" {
+    let greet = || {
+        return "hello";
+    };
+    assert greet() == "hello";
+}
+
+test "closure no params capture" {
+    let x = 10;
+    let get_x = || x;
+    assert get_x() == 10;
+}
+
+test "closure no params logical or" {
+    let a = false || true;
+    assert a == true;
+
+    let b = false;
+    let get_value = || 42;
+    let c = b || get_value() > 0;
+    assert c == true;
+}
+
+test "closure return bool" {
+    let is_even = |x: i32| x % 2 == 0;
+    assert is_even(4) == true;
+    assert is_even(7) == false;
+}
+
+test "closure return i64" {
+    let to_i64 = |x: i32| x as i64 * 1000000000 as i64;
+    let big = to_i64(5);
+    assert big == 5000000000 as i64;
+}
+
+test "closure struct literal return" {
+    let make_point = |x: i32, y: i32| ClosurePoint { x, y };
+    let p: ClosurePoint = make_point(10, 20);
+    assert p.x == 10;
+    assert p.y == 20;
+}
+
+test "closure function factory" {
+    let add5 = make_adder(5);
+    let triple = make_multiplier(3);
+
+    assert add5(3) == 8;
+    assert triple(4) == 12;
+    assert add5(triple(2)) == 11;
+}
+
+__DATA__
+{"test": {}}

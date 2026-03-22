@@ -1,0 +1,117 @@
+fn classify(n: i32) -> String {
+    match n {
+        x && x > 0 => { return "positive"; },
+        x && x < 0 => { return "negative"; },
+        _ => { return "zero"; },
+    }
+}
+
+fn first_non_negative(a: i32, b: i32) -> i32 {
+    let result: i32 = match a >= 0 {
+        true => a,
+        false => { return b; },
+    };
+    return result;
+}
+
+fn classify_nested(x: i32) -> String {
+    return match x {
+        _ && x > 0 => {
+            if x > 10 {
+                "big"
+            } else {
+                "small"
+            }
+        },
+        _ => "zero",
+    };
+}
+
+fn classify_builder(x: i32) -> String {
+    return match x {
+        _ && x > 0 => {
+            if x > 10 {
+                let mut s = String::with_capacity(8);
+                s.append("big");
+                s
+            } else {
+                "small"
+            }
+        },
+        _ => "zero",
+    };
+}
+
+test "option basic" {
+    let some_val: Option<i32> = Option::<i32>::Some(42);
+    let none_val: Option<i32> = null;
+    let x = match some_val {
+        Some(v) => v * 2,
+        None => 0,
+    };
+    assert x == 84;
+    let y = match none_val {
+        Some(v) => v * 2,
+        None => -1,
+    };
+    assert y == -1;
+}
+
+test "return in arms" {
+    assert classify(1) == "positive";
+    assert classify(-1) == "negative";
+    assert classify(0) == "zero";
+}
+
+test "stmt no semi" {
+    assert classify(1) == "positive";
+}
+
+test "string literal" {
+    let text = "hello";
+    let result = match text {
+        "hello" => 1,
+        "world" => 2,
+        _ => 0,
+    };
+    assert result == 1;
+    let text2 = "other";
+    let result2 = match text2 {
+        "hello" => 1,
+        "world" => 2,
+        _ => 0,
+    };
+    assert result2 == 0;
+}
+
+test "never arm" {
+    let a: Option<i32> = Option::<i32>::Some(1);
+    let x: i32 = match a {
+        Some(v) => v,
+        None => panic("unreachable"),
+    };
+    assert x == 1;
+    let b: Option<i32> = Option::<i32>::Some(2);
+    let y: i32 = match b {
+        None => panic("unreachable"),
+        Some(v) => v,
+    };
+    assert y == 2;
+}
+
+test "never type" {
+    assert first_non_negative(5, 10) == 5;
+    assert first_non_negative(-1, 10) == 10;
+}
+
+test "arm nested if value" {
+    assert classify_nested(5) == "small";
+    assert classify_nested(15) == "big";
+    assert classify_nested(0) == "zero";
+    assert classify_builder(5) == "small";
+    assert classify_builder(15) == "big";
+    assert classify_builder(0) == "zero";
+}
+
+__DATA__
+{"test": {}}

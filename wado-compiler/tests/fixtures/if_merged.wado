@@ -1,0 +1,280 @@
+use { println, Stdout } from "core:cli";
+
+fn classify(n: i32) -> String {
+    if n < 0 {
+        return "negative";
+    } else if n == 0 {
+        return "zero";
+    } else if n < 10 {
+        return "small";
+    } else if n < 100 {
+        return "medium";
+    } else {
+        return "large";
+    }
+}
+
+fn test_else_if() with Stdout {
+    println(classify(-5));
+    println(classify(0));
+    println(classify(5));
+    println(classify(50));
+    println(classify(500));
+}
+
+variant IfMode1 {
+    Decimal,
+    Exp,
+}
+
+fn compute_mode1(mode: IfMode1, precision: i32, exp_est: i32) -> i32 {
+    let n = if mode matches { Decimal } {
+        let base = precision + 1;
+        let adjusted = base + exp_est;
+        if exp_est >= 0 {
+            adjusted;
+        } else {
+            base;
+        }
+    } else {
+        precision + 1;
+    };
+    return n;
+}
+
+fn test_expr_1() with Stdout {
+    let x = if true {
+        42;
+    } else {
+        0;
+    };
+    println(`{x}`);
+    let y = if false {
+        100;
+    } else {
+        200;
+    };
+    println(`{y}`);
+    println(`{compute_mode1(IfMode1::Decimal, 2, 3)}`);
+    println(`{compute_mode1(IfMode1::Decimal, 2, -1)}`);
+    println(`{compute_mode1(IfMode1::Exp, 2, 3)}`);
+    let n = 25;
+    let x2 = if n < 10 {
+        1;
+    } else if n < 20 {
+        2;
+    } else if n < 30 {
+        3;
+    } else {
+        4;
+    };
+    println(`{x2}`);
+    let y2 = if n == 25 {
+        100;
+    } else if n == 24 {
+        200;
+    } else {
+        300;
+    };
+    println(`{y2}`);
+}
+
+variant IfMode2 {
+    A,
+    B,
+}
+
+fn compute_mode2(mode: IfMode2, x: i32) -> i32 {
+    let n = if mode matches { A } {
+        let a = x * 2;
+        a;
+    } else {
+        x + 1;
+    };
+    return n;
+}
+
+fn test_expr_2() with Stdout {
+    println(`{compute_mode2(IfMode2::A, 5)}`);
+    println(`{compute_mode2(IfMode2::B, 5)}`);
+    let x = if true {
+        42;
+    } else {
+        0;
+    };
+    println(`{x}`);
+}
+
+fn compute_if3(x: i32) -> i32 {
+    let result = if x > 0 {
+        let a = x * 2;
+        let b = a + 1;
+        b;
+    } else {
+        let c = x * 3;
+        c;
+    };
+    return result;
+}
+
+fn test_expr_3() with Stdout {
+    println(`{compute_if3(5)}`);
+    println(`{compute_if3(-2)}`);
+    let x = if true {
+        42;
+    } else {
+        0;
+    };
+    println(`{x}`);
+}
+
+fn test_if_let() with Stdout {
+    if let x = 10 && x > 5 {
+        println(`x = {x}`);
+    }
+    let val = 3;
+    if let x = val && x > 5 {
+        println("big");
+    } else {
+        println(`small: {val}`);
+    }
+    if let mut x = 5 && x > 0 {
+        x = x + 1;
+        println(`{x}`);
+    }
+}
+
+fn test_if_let_chain() with Stdout {
+    if let x = 10 && x > 5 {
+        println(`x = {x}`);
+    }
+    let val = 3;
+    if let x = val && x > 5 {
+        println("big");
+    } else {
+        println(`small: {val}`);
+    }
+    if let mut x = 5 && x > 0 {
+        x = x + 1;
+        println(`{x}`);
+    }
+    let opt = Option::<i32>::Some(42);
+    if let Some(x) = opt && x > 10 {
+        println(`big: {x}`);
+    }
+    let a = Option::<i32>::Some(10);
+    let b = Option::<i32>::Some(20);
+    if let Some(x) = a && let Some(y) = b {
+        println(`{x} {y}`);
+    }
+    if let Some(x) = a && let Some(y) = b && x + y > 25 {
+        println(`sum ok: {x + y}`);
+    }
+    let opt2 = Option::<i32>::Some(5);
+    let flag = true;
+    if flag && let Some(x) = opt2 {
+        println(`flag and x={x}`);
+    }
+    let outer: Option<Option<i32>> = Option::Some(Option::Some(99));
+    if let Some(inner) = outer && let Some(n) = inner {
+        println(`nested: {n}`);
+    }
+    let outer2: Option<Option<i32>> = Option::Some(null);
+    if let Some(inner2) = outer2 && let Some(n2) = inner2 {
+        println(`should not print: {n2}`);
+    } else {
+        println("inner none");
+    }
+    let opt3 = Option::<i32>::Some(5);
+    let flag1 = true;
+    let flag2 = true;
+    if let Some(x) = opt3 && (flag1 && flag2) {
+        println(`paren: x={x}`);
+    }
+    if let Some(x) = opt3 && (flag1 && false) {
+        println(`should not print: {x}`);
+    } else {
+        println("paren false");
+    }
+}
+
+fn unwrap_or(opt: Option<i32>, default: i32) -> i32 {
+    return if let Some(x) = opt { x } else { default };
+}
+
+fn classify_opt(opt: Option<i32>) -> String {
+    let label = if let Some(n) = opt {
+        if n > 0 { "positive" } else { "non-positive" }
+    } else {
+        "none"
+    };
+    return label;
+}
+
+fn nested_opt(outer: Option<Option<i32>>) -> i32 {
+    return if let Some(inner) = outer {
+        if let Some(v) = inner { v } else { -1 }
+    } else {
+        -2
+    };
+}
+
+fn test_if_let_expr() with Stdout {
+    println(`{unwrap_or(Option::Some(42), 0)}`);
+    println(`{unwrap_or(null, 99)}`);
+    println(`{classify_opt(Option::Some(5))}`);
+    println(`{classify_opt(Option::Some(-3))}`);
+    println(`{classify_opt(null)}`);
+    println(`{nested_opt(Option::Some(Option::Some(7)))}`);
+    println(`{nested_opt(Option::Some(null))}`);
+    println(`{nested_opt(null)}`);
+}
+
+fn test_never_branch() with Stdout {
+    let t = true;
+    let a: i32 = if t {
+        1;
+    } else {
+        panic("unreachable");
+    };
+    assert a == 1;
+    let b: i32 = if !t {
+        panic("unreachable");
+    } else {
+        2;
+    };
+    assert b == 2;
+    let c = if t {
+        3;
+    } else {
+        panic("unreachable");
+    };
+    assert c == 3;
+    let d = if !t {
+        panic("unreachable");
+    } else {
+        4;
+    };
+    assert d == 4;
+    let e: i32 = if t {
+        5;
+    } else {
+        unreachable();
+    };
+    assert e == 5;
+    println("ok");
+}
+
+export fn run() with Stdout {
+    test_else_if();
+    test_expr_1();
+    test_expr_2();
+    test_expr_3();
+    test_if_let();
+    test_if_let_chain();
+    test_if_let_expr();
+    test_never_branch();
+}
+
+__DATA__
+{"stdout": "negative\nzero\nsmall\nmedium\nlarge\n42\n200\n6\n3\n3\n3\n100\n10\n6\n42\n11\n-6\n42\nx = 10\nsmall: 3\n6\nx = 10\nsmall: 3\n6\nbig: 42\n10 20\nsum ok: 30\nflag and x=5\nnested: 99\ninner none\nparen: x=5\nparen false\n42\n99\npositive\nnon-positive\nnone\n7\n-1\n-2\nok\n"}

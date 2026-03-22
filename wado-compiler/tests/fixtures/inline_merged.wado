@@ -1,0 +1,125 @@
+use { println, Stdout } from "core:cli";
+
+fn test_array_append_minimal() with Stdout {
+    let mut arr: Array<i32> = [];
+    for let mut i = 0; i < 3; i += 1 {
+        arr.append(i);
+    }
+    println(`len={arr.len()}`);
+}
+
+fn inline_classify(x: i32) -> String {
+    if x < 0 {
+        return "negative";
+    }
+    if x == 0 {
+        return "zero";
+    }
+    return "positive";
+}
+
+fn inline_abs(x: i32) -> i32 {
+    if x < 0 {
+        return -x;
+    }
+    return x;
+}
+
+fn test_early_return() with Stdout {
+    println(inline_classify(-5));
+    println(inline_classify(0));
+    println(inline_classify(7));
+    println(`{inline_abs(-3)}`);
+    println(`{inline_abs(4)}`);
+}
+
+struct InlineItem {
+    value: i32,
+}
+
+fn test_generic_nested_ref() with Stdout {
+    let mut a = InlineItem { value: 10 };
+    let mut b = InlineItem { value: 20 };
+    let items: Array<&mut InlineItem> = [&mut a, &mut b];
+    for let mut i = 0; i < items.len(); i += 1 {
+        println(`{items[i].value}`);
+    }
+}
+
+struct InlineS {
+    a: i64,
+    b: i64,
+}
+
+fn INLINE_MIN() -> i32 {
+    return -50;
+}
+
+fn inline_tuple_fn(x: i64) -> [i64, i32] {
+    return [x * 2 as i64, 42];
+}
+
+fn inline_big_match(idx: i32) -> InlineS {
+    return match idx {
+        0 => InlineS { a: 0 as i64, b: 0 as i64 },
+        1 => InlineS { a: 1 as i64, b: 1 as i64 },
+        2 => InlineS { a: 2 as i64, b: 2 as i64 },
+        3 => InlineS { a: 3 as i64, b: 3 as i64 },
+        4 => InlineS { a: 4 as i64, b: 4 as i64 },
+        5 => InlineS { a: 5 as i64, b: 5 as i64 },
+        6 => InlineS { a: 6 as i64, b: 6 as i64 },
+        7 => InlineS { a: 7 as i64, b: 7 as i64 },
+        8 => InlineS { a: 8 as i64, b: 8 as i64 },
+        9 => InlineS { a: 9 as i64, b: 9 as i64 },
+        _ => InlineS { a: 99 as i64, b: 99 as i64 },
+    };
+}
+
+fn inline_get_val(p: i32) -> InlineS {
+    let idx = p - INLINE_MIN();
+    return inline_big_match(idx);
+}
+
+fn inline_outer(e: i32) -> i64 {
+    let min_exp = -100;
+    let mut z = 11;
+    let mut p: i32 = 0;
+    if e > min_exp {
+        p = -e;
+    } else {
+        if e < min_exp {
+            z = 11 + (min_exp - e);
+        }
+        p = -z;
+    }
+    let pm = inline_get_val(p);
+    let [val, _] = inline_tuple_fn(pm.a);
+    return val;
+}
+
+fn test_match_tuple() with Stdout {
+    let s = inline_outer(-50);
+    println(`{s}`);
+}
+
+fn test_method_minimal() with Stdout {
+    let mut arr1: Array<i32> = [];
+    let mut arr2: Array<i32> = [];
+    arr1.append(1);
+    arr1.append(2);
+    arr2.append(3);
+    let a = arr1[0];
+    let b = arr2[0];
+    println(`Result: {a}, {b}`);
+}
+
+export fn run() with Stdout {
+    test_array_append_minimal();
+    test_early_return();
+    test_generic_nested_ref();
+    test_match_tuple();
+    test_method_minimal();
+}
+
+__DATA__
+{"stdout": "len=3\nnegative\nzero\npositive\n3\n4\n10\n20\n198\nResult: 1, 3\n"}

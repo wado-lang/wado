@@ -1,0 +1,135 @@
+// identity
+fn identity<..T>(x: [..T]) -> [..T] {
+    return x;
+}
+
+test "identity mixed types" {
+    let a = identity([1, "hello", true]);
+    assert a.0 == 1;
+    assert a.1 == "hello";
+    assert a.2 == true;
+}
+
+test "identity single element" {
+    let b = identity([42]);
+    assert b.0 == 42;
+}
+
+test "identity homogeneous" {
+    let c = identity([1, 2, 3]);
+    assert c.0 == 1;
+    assert c.1 == 2;
+    assert c.2 == 3;
+}
+
+// append
+fn append<..T, B>(rest: [..T], b: B) -> [..T, B] {
+    return [..rest, b];
+}
+
+test "append to pack" {
+    let result = append(["hello", true], 42);
+    assert result.0 == "hello";
+    assert result.1 == true;
+    assert result.2 == 42;
+}
+
+test "append single element pack" {
+    let single = append([1], "end");
+    assert single.0 == 1;
+    assert single.1 == "end";
+}
+
+// wrap in option
+fn wrap_in_option<..T>(t: [..T]) -> Option<[..T]> {
+    return Option::<[..T]>::Some(t);
+}
+
+test "wrap in option" {
+    let result = wrap_in_option([42, "hello"]);
+    if let Some(t) = result {
+        assert t.0 == 42;
+        assert t.1 == "hello";
+    }
+}
+
+// mixed params (prepend)
+fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
+    return [a, ..rest];
+}
+
+test "prepend mixed params" {
+    let result = prepend(42, ["hello", true]);
+    assert result.0 == 42;
+    assert result.1 == "hello";
+    assert result.2 == true;
+}
+
+// empty pack
+test "empty pack identity" {
+    let a = identity([]);
+}
+
+test "empty pack prepend" {
+    let b = prepend(42, []);
+    assert b.0 == 42;
+}
+
+// surround
+fn surround<A, ..T, B>(a: A, middle: [..T], b: B) -> [A, ..T, B] {
+    return [a, ..middle, b];
+}
+
+test "surround with middle" {
+    let result = surround(1, ["hello", true], 99);
+    assert result.0 == 1;
+    assert result.1 == "hello";
+    assert result.2 == true;
+    assert result.3 == 99;
+}
+
+test "surround empty middle" {
+    let empty_mid = surround("start", [], "end");
+    assert empty_mid.0 == "start";
+    assert empty_mid.1 == "end";
+}
+
+// for-of
+fn collect_for_of<..T>(items: [..T]) -> [..T] {
+    let mut result: Array<String> = [];
+    for let item of items {
+        result.append(`{item}`);
+    }
+    assert result[0] == "1";
+    assert result[1] == "hello";
+    assert result[2] == "true";
+    return items;
+}
+
+test "for-of variadic" {
+    collect_for_of([1, "hello", true]);
+}
+
+// nested call
+fn wrap<..T>(x: [..T]) -> [..T] {
+    return identity(x);
+}
+
+fn double_wrap<..T>(x: [..T]) -> [..T] {
+    return wrap(x);
+}
+
+test "nested call" {
+    let a = double_wrap([1, "hello", true]);
+    assert a.0 == 1;
+    assert a.1 == "hello";
+    assert a.2 == true;
+}
+
+test "nested call single" {
+    let b = double_wrap([42]);
+    assert b.0 == 42;
+}
+
+__DATA__
+{"test": {}}
