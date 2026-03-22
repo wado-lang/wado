@@ -15,13 +15,6 @@ impl G4Lexer {
         return self.pos >= self.chars.len();
     }
 
-    fn peek(&self) -> Option<char> {
-        if self.at_end() {
-            return null;
-        }
-        return Option::<char>::Some(self.chars[self.pos]);
-    }
-
     fn peek_at(&self, offset: i32) -> Option<char> {
         let i = self.pos + offset;
         if i >= self.chars.len() {
@@ -98,16 +91,17 @@ impl G4Lexer {
                 return make_token(G4Token::Error, "unterminated string", start, self.pos);
             }
             let c = self.advance();
-            if c == '\'' {
-                return make_token(G4Token::StringLit, text, start, self.pos);
-            } else if c == '\\' {
-                if !self.at_end() {
-                    let escaped = self.advance();
-                    text.append_char(escaped);
-                }
-            } else {
-                text.append_char(c);
-            }
+            match c {
+                '\'' => {
+                    return make_token(G4Token::StringLit, text, start, self.pos);
+                },
+                '\\' => {
+                    if !self.at_end() {
+                        text.append_char(self.advance());
+                    }
+                },
+                _ => text.append_char(c),
+            };
         }
     }
 
@@ -121,18 +115,19 @@ impl G4Lexer {
                 return make_token(G4Token::Error, "unterminated char class", start, self.pos);
             }
             let c = self.advance();
-            if c == ']' {
-                text.append_char(']');
-                return make_token(G4Token::CharClass, text, start, self.pos);
-            } else if c == '\\' {
-                text.append_char(c);
-                if !self.at_end() {
-                    let escaped = self.advance();
-                    text.append_char(escaped);
-                }
-            } else {
-                text.append_char(c);
-            }
+            match c {
+                ']' => {
+                    text.append_char(']');
+                    return make_token(G4Token::CharClass, text, start, self.pos);
+                },
+                '\\' => {
+                    text.append_char(c);
+                    if !self.at_end() {
+                        text.append_char(self.advance());
+                    }
+                },
+                _ => text.append_char(c),
+            };
         }
     }
 

@@ -17,13 +17,6 @@ fn first_char(s: &String) -> Option<char> {
     return iter.next();
 }
 
-fn is_parser_rule_name(name: &String) -> bool {
-    if let Some(c) = first_char(name) {
-        return c >= 'a' && c <= 'z';
-    }
-    return false;
-}
-
 fn is_lexer_rule_name(name: &String) -> bool {
     if let Some(c) = first_char(name) {
         return c >= 'A' && c <= 'Z';
@@ -272,16 +265,14 @@ impl G4Parser {
         if self.is_kind(G4Token::StringLit) {
             let tok = self.advance();
             let text = tok.text;
-            let text_chars = text.chars().collect();
             let is_dot_dot = self.is_kind(G4Token::Dot)
                 && self.peek_kind_at(1) == G4Token::Dot as i32;
-            if is_dot_dot && text_chars.len() == 1 {
+            if is_dot_dot && text.len() == 1 {
                 self.advance();
                 self.advance();
                 let end_tok = self.expect(G4Token::StringLit)?;
-                let end_chars = end_tok.text.chars().collect();
-                let start_char = text_chars[0];
-                let end_char = end_chars[0];
+                let start_char = first_char(&text).unwrap();
+                let end_char = first_char(&end_tok.text).unwrap();
                 return Result::<LexerElement, ParseError>::Ok(
                     LexerElement::CharRange([start_char, end_char]),
                 );
