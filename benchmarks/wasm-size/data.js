@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774150289245,
+  "lastUpdate": 1774156913344,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6029,6 +6029,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ebbe1df6fd993a35c35b3f42cfa7f7f7b2399ee0"
         },
         "date": 1774150289046,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7f5b80ba87709c93ca96c397996bb1285c34ab5a",
+          "message": "Merge pull request #657 from wado-lang/claude/add-test-timeout-HltLN\n\nAdd per-test timeout support with epoch-based interruption",
+          "timestamp": "2026-03-22T14:19:28+09:00",
+          "tree_id": "03ccebe9d2be923ae38b6b43c2427379abd4ff1b",
+          "url": "https://github.com/wado-lang/wado/commit/7f5b80ba87709c93ca96c397996bb1285c34ab5a"
+        },
+        "date": 1774156913120,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
