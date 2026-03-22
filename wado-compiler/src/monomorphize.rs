@@ -3156,6 +3156,70 @@ impl Monomorphizer {
         }
     }
 
+    fn collect_match_pattern_locals_in_stmt(stmt: &TirStmt, locals: &mut Vec<u32>) {
+        match &stmt.kind {
+            TirStmtKind::Expr(expr) => {
+                Self::collect_match_pattern_locals_in_expr(expr, locals);
+            }
+            TirStmtKind::Return { value: Some(v) } => {
+                Self::collect_match_pattern_locals_in_expr(v, locals);
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                Self::collect_match_pattern_locals_in_expr(condition, locals);
+                for s in &then_block.stmts {
+                    Self::collect_match_pattern_locals_in_stmt(s, locals);
+                }
+                if let Some(eb) = else_block {
+                    for s in &eb.stmts {
+                        Self::collect_match_pattern_locals_in_stmt(s, locals);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_match_pattern_locals_in_expr(expr: &TirExpr, locals: &mut Vec<u32>) {
+        match &expr.kind {
+            TirExprKind::Match { expr: scrutinee, arms } => {
+                Self::collect_match_pattern_locals_in_expr(scrutinee, locals);
+                for arm in arms {
+                    Self::collect_locals_in_pattern(&arm.pattern, locals);
+                    if let Some(guard) = &arm.guard {
+                        Self::collect_match_pattern_locals_in_expr(guard, locals);
+                    }
+                    Self::collect_match_pattern_locals_in_expr(&arm.body, locals);
+                }
+            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                for s in &block.stmts {
+                    Self::collect_match_pattern_locals_in_stmt(s, locals);
+                }
+            }
+            TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+                for arg in args {
+                    Self::collect_match_pattern_locals_in_expr(&arg.expr, locals);
+                }
+            }
+            TirExprKind::If { condition, then_branch, else_branch, .. } => {
+                Self::collect_match_pattern_locals_in_expr(condition, locals);
+                for s in &then_branch.stmts {
+                    Self::collect_match_pattern_locals_in_stmt(s, locals);
+                }
+                if let Some(eb) = else_branch {
+                    for s in &eb.stmts {
+                        Self::collect_match_pattern_locals_in_stmt(s, locals);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn collect_locals_in_block(block: &TirBlock, locals: &mut Vec<u32>) {
         for stmt in &block.stmts {
             match &stmt.kind {
@@ -3673,8 +3737,27 @@ impl Monomorphizer {
                             None
                         };
 
-                        // For each iteration block, allocate a new local for the binding
-                        for child in block.stmts.iter_mut().skip(1) {
+                        // Collect locals from match pattern bindings in the first iteration body.
+                        // These include `?` expansion temporaries (__qm_v, __qm_e) that need
+                        // separate locals per iteration due to differing element types.
+                        // We only collect pattern binding locals (not let stmt locals or
+                        // nested block locals) to avoid breaking non-? for-of bodies.
+                        let first_iter_body_locals: Vec<u32> = {
+                            let mut locals = Vec::new();
+                            if let Some(TirStmt {
+                                kind: TirStmtKind::LabeledBlock { block: first_block, .. },
+                                ..
+                            }) = block.stmts.get(1)
+                            {
+                                for s in first_block.stmts.iter().skip(1) {
+                                    Self::collect_match_pattern_locals_in_stmt(s, &mut locals);
+                                }
+                            }
+                            locals
+                        };
+
+                        // For each iteration block, allocate new locals for binding and body
+                        for (iter_idx, child) in block.stmts.iter_mut().skip(1).enumerate() {
                             if let TirStmtKind::LabeledBlock {
                                 block: iter_block, ..
                             } = &mut child.kind
@@ -3696,6 +3779,32 @@ impl Monomorphizer {
                                 // Update all references to old_idx → new_idx in this block
                                 for s in iter_block.stmts.iter_mut().skip(1) {
                                     Self::rewrite_local_index_in_stmt(s, old_idx, new_idx);
+                                }
+
+                                // For iterations after the first, also reallocate body locals
+                                // (e.g., temporaries from `?` expansion that differ in type
+                                // per iteration due to different element types).
+                                if iter_idx > 0 {
+                                    for &body_local in &first_iter_body_locals {
+                                        let new_body_idx = *local_count;
+                                        *local_count += 1;
+                                        let body_local_type =
+                                            Self::find_local_type_in_block(iter_block, body_local)
+                                                .unwrap_or(
+                                                    local_types
+                                                        .get(body_local as usize)
+                                                        .copied()
+                                                        .unwrap_or(TypeTable::UNIT),
+                                                );
+                                        local_types.push(body_local_type);
+                                        for s in iter_block.stmts.iter_mut().skip(1) {
+                                            Self::rewrite_local_index_in_stmt(
+                                                s,
+                                                body_local,
+                                                new_body_idx,
+                                            );
+                                        }
+                                    }
                                 }
                             }
                         }
