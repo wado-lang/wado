@@ -1,0 +1,11 @@
+use { V, Inner, consume } from "./sub/ref_null_bug_helper.wado";
+
+test "cross module recursive variant" {
+    let v = V::B(Inner { element: V::A("hello") });
+    let mut out = String::with_capacity(10);
+    consume(&v, &mut out);
+    assert out == "hello";
+}
+
+__DATA__
+{"test": {}}

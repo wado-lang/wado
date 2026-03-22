@@ -1,0 +1,19 @@
+pub variant V {
+    A(String),
+    B(Inner),
+}
+
+pub struct Inner {
+    pub element: V,
+}
+
+pub fn consume(elem: &V, out: &mut String) {
+    if let A(s) = *elem {
+        out.append(s);
+        return;
+    }
+    if let B(inner) = *elem {
+        consume(&inner.element, out);
+        return;
+    }
+}
