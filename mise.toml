@@ -91,7 +91,7 @@ cargo test --profile dev-optimized
 
 [tasks.test-wado]
 description = "Run Wado module tests"
-run = "cargo run --profile dev-optimized -p wado-cli -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado package-gale/src"
+run = "cargo run --profile dev-optimized -p wado-cli -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado package-gale"
 
 [tasks.test-cov]
 description = "Run tests with coverage"
@@ -156,6 +156,9 @@ mkdir -p package-gale/tests/golden
 ./target/dev-optimized/wado run package-gale/src/main.wado \
     gen "package-gale/tests/grammars/calculator.g4" \
     > "package-gale/tests/golden/calculator.wado"
+./target/dev-optimized/wado run package-gale/src/main.wado \
+    gen "package-gale/tests/grammars/SQLite.g4" \
+    > "package-gale/tests/golden/sqlite.wado"
 """
 
 [tasks.update-golden-format-fixtures]
