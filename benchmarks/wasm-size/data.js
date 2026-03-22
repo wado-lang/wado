@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774162497262,
+  "lastUpdate": 1774164723277,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6107,6 +6107,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e4cd440119ed61824267229b9493ba573da7b2c1"
         },
         "date": 1774162497168,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "672e9683616006a89446346d958c217b46dae1cf",
+          "message": "Merge pull request #659 from wado-lang/claude/variadic-generics-tuples-qs0Pp\n\nFix Self:: method calls and add tuple.len() support",
+          "timestamp": "2026-03-22T16:29:41+09:00",
+          "tree_id": "33bbc8e2af1667342b390357a324bec98f95ae61",
+          "url": "https://github.com/wado-lang/wado/commit/672e9683616006a89446346d958c217b46dae1cf"
+        },
+        "date": 1774164723180,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
