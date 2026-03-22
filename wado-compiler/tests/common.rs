@@ -223,9 +223,11 @@ pub fn engine() -> &'static Engine {
 
         // Start background epoch ticker thread
         let engine_clone = engine.clone();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_millis(EPOCH_INTERVAL_MS));
-            engine_clone.increment_epoch();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(EPOCH_INTERVAL_MS));
+                engine_clone.increment_epoch();
+            }
         });
 
         engine
