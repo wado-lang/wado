@@ -1504,8 +1504,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 // (those are outer scope type params, not method-level ones)
                                 if matches!(
                                     tt.get(concrete_id),
-                                    ResolvedType::TypeParam { .. }
-                                        | ResolvedType::TypePack { .. }
+                                    ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
                                 ) {
                                     return None;
                                 }

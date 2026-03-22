@@ -410,12 +410,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     });
                 }
                 // For non-len methods, use "Tuple" as struct name to search trait impls
-                (
-                    "Tuple".to_string(),
-                    None,
-                    Some(elems.clone()),
-                    None,
-                )
+                ("Tuple".to_string(), None, Some(elems.clone()), None)
             }
             _ => return None,
         };

@@ -3185,7 +3185,10 @@ impl Monomorphizer {
 
     fn collect_match_pattern_locals_in_expr(expr: &TirExpr, locals: &mut Vec<u32>) {
         match &expr.kind {
-            TirExprKind::Match { expr: scrutinee, arms } => {
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
                 Self::collect_match_pattern_locals_in_expr(scrutinee, locals);
                 for arm in arms {
                     Self::collect_locals_in_pattern(&arm.pattern, locals);
@@ -3205,7 +3208,12 @@ impl Monomorphizer {
                     Self::collect_match_pattern_locals_in_expr(&arg.expr, locals);
                 }
             }
-            TirExprKind::If { condition, then_branch, else_branch, .. } => {
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 Self::collect_match_pattern_locals_in_expr(condition, locals);
                 for s in &then_branch.stmts {
                     Self::collect_match_pattern_locals_in_stmt(s, locals);
@@ -3745,7 +3753,10 @@ impl Monomorphizer {
                         let first_iter_body_locals: Vec<u32> = {
                             let mut locals = Vec::new();
                             if let Some(TirStmt {
-                                kind: TirStmtKind::LabeledBlock { block: first_block, .. },
+                                kind:
+                                    TirStmtKind::LabeledBlock {
+                                        block: first_block, ..
+                                    },
                                 ..
                             }) = block.stmts.get(1)
                             {
