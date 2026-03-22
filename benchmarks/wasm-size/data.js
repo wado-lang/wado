@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774180926040,
+  "lastUpdate": 1774185719930,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6380,6 +6380,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b7f9b0aebc01aa615cdce3b540940b6346aa22df"
         },
         "date": 1774180925811,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b5a96793b8635d2cf3846f8f0d85f8fc92633885",
+          "message": "Merge pull request #668 from wado-lang/claude/remove-optimized-dev-profile-ZvMxK\n\nRemove dev-optimized profile and use default dev profile",
+          "timestamp": "2026-03-22T22:19:29+09:00",
+          "tree_id": "1ec84106cf33a11ec3986474c273d2e57e79e7f7",
+          "url": "https://github.com/wado-lang/wado/commit/b5a96793b8635d2cf3846f8f0d85f8fc92633885"
+        },
+        "date": 1774185719682,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
