@@ -213,6 +213,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         };
 
+        // Tuple.len() is a compile-time constant — return immediately without a function call.
+        if method_call.method == "len"
+            && matches!(
+                self.type_table.borrow().get(base_type_id),
+                ResolvedType::Tuple(_)
+            )
+        {
+            let len = match self.type_table.borrow().get(base_type_id) {
+                ResolvedType::Tuple(elems) => elems.len() as i64,
+                _ => unreachable!(),
+            };
+            return TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: len as u64,
+                    repr: len.to_string(),
+                },
+                TypeTable::I32,
+                method_call.span,
+            );
+        }
+
         // Static methods (no self parameter) cannot be called with instance method syntax.
         // e.g., `obj.static_method()` should be `Type::static_method()` instead.
         if self_kind == ast::SelfKind::None {

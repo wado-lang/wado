@@ -1,0 +1,41 @@
+// Test: ? operator inside variadic for-of loop with Result<(), E>.
+use { println, Stdout } from "core:cli";
+
+trait Processable {
+    fn process(&self) -> Result<(), String>;
+}
+
+impl Processable for i32 {
+    fn process(&self) -> Result<(), String> {
+        return Result::<(), String>::Ok(());
+    }
+}
+
+impl Processable for String {
+    fn process(&self) -> Result<(), String> {
+        return Result::<(), String>::Ok(());
+    }
+}
+
+impl Processable for bool {
+    fn process(&self) -> Result<(), String> {
+        return Result::<(), String>::Ok(());
+    }
+}
+
+fn process_all<..T: Processable>(items: &[..T]) -> Result<(), String> {
+    for let v of *items {
+        v.process()?;
+    }
+    return Result::<(), String>::Ok(());
+}
+
+export fn run() with Stdout {
+    let result = process_all(&[1, "hello", true]);
+    if let Ok(_) = result {
+        println("ok");
+    }
+}
+
+__DATA__
+{"stdout": "ok\n"}

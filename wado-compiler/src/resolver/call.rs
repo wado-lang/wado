@@ -209,6 +209,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if prefix == "builtin" {
                         (Some(ModuleSource::builtin()), suffix.to_string(), true)
                     }
+                    // Self::method() — resolve Self to the concrete type name
+                    else if prefix == "Self"
+                        && let Some(self_type_id) = self.trait_ctx.self_type
+                    {
+                        let self_name = self.type_table.borrow().type_name(self_type_id);
+                        let synthetic_call = ast::CallExpr {
+                            callee: Expr::Ident(ast::IdentExpr {
+                                name: format!("{self_name}::{suffix}"),
+                                span: ident.span,
+                            }),
+                            type_args: call.type_args.clone(),
+                            args: call.args.clone(),
+                            has_trailing_comma: call.has_trailing_comma,
+                            span: call.span,
+                        };
+                        return self.resolve_call(&synthetic_call, ctx, expected_type);
+                    }
                     // Check if this is a type parameter static call (T::method where T: Trait)
                     else if let Some(&(_param_idx, type_param_type_id)) =
                         self.trait_ctx.type_params.get(prefix)
@@ -1460,11 +1477,49 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let return_type = method_info_result.return_type;
 
             // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)
-            let method_type_args: Vec<TypeId> = call
+            let mut method_type_args: Vec<TypeId> = call
                 .type_args
                 .iter()
                 .map(|ty| self.resolve_type(ty))
                 .collect();
+
+            // If no explicit type args, infer method-level type params from argument types.
+            // e.g., T::read_from(r) where r: &mut FixedReader infers R = FixedReader.
+            if method_type_args.is_empty() && !method_info_result.param_types.is_empty() {
+                let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::default();
+                for (param_type, arg) in method_info_result.param_types.iter().zip(args.iter()) {
+                    self.unify_types_for_inference(*param_type, arg.type_id, &mut type_param_map);
+                }
+                if !type_param_map.is_empty() {
+                    // Collect inferred types sorted by TypeParam index.
+                    // Only include entries where the inferred type is concrete
+                    // (skip entries where both key and value are type params,
+                    // e.g., Self → T from outer scope).
+                    let mut inferred: Vec<(u32, TypeId)> = type_param_map
+                        .iter()
+                        .filter_map(|(&tp_id, &concrete_id)| {
+                            let tt = self.type_table.borrow();
+                            if let ResolvedType::TypeParam { index, .. } = tt.get(tp_id) {
+                                // Skip if the inferred type is also a TypeParam/TypePack
+                                // (those are outer scope type params, not method-level ones)
+                                if matches!(
+                                    tt.get(concrete_id),
+                                    ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                                ) {
+                                    return None;
+                                }
+                                Some((*index, concrete_id))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    inferred.sort_by_key(|(idx, _)| *idx);
+                    if !inferred.is_empty() {
+                        method_type_args = inferred.into_iter().map(|(_, id)| id).collect();
+                    }
+                }
+            }
 
             // Don't substitute method-level type params in the return type here.
             // The return type contains function-level TypeParams (e.g., Self -> TypeParam{T})

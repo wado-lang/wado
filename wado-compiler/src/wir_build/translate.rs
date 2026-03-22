@@ -5708,7 +5708,21 @@ impl FunctionTranslator<'_, '_> {
                                         expr: Box::new(scrut_get),
                                     }
                                 } else {
-                                    WirInstr::I32Const(0)
+                                    // Case type not found (unit payload): fall back to discriminant check
+                                    let wir_type =
+                                        self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
+                                    if let WirType::Ref { type_id, .. } = wir_type {
+                                        WirInstr::I32Eq(
+                                            Box::new(WirInstr::StructGet {
+                                                type_id,
+                                                field_name: "discriminant".to_string(),
+                                                expr: Box::new(scrut_get),
+                                            }),
+                                            Box::new(WirInstr::I32Const(case.index as i32)),
+                                        )
+                                    } else {
+                                        WirInstr::I32Const(0)
+                                    }
                                 }
                             }
                         } else {
@@ -5910,10 +5924,13 @@ impl FunctionTranslator<'_, '_> {
                             } else {
                                 payload_get
                             };
-                            instrs.push(WirInstr::LocalSet {
-                                name: self.local_name(*local_index),
-                                value: Box::new(value),
-                            });
+                            // Skip local.set for unit-typed bindings (no Wasm local exists)
+                            if !matches!(binding_wir, WirType::Unit) {
+                                instrs.push(WirInstr::LocalSet {
+                                    name: self.local_name(*local_index),
+                                    value: Box::new(value),
+                                });
+                            }
                         } else if let TirPattern::Tuple(sub_patterns) = binding {
                             // Tuple payload: payload_i is a ref to a tuple struct.
                             // Extract each tuple field into the corresponding local.
@@ -5953,13 +5970,22 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     // Fallback: just copy the scrutinee (won't be type-correct for payload)
                     for binding in bindings {
-                        if let TirPattern::Binding { local_index, .. } = binding {
-                            instrs.push(WirInstr::LocalSet {
-                                name: self.local_name(*local_index),
-                                value: Box::new(WirInstr::LocalGet {
-                                    name: scrut_local.to_string(),
-                                }),
-                            });
+                        if let TirPattern::Binding {
+                            local_index,
+                            type_id,
+                            ..
+                        } = binding
+                        {
+                            let wir = self.ctx.type_id_to_wir_type(self.type_table, *type_id);
+                            // Skip unit-typed bindings (no Wasm local exists for unit)
+                            if !matches!(wir, WirType::Unit) {
+                                instrs.push(WirInstr::LocalSet {
+                                    name: self.local_name(*local_index),
+                                    value: Box::new(WirInstr::LocalGet {
+                                        name: scrut_local.to_string(),
+                                    }),
+                                });
+                            }
                         }
                     }
                 }
