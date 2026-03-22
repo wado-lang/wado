@@ -5894,7 +5894,12 @@ fn replace_type_and_names_in_expr(
                 func.name = func.name.replace(old_name, new_name);
             }
             if let Some(ref mut mono) = func.monomorph_info {
-                for ta in &mut mono.type_args {
+                for ta in &mut mono.impl_type_args {
+                    if *ta == old_type {
+                        *ta = new_type;
+                    }
+                }
+                for ta in &mut mono.method_type_args {
                     if *ta == old_type {
                         *ta = new_type;
                     }
@@ -5920,7 +5925,12 @@ fn replace_type_and_names_in_expr(
                 func.name = func.name.replace(old_name, new_name);
             }
             if let Some(ref mut mono) = func.monomorph_info {
-                for ta in &mut mono.type_args {
+                for ta in &mut mono.impl_type_args {
+                    if *ta == old_type {
+                        *ta = new_type;
+                    }
+                }
+                for ta in &mut mono.method_type_args {
                     if *ta == old_type {
                         *ta = new_type;
                     }
@@ -6028,7 +6038,12 @@ fn replace_type_in_expr(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) 
     match &mut expr.kind {
         TirExprKind::Call { func, args, .. } => {
             if let Some(ref mut mono) = func.monomorph_info {
-                for ta in &mut mono.type_args {
+                for ta in &mut mono.impl_type_args {
+                    if *ta == old_type {
+                        *ta = new_type;
+                    }
+                }
+                for ta in &mut mono.method_type_args {
                     if *ta == old_type {
                         *ta = new_type;
                     }
@@ -6045,7 +6060,12 @@ fn replace_type_in_expr(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) 
             ..
         } => {
             if let Some(ref mut mono) = func.monomorph_info {
-                for ta in &mut mono.type_args {
+                for ta in &mut mono.impl_type_args {
+                    if *ta == old_type {
+                        *ta = new_type;
+                    }
+                }
+                for ta in &mut mono.method_type_args {
                     if *ta == old_type {
                         *ta = new_type;
                     }

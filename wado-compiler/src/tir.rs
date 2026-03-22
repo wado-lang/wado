@@ -2220,8 +2220,10 @@ pub struct TirTypeParam {
 pub struct MonomorphInfo {
     /// Original generic name (e.g., "Box" for "Box<i32>", or "`BTreeNode`<`K,V>::insert`" for methods)
     pub generic_name: String,
-    /// Concrete type arguments used for this instantiation
-    pub type_args: Vec<TypeId>,
+    /// Impl-level type arguments (from the struct/type, e.g. `[i32]` for `Array<i32>`)
+    pub impl_type_args: Vec<TypeId>,
+    /// Method-level type arguments (from the method's own generics, e.g. `[String]` for `.transform::<String>()`)
+    pub method_type_args: Vec<TypeId>,
     /// Whether this originates from a blanket impl (e.g., `impl<I: Iterator> IntoIterator for I`)
     pub is_blanket: bool,
 }
@@ -2576,14 +2578,16 @@ pub struct TirImport {
 }
 
 /// Tracks a requested instantiation of a generic item
-/// Note: Only `name` and `type_args` are used for equality/hashing.
+/// Note: Only `name`, `impl_type_args`, and `method_type_args` are used for equality/hashing.
 /// `method_info` is auxiliary metadata for name formatting.
 #[derive(Debug, Clone)]
 pub struct InstantiationKey {
     /// Name of the generic item (struct, function, or enum)
     pub name: String,
-    /// Concrete type arguments for instantiation
-    pub type_args: Vec<TypeId>,
+    /// Impl-level type arguments (from the struct/type)
+    pub impl_type_args: Vec<TypeId>,
+    /// Method-level type arguments (from the method's own generics)
+    pub method_type_args: Vec<TypeId>,
     /// Method info for method instantiations (None for struct/enum instantiations)
     /// Not included in equality/hash - used only for name formatting
     pub method_info: Option<LocalMethodName>,
@@ -2591,7 +2595,9 @@ pub struct InstantiationKey {
 
 impl PartialEq for InstantiationKey {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.type_args == other.type_args
+        self.name == other.name
+            && self.impl_type_args == other.impl_type_args
+            && self.method_type_args == other.method_type_args
     }
 }
 
@@ -2600,7 +2606,8 @@ impl Eq for InstantiationKey {}
 impl std::hash::Hash for InstantiationKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.name.hash(state);
-        self.type_args.hash(state);
+        self.impl_type_args.hash(state);
+        self.method_type_args.hash(state);
     }
 }
 

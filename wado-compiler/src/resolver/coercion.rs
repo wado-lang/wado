@@ -514,7 +514,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     } else {
                         Some(MonomorphInfo {
                             generic_name: format!("{builder_base_name}::new_literal"),
-                            type_args: type_arg_ids.clone(),
+                            impl_type_args: type_arg_ids.clone(),
+                            method_type_args: vec![],
                             is_blanket: false,
                         })
                     },
@@ -646,7 +647,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             } else {
                 Some(MonomorphInfo {
                     generic_name: format!("{builder_base_name}::build"),
-                    type_args: type_arg_ids,
+                    impl_type_args: type_arg_ids,
+                    method_type_args: vec![],
                     is_blanket: false,
                 })
             };
@@ -772,7 +774,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     } else {
                         Some(MonomorphInfo {
                             generic_name: format!("{builder_base_name}::new_literal"),
-                            type_args: type_arg_ids.clone(),
+                            impl_type_args: type_arg_ids.clone(),
+                            method_type_args: vec![],
                             is_blanket: false,
                         })
                     },
@@ -861,7 +864,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         } else {
                             Some(MonomorphInfo {
                                 generic_name: format!("{builder_base_name}::push_literal"),
-                                type_args: type_arg_ids.clone(),
+                                impl_type_args: type_arg_ids.clone(),
+                                method_type_args: vec![],
                                 is_blanket: false,
                             })
                         },
@@ -905,7 +909,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     } else {
                         Some(MonomorphInfo {
                             generic_name: format!("{builder_base_name}::build"),
-                            type_args: type_arg_ids,
+                            impl_type_args: type_arg_ids,
+                            method_type_args: vec![],
                             is_blanket: false,
                         })
                     },

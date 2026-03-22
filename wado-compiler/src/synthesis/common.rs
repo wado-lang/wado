@@ -287,7 +287,8 @@ pub fn generic_static_call(
     } else {
         Some(MonomorphInfo {
             generic_name: mangled_name.clone(),
-            type_args,
+            impl_type_args: type_args,
+            method_type_args: vec![],
             is_blanket: false,
         })
     };
