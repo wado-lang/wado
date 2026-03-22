@@ -1,0 +1,29 @@
+// Test: default trait method with its own type param, called via type parameter.
+use { println, Stdout } from "core:cli";
+
+trait Readable {
+    fn read() -> Self;
+
+    fn read_with_default(default: Self) -> Self {
+        return Self::read();
+    }
+}
+
+impl Readable for i32 {
+    fn read() -> i32 {
+        return 42;
+    }
+}
+
+fn read_item<T: Readable>() -> T {
+    return T::read_with_default(T::read());
+}
+
+export fn run() with Stdout {
+    let result = read_item::<i32>();
+    assert result == 42;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
