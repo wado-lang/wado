@@ -1700,8 +1700,7 @@ impl Monomorphizer {
                                 };
                                 if !self.function_instantiated.contains_key(&key) {
                                     let mangled = self.method_instantiation_name(
-                                        &key,
-                                        type_table,
+                                        &key, type_table,
                                         0, // non-generic struct: no impl type params
                                     );
                                     self.function_instantiated
