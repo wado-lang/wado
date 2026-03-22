@@ -1,0 +1,34 @@
+use { generate } from "../src/generator.wado";
+use { parse } from "../src/g4/parser.wado";
+
+test "generate json golden" {
+    let input = #include_str("./grammars/JSON.g4");
+    let grammar = parse(input).unwrap();
+    let output = generate(&grammar);
+    let expected = #include_str("./golden/json.wado");
+    assert output == expected, `golden mismatch:\n---actual (len={output.len()})---\n{output}\n---expected (len={expected.len()})---\n{expected}`;
+}
+
+test "generate calculator golden" {
+    let input = #include_str("./grammars/calculator.g4");
+    let grammar = parse(input).unwrap();
+    let output = generate(&grammar);
+    let expected = #include_str("./golden/calculator.wado");
+    assert output == expected, `golden mismatch:\n---actual (len={output.len()})---\n{output}\n---expected (len={expected.len()})---\n{expected}`;
+}
+
+test "generate sexpression golden" {
+    let input = #include_str("./grammars/sexpression.g4");
+    let grammar = parse(input).unwrap();
+    let output = generate(&grammar);
+    let expected = #include_str("./golden/sexpression.wado");
+    assert output == expected, `golden mismatch:\n---actual (len={output.len()})---\n{output}\n---expected (len={expected.len()})---\n{expected}`;
+}
+
+test "generate sqlite golden" {
+    let input = #include_str("./grammars/SQLite.g4");
+    let grammar = parse(input).unwrap();
+    let output = generate(&grammar);
+    let expected = #include_str("./golden/sqlite.wado");
+    assert output == expected, `golden mismatch:\n---actual (len={output.len()})---\n{output}\n---expected (len={expected.len()})---\n{expected}`;
+}

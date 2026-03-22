@@ -44,6 +44,7 @@ mise run update-bundled
 cargo build --profile dev-optimized --bin wado --bin wado-dev-tools
 mise run update-golden-fixtures
 mise run update-golden-format-fixtures
+mise run update-gale-golden
 mise run doc-stdlib
 mise run format
 mise run test
@@ -90,7 +91,7 @@ cargo test --profile dev-optimized
 
 [tasks.test-wado]
 description = "Run Wado module tests"
-run = "cargo run --profile dev-optimized -p wado-cli -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado package-gale/src"
+run = "cargo run --profile dev-optimized -p wado-cli -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado package-gale"
 
 [tasks.test-cov]
 description = "Run tests with coverage"
@@ -138,6 +139,26 @@ rm -rf wado-compiler/tests/fixtures.golden/*.*
     --in 'wado-compiler/tests/fixtures/{name}.wado' \
     --out 'wado-compiler/tests/fixtures.golden/{name}.wir.wado' \
     --phase wir -O2
+"""
+
+[tasks.update-gale-golden]
+description = "Regenerate gale golden fixtures from .g4 grammars"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+mkdir -p package-gale/tests/golden
+./target/dev-optimized/wado run package-gale/src/main.wado \
+    gen "package-gale/tests/grammars/sexpression.g4" \
+    > "package-gale/tests/golden/sexpression.wado"
+./target/dev-optimized/wado run package-gale/src/main.wado \
+    gen "package-gale/tests/grammars/JSON.g4" \
+    > "package-gale/tests/golden/json.wado"
+./target/dev-optimized/wado run package-gale/src/main.wado \
+    gen "package-gale/tests/grammars/calculator.g4" \
+    > "package-gale/tests/golden/calculator.wado"
+./target/dev-optimized/wado run package-gale/src/main.wado \
+    gen "package-gale/tests/grammars/SQLite.g4" \
+    > "package-gale/tests/golden/sqlite.wado"
 """
 
 [tasks.update-golden-format-fixtures]

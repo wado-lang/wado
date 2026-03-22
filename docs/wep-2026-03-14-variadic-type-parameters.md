@@ -341,6 +341,31 @@ impl<..T: Inspect> Inspect for [..T] {
 }
 ```
 
+### Tuple `Serialize`
+
+```wado
+impl<..T: Serialize> Serialize for [..T] {
+    fn serialize<S: Serializer>(&self, seq: &mut S::SeqSerializer) -> Result<(), SerializeError> {
+        for let v of *self {
+            seq.element(&v)?;
+        }
+        return Result::<(), SerializeError>::Ok(());
+    }
+}
+```
+
+### Tuple `Deserialize`
+
+```wado
+impl<..T: Deserialize> Deserialize for [..T] {
+    fn deserialize<D: Deserializer>(seq: &mut D::SeqAccess) -> Result<[..T], DeserializeError> {
+        return Result::<[..T], DeserializeError>::Ok([for let _v of [..T::default()] {
+            seq.next_element()?
+        }]);
+    }
+}
+```
+
 ### Struct `Inspect` via `Reflect`
 
 ```wado
@@ -378,6 +403,9 @@ where T: Reflect<Fields = [..F]>
 - [x] Standard library: add variadic impls for `Inspect`, `InspectAlt`, `Display`,
       `DisplayAlt` in `core:prelude/tuple.wado`; remove hardcoded tuple synthesis
 - [x] Type pack expansion: lower `[..T::method()]` to a tuple literal at monomorphization
+- [x] Standard library: add variadic impls for `Serialize` and `Deserialize` for tuples
+      in `core:serde`; monomorphizer handles cross-module variadic impls with method-level
+      type params (e.g., `fn serialize<S: Serializer>`) and associated type projections
 - [ ] Coherence: implement Rule 1 (non-VG wins) and Rule 2 (VG overlap forbidden)
 - [ ] `Reflect` trait: synthesize per-struct impl in the lowering pass
 - [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
@@ -428,3 +456,4 @@ where T: Reflect<Fields = [..F]>
 - [Inspect / Debug Output](./wep-2026-02-21-inspect-debug-output.md)
 - [Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md)
 - [Tuple Destructuring](./wep-2026-02-22-tuple-destructuring.md)
+- [Serialization and Deserialization](./wep-2026-02-28-serde.md)
