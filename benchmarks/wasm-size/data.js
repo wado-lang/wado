@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774187500254,
+  "lastUpdate": 1774192940934,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6458,6 +6458,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3110803205f45209de43cc650e891459e454b855"
         },
         "date": 1774187500050,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "323445645b54ad32e9a2768964cf1ff08576c5bf",
+          "message": "Merge pull request #669 from wado-lang/claude/refactor-method-type-args-fAWYi\n\nSeparate impl and method type arguments in monomorphization",
+          "timestamp": "2026-03-23T00:19:54+09:00",
+          "tree_id": "7deec6e7f801b7f01bf55b9c662ad2e344478004",
+          "url": "https://github.com/wado-lang/wado/commit/323445645b54ad32e9a2768964cf1ff08576c5bf"
+        },
+        "date": 1774192940732,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
