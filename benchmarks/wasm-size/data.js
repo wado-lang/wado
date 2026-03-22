@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774134245894,
+  "lastUpdate": 1774137637289,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5834,6 +5834,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bc1823793396fda44a1ca0104662dbe2bb84a29e"
         },
         "date": 1774134245674,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22175,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9ea1b5f692d12d5c4f23a06701f60294330a33b4",
+          "message": "Merge pull request #653 from wado-lang/claude/optimize-zlib-compress-ymEWV\n\nMove bounds check elimination from WIR to TIR optimization",
+          "timestamp": "2026-03-22T08:58:11+09:00",
+          "tree_id": "ad5106378540ec3d1535014472d393001ef8b783",
+          "url": "https://github.com/wado-lang/wado/commit/9ea1b5f692d12d5c4f23a06701f60294330a33b4"
+        },
+        "date": 1774137637071,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
