@@ -1,0 +1,101 @@
+/// Grammar is the top-level IR representing a parsed .g4 file.
+pub struct Grammar {
+    pub name: String,
+    pub parser_rules: Array<ParserRule>,
+    pub lexer_rules: Array<LexerRule>,
+}
+
+/// ParserRule represents a parser rule (lowercase name in .g4).
+pub struct ParserRule {
+    pub name: String,
+    pub alternatives: Array<Alternative>,
+}
+
+/// Alternative is one branch of a parser rule, optionally labeled.
+pub struct Alternative {
+    pub label: Option<String>,
+    pub elements: Array<Element>,
+}
+
+/// Element is a single unit within an alternative.
+pub variant Element {
+    RuleRef(String),
+    TokenRef(String),
+    Literal(String),
+    Group(Array<Alternative>),
+    Repeat(RepeatElement),
+    Label(LabelElement),
+}
+
+pub struct RepeatElement {
+    pub kind: RepeatKind,
+    pub element: Element,
+}
+
+pub struct LabelElement {
+    pub name: String,
+    pub element: Element,
+}
+
+/// RepeatKind indicates the repetition type.
+pub enum RepeatKind {
+    Star,
+    Plus,
+    Optional,
+}
+
+/// LexerRule represents a lexer rule (uppercase name in .g4).
+pub struct LexerRule {
+    pub name: String,
+    pub is_fragment: bool,
+    pub skip: bool,
+    pub body: Array<LexerAlt>,
+}
+
+/// LexerAlt is one alternative in a lexer rule.
+pub struct LexerAlt {
+    pub elements: Array<LexerElement>,
+}
+
+/// LexerElement is a single unit within a lexer alternative.
+pub variant LexerElement {
+    Literal(String),
+    CharRange([char, char]),
+    CharClass(CharClass),
+    AnyChar,
+    RuleRef(String),
+    Group(Array<LexerAlt>),
+    Repeat(LexerRepeatElement),
+    Not(LexerNotElement),
+}
+
+pub struct LexerRepeatElement {
+    pub kind: RepeatKind,
+    pub element: LexerElement,
+}
+
+pub struct LexerNotElement {
+    pub element: LexerElement,
+}
+
+/// CharClass represents a character class like [a-zA-Z0-9].
+pub struct CharClass {
+    pub ranges: Array<CharRange>,
+    pub negated: bool,
+}
+
+/// CharRange is a single range within a character class.
+pub struct CharRange {
+    pub start: char,
+    pub end: char,
+}
+
+impl CharRange {
+    pub fn single(c: char) -> CharRange {
+        return CharRange { start: c, end: c };
+    }
+
+    pub fn range(start: char, end: char) -> CharRange {
+        return CharRange { start, end };
+    }
+}

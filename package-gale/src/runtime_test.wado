@@ -1,0 +1,53 @@
+use { Span, Token, ParseError } from "./runtime.wado";
+
+test "Span::new creates span" {
+    let s = Span::new(0, 5);
+    assert s.start == 0;
+    assert s.end == 5;
+}
+
+test "Span::len returns length" {
+    let s = Span::new(3, 10);
+    assert s.len() == 7;
+}
+
+test "Span::merge combines two spans" {
+    let a = Span::new(5, 10);
+    let b = Span::new(2, 8);
+    let merged = a.merge(&b);
+    assert merged.start == 2;
+    assert merged.end == 10;
+}
+
+test "Span equality" {
+    let a = Span::new(0, 5);
+    let b = Span::new(0, 5);
+    let c = Span::new(1, 5);
+    assert a == b;
+    assert a != c;
+}
+
+test "Token::new creates token" {
+    let t = Token::new(1, "hello", Span::new(0, 5));
+    assert t.kind == 1;
+    assert t.text == "hello";
+    assert t.span == Span::new(0, 5);
+}
+
+test "Token equality" {
+    let a = Token::new(1, "x", Span::new(0, 1));
+    let b = Token::new(1, "x", Span::new(0, 1));
+    let c = Token::new(2, "x", Span::new(0, 1));
+    assert a == b;
+    assert a != c;
+}
+
+test "ParseError::new creates error" {
+    let expected: Array<String> = ["INT", "STRING"];
+    let err = ParseError::new("unexpected token", Span::new(5, 6), expected);
+    assert err.message == "unexpected token";
+    assert err.span == Span::new(5, 6);
+    assert err.expected.len() == 2;
+    assert err.expected[0] == "INT";
+    assert err.expected[1] == "STRING";
+}
