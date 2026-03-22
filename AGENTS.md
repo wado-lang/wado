@@ -16,11 +16,15 @@ The compiler is implemented in `wado-compiler/`.
 
 Standard libraries (stdlib) are implemented in `wado-compiler/lib`, with `wasi/` for WASI interface and `core/` for the core library.
 
-See `docs/compiler.md` in order to develop the compiler. See `docs/optimizer.md` for optimization passes and future plans.
+For other important files:
 
-Builtin functions that are directly mapped to wasm instructions or external functions are implemented in `wado-compiler/lib/core/builtin.wado`.
+- `wado-compiler/lib/core/builtin.wado` for compiler intrinsics.
+- `wado-compiler/lib/core/internal.wado` for utilities to implement language features
 
-Internal functions that are used to provide language features are implemented in `wado-compiler/lib/core/internal.wado`.
+See also:
+
+- `docs/compiler.md` for the compiler internals.
+- `docs/optimizer.md` for the optimization passes.
 
 ### Wasm Compatibility
 
@@ -28,11 +32,11 @@ Internal functions that are used to provide language features are implemented in
 
 ### E2E Test Specification (Compiler Tests)
 
-E2E tests verify **compiler behavior** (codegen, error messages, optimization). They are `.wado` files in `wado-compiler/tests/fixtures/` with a `__DATA__` section containing JSON test expectations.
+E2E tests verify language features and compiler behaviors (codegen, error messages, optimization). They are `.wado` files in `wado-compiler/tests/fixtures/` with a `__DATA__` section containing JSON test specification.
 
 Each test fixture group has the same prefix in their filenames.
 
-By default, only O0 and O2 run locally; O1/O3/Os require `CI=1` or `WADO_FULL_TEST=1`.
+By default, only O0 and O2 run locally; O1/O3/Os require `WADO_FULL_TEST=1`.
 
 #### Data Section Schema
 
@@ -112,7 +116,7 @@ __DATA__
 }
 ```
 
-### Adding New Test Fixtures
+### Adding Test Fixtures
 
 After adding new `.wado` files to `wado-compiler/tests/fixtures/`, you must touch `wado-compiler/tests/e2e.rs` to trigger `datatest_mini` to rediscover test files:
 
@@ -124,7 +128,7 @@ Without this, `cargo test` will not detect the new fixture because `datatest_min
 
 ### Standard Library Tests (Library Logic)
 
-Tests for **standard library logic** (e.g., `zlib_test.wado`, `string_test.wado`) live alongside implementations in `wado-compiler/lib/`. These are `.wado` files with `test` blocks, run with `wado test`.
+Tests for standard library logic live alongside implementations in `wado-compiler/lib/`. These are `.wado` files with `test` blocks (e.g., `zlib_test.wado`, `string_test.wado`) , run with `wado test`.
 
 ### The `wasi:*` Modules
 
@@ -142,7 +146,7 @@ It requires a git submodule `vendor/wasmtime` to be initialized.
 
 `wado-manifest/` handles `wado.toml` parsing, validation, and `wado.lock` lock file management.
 
-This crate must compile for `wasm32-unknown-unknown` (same constraint as `wado-compiler`). CI enforces this.
+This crate must compile for `wasm32-unknown-unknown`. CI enforces this.
 
 ## The CLI
 
@@ -244,9 +248,9 @@ Wado is designed on the following Wasm features:
   - CM spec: `vendor/component-model/design/mvp/`
   - Canonical built-ins: `vendor/component-model/design/mvp/CanonicalABI.md`
   - Concurrency (async, streams, futures): `vendor/component-model/design/mvp/Concurrency.md`
-- Wasm Stack Switching (not yet implemented in wasmtime)
+- Wasm Stack Switching (not fully implemented in wasmtime yet)
 - WASI 0.3.0 (P3)
-  - P3 is supported by wasmtime v41
+  - P3 is supported by wasmtime v42
   - See wasmtime P3 support: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
 
 ## General Rules
@@ -254,28 +258,25 @@ Wado is designed on the following Wasm features:
 - Don't be anchored by existing implementations or conventions. Always design from first principles toward the optimal solution.
 - All the documents and comments must be written in English.
 - When referring to WAT, use folded style syntax.
-- If you find a compiler bug, limitation, or awkward behavior, fix it. Such a problem must be treated as the highest priority.
+- If you find a compiler bug or a limitation, fix it. Such a problem must be treated as the highest priority.
 - Use sub-agents only for research tasks (searching, reading, exploring). Never use sub-agents for editing files.
 - `CLAUDE.md` is a symlink to `AGENTS.md`. Editing either one is sufficient.
 
 ## Rules for Rust
 
-- Write tests in implementation files just for simple smoke tests. For comprehensive tests, write tests in the `tests/`.
 - Manage dependencies in the workspace `Cargo.toml`.
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!` for things that are not yet implemented or not supported.
 - YAGNI. Do the simplest thing that could possibly work.
-- Use `IndexMap` and `IndexSet` from the `indexmap` crate in order to ensure deterministic iteration order.
-- Do not use any comment sections to separate or organize code. Use Rust's natural structure instead.
-- Follow Test-Driven Development: write a failing test case first, then implement the concern.
+- Use `IndexMap` and `IndexSet` from the `indexmap` crate in order to ensure deterministic behaviors.
+- Do not use any comment sections to separate or organize code.
+- Follow TDD: write a failing test case first, then implement the concern.
 
 ### Rules for the Compiler Code Base
 
 - The principle: `codegen.rs` emits the `Project` as is, which does not have the knowledge of the previous phases.
 - Use utilities in `name.rs` to handle name mangling and monomorphization. Other components must not know the details of name formats.
-- Do not parse mangled / formatted names even in `name.rs`. Use parsed objects instead.
-- Minimize hard-coded logic for compiler builtins. Define builtin and internal functions in Wado source files in `lib/core/*.wado`.
-- Minimize hard-coded logic for WASI. Use metadata extracted from `lib/wasi/*.wado`.
+- Minimize hard-coded logic for compiler builtins or WASI. Define builtin and internal functions in Wado source files in `lib/core/*.wado` or `lib/wasi/*.wado`.
 
 ## Wado Evolution Proposals (WEP)
 
@@ -287,7 +288,7 @@ See [docs/WEP.md] for details and existing WEPs.
 
 ### Tool Management
 
-This project uses [mise](https://mise.jdx.dev/) to manage dev tools. Project tasks are defined in `mise.toml`. Run `mise tasks ls` to list available tasks.
+This project uses [mise](https://mise.jdx.dev/) to manage dev tools. Project tasks are defined in `mise.toml`. Run `mise tasks` to discover available tasks.
 
 Install mise first if you don't have it:
 
@@ -298,7 +299,7 @@ curl -fsSL https://mise.run | sh
 #   eval "$(~/.local/bin/mise activate zsh)"   # for zsh
 ```
 
-Then run `mise run on-task-started` to install all required development tools.
+Then run `mise run on-task-started` to install the development tools.
 
 ### Development Tasks
 
@@ -306,7 +307,6 @@ Then run `mise run on-task-started` to install all required development tools.
 mise run test        # test Rust crates (included in on-task-done)
 mise run test-wado   # test Wado modules (included in on-task-done)
 mise run format      # format Rust files and Markdown files
-mise run format-wado # format Wado source files
 
 mise run benchmark-all # count-prime, mandelbrot, sieve, fts, and zlib
 mise run report-wasm-size # hello_world, pi_approx, and zlib
@@ -340,5 +340,8 @@ When you have completed a task, make sure everything is up-to-date and tested:
   - docs/cheatsheet.md
   - docs/compiler.md
   - docs/optimizer.md
-- Run `mise run on-task-done` to format, clippy-fix, update golden fixtures, regenerate stdlib docs, and test. It will take 15+ minutes.
-  - Run in foreground and commit the results. CI's integrity check fails if generated files are uncommitted.
+- Run `mise run on-task-done`
+  - It performs format, clippy-fix, update golden fixtures, regenerate stdlib docs, and tests.
+  - It will take 15+ minutes
+  - Run in foreground and commit the results with without `| tail` in order not to lost the results.
+  - CI's integrity check fails if generated files are uncommitted.
