@@ -1,0 +1,91 @@
+// Test: per-case variant SROA decomposes Result<T, E> returns
+//
+// When Ok and Err payload types differ, the SROA pass uses per-case slot
+// allocation: the return becomes [i32 discriminant, Ok_payload..., Err_payload...].
+// At call sites, ref.test/ref.cast are replaced by i32 discriminant checks.
+//
+// Also exercises the pre-SROA copy propagation pass that inlines trivial copies
+// like `__match_scrut = result` so SROA can see direct variant access patterns.
+
+// --- Case 1: Result<value, ref> — Ok is i32, Err is String ---
+
+#[inline("never")]
+fn divide(a: i32, b: i32) -> Result<i32, String> {
+    if b == 0 {
+        return Result::<i32, String>::Err("division by zero");
+    }
+    return Result::<i32, String>::Ok(a / b);
+}
+
+#[inline("never")]
+fn try_divide(a: i32, b: i32) -> i32 {
+    let result = divide(a, b);
+    if let Ok(n) = result {
+        return n;
+    }
+    return -1;
+}
+
+// --- Case 2: Result<ref, ref> — both payloads are ref types ---
+
+struct Payload {
+    value: i32,
+}
+
+#[inline("never")]
+fn make_payload(x: i32) -> Result<Payload, String> {
+    if x < 0 {
+        return Result::<Payload, String>::Err("negative");
+    }
+    return Result::<Payload, String>::Ok(Payload { value: x * 2 });
+}
+
+#[inline("never")]
+fn use_payload(x: i32) -> i32 {
+    let result = make_payload(x);
+    if let Ok(p) = result {
+        return p.value;
+    }
+    return -1;
+}
+
+// --- Case 3: Err branch access ---
+
+#[inline("never")]
+fn use_err_branch(x: i32) -> String {
+    let result = make_payload(x);
+    if let Err(msg) = result {
+        return msg;
+    }
+    return "ok";
+}
+
+export fn run() {
+    // Case 1: value/ref Result
+    assert try_divide(10, 2) == 5;
+    assert try_divide(10, 0) == -1;
+    assert try_divide(100, 10) == 10;
+
+    // Case 2: ref/ref Result — Ok branch
+    assert use_payload(5) == 10;
+    assert use_payload(0) == 0;
+    assert use_payload(-1) == -1;
+
+    // Case 3: Err branch access
+    assert use_err_branch(-1) == "negative";
+    assert use_err_branch(5) == "ok";
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O1": [
+        "multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = divide(",
+        "multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = make_payload(",
+        "__sroa_result_discriminant == 0"
+    ],
+    "wir_not_expect:O2": [
+        "ref.test Result<i32,String>",
+        "ref.test Result<Payload,String>"
+    ]
+}

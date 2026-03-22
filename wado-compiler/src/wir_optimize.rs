@@ -85,6 +85,9 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel, profiler: &dyn 
     // Rewrite type-level representations before any value-level passes see them.
     profiler.span_start("wir/phase1_type_repr");
     optimize_nullable_refs(module);
+    // Pre-SROA copy propagation: inline trivial copies like `alias = source`
+    // so that SROA can see direct variant access patterns (RefTest/RefCast on source).
+    peephole::propagate_trivial_copies(module);
     sroa_multi_value_returns(module);
     sroa_single_field_parameters(module);
     profiler.span_end("wir/phase1_type_repr");

@@ -1209,6 +1209,7 @@ fn apply_sroa(module: &mut WirModule, confirmed: &[(u32, SroaCandidate)]) {
             rewrite_call_sites(body, &candidate_map, &module.types);
         }
     }
+
 }
 
 /// Rewrite `Return { value: StructNew { fields } }` → `Return { value: Seq(fields) }`.

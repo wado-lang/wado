@@ -189,7 +189,17 @@ pub fn new_runtime() -> tokio::runtime::Runtime {
 /// Shared wasmtime Engine for all tests (initialized once)
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 
-/// Get or initialize the shared wasmtime Engine for all tests
+/// Default timeout for e2e test execution (5 seconds).
+pub const DEFAULT_TIMEOUT_MS: u64 = 5000;
+
+/// Epoch tick interval for wasmtime's epoch-based interruption.
+/// Coarser interval (1s) reduces thread wake-ups; up to 1s of overshoot is acceptable
+/// since timeouts only fire on runaway tests.
+const EPOCH_INTERVAL_MS: u64 = 1000;
+
+/// Get or initialize the shared wasmtime Engine for all tests.
+/// The engine has epoch interruption enabled; a background thread increments
+/// the epoch every `EPOCH_INTERVAL_MS` to enforce test timeouts.
 pub fn engine() -> &'static Engine {
     ENGINE.get_or_init(|| {
         let mut config = Config::new();
@@ -207,7 +217,18 @@ pub fn engine() -> &'static Engine {
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         // Use minimal optimization for faster compilation in tests
         config.cranelift_opt_level(wasmtime::OptLevel::None);
-        Engine::new(&config).expect("Failed to create wasmtime Engine")
+        // Enable epoch-based interruption for timeout enforcement
+        config.epoch_interruption(true);
+        let engine = Engine::new(&config).expect("Failed to create wasmtime Engine");
+
+        // Start background epoch ticker thread
+        let engine_clone = engine.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_millis(EPOCH_INTERVAL_MS));
+            engine_clone.increment_epoch();
+        });
+
+        engine
     })
 }
 
@@ -638,6 +659,9 @@ pub fn run_wasm_with_full_options(
             },
         };
         let mut store = Store::new(engine, state);
+        // Set epoch deadline for timeout enforcement
+        let deadline_ticks = (DEFAULT_TIMEOUT_MS / EPOCH_INTERVAL_MS).max(1);
+        store.set_epoch_deadline(deadline_ticks);
 
         let instance = linker.instantiate_async(&mut store, &component).await?;
         let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
