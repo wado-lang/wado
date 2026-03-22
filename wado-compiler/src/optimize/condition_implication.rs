@@ -1030,8 +1030,8 @@ fn is_implied_by_dominating_guard(
 
 /// Extract a dominating guard from an if-condition.
 ///
-/// Matches: `(var + offset) < bound` → DominatingGuard { var, max_offset: offset, bound }
-///      or: `var < bound` → DominatingGuard { var, max_offset: 0, bound }
+/// Matches: `(var + offset) < bound` → `DominatingGuard` { var, `max_offset`: offset, bound }
+///      or: `var < bound` → `DominatingGuard` { var, `max_offset`: 0, bound }
 fn extract_dominating_guard(condition: &TirExpr, defs: &DefMap) -> Option<DominatingGuard> {
     let TirExprKind::Binary { left, op, right } = &condition.kind else {
         return None;
@@ -1144,13 +1144,14 @@ fn resolves_field_access_to(
         return false;
     }
     match defs.get(&target) {
-        Some(Def::Copy(next)) => resolves_field_access_to(*next, base_local, field_index, defs, depth + 1),
+        Some(Def::Copy(next)) => {
+            resolves_field_access_to(*next, base_local, field_index, defs, depth + 1)
+        }
         Some(Def::FieldAccess {
             local: tgt_local,
             field_index: tgt_field,
         }) => {
-            *tgt_field == field_index
-                && resolves_to_inner(*tgt_local, base_local, defs, depth + 1)
+            *tgt_field == field_index && resolves_to_inner(*tgt_local, base_local, defs, depth + 1)
         }
         _ => false,
     }
