@@ -1439,6 +1439,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Extract type param mappings from the impl block before mutating self.
             let impl_block = self.get_impl_block(impl_ref);
+            // Track variadic type pack spreads: (pack_name, param_index)
+            let mut variadic_pack_entry: Option<(String, u32)> = None;
             let type_param_entries: Vec<(String, u32)> =
                 if let Type::Generic(generic) = &impl_block.ty {
                     generic
@@ -1460,6 +1462,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     } else {
                         Vec::new()
                     }
+                } else if let Type::Tuple(elems) = &impl_block.ty {
+                    // Handle variadic tuple impls: impl<..T> Trait for [..T]
+                    // TypePackSpread elements map the pack name to its index.
+                    let mut entries = Vec::new();
+                    for (i, elem) in elems.iter().enumerate() {
+                        match elem {
+                            Type::TypePackSpread(name, _) => {
+                                // Find the pack's index from the impl block's type_params
+                                let pack_idx = impl_block
+                                    .type_params
+                                    .iter()
+                                    .position(|tp| tp.name == *name)
+                                    .map(|p| p as u32)
+                                    .unwrap_or(i as u32);
+                                variadic_pack_entry = Some((name.clone(), pack_idx));
+                            }
+                            Type::Named(named) => {
+                                entries.push((named.name.clone(), i as u32));
+                            }
+                            _ => {}
+                        }
+                    }
+                    entries
                 } else {
                     Vec::new()
                 };
@@ -1491,6 +1516,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .type_params
                             .insert(name.clone(), (*idx, type_args[i]));
                     }
+                }
+                // For variadic pack params (..T in impl<..T> Trait for [..T]),
+                // map the pack to a TypePack so that the method body can reference it.
+                if let Some((pack_name, pack_idx)) = &variadic_pack_entry {
+                    let pack_type = self.type_table.borrow_mut().make_tuple(type_args.to_vec());
+                    self.trait_ctx
+                        .type_params
+                        .insert(pack_name.clone(), (*pack_idx, pack_type));
                 }
             }
 

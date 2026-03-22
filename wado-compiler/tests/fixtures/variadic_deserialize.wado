@@ -1,0 +1,15 @@
+use { to_string, from_string } from "core:json";
+
+test "tuple deserialize via variadic impl" {
+    let json = "[42,\"hello\"]";
+    let parsed = from_string::<[i32, String]>(json);
+    if let Ok(t) = parsed {
+        assert t.0 == 42;
+        assert t.1 == "hello";
+    } else {
+        panic("parse failed");
+    }
+}
+
+__DATA__
+{"test": {}}

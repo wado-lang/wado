@@ -334,7 +334,6 @@ fn register_methods(ctx: &mut WirContext<'_>) {
         if module_source.is_wasi() {
             continue;
         }
-
         let type_table_rc = tir_mod.type_table.clone();
         let type_table = &*type_table_rc.borrow();
 

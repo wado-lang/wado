@@ -1466,6 +1466,24 @@ impl TypeTable {
         }
     }
 
+    /// Find type args for a struct/tuple by its mangled name (e.g., "Tuple<i32,String>").
+    /// Used by the monomorphizer to extract impl type args for variadic impls.
+    pub fn find_type_args_by_mangled_name(&self, mangled_name: &str) -> Option<Vec<TypeId>> {
+        for tid in self.iter_type_ids() {
+            if self.mangle_type_name(tid) == mangled_name {
+                return self.generic_type_args(tid).or_else(|| {
+                    // For Tuple types, the "type args" are the element types
+                    if let ResolvedType::Tuple(elems) = self.get(tid) {
+                        Some(elems.clone())
+                    } else {
+                        None
+                    }
+                });
+            }
+        }
+        None
+    }
+
     /// Convert a resolved type to its name info for formatting.
     ///
     /// This separates type resolution (here in tir.rs) from name formatting
