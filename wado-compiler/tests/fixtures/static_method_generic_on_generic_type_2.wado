@@ -1,0 +1,37 @@
+// Test: generic static method on a generic type, called from within a generic function
+use { println, Stdout } from "core:cli";
+
+struct Wrapper<T> {
+    value: T,
+}
+
+impl<T> Wrapper<T> {
+    pub fn new(value: T) -> Wrapper<T> {
+        return Wrapper { value };
+    }
+
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+
+    // Generic static method: returns a Wrapper of a different type
+    pub fn wrap_as<U>(value: U) -> Wrapper<U> {
+        return Wrapper { value };
+    }
+}
+
+// Call the generic static method from within another generic function
+fn make_wrapper<V>(value: V) -> Wrapper<V> {
+    return Wrapper::<i32>::wrap_as::<V>(value);
+}
+
+export fn run() with Stdout {
+    let w = make_wrapper::<String>("hello");
+    println(`result: {w.get()}`);
+
+    let w2 = make_wrapper::<i32>(42);
+    println(`result: {w2.get()}`);
+}
+
+__DATA__
+{"stdout": "result: hello\nresult: 42\n"}

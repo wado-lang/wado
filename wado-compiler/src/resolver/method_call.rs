@@ -528,6 +528,70 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        // Resolve method-level type arguments
+        let method_type_args: Vec<TypeId> = static_call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+
+        // Substitute UNKNOWN param types with concrete types from call-site type args.
+        // lookup_static_method_param_types resolves without type params in scope, so
+        // generic params like T and U become UNKNOWN. We substitute them by matching AST
+        // param type names against impl block type param names and method type param names.
+        if !param_types.is_empty() && param_types.iter().any(|t| *t == TypeTable::UNKNOWN) {
+            let method_def = self.find_static_method_def(
+                struct_name_for_lookup.as_deref().unwrap_or(""),
+                &static_call.method,
+            );
+            if let Some((impl_type_param_names, method_def)) = method_def {
+                // Build name→concrete type maps
+                // impl type params: names from impl block, concrete types from call-site turbofish
+                let call_site_impl_args: Vec<TypeId> = match &static_call.target_type {
+                    ast::Type::Generic(g) => {
+                        g.args.iter().map(|t| self.resolve_type(t)).collect()
+                    }
+                    _ => vec![],
+                };
+
+                let non_self_params: Vec<_> = method_def
+                    .params
+                    .iter()
+                    .filter(|p| p.self_kind == ast::SelfKind::None)
+                    .collect();
+                for (i, param_type) in param_types.iter_mut().enumerate() {
+                    if *param_type != TypeTable::UNKNOWN {
+                        continue;
+                    }
+                    let Some(param) = non_self_params.get(i) else {
+                        continue;
+                    };
+                    let ast::Type::Named(named) = &param.ty else {
+                        continue;
+                    };
+                    // Check impl type params (e.g., T in impl<T> Container<T>)
+                    if let Some(idx) = impl_type_param_names
+                        .iter()
+                        .position(|name| *name == named.name)
+                    {
+                        if let Some(&concrete) = call_site_impl_args.get(idx) {
+                            *param_type = concrete;
+                        }
+                    }
+                    // Check method type params (e.g., U in fn make<U>)
+                    else if let Some(idx) = method_def
+                        .type_params
+                        .iter()
+                        .position(|tp| tp.name == named.name)
+                    {
+                        if let Some(&concrete) = method_type_args.get(idx) {
+                            *param_type = concrete;
+                        }
+                    }
+                }
+            }
+        }
+
         // Resolve arguments with expected types for coercion
         let args: Vec<TirExpr> = static_call
             .args
@@ -947,13 +1011,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
         }
-
-        // Resolve method-level type arguments (e.g., Box::<i32>::wrap_other::<String>(...))
-        let method_type_args: Vec<TypeId> = static_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
 
         // Substitute type parameters in the return type using SubstitutionContext
         {
@@ -1377,6 +1434,59 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         Vec::new()
+    }
+
+    /// Find the AST definition of a static method for a given struct.
+    /// Returns the impl block's type param names and the method definition.
+    fn find_static_method_def(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Option<(Vec<String>, ast::Function)> {
+        let extract_impl_type_param_names = |ty: &ast::Type| -> Vec<String> {
+            match ty {
+                ast::Type::Generic(g) => g
+                    .args
+                    .iter()
+                    .filter_map(|arg| match arg {
+                        ast::Type::Named(n) => Some(n.name.clone()),
+                        _ => None,
+                    })
+                    .collect(),
+                _ => vec![],
+            }
+        };
+
+        // Check current module
+        for item in self.current_module_items.iter() {
+            if let Item::Impl(impl_block) = item
+                && Self::get_type_name_static(&impl_block.ty) == struct_name
+            {
+                for method in &impl_block.methods {
+                    let has_self = method
+                        .params
+                        .iter()
+                        .any(|p| p.self_kind != ast::SelfKind::None);
+                    if method.name == method_name && !has_self {
+                        let names = extract_impl_type_param_names(&impl_block.ty);
+                        return Some((names, method.clone()));
+                    }
+                }
+            }
+        }
+        // Check indexed modules
+        if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
+            for (name, module_source, item_idx, method_idx) in methods {
+                if name == method_name
+                    && let Some(module) = self.loaded_modules.get(module_source)
+                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+                {
+                    let names = extract_impl_type_param_names(&impl_block.ty);
+                    return Some((names, impl_block.methods[*method_idx].clone()));
+                }
+            }
+        }
+        None
     }
 
     /// Look up whether each non-self parameter of an instance method is `mut`.
