@@ -1,0 +1,205 @@
+use { println, Stdout } from "core:cli";
+
+struct SDPoint {
+    x: i32,
+    y: i32,
+}
+
+struct SDLine {
+    start: SDPoint,
+    end: SDPoint,
+}
+
+struct SDPerson {
+    name: String,
+    age: i32,
+    email: String,
+}
+
+struct SDIntPair {
+    label: String,
+    value: i32,
+}
+
+struct SDBoolPair {
+    label: String,
+    flag: bool,
+}
+
+struct SDCharPair {
+    label: String,
+    ch: char,
+}
+
+struct SDStringPair {
+    first: String,
+    second: String,
+}
+
+fn destruct_basic() with Stdout {
+    let p = SDPoint { x: 10, y: 20 };
+    let { x, y } = p;
+    println(`{x}, {y}`);
+    let SDPoint { x: a, y: b } = p;
+    println(`{a}, {b}`);
+    let { x: x2, .. } = p;
+    println(`{x2}`);
+    let mut { x: mx, y: my } = p;
+    mx += 1;
+    my += 2;
+    println(`{mx}, {my}`);
+}
+
+fn destruct_for_of() with Stdout {
+    let points: Array<SDPoint> = [SDPoint { x: 1, y: 2 }, SDPoint { x: 3, y: 4 }, SDPoint { x: 5, y: 6 }];
+    for let { x, y } of points {
+        println(`{x + y}`);
+    }
+    for let { x: a, y: b } of points {
+        println(`{a * b}`);
+    }
+}
+
+fn destruct_if_let() with Stdout {
+    let p = SDPoint { x: 5, y: 15 };
+    if let { x, y } = p {
+        println(`{x}, {y}`);
+    }
+    if let SDPoint { x, y } = p {
+        println(`{x + y}`);
+    }
+    let person = SDPerson { name: "Alice", age: 30, email: "alice@test.com" };
+    if let { name, .. } = person {
+        println(name);
+    }
+    if let { x: a, y: b } = p {
+        println(`{a * b}`);
+    }
+}
+
+fn destruct_nested() with Stdout {
+    let line = SDLine {
+        start: SDPoint { x: 1, y: 2 },
+        end: SDPoint { x: 3, y: 4 },
+    };
+    let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
+    println(`{x1}, {y1}, {x2}, {y2}`);
+    let { start: { x, .. }, .. } = line;
+    println(`{x}`);
+}
+
+fn destruct_rename() with Stdout {
+    let p = SDPoint { x: 10, y: 20 };
+    let { x: horizontal, y: vertical } = p;
+    println(`{horizontal}, {vertical}`);
+    let { x, y: vertical2 } = p;
+    println(`{x}, {vertical2}`);
+    let person = SDPerson { name: "Alice", age: 30, email: "alice@example.com" };
+    let { name: n, .. } = person;
+    println(`{n}`);
+    let SDPoint { x: a, y: b } = p;
+    println(`{a}, {b}`);
+}
+
+fn destruct_wildcard() with Stdout {
+    let p = SDPoint { x: 10, y: 20 };
+    let { x, y: _ } = p;
+    println(`{x}`);
+    let { x: _, y } = p;
+    println(`{y}`);
+    let person = SDPerson { name: "Bob", age: 25, email: "bob@example.com" };
+    let { name, age: _, email: _ } = person;
+    println(`{name}`);
+    let { name: _, age, email: _ } = person;
+    println(`{age}`);
+}
+
+fn destruct_match() with Stdout {
+    let p = SDPoint { x: 10, y: 20 };
+    let label = match p {
+        { x, y } && x > 0 && y > 0 => "positive",
+        { x, .. } && x > 0 => "positive x",
+        _ => "other",
+    };
+    println(label);
+    let label2 = match p {
+        SDPoint { x, y } && x + y > 25 => "large",
+        SDPoint { x, y } => "small",
+    };
+    println(label2);
+    let desc = match p {
+        { x: h, y: v } && h == v => `equal: {h}`,
+        { x: h, y: v } => `{h}, {v}`,
+    };
+    println(desc);
+}
+
+fn destruct_matches() with Stdout {
+    let p = SDPoint { x: 10, y: 20 };
+    if p matches { { x, y } && x > 0 } {
+        println("positive x");
+    }
+    if p matches { SDPoint { x, y } && x + y > 25 } {
+        println("large point");
+    }
+    let person = SDPerson { name: "Alice", age: 30, email: "alice@test.com" };
+    if person matches { { age, .. } && age >= 18 } {
+        println("adult");
+    }
+    let is_origin = p matches { { x, y } && x == 0 && y == 0 };
+    if is_origin {
+        println("origin");
+    } else {
+        println("not origin");
+    }
+}
+
+fn destruct_literal() with Stdout {
+    let ip = SDIntPair { label: "int", value: 42 };
+    let result = match ip {
+        SDIntPair { label, value: 42 } => `matched int: {label}`,
+        _ => "no match",
+    };
+    println(result);
+    let bp = SDBoolPair { label: "bool", flag: true };
+    let result3 = match bp {
+        SDBoolPair { label, flag: true } => `matched bool: {label}`,
+        SDBoolPair { label, flag: false } => `not matched: {label}`,
+    };
+    println(result3);
+    let cp = SDCharPair { label: "char", ch: 'Z' };
+    let result4 = match cp {
+        SDCharPair { label, ch: 'Z' } => `matched char: {label}`,
+        _ => "no match",
+    };
+    println(result4);
+    let sp = SDStringPair { first: "hello", second: "world" };
+    let result5 = match sp {
+        SDStringPair { first, second: "world" } => `matched string: {first}`,
+        _ => "no match",
+    };
+    println(result5);
+    let ip2 = SDIntPair { label: "test", value: 0 };
+    if let SDIntPair { label, value: 0 } = ip2 {
+        println(`if-let int: {label}`);
+    }
+    let bp2 = SDBoolPair { label: "check", flag: false };
+    if bp2 matches { SDBoolPair { flag: false, .. } } {
+        println("matches bool");
+    }
+}
+
+export fn run() with Stdout {
+    destruct_basic();
+    destruct_for_of();
+    destruct_if_let();
+    destruct_nested();
+    destruct_rename();
+    destruct_wildcard();
+    destruct_match();
+    destruct_matches();
+    destruct_literal();
+}
+
+__DATA__
+{"stdout": "10, 20\n10, 20\n10\n11, 22\n3\n7\n11\n2\n12\n30\n5, 15\n20\nAlice\n75\n1, 2, 3, 4\n1\n10, 20\n10, 20\nAlice\n10, 20\n10\n20\nBob\n25\npositive\nlarge\n10, 20\npositive x\nlarge point\nadult\nnot origin\nmatched int: int\nmatched bool: bool\nmatched char: char\nmatched string: hello\nif-let int: test\nmatches bool\n"}
