@@ -4406,9 +4406,18 @@ impl Monomorphizer {
                                         is_blanket: false,
                                     })
                                 };
+                                // When the call still needs monomorphization (new_monomorph is Some),
+                                // use the current module source because instantiate_function will
+                                // add the concrete function to this module. When monomorphization
+                                // is complete (None), use the concrete module where the impl lives.
+                                let resolved_module = if new_monomorph.is_some() {
+                                    self.current_module_source.clone()
+                                } else {
+                                    concrete_module
+                                        .unwrap_or_else(|| module_source.clone())
+                                };
                                 *call_func = FunctionRef {
-                                    module_source: concrete_module
-                                        .unwrap_or_else(|| module_source.clone()),
+                                    module_source: resolved_module,
                                     name: new_func_name,
                                     monomorph_info: new_monomorph,
                                     method_info: Some(new_info),
