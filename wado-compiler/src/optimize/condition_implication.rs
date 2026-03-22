@@ -1,8 +1,12 @@
-//! Condition Implication — eliminates conditions implied false by loop guards.
+//! Condition Implication — eliminates conditions implied false by guards.
 //!
 //! When a loop guard proves `i < bound`, any inner condition `i >= bound` is
 //! known false and can be replaced with `false`. The existing `const_branch_prune`
 //! pass then removes the dead branch on the next iteration.
+//!
+//! Also handles dominating if-conditions: when `if (var + offset) < bound { ... }`,
+//! bounds checks `(var + k) >= bound` for `k <= offset` inside the then-block
+//! are known false.
 //!
 //! This subsumes the WIR-level `bounds_check` pass, handling both strict `<`
 //! and inclusive `<=` guard patterns.
@@ -20,6 +24,18 @@ struct LoopGuard {
     bound: u32,
     /// `true` for `<` (strict), `false` for `<=` (inclusive)
     is_strict: bool,
+}
+
+/// A dominating if-condition that proves `var + k < bound` for all `k <= max_offset`.
+/// Extracted from `if (var + max_offset) < bound { then_block }`.
+#[derive(Clone)]
+struct DominatingGuard {
+    /// Local index of the base variable
+    var: u32,
+    /// Maximum offset proven: `var + max_offset < bound`
+    max_offset: i64,
+    /// Local index of the bound
+    bound: u32,
 }
 
 #[derive(Clone)]
@@ -127,7 +143,7 @@ fn process_loop(body: &mut TirBlock, defs: &mut DefMap) -> bool {
     if let Some(guard) = &guard {
         // Eliminate implied conditions in the loop body (skip the guard itself)
         for stmt in body.stmts.iter_mut().skip(1) {
-            changed |= eliminate_in_stmt(stmt, guard, &loop_defs);
+            changed |= eliminate_in_stmt(stmt, guard, &[], &loop_defs);
         }
     }
 
@@ -475,7 +491,12 @@ fn record_defs_from_expr(expr: &TirExpr, defs: &mut DefMap) {
 }
 
 /// Eliminate implied-false conditions within a statement.
-fn eliminate_in_stmt(stmt: &mut TirStmt, guard: &LoopGuard, defs: &DefMap) -> bool {
+fn eliminate_in_stmt(
+    stmt: &mut TirStmt,
+    guard: &LoopGuard,
+    dom_guards: &[DominatingGuard],
+    defs: &DefMap,
+) -> bool {
     // Check if this stmt itself is a bounds check pattern
     if let TirStmtKind::If {
         condition,
@@ -483,7 +504,7 @@ fn eliminate_in_stmt(stmt: &mut TirStmt, guard: &LoopGuard, defs: &DefMap) -> bo
         else_block: None,
     } = &mut stmt.kind
         && is_panic_block(then_block)
-        && is_implied_false(condition, guard, defs)
+        && is_implied_false_by_any(condition, guard, dom_guards, defs)
     {
         *condition = TirExpr {
             kind: TirExprKind::BoolLiteral(false),
@@ -495,35 +516,46 @@ fn eliminate_in_stmt(stmt: &mut TirStmt, guard: &LoopGuard, defs: &DefMap) -> bo
 
     // Recurse into sub-structures
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => eliminate_in_expr(value, guard, defs),
-        TirStmtKind::Expr(expr) => eliminate_in_expr(expr, guard, defs),
+        TirStmtKind::Let { value, .. } => eliminate_in_expr(value, guard, dom_guards, defs),
+        TirStmtKind::Expr(expr) => eliminate_in_expr(expr, guard, dom_guards, defs),
         TirStmtKind::Return { value: Some(expr) }
         | TirStmtKind::Break {
             value: Some(expr), ..
-        } => eliminate_in_expr(expr, guard, defs),
+        } => eliminate_in_expr(expr, guard, dom_guards, defs),
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            let mut changed = eliminate_in_expr(condition, guard, defs);
-            changed |= eliminate_in_block(then_block, guard, defs);
+            let mut changed = eliminate_in_expr(condition, guard, dom_guards, defs);
+            // If condition is `(var + offset) < bound`, create a dominating guard
+            // for the then-block to eliminate bounds checks on var+k for k <= offset.
+            let dom = extract_dominating_guard(condition, defs);
+            if let Some(dg) = dom {
+                let mut extended = dom_guards.to_vec();
+                extended.push(dg);
+                changed |= eliminate_in_block(then_block, guard, &extended, defs);
+            } else {
+                changed |= eliminate_in_block(then_block, guard, dom_guards, defs);
+            }
             if let Some(eb) = else_block {
-                changed |= eliminate_in_block(eb, guard, defs);
+                changed |= eliminate_in_block(eb, guard, dom_guards, defs);
             }
             changed
         }
-        TirStmtKind::LabeledBlock { block, .. } => eliminate_in_block(block, guard, defs),
+        TirStmtKind::LabeledBlock { block, .. } => {
+            eliminate_in_block(block, guard, dom_guards, defs)
+        }
         TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
             ..
         } => {
-            let mut changed = eliminate_in_expr(scrutinee, guard, defs);
-            changed |= eliminate_in_block(then_block, guard, defs);
+            let mut changed = eliminate_in_expr(scrutinee, guard, dom_guards, defs);
+            changed |= eliminate_in_block(then_block, guard, dom_guards, defs);
             if let Some(eb) = else_block {
-                changed |= eliminate_in_block(eb, guard, defs);
+                changed |= eliminate_in_block(eb, guard, dom_guards, defs);
             }
             changed
         }
@@ -531,18 +563,28 @@ fn eliminate_in_stmt(stmt: &mut TirStmt, guard: &LoopGuard, defs: &DefMap) -> bo
     }
 }
 
-fn eliminate_in_block(block: &mut TirBlock, guard: &LoopGuard, defs: &DefMap) -> bool {
+fn eliminate_in_block(
+    block: &mut TirBlock,
+    guard: &LoopGuard,
+    dom_guards: &[DominatingGuard],
+    defs: &DefMap,
+) -> bool {
     let mut changed = false;
     for stmt in &mut block.stmts {
-        changed |= eliminate_in_stmt(stmt, guard, defs);
+        changed |= eliminate_in_stmt(stmt, guard, dom_guards, defs);
     }
     changed
 }
 
-fn eliminate_in_expr(expr: &mut TirExpr, guard: &LoopGuard, defs: &DefMap) -> bool {
+fn eliminate_in_expr(
+    expr: &mut TirExpr,
+    guard: &LoopGuard,
+    dom_guards: &[DominatingGuard],
+    defs: &DefMap,
+) -> bool {
     match &mut expr.kind {
         TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
-            eliminate_in_block(block, guard, defs)
+            eliminate_in_block(block, guard, dom_guards, defs)
         }
         TirExprKind::Binary { left, right, .. }
         | TirExprKind::Assign {
@@ -553,59 +595,68 @@ fn eliminate_in_expr(expr: &mut TirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
             expr: left,
             index: right,
         } => {
-            let mut c = eliminate_in_expr(left, guard, defs);
-            c |= eliminate_in_expr(right, guard, defs);
+            let mut c = eliminate_in_expr(left, guard, dom_guards, defs);
+            c |= eliminate_in_expr(right, guard, dom_guards, defs);
             c
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::GlobalVarSet { value: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner, .. } => eliminate_in_expr(inner, guard, defs),
+        | TirExprKind::TupleSpread { expr: inner, .. } => {
+            eliminate_in_expr(inner, guard, dom_guards, defs)
+        }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            let mut c = eliminate_in_expr(condition, guard, defs);
-            c |= eliminate_in_block(then_branch, guard, defs);
+            let mut c = eliminate_in_expr(condition, guard, dom_guards, defs);
+            let dom = extract_dominating_guard(condition, defs);
+            if let Some(dg) = dom {
+                let mut extended = dom_guards.to_vec();
+                extended.push(dg);
+                c |= eliminate_in_block(then_branch, guard, &extended, defs);
+            } else {
+                c |= eliminate_in_block(then_branch, guard, dom_guards, defs);
+            }
             if let Some(eb) = else_branch {
-                c |= eliminate_in_block(eb, guard, defs);
+                c |= eliminate_in_block(eb, guard, dom_guards, defs);
             }
             c
         }
         TirExprKind::Call { args, .. } => {
             let mut c = false;
             for arg in args {
-                c |= eliminate_in_expr(&mut arg.expr, guard, defs);
+                c |= eliminate_in_expr(&mut arg.expr, guard, dom_guards, defs);
             }
             c
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            let mut c = eliminate_in_expr(receiver, guard, defs);
+            let mut c = eliminate_in_expr(receiver, guard, dom_guards, defs);
             for arg in args {
-                c |= eliminate_in_expr(&mut arg.expr, guard, defs);
+                c |= eliminate_in_expr(&mut arg.expr, guard, dom_guards, defs);
             }
             c
         }
         TirExprKind::StructLiteral { fields, .. } => {
             let mut c = false;
             for f in fields {
-                c |= eliminate_in_expr(&mut f.value, guard, defs);
+                c |= eliminate_in_expr(&mut f.value, guard, dom_guards, defs);
             }
             c
         }
         TirExprKind::TupleLiteral { elements } => {
             let mut c = false;
             for e in elements {
-                c |= eliminate_in_expr(e, guard, defs);
+                c |= eliminate_in_expr(e, guard, dom_guards, defs);
             }
             c
         }
         TirExprKind::VariantConstruct {
             payload: Some(inner),
             ..
-        } => eliminate_in_expr(inner, guard, defs),
+        } => eliminate_in_expr(inner, guard, dom_guards, defs),
         _ => false,
     }
 }
@@ -920,6 +971,138 @@ fn is_implied_false(condition: &TirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
     }
 }
 
+/// Check if a condition is implied false by the loop guard OR any dominating guard.
+fn is_implied_false_by_any(
+    condition: &TirExpr,
+    guard: &LoopGuard,
+    dom_guards: &[DominatingGuard],
+    defs: &DefMap,
+) -> bool {
+    if is_implied_false(condition, guard, defs) {
+        return true;
+    }
+    for dg in dom_guards {
+        if is_implied_by_dominating_guard(condition, dg, defs) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Check if `check_var >= check_bound` is implied false by a dominating guard.
+///
+/// A dominating guard `(var + max_offset) < bound` proves that
+/// `var + k < bound` for all `k <= max_offset` (assuming non-negative offsets).
+/// So `(var + k) >= bound` is false for `k <= max_offset`.
+fn is_implied_by_dominating_guard(
+    condition: &TirExpr,
+    dg: &DominatingGuard,
+    defs: &DefMap,
+) -> bool {
+    let TirExprKind::Binary { left, op, right } = &condition.kind else {
+        return false;
+    };
+    if *op != TirBinaryOp::GtEq {
+        return false;
+    }
+    let TirExprKind::Local {
+        index: check_var, ..
+    } = &left.kind
+    else {
+        return false;
+    };
+    let TirExprKind::Local {
+        index: check_bound, ..
+    } = &right.kind
+    else {
+        return false;
+    };
+
+    // check_bound must resolve to the dominating guard's bound
+    if !resolves_to(*check_bound, dg.bound, defs) {
+        return false;
+    }
+
+    // check_var must resolve to `dg.var + k` where `k <= dg.max_offset`
+    resolve_offset_from(*check_var, dg.var, defs)
+        .is_some_and(|offset| offset >= 0 && offset <= dg.max_offset)
+}
+
+/// Extract a dominating guard from an if-condition.
+///
+/// Matches: `(var + offset) < bound` → `DominatingGuard` { var, `max_offset`: offset, bound }
+///      or: `var < bound` → `DominatingGuard` { var, `max_offset`: 0, bound }
+fn extract_dominating_guard(condition: &TirExpr, defs: &DefMap) -> Option<DominatingGuard> {
+    let TirExprKind::Binary { left, op, right } = &condition.kind else {
+        return None;
+    };
+    if *op != TirBinaryOp::Lt {
+        return None;
+    }
+    let TirExprKind::Local {
+        index: bound_var, ..
+    } = &right.kind
+    else {
+        return None;
+    };
+
+    // Left side: either `var` or `var + offset`
+    match &left.kind {
+        TirExprKind::Local { index: var, .. } => Some(DominatingGuard {
+            var: *var,
+            max_offset: 0,
+            bound: *bound_var,
+        }),
+        TirExprKind::Binary {
+            left: inner_left,
+            op: TirBinaryOp::Add,
+            right: inner_right,
+        } => {
+            let TirExprKind::Local { index: var, .. } = &inner_left.kind else {
+                return None;
+            };
+            // Offset can be a literal or a local resolving to a constant
+            let offset = match &inner_right.kind {
+                TirExprKind::IntLiteral { value, .. } => *value as i64,
+                TirExprKind::Local { index, .. } => resolve_constant(*index, defs)?,
+                _ => return None,
+            };
+            if offset < 0 {
+                return None;
+            }
+            Some(DominatingGuard {
+                var: *var,
+                max_offset: offset,
+                bound: *bound_var,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Resolve the offset of `source` from `base`: if `source` resolves to `base + k`, return `Some(k)`.
+/// If `source` resolves directly to `base`, return `Some(0)`.
+fn resolve_offset_from(source: u32, base: u32, defs: &DefMap) -> Option<i64> {
+    resolve_offset_from_inner(source, base, defs, 0)
+}
+
+fn resolve_offset_from_inner(source: u32, base: u32, defs: &DefMap, depth: usize) -> Option<i64> {
+    if source == base {
+        return Some(0);
+    }
+    if depth >= MAX_CHAIN_DEPTH {
+        return None;
+    }
+    match defs.get(&source) {
+        Some(Def::Copy(next)) => resolve_offset_from_inner(*next, base, defs, depth + 1),
+        Some(Def::AddConst(var, offset)) => {
+            let base_offset = resolve_offset_from_inner(*var, base, defs, depth + 1)?;
+            Some(base_offset + offset)
+        }
+        _ => None,
+    }
+}
+
 const MAX_CHAIN_DEPTH: usize = 10;
 
 /// Check if `source` resolves to `target` by following copy chains.
@@ -936,6 +1119,40 @@ fn resolves_to_inner(source: u32, target: u32, defs: &DefMap, depth: usize) -> b
     }
     match defs.get(&source) {
         Some(Def::Copy(next)) => resolves_to_inner(*next, target, defs, depth + 1),
+        Some(Def::FieldAccess {
+            local: src_local,
+            field_index: src_field,
+        }) => {
+            // Two locals derived from the same field access on the same base are equal.
+            // This handles the pattern where LICM hoists `obj.field` to a new local while
+            // the original `let x = obj.field` already exists — both read the same value.
+            resolves_field_access_to(target, *src_local, *src_field, defs, depth)
+        }
+        _ => false,
+    }
+}
+
+/// Check if `target` also resolves to `FieldAccess(base_local, field_index)`.
+fn resolves_field_access_to(
+    target: u32,
+    base_local: u32,
+    field_index: u32,
+    defs: &DefMap,
+    depth: usize,
+) -> bool {
+    if depth >= MAX_CHAIN_DEPTH {
+        return false;
+    }
+    match defs.get(&target) {
+        Some(Def::Copy(next)) => {
+            resolves_field_access_to(*next, base_local, field_index, defs, depth + 1)
+        }
+        Some(Def::FieldAccess {
+            local: tgt_local,
+            field_index: tgt_field,
+        }) => {
+            *tgt_field == field_index && resolves_to_inner(*tgt_local, base_local, defs, depth + 1)
+        }
         _ => false,
     }
 }
