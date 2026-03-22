@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774171875279,
+  "lastUpdate": 1774175514694,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6224,6 +6224,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7fc1c94d69c86d8565567955564e0e7c828378df"
         },
         "date": 1774171875051,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cc9f3bed88cc0ba61f1f903c5a3e1670be3a959e",
+          "message": "Merge pull request #663 from wado-lang/claude/gale-code-generator-CmCmD\n\nAdd code generator for ANTLR grammar to Wado AST",
+          "timestamp": "2026-03-22T19:29:24+09:00",
+          "tree_id": "463d375d54bc0c2c34b4d5a06c0bae5374d08bba",
+          "url": "https://github.com/wado-lang/wado/commit/cc9f3bed88cc0ba61f1f903c5a3e1670be3a959e"
+        },
+        "date": 1774175514467,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
