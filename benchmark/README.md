@@ -185,7 +185,7 @@ All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
 | Rust (serde_json, native)  | 0.663     | 1.00x    |
-| **Wado** (core:json, Wasm) | 18.400    | 27.75x   |
+| **Wado** (core:json, Wasm) | 19.190    | 28.94x   |
 
 Both implementations parse 100 statuses from Twitter search results.
 
@@ -194,7 +194,7 @@ Both implementations parse 100 statuses from Twitter search results.
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
 | Rust (serde_json, native)  | 7.503     | 1.00x    |
-| **Wado** (core:json, Wasm) | 130.963   | 17.46x   |
+| **Wado** (core:json, Wasm) | 80.453    | 10.72x   |
 
 Both implementations parse 55,563 coordinate points from GeoJSON.
 
@@ -203,7 +203,7 @@ Both implementations parse 55,563 coordinate points from GeoJSON.
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
 | Rust (serde_json, native)  | 2.221     | 1.00x    |
-| **Wado** (core:json, Wasm) | 48.477    | 21.83x   |
+| **Wado** (core:json, Wasm) | 49.458    | 22.27x   |
 
 Both implementations parse 184 events and 243 performances from CITM catalog data. Rust uses `BTreeMap` (ordered map) to match Wado's `TreeMap`.
 
