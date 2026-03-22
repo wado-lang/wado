@@ -15,7 +15,7 @@ use wasmtime::component::Component;
 use crate::args::{self, CliExit};
 use crate::compile;
 
-const DEFAULT_TIMEOUT_MS: u64 = 1000;
+const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // Epoch tick interval for wasmtime's epoch-based interruption.
 // A coarser interval (1s) reduces thread wake-ups. The trade-off is up to 1s
 // of overshoot beyond the nominal timeout, which is acceptable since timeouts
