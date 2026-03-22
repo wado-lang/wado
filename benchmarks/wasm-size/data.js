@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774164723277,
+  "lastUpdate": 1774167989924,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6146,6 +6146,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/672e9683616006a89446346d958c217b46dae1cf"
         },
         "date": 1774164723180,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "93f780c5324e5d0ec39c6c8a27dad507806ae13a",
+          "message": "Merge pull request #660 from wado-lang/claude/add-string-literal-match-AivJ0\n\nLower string literal patterns to binding + guard",
+          "timestamp": "2026-03-22T17:24:05+09:00",
+          "tree_id": "4dfb3fca6147df61fbd070c7679fb2f16f6ee9ff",
+          "url": "https://github.com/wado-lang/wado/commit/93f780c5324e5d0ec39c6c8a27dad507806ae13a"
+        },
+        "date": 1774167989702,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
