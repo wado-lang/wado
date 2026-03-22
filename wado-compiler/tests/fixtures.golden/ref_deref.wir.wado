@@ -6,6 +6,10 @@ struct Box<i32> {  // from core:internal  // Box<T> with T=i32
     mut value: i32,
 }
 
+struct Box<Option<i32>> {  // from core:internal  // Box<T> with T=Option<i32>
+    mut value: ref Option<i32>,
+}
+
 array array<u8> (mut u8);
 
 struct String {
@@ -177,13 +181,15 @@ fn ref_deref_assign_struct() with Stdout {
 }
 
 fn ref_deref_assign_variant() with Stdout {
-    let __sroa_c_value: ref Option<i32>;
+    let c: ref "core:internal/Box<Option<i32>>";
+    let cr: ref "core:internal/Box<Option<i32>>";
     "core:cli/println"(maybe_read(Option<i32>::Some { discriminant: 0, payload_0: 42 }));
     "core:cli/println"(maybe_read(Option<i32> { 1 }));
-    __sroa_c_value = Option<i32>::Some { discriminant: 0, payload_0: 10 };
-    "core:cli/println"(maybe_read(ref.as_non_null(__sroa_c_value)));
-    __sroa_c_value = Option<i32> { 1 };
-    "core:cli/println"(maybe_read(ref.as_non_null(__sroa_c_value)));
+    c = "core:internal/Box<Option<i32>>" { value: Option<i32>::Some { discriminant: 0, payload_0: 10 } };
+    "core:cli/println"(maybe_read(c.value));
+    cr = c;
+    cr.value = Option<i32> { 1 };
+    "core:cli/println"(maybe_read(c.value));
 }
 
 fn ref_deref_reassign() with Stdout {

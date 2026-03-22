@@ -242,11 +242,7 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, in_loop: bool, in_c
             if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind
                 && let TirExprKind::Local { index, .. } = &inner.kind
             {
-                result
-                    .usage
-                    .entry(*index)
-                    .or_default()
-                    .has_field_mutation = true;
+                result.usage.entry(*index).or_default().has_field_mutation = true;
             }
             analyze_expr(target, result, in_loop, in_condition);
             analyze_expr(value, result, in_loop, in_condition);
