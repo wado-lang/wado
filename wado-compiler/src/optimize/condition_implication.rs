@@ -28,10 +28,20 @@ enum Def {
     Copy(u32),
     /// `let x = y + const_val`
     AddConst(u32, i64),
+    /// `let x = y & const_val` — bitmask, result is in `[0, mask]`
+    BitAndConst(i64),
+    /// `let x = int_literal` — known constant
+    IntConst(i64),
     /// `let x = obj.field` — field access on a local
     FieldAccess { local: u32, field_index: u32 },
-    /// Struct literal: maps `field_index` → `local_index` for fields that are simple locals
-    StructLit(IndexMap<u32, u32>),
+    /// Struct literal: maps `field_index` → source for fields
+    StructLit(IndexMap<u32, FieldSource>),
+}
+
+#[derive(Clone)]
+enum FieldSource {
+    Local(u32),
+    Const(i64),
 }
 
 type DefMap = IndexMap<u32, Def>;
@@ -60,6 +70,7 @@ fn process_block(block: &mut TirBlock, defs: &mut DefMap) -> bool {
     for stmt in &mut block.stmts {
         record_def_from_stmt(stmt, defs);
         record_defs_from_nested(stmt, defs);
+        changed |= eliminate_bitmask_bounded(stmt, defs);
         changed |= process_stmt(stmt, defs);
     }
     changed
@@ -103,21 +114,26 @@ fn process_loop(body: &mut TirBlock, defs: &mut DefMap) -> bool {
     // and recurse into nested structures
     let mut changed = false;
 
+    // Collect defs from the loop body before eliminating
+    let mut loop_defs = defs.clone();
+    for stmt in &body.stmts {
+        record_def_from_stmt(stmt, &mut loop_defs);
+        record_defs_from_nested(stmt, &mut loop_defs);
+    }
+
     // Extract the loop guard from the first statement
     let guard = extract_loop_guard(&body.stmts);
 
     if let Some(guard) = &guard {
-        // Collect defs from the loop body before eliminating
-        let mut loop_defs = defs.clone();
-        for stmt in &body.stmts {
-            record_def_from_stmt(stmt, &mut loop_defs);
-            record_defs_from_nested(stmt, &mut loop_defs);
-        }
-
         // Eliminate implied conditions in the loop body (skip the guard itself)
         for stmt in body.stmts.iter_mut().skip(1) {
             changed |= eliminate_in_stmt(stmt, guard, &loop_defs);
         }
+    }
+
+    // Eliminate bitmask-bounded checks in the loop body
+    for stmt in body.stmts.iter_mut() {
+        changed |= eliminate_bitmask_bounded(stmt, &loop_defs);
     }
 
     // Recurse into nested loops
@@ -254,7 +270,16 @@ fn record_def_from_stmt(stmt: &TirStmt, defs: &mut DefMap) {
             ) = (&left.kind, op, &right.kind)
             {
                 defs.insert(*local_index, Def::AddConst(*lhs, *val as i64));
+            } else if *op == TirBinaryOp::BitAnd {
+                if let TirExprKind::IntLiteral { value: val, .. } = &right.kind {
+                    defs.insert(*local_index, Def::BitAndConst(*val as i64));
+                } else if let TirExprKind::IntLiteral { value: val, .. } = &left.kind {
+                    defs.insert(*local_index, Def::BitAndConst(*val as i64));
+                }
             }
+        }
+        TirExprKind::IntLiteral { value: val, .. } => {
+            defs.insert(*local_index, Def::IntConst(*val as i64));
         }
         TirExprKind::FieldAccess {
             expr, field_index, ..
@@ -284,7 +309,9 @@ fn record_struct_lit_def(
     let mut field_map = IndexMap::default();
     for f in fields {
         if let TirExprKind::Local { index, .. } = &f.value.kind {
-            field_map.insert(f.field_index, *index);
+            field_map.insert(f.field_index, FieldSource::Local(*index));
+        } else if let TirExprKind::IntLiteral { value, .. } = &f.value.kind {
+            field_map.insert(f.field_index, FieldSource::Const(*value as i64));
         }
     }
     if !field_map.is_empty() {
@@ -583,6 +610,274 @@ fn eliminate_in_expr(expr: &mut TirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
     }
 }
 
+/// Eliminate bounds checks where the index is masked by a bitmask and the bound
+/// exceeds the mask's maximum value.
+///
+/// Pattern: `if (x & MASK) >= BOUND { panic(...) }` where `BOUND > MASK >= 0`
+/// Since `(x & MASK)` is always in `[0, MASK]`, `(x & MASK) >= BOUND` is always false.
+fn eliminate_bitmask_bounded(stmt: &mut TirStmt, defs: &DefMap) -> bool {
+    if let TirStmtKind::If {
+        condition,
+        then_block,
+        else_block: None,
+    } = &mut stmt.kind
+        && is_panic_block(then_block)
+        && is_bitmask_bounded(condition, defs)
+    {
+        *condition = TirExpr {
+            kind: TirExprKind::BoolLiteral(false),
+            type_id: condition.type_id,
+            span: condition.span,
+        };
+        return true;
+    }
+
+    // Recurse into sub-structures
+    match &mut stmt.kind {
+        TirStmtKind::Let { value, .. } => eliminate_bitmask_in_expr(value, defs),
+        TirStmtKind::Expr(expr) => eliminate_bitmask_in_expr(expr, defs),
+        TirStmtKind::Return { value: Some(expr) }
+        | TirStmtKind::Break {
+            value: Some(expr), ..
+        } => eliminate_bitmask_in_expr(expr, defs),
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            let mut changed = eliminate_bitmask_in_expr(condition, defs);
+            for s in &mut then_block.stmts {
+                changed |= eliminate_bitmask_bounded(s, defs);
+            }
+            if let Some(eb) = else_block {
+                for s in &mut eb.stmts {
+                    changed |= eliminate_bitmask_bounded(s, defs);
+                }
+            }
+            changed
+        }
+        TirStmtKind::LabeledBlock { block, .. } => {
+            let mut changed = false;
+            for s in &mut block.stmts {
+                changed |= eliminate_bitmask_bounded(s, defs);
+            }
+            changed
+        }
+        TirStmtKind::Loop { body } => {
+            let mut changed = false;
+            for s in &mut body.stmts {
+                changed |= eliminate_bitmask_bounded(s, defs);
+            }
+            changed
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            let mut changed = eliminate_bitmask_in_expr(scrutinee, defs);
+            for s in &mut then_block.stmts {
+                changed |= eliminate_bitmask_bounded(s, defs);
+            }
+            if let Some(eb) = else_block {
+                for s in &mut eb.stmts {
+                    changed |= eliminate_bitmask_bounded(s, defs);
+                }
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn eliminate_bitmask_in_expr(expr: &mut TirExpr, defs: &DefMap) -> bool {
+    match &mut expr.kind {
+        TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
+            let mut changed = false;
+            for s in &mut block.stmts {
+                changed |= eliminate_bitmask_bounded(s, defs);
+            }
+            changed
+        }
+        TirExprKind::Binary { left, right, .. }
+        | TirExprKind::Assign {
+            target: left,
+            value: right,
+        }
+        | TirExprKind::Index {
+            expr: left,
+            index: right,
+        } => {
+            let mut c = eliminate_bitmask_in_expr(left, defs);
+            c |= eliminate_bitmask_in_expr(right, defs);
+            c
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::GlobalVarSet { value: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner, .. } => {
+            eliminate_bitmask_in_expr(inner, defs)
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let mut c = eliminate_bitmask_in_expr(condition, defs);
+            for s in &mut then_branch.stmts {
+                c |= eliminate_bitmask_bounded(s, defs);
+            }
+            if let Some(eb) = else_branch {
+                for s in &mut eb.stmts {
+                    c |= eliminate_bitmask_bounded(s, defs);
+                }
+            }
+            c
+        }
+        TirExprKind::Call { args, .. } => {
+            let mut c = false;
+            for arg in args {
+                c |= eliminate_bitmask_in_expr(&mut arg.expr, defs);
+            }
+            c
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            let mut c = eliminate_bitmask_in_expr(receiver, defs);
+            for arg in args {
+                c |= eliminate_bitmask_in_expr(&mut arg.expr, defs);
+            }
+            c
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            let mut c = false;
+            for f in fields {
+                c |= eliminate_bitmask_in_expr(&mut f.value, defs);
+            }
+            c
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            let mut c = false;
+            for e in elements {
+                c |= eliminate_bitmask_in_expr(e, defs);
+            }
+            c
+        }
+        TirExprKind::VariantConstruct {
+            payload: Some(inner),
+            ..
+        } => eliminate_bitmask_in_expr(inner, defs),
+        _ => false,
+    }
+}
+
+/// Check if `(index >= bound)` is provably false because index is bitmask-bounded.
+///
+/// `(x & MASK) >= BOUND` is false when `MASK >= 0` and `BOUND > MASK`.
+fn is_bitmask_bounded(condition: &TirExpr, defs: &DefMap) -> bool {
+    let TirExprKind::Binary { left, op, right } = &condition.kind else {
+        return false;
+    };
+
+    if *op != TirBinaryOp::GtEq {
+        return false;
+    }
+
+    let TirExprKind::Local {
+        index: check_var, ..
+    } = &left.kind
+    else {
+        return false;
+    };
+    let TirExprKind::Local {
+        index: check_bound,
+        ..
+    } = &right.kind
+    else {
+        return false;
+    };
+
+    // Find the maximum value of check_var (if bitmask-bounded)
+    let Some(max_val) = resolve_max_value(*check_var, defs) else {
+        return false;
+    };
+
+    // Find the constant value of check_bound
+    let Some(bound_val) = resolve_constant(*check_bound, defs) else {
+        return false;
+    };
+
+    // If max possible value < bound, then `check_var >= bound` is always false
+    bound_val > 0 && max_val < bound_val
+}
+
+/// Resolve the maximum possible value of a variable through definition chains.
+/// Returns `Some(max)` if the variable is provably bounded by `max`.
+fn resolve_max_value(var: u32, defs: &DefMap) -> Option<i64> {
+    resolve_max_value_inner(var, defs, 0)
+}
+
+fn resolve_max_value_inner(var: u32, defs: &DefMap, depth: usize) -> Option<i64> {
+    if depth >= MAX_CHAIN_DEPTH {
+        return None;
+    }
+    match defs.get(&var) {
+        Some(Def::BitAndConst(mask)) if *mask >= 0 => Some(*mask),
+        Some(Def::Copy(next)) => resolve_max_value_inner(*next, defs, depth + 1),
+        Some(Def::IntConst(val)) => Some(*val),
+        _ => None,
+    }
+}
+
+/// Resolve a variable to a constant value through definition chains.
+fn resolve_constant(var: u32, defs: &DefMap) -> Option<i64> {
+    resolve_constant_inner(var, defs, 0)
+}
+
+fn resolve_constant_inner(var: u32, defs: &DefMap, depth: usize) -> Option<i64> {
+    if depth >= MAX_CHAIN_DEPTH {
+        return None;
+    }
+    match defs.get(&var) {
+        Some(Def::IntConst(val)) => Some(*val),
+        Some(Def::Copy(next)) => resolve_constant_inner(*next, defs, depth + 1),
+        Some(Def::FieldAccess { local, field_index }) => {
+            resolve_constant_through_struct(*local, *field_index, defs, depth)
+        }
+        _ => None,
+    }
+}
+
+fn resolve_constant_through_struct(
+    local: u32,
+    field_index: u32,
+    defs: &DefMap,
+    depth: usize,
+) -> Option<i64> {
+    let struct_def = match defs.get(&local) {
+        Some(Def::StructLit(fields)) => Some(fields),
+        Some(Def::Copy(next)) => {
+            if let Some(Def::StructLit(fields)) = defs.get(next) {
+                Some(fields)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+    if let Some(fields) = struct_def
+        && let Some(source) = fields.get(&field_index)
+    {
+        match source {
+            FieldSource::Const(val) => Some(*val),
+            FieldSource::Local(local) => resolve_constant_inner(*local, defs, depth + 1),
+        }
+    } else {
+        None
+    }
+}
+
 /// Check if a condition is implied false by the loop guard.
 ///
 /// For a `<` guard (`var < bound`):
@@ -665,22 +960,33 @@ fn resolves_to_plus_one_inner(source: u32, target: u32, defs: &DefMap, depth: us
         Some(Def::AddConst(base, 1)) => resolves_to_inner(*base, target, defs, depth + 1),
         Some(Def::FieldAccess { local, field_index }) => {
             // Follow: `_licm_used = arr.used` → look up arr's struct literal
-            if let Some(Def::StructLit(fields)) = defs.get(local)
-                && let Some(field_local) = fields.get(field_index)
-            {
-                return resolves_to_plus_one_inner(*field_local, target, defs, depth + 1);
+            let field_source = resolve_field_source(*local, *field_index, defs);
+            match field_source {
+                Some(FieldSource::Local(field_local)) => {
+                    resolves_to_plus_one_inner(field_local, target, defs, depth + 1)
+                }
+                _ => false,
             }
-            // Also follow through copies of the struct local
-            if let Some(Def::Copy(next)) = defs.get(local)
-                && let Some(Def::StructLit(fields)) = defs.get(next)
-                && let Some(field_local) = fields.get(field_index)
-            {
-                return resolves_to_plus_one_inner(*field_local, target, defs, depth + 1);
-            }
-            false
         }
         _ => false,
     }
+}
+
+fn resolve_field_source(local: u32, field_index: u32, defs: &DefMap) -> Option<FieldSource> {
+    let struct_def = match defs.get(&local) {
+        Some(Def::StructLit(fields)) => Some(fields),
+        Some(Def::Copy(next)) => {
+            if let Some(Def::StructLit(fields)) = defs.get(next) {
+                Some(fields)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+    struct_def
+        .and_then(|fields| fields.get(&field_index))
+        .cloned()
 }
 
 /// Check if a block consists of a panic call (bounds check failure path).

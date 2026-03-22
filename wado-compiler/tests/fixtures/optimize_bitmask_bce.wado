@@ -1,0 +1,17 @@
+// Bitmask bounds check elimination: (x & MASK) >= BOUND is false when BOUND > MASK
+export fn run() {
+    let mut arr: Array<i32> = Array::<i32>::filled(32768, -1);
+    let mut sum = 0;
+    for let mut i = 0; i < 100; i += 1 {
+        let idx = i & 32767;
+        sum += arr[idx];
+        arr[idx] = i;
+    }
+    assert sum == -100;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["index out of bounds"]
+}
