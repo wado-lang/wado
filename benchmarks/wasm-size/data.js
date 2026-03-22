@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774175514694,
+  "lastUpdate": 1774178367728,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6263,6 +6263,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cc9f3bed88cc0ba61f1f903c5a3e1670be3a959e"
         },
         "date": 1774175514467,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a01a3d461a051398b965334ddaf69db539815723",
+          "message": "Merge pull request #664 from wado-lang/claude/analyze-e2e-fixtures-U2Igx\n\nImplement gale grammar-to-code generator CLI and golden tests",
+          "timestamp": "2026-03-22T20:16:59+09:00",
+          "tree_id": "b242b49da56e77b66010436ed3541eb015a65bf3",
+          "url": "https://github.com/wado-lang/wado/commit/a01a3d461a051398b965334ddaf69db539815723"
+        },
+        "date": 1774178367505,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
