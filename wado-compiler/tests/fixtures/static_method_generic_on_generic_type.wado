@@ -1,0 +1,35 @@
+// Test: generic static method on a generic type
+// impl<T> Foo<T> { fn bar<U>(...) -> ... }
+// Called as Foo::<T>::bar::<U>(...)
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+impl<T> Box<T> {
+    pub fn new(value: T) -> Box<T> {
+        return Box { value };
+    }
+
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+
+    // Generic static method: the method itself has its own type parameter U
+    pub fn wrap_other<U>(value: U) -> Box<U> {
+        return Box { value };
+    }
+}
+
+export fn run() with Stdout {
+    // Call generic static method with explicit turbofish on both type and method
+    let b = Box::<i32>::wrap_other::<String>("hello");
+    println(`wrapped: {b.get()}`);
+
+    let c = Box::<String>::wrap_other::<i32>(42);
+    println(`wrapped: {c.get()}`);
+}
+
+__DATA__
+{"stdout": "wrapped: hello\nwrapped: 42\n"}

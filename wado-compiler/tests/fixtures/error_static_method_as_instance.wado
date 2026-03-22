@@ -1,0 +1,18 @@
+// Test: calling a static method with instance method syntax should produce a clear error
+struct Utils {
+    dummy: i32,
+}
+
+impl Utils {
+    pub fn identity(value: i32) -> i32 {
+        return value;
+    }
+}
+
+export fn run() {
+    let u = Utils { dummy: 0 };
+    let x = u.identity(42);
+}
+
+__DATA__
+{"compile_error": "'identity' is a static method; use Utils::identity() instead"}

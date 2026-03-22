@@ -1,0 +1,24 @@
+// Test: generic static method with turbofish on a non-generic struct
+use { println, Stdout } from "core:cli";
+
+struct Utils {
+    dummy: i32,
+}
+
+impl Utils {
+    // Static method (no self) with generic type param
+    pub fn identity<U>(value: U) -> U {
+        return value;
+    }
+}
+
+export fn run() with Stdout {
+    let s = Utils::identity::<String>("hello");
+    println(`{s}`);
+
+    let n = Utils::identity::<i32>(42);
+    println(`{n}`);
+}
+
+__DATA__
+{"stdout": "hello\n42\n"}

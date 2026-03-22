@@ -967,6 +967,8 @@ pub struct StaticMethodCallExpr {
     pub target_type: Type,
     /// The method name (e.g., `with_capacity` or `origin`)
     pub method: String,
+    /// Explicit type arguments for generic methods: `Box::<i32>::wrap_other::<String>(x)`
+    pub type_args: Vec<Type>,
     /// Arguments to the method
     pub args: Vec<Expr>,
     /// Whether the original source had a trailing comma (for formatting purposes).

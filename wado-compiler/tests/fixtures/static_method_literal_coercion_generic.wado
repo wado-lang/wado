@@ -1,0 +1,55 @@
+// Test: literal coercion with generic static method type params.
+// Ensures that impl-level and method-level type args are used to substitute
+// param types for proper literal coercion.
+use { println, Stdout } from "core:cli";
+
+struct Container<T> {
+    value: T,
+}
+
+impl<T> Container<T> {
+    pub fn make(value: T) -> Container<T> {
+        return Container { value };
+    }
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+}
+
+struct Factory<T> {
+    _phantom: T,
+}
+
+impl<T> Factory<T> {
+    pub fn make_array<U>(first: U, second: U) -> Array<U> {
+        let mut arr: Array<U> = [];
+        arr.append(first);
+        arr.append(second);
+        return arr;
+    }
+}
+
+impl<T> Factory<T> {
+    // Composite param type: Array<T> where T is impl type param
+    pub fn wrap_array(arr: Array<T>) -> Array<T> {
+        return arr;
+    }
+}
+
+export fn run() with Stdout {
+    // Impl-level: integer literal 42 should coerce to i64 based on T=i64
+    let c = Container::<i64>::make(42);
+    println(`{c.get()}`);
+
+    // Method-level: integer literals should coerce to i64 based on U=i64
+    let arr = Factory::<String>::make_array::<i64>(10, 20);
+    let sum = arr[0] + arr[1];
+    println(`sum: {sum}`);
+
+    // Composite type: Array<T> with T=i64 should coerce array literal elements
+    let arr2 = Factory::<i64>::wrap_array([100, 200, 300]);
+    println(`len: {arr2.len()}, first: {arr2[0]}`);
+}
+
+__DATA__
+{"stdout": "42\nsum: 30\nlen: 3, first: 100\n"}
