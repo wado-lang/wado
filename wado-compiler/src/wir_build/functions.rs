@@ -444,25 +444,22 @@ fn register_single_function(
             module_source: Some(module_source.clone()),
             ..WirMeta::default()
         },
-        generic_origin: tir_func
-            .monomorph_info
-            .as_ref()
-            .map(|info| {
-                let mut type_arg_names: Vec<String> = info
-                    .impl_type_args
+        generic_origin: tir_func.monomorph_info.as_ref().map(|info| {
+            let mut type_arg_names: Vec<String> = info
+                .impl_type_args
+                .iter()
+                .map(|&ta| type_table.mangle_type_name(ta))
+                .collect();
+            type_arg_names.extend(
+                info.method_type_args
                     .iter()
-                    .map(|&ta| type_table.mangle_type_name(ta))
-                    .collect();
-                type_arg_names.extend(
-                    info.method_type_args
-                        .iter()
-                        .map(|&ta| type_table.mangle_type_name(ta)),
-                );
-                WirGenericOrigin {
-                    base_name: info.generic_name.clone(),
-                    type_args: type_arg_names,
-                }
-            }),
+                    .map(|&ta| type_table.mangle_type_name(ta)),
+            );
+            WirGenericOrigin {
+                base_name: info.generic_name.clone(),
+                type_args: type_arg_names,
+            }
+        }),
         effects,
         stores: tir_func.stores.clone(),
         comp_features: tir_func.comp_features,

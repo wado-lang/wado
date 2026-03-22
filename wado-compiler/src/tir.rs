@@ -2228,7 +2228,6 @@ pub struct MonomorphInfo {
     pub is_blanket: bool,
 }
 
-
 /// Global variable declaration in TIR
 #[derive(Debug, Clone)]
 pub struct TirGlobal {
@@ -2593,7 +2592,6 @@ pub struct InstantiationKey {
     /// Not included in equality/hash - used only for name formatting
     pub method_info: Option<LocalMethodName>,
 }
-
 
 impl PartialEq for InstantiationKey {
     fn eq(&self, other: &Self) -> bool {
