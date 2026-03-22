@@ -60,6 +60,9 @@ pub struct TestExportPlan {
     /// Whether this is a TODO placeholder test (derived from the `#[TODO]` attribute).
     /// Like `expect_trap`, passes when the body traps, but the runner emits a distinct message.
     pub is_todo: bool,
+    /// Per-test timeout in milliseconds (from `#[timeout_ms(N)]` attribute).
+    /// `None` means use the default timeout.
+    pub timeout_ms: Option<u64>,
 }
 
 /// Build a `ComponentPlan` from the project.
@@ -106,6 +109,7 @@ pub fn build_component_plan(project: &Project) -> ComponentPlan {
                     export_name,
                     expect_trap: test.expect_trap,
                     is_todo: test.is_todo,
+                    timeout_ms: test.timeout_ms,
                 }
             })
             .collect()
@@ -220,5 +224,18 @@ mod tests {
             "test-todo-0-not-yet-implemented"
         );
         assert_eq!(sanitize_kebab_export_name("__test_todo_2"), "test-todo-2");
+        // timeout_ms tests
+        assert_eq!(
+            sanitize_kebab_export_name("__test_tm2000_0_slow"),
+            "test-tm2000-0-slow"
+        );
+        assert_eq!(
+            sanitize_kebab_export_name("__test_trap_tm500_0_panics"),
+            "test-trap-tm500-0-panics"
+        );
+        assert_eq!(
+            sanitize_kebab_export_name("__test_todo_tm3000_1"),
+            "test-todo-tm3000-1"
+        );
     }
 }

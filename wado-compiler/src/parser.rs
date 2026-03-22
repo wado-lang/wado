@@ -586,6 +586,10 @@ impl Parser {
                             AttrArg::Ident(value)
                         }
                     }
+                    TokenKind::NumberLit(value) => {
+                        self.advance();
+                        AttrArg::Str(value)
+                    }
                     _ => break,
                 };
                 args.push(arg);

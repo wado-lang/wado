@@ -3235,6 +3235,13 @@ test {
 test "not yet implemented" {
     panic("TODO: implement this feature");
 }
+
+// Custom timeout: override the default 1000ms limit
+#[timeout_ms(5000)]
+test "slow computation" {
+    let result = expensive_computation();
+    assert result == 42;
+}
 ```
 
 **Syntax Rules:**
@@ -3244,7 +3251,7 @@ test "not yet implemented" {
 - Test body is a block containing statements
 - No return type or effect declarations needed
 - Tests can use any effects (side effects are allowed in tests)
-- Attributes (e.g., `#[expect_trap]`, `#[TODO]`) may appear before the `test` keyword
+- Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`) may appear before the `test` keyword
 
 **Test Identification:**
 
@@ -3281,6 +3288,18 @@ test "panics on null dereference" {
 **`#[TODO]` Attribute:**
 
 The `#[TODO]` attribute marks a test as a placeholder for a feature not yet implemented. It has the same trap-expectation semantics as `#[expect_trap]`, but the runner emits a distinct failure message when the body unexpectedly passes, reminding the developer to remove the attribute.
+
+**`#[timeout_ms(N)]` Attribute:**
+
+The `#[timeout_ms(N)]` attribute overrides the default test timeout (1000ms) for a specific test. `N` is an integer literal specifying the timeout in milliseconds. If a test exceeds its timeout, it is interrupted and reported as failed with a message suggesting the `#[timeout_ms(N)]` attribute. This is useful for tests that involve expensive computation or I/O:
+
+```wado
+#[timeout_ms(5000)]
+test "large data processing" {
+    let result = process_large_dataset();
+    assert result.len() > 0;
+}
+```
 
 **Effects:**
 
@@ -3373,21 +3392,6 @@ test "add negative numbers" {
     assert add(-5, 3) == -2;
 }
 ```
-
-### Implementation Notes
-
-**Component Model Export:**
-
-Test functions are exported at the Component Model level with kebab-case names:
-
-- `test "simple addition"` → exported as `test-0-simple-addition`
-- `test { ... }` (unnamed, line 10) → exported as `test-1`
-
-The numeric prefix preserves declaration order for deterministic execution.
-
-**Async Support:**
-
-Test functions use the same async wrapper as `run()`, ensuring compatibility with WASI P3's async model. Each test properly completes its async task before reporting results.
 
 ## Reactive System
 
@@ -4285,6 +4289,18 @@ test "panics on invalid input" {
 #[TODO]
 test "not yet implemented" {
     panic("TODO: implement this");
+}
+```
+
+#### `#[timeout_ms(N)]`
+
+Test block attribute. Overrides the default test timeout (1000ms). `N` is an integer literal specifying the timeout in milliseconds.
+
+```wado
+#[timeout_ms(5000)]
+test "slow computation" {
+    let result = expensive_computation();
+    assert result == 42;
 }
 ```
 

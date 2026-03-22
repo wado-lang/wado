@@ -2456,6 +2456,9 @@ pub struct TirTest {
     /// a distinct message when the body unexpectedly passes, reminding the developer
     /// to remove the `#[TODO]` attribute.
     pub is_todo: bool,
+    /// Per-test timeout in milliseconds (from `#[timeout_ms(N)]` attribute).
+    /// `None` means use the default timeout (1 second).
+    pub timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone)]

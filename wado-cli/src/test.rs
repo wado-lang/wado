@@ -2,6 +2,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -13,6 +14,13 @@ use wasmtime::component::Component;
 
 use crate::args::{self, CliExit};
 use crate::compile;
+
+const DEFAULT_TIMEOUT_MS: u64 = 5000;
+// Epoch tick interval for wasmtime's epoch-based interruption.
+// A coarser interval (1s) reduces thread wake-ups. The trade-off is up to 1s
+// of overshoot beyond the nominal timeout, which is acceptable since timeouts
+// only fire on runaway tests, not on normal execution.
+const EPOCH_INTERVAL_MS: u64 = 1000;
 use crate::runtime;
 
 pub struct TestOptions {
@@ -195,6 +203,7 @@ struct TestJob {
     display_name: String,
     expect_trap: bool,
     is_todo: bool,
+    timeout_ms: u64,
 }
 
 /// Result from a test execution
@@ -205,6 +214,32 @@ struct TestResult {
     passed: bool,
     error: Option<String>,
     duration: Duration,
+}
+
+/// Parse per-test timeout from export name.
+///
+/// Export names with custom timeout contain a `tm{N}` segment:
+/// - `test-tm2000-0-name` → `Some(2000)`
+/// - `test-trap-tm500-0-name` → `Some(500)`
+/// - `test-0-name` → `None` (use default)
+fn parse_timeout_ms(test_name: &str) -> Option<u64> {
+    let rest = test_name
+        .strip_prefix("test-trap-")
+        .or_else(|| test_name.strip_prefix("test-todo-"))
+        .or_else(|| test_name.strip_prefix("test-"))?;
+    let rest = rest.strip_prefix("tm")?;
+    let end = rest.find('-')?;
+    rest[..end].parse::<u64>().ok()
+}
+
+/// Strip the `tm{N}-` segment from the name part for display purposes.
+fn strip_timeout_segment(name_part: &str) -> &str {
+    if let Some(rest) = name_part.strip_prefix("tm")
+        && let Some(idx) = rest.find('-')
+    {
+        return &rest[idx + 1..];
+    }
+    name_part
 }
 
 /// Extract display name from test export name.
@@ -222,6 +257,8 @@ fn extract_display_name(test_name: &str) -> String {
         .or_else(|| test_name.strip_prefix("test-todo-"))
         .or_else(|| test_name.strip_prefix("test-"))
         .unwrap_or(test_name);
+    // Strip optional timeout segment (e.g., "tm2000-")
+    let name_part = strip_timeout_segment(name_part);
     if let Some(idx) = name_part.find('-') {
         name_part[idx + 1..].replace('-', "_")
     } else {
@@ -254,10 +291,7 @@ async fn collect_test_jobs(
         .await;
         let compile_duration = compile_start.elapsed();
         let load_start = Instant::now();
-        let engine = Arc::new(runtime::create_engine(
-            wasmtime::OptLevel::None,
-            &runtime::ProfileMode::None,
-        )?);
+        let engine = Arc::new(runtime::create_test_engine(wasmtime::OptLevel::None)?);
         let component = Arc::new(Component::new(&engine, &wasm)?);
         let load_duration = load_start.elapsed();
 
@@ -280,12 +314,14 @@ async fn collect_test_jobs(
         for test_name in &test_names {
             let expect_trap = test_name.starts_with("test-trap-");
             let is_todo = test_name.starts_with("test-todo-");
+            let timeout_ms = parse_timeout_ms(test_name).unwrap_or(DEFAULT_TIMEOUT_MS);
             jobs.push(TestJob {
                 module_idx,
                 test_name: test_name.clone(),
                 display_name: extract_display_name(test_name),
                 expect_trap,
                 is_todo,
+                timeout_ms,
             });
         }
 
@@ -319,6 +355,10 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
             };
         }
     };
+
+    // Set epoch deadline for timeout enforcement
+    let deadline_ticks = (job.timeout_ms / EPOCH_INTERVAL_MS).max(1);
+    store.set_epoch_deadline(deadline_ticks);
     let linker = match runtime::create_linker(&module.engine) {
         Ok(l) => l,
         Err(e) => {
@@ -377,7 +417,16 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
             }
             Ok((Err(()),)) => (false, Some("test returned error".to_string())),
             Err(e) => {
-                if job.expect_trap || job.is_todo {
+                let is_timeout = is_epoch_deadline_error(&e);
+                if is_timeout {
+                    (
+                        false,
+                        Some(format!(
+                            "test timed out after {}ms (use #[timeout_ms(N)] to increase)",
+                            job.timeout_ms
+                        )),
+                    )
+                } else if job.expect_trap || job.is_todo {
                     (true, None) // expected trap: pass
                 } else {
                     (false, Some(format!("{e}")))
@@ -397,6 +446,11 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
     }
 }
 
+/// Check if an error is caused by an epoch deadline (timeout).
+fn is_epoch_deadline_error(err: &wasmtime::Error) -> bool {
+    err.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt)
+}
+
 /// Phase 2: Execute tests in parallel
 async fn execute_tests_parallel(
     modules: &[Arc<CompiledTestModule>],
@@ -406,6 +460,24 @@ async fn execute_tests_parallel(
     if jobs.is_empty() {
         return Vec::new();
     }
+
+    // Start epoch-incrementing threads for each engine (for timeout enforcement).
+    // Each thread increments the engine's epoch every EPOCH_INTERVAL_MS.
+    let epoch_stops: Vec<Arc<AtomicBool>> = modules
+        .iter()
+        .map(|m| {
+            let stop = Arc::new(AtomicBool::new(false));
+            let stop_clone = stop.clone();
+            let engine = m.engine.clone();
+            std::thread::spawn(move || {
+                while !stop_clone.load(Ordering::Relaxed) {
+                    std::thread::sleep(Duration::from_millis(EPOCH_INTERVAL_MS));
+                    engine.increment_epoch();
+                }
+            });
+            stop
+        })
+        .collect();
 
     let (tx, mut rx) = mpsc::channel(jobs.len());
     let jobs = Arc::new(std::sync::Mutex::new(jobs.into_iter()));
@@ -448,6 +520,11 @@ async fn execute_tests_parallel(
     // Wait for all workers
     for handle in handles {
         let _ = handle.await;
+    }
+
+    // Stop epoch-incrementing threads
+    for stop in &epoch_stops {
+        stop.store(true, Ordering::Relaxed);
     }
 
     results
@@ -547,5 +624,31 @@ pub async fn run(opts: TestOptions) {
 
     if total_failed > 0 {
         process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_timeout_ms() {
+        assert_eq!(parse_timeout_ms("test-tm2000-0-slow"), Some(2000));
+        assert_eq!(parse_timeout_ms("test-trap-tm500-0-panics"), Some(500));
+        assert_eq!(parse_timeout_ms("test-todo-tm3000-1"), Some(3000));
+        assert_eq!(parse_timeout_ms("test-0-simple"), None);
+        assert_eq!(parse_timeout_ms("test-trap-0-panics"), None);
+        assert_eq!(parse_timeout_ms("test-todo-2"), None);
+    }
+
+    #[test]
+    fn test_extract_display_name_with_timeout() {
+        assert_eq!(extract_display_name("test-tm2000-0-slow"), "slow");
+        assert_eq!(extract_display_name("test-trap-tm500-0-panics"), "panics");
+        assert_eq!(extract_display_name("test-todo-tm3000-1"), "<test 1>");
+        // Existing behavior preserved
+        assert_eq!(extract_display_name("test-0-simple"), "simple");
+        assert_eq!(extract_display_name("test-trap-0-panics"), "panics");
+        assert_eq!(extract_display_name("test-1"), "<test 1>");
     }
 }
