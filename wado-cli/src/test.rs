@@ -16,7 +16,11 @@ use crate::args::{self, CliExit};
 use crate::compile;
 
 const DEFAULT_TIMEOUT_MS: u64 = 1000;
-const EPOCH_INTERVAL_MS: u64 = 10;
+// Epoch tick interval for wasmtime's epoch-based interruption.
+// A coarser interval (1s) reduces thread wake-ups. The trade-off is up to 1s
+// of overshoot beyond the nominal timeout, which is acceptable since timeouts
+// only fire on runaway tests, not on normal execution.
+const EPOCH_INTERVAL_MS: u64 = 1000;
 use crate::runtime;
 
 pub struct TestOptions {
