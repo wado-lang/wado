@@ -2899,12 +2899,39 @@ impl Monomorphizer {
                                 arg_type = ta[0];
                             }
                             // Only set if arg_type is concrete (not a type param)
-                            if !matches!(
+                            // AND not already present in monomorph_info.type_args.
+                            // If it's already there, it's an impl type arg (e.g.,
+                            // Array<String>::append where T=String comes from the
+                            // impl, not a method-level type param). Adding it again
+                            // would cause double-counting in instantiation.
+                            let is_concrete = !matches!(
                                 type_table.get(arg_type),
                                 ResolvedType::TypeParam { .. }
                                     | ResolvedType::TypePack { .. }
                                     | ResolvedType::Unknown
-                            ) {
+                            );
+                            // Check if the inferred type is already an impl type arg
+                            // of the receiver's struct. If so, it's not a method-level
+                            // type arg and should not be added (to avoid double-counting
+                            // in instantiation). e.g., Array<String>::append infers
+                            // String from the arg, but String is the impl type arg.
+                            let receiver_impl_type_args = {
+                                let mut base = receiver.type_id;
+                                while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                                    type_table.get(base).clone()
+                                {
+                                    base = t;
+                                }
+                                match type_table.get(base) {
+                                    ResolvedType::GenericInstance { type_args: ta, .. } => {
+                                        ta.clone()
+                                    }
+                                    ResolvedType::BuiltinArray(elem) => vec![*elem],
+                                    _ => vec![],
+                                }
+                            };
+                            let is_impl_type_arg = receiver_impl_type_args.contains(&arg_type);
+                            if is_concrete && !is_impl_type_arg {
                                 type_args.push(arg_type);
                             }
                         }
@@ -4544,7 +4571,21 @@ impl Monomorphizer {
                         let base = type_table.base_type_name(inner);
                         info.with_substituted_struct_name(&mangled, &base)
                     } else if needs_struct_type_args {
-                        info.with_struct_type_args(&type_names)
+                        // Derive the struct name from the already-substituted receiver
+                        // type. This is authoritative: the receiver was substituted at
+                        // line 4504 and reflects the correct concrete type. Using the
+                        // substitution map's type_names directly would be wrong when
+                        // the map contains unrelated type params (e.g., tuple for-of
+                        // element types that don't affect the struct's type args).
+                        let mut recv_inner = receiver.type_id;
+                        while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                            type_table.get(recv_inner).clone()
+                        {
+                            recv_inner = t;
+                        }
+                        let recv_mangled = type_table.mangle_type_name(recv_inner);
+                        let recv_base = type_table.base_type_name(recv_inner);
+                        info.with_substituted_struct_name(&recv_mangled, &recv_base)
                     } else {
                         info.clone()
                     };
