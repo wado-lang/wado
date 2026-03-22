@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774179635735,
+  "lastUpdate": 1774180926040,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6341,6 +6341,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/40830ed140c4b3118a2b679be631e9d39df2f8a9"
         },
         "date": 1774179635509,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b7f9b0aebc01aa615cdce3b540940b6346aa22df",
+          "message": "Merge pull request #667 from wado-lang/claude/setup-sqlite-grammar-test-C4MYy\n\nAdd SQLite grammar and integration tests for code generation",
+          "timestamp": "2026-03-22T20:59:40+09:00",
+          "tree_id": "30cf44f5cd740acda6870f6d6c9eb11091be853c",
+          "url": "https://github.com/wado-lang/wado/commit/b7f9b0aebc01aa615cdce3b540940b6346aa22df"
+        },
+        "date": 1774180925811,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
