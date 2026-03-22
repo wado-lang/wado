@@ -1,0 +1,74 @@
+test "and" {
+    let a = 0b1100;  // 12
+    let b = 0b1010;  // 10
+    let result = a & b;  // 0b1000 = 8
+    assert result == 8;
+}
+
+test "or" {
+    let a = 0b1100;  // 12
+    let b = 0b1010;  // 10
+    let result = a | b;  // 0b1110 = 14
+    assert result == 14;
+}
+
+test "xor" {
+    let a = 0b1100;  // 12
+    let b = 0b1010;  // 10
+    let result = a ^ b;  // 0b0110 = 6
+    assert result == 6;
+}
+
+test "not" {
+    let a = 0;
+    let result = ~a;  // All bits set = -1 for signed integers
+    assert result == -1;
+}
+
+test "combined precedence" {
+    // & has higher precedence than |
+    let a = 3;  // 0b0011
+    let b = 4;  // 0b0100
+    let c = 6;  // 0b0110
+    let result = a | b & c;  // 0b0100 & 0b0110 = 0b0100, then 0b0011 | 0b0100 = 0b0111
+    assert result == 7;
+}
+
+test "shift" {
+    let a = 1;
+    let left_shift = a << 3;  // 1 * 8 = 8
+    let right_shift = 16 >> 2;  // 16 / 4 = 4
+    assert left_shift == 8;
+    assert right_shift == 4;
+}
+
+test "shift i64" {
+    // u64 << literal (literal coerced to u64)
+    let x: u64 = 1;
+    let result = x << 11;
+    assert result == 2048;
+
+    // u64 >> literal
+    let y: u64 = 2048;
+    let result2 = y >> 11;
+    assert result2 == 1;
+
+    // i64 << literal
+    let z: i64 = 1 as i64;
+    let result3 = z << 11;
+    assert result3 == 2048 as i64;
+
+    // i64 >> literal
+    let w: i64 = 2048 as i64;
+    let result4 = w >> 11;
+    assert result4 == 1 as i64;
+
+    // u64 << u64 variable (same type)
+    let shift_amt: u64 = 5;
+    let v: u64 = 1;
+    let shifted = v << shift_amt;
+    assert shifted == 32;
+}
+
+__DATA__
+{"test": {}}

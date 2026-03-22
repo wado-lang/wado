@@ -1,0 +1,166 @@
+struct InspPoint {
+    x: i32,
+    y: i32,
+}
+
+struct InspLine {
+    start: InspPoint,
+    end: InspPoint,
+}
+
+struct InspWrapper {
+    value: Option<i32>,
+}
+
+struct InspMatrix {
+    data: Array<Array<i32>>,
+    rows: i32,
+}
+
+struct InspBox<T> {
+    value: T,
+}
+
+struct InspPair<T> {
+    first: T,
+    second: T,
+}
+
+struct InspUser {
+    name: String,
+
+    #[hidden]
+    password: String,
+    age: i32,
+}
+
+struct InspAllHidden {
+    #[hidden]
+    secret1: i32,
+
+    #[hidden]
+    secret2: i32,
+}
+
+test "struct" {
+    let p = InspPoint { x: 10, y: 20 };
+    assert `{p:?}` == "InspPoint { x: 10, y: 20 }";
+    let origin = InspPoint { x: 0, y: 0 };
+    assert `{origin:?}` == "InspPoint { x: 0, y: 0 }";
+}
+
+test "struct option field" {
+    let w1 = InspWrapper { value: Option::<i32>::Some(42) };
+    assert `{w1:?}` == "InspWrapper { value: Option::Some(42) }";
+    let w2 = InspWrapper { value: null };
+    assert `{w2:?}` == "InspWrapper { value: Option::None }";
+}
+
+test "generic struct" {
+    let b = InspBox { value: 42 };
+    assert `{b:?}` == "InspBox { value: 42 }";
+    let p = InspPair { first: "hello", second: "world" };
+    assert `{p:?}` == "InspPair { first: \"hello\", second: \"world\" }";
+}
+
+test "hidden fields" {
+    let u = InspUser { name: "Alice", password: "secret123", age: 30 };
+    assert `{u:?}` == "InspUser { name: \"Alice\", age: 30, .. }";
+    let h = InspAllHidden { secret1: 1, secret2: 2 };
+    assert `{h:?}` == "InspAllHidden { .. }";
+}
+
+test "array" {
+    let arr: Array<i32> = [1, 2, 3];
+    assert `{arr:?}` == "[1, 2, 3]";
+    let empty: Array<i32> = [];
+    assert `{empty:?}` == "[]";
+    let single: Array<i32> = [42];
+    assert `{single:?}` == "[42]";
+
+    // fallback to inspect without :?
+    assert `{arr}` == "[1, 2, 3]";
+    assert `{empty}` == "[]";
+
+    let points: Array<InspPoint> = [InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }];
+    assert `{points}` == "[InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }]";
+}
+
+test "array option" {
+    let arr: Array<Option<i32>> = [Option::<i32>::Some(1), null, Option::<i32>::Some(3)];
+    assert `{arr:?}` == "[Option::Some(1), Option::None, Option::Some(3)]";
+}
+
+test "nested struct" {
+    let line = InspLine {
+        start: InspPoint { x: 0, y: 0 },
+        end: InspPoint { x: 10, y: 20 },
+    };
+    assert `{line:?}` == "InspLine { start: InspPoint { x: 0, y: 0 }, end: InspPoint { x: 10, y: 20 } }";
+
+    let points: Array<InspPoint> = [InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }];
+    assert `{points:?}` == "[InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }]";
+}
+
+test "option" {
+    let some_val: Option<i32> = Option::<i32>::Some(42);
+    assert `{some_val:?}` == "Option::Some(42)";
+    let none_val: Option<i32> = null;
+    assert `{none_val:?}` == "Option::None";
+}
+
+test "option nested" {
+    let some_some: Option<Option<i32>> = Option::<Option<i32>>::Some(Option::<i32>::Some(42));
+    assert `{some_some:?}` == "Option::Some(Option::Some(42))";
+    let some_none: Option<Option<i32>> = Option::<Option<i32>>::Some(null);
+    assert `{some_none:?}` == "Option::Some(Option::None)";
+    let none: Option<Option<i32>> = null;
+    assert `{none:?}` == "Option::None";
+}
+
+test "option deeply nested" {
+    let deep: Option<Option<Option<i32>>> = Option::<Option<Option<i32>>>::Some(Option::<Option<i32>>::Some(Option::<i32>::Some(7)));
+    assert `{deep:?}` == "Option::Some(Option::Some(Option::Some(7)))";
+}
+
+test "option of string" {
+    let some_some: Option<Option<String>> = Option::<Option<String>>::Some(Option::<String>::Some("hello"));
+    assert `{some_some:?}` == "Option::Some(Option::Some(\"hello\"))";
+}
+
+test "nested arrays" {
+    let matrix: Array<Array<i32>> = [[1, 2], [3, 4]];
+    assert `{matrix:?}` == "[[1, 2], [3, 4]]";
+    let deep: Array<Array<Array<i32>>> = [[[1, 2], [3]], [[4, 5, 6]]];
+    assert `{deep:?}` == "[[[1, 2], [3]], [[4, 5, 6]]]";
+    let strs: Array<Array<String>> = [["a", "b"], ["c"]];
+    assert `{strs:?}` == "[[\"a\", \"b\"], [\"c\"]]";
+}
+
+test "nested array struct" {
+    let data: Array<Array<i32>> = [[1, 2], [3, 4]];
+    let m = InspMatrix { data: data, rows: 2 };
+    assert `{m:?}` == "InspMatrix { data: [[1, 2], [3, 4]], rows: 2 }";
+}
+
+test "nested array tuple" {
+    let arr: Array<[i32, String]> = [[1, "one"], [2, "two"]];
+    assert `{arr:?}` == "[[1, \"one\"], [2, \"two\"]]";
+}
+
+test "option of struct" {
+    let opt_p: Option<InspPoint> = Option::<InspPoint>::Some(InspPoint { x: 10, y: 20 });
+    assert `{opt_p:?}` == "Option::Some(InspPoint { x: 10, y: 20 })";
+    let none_p: Option<InspPoint> = null;
+    assert `{none_p:?}` == "Option::None";
+}
+
+test "fallback" {
+    let p = InspPoint { x: 5, y: 10 };
+    assert `{p}` == "InspPoint { x: 5, y: 10 }";
+    let opt: Option<InspPoint> = Option::<InspPoint>::Some(InspPoint { x: 1, y: 2 });
+    assert `{opt}` == "Option::Some(InspPoint { x: 1, y: 2 })";
+}
+
+__DATA__
+{"test": {}}

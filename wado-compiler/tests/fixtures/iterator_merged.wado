@@ -1,0 +1,64 @@
+test "basic next" {
+    let arr: Array<i32> = [10, 20, 30];
+    let mut iter = arr.iter();
+
+    if let Some(a) = iter.next() {
+        assert a == 10;
+    } else {
+        assert false, "expected Some";
+    }
+
+    if let Some(b) = iter.next() {
+        assert b == 20;
+    } else {
+        assert false, "expected Some";
+    }
+
+    if let Some(c) = iter.next() {
+        assert c == 30;
+    } else {
+        assert false, "expected Some";
+    }
+
+    assert iter.next() matches { None };
+}
+
+test "empty" {
+    let arr: Array<i32> = [];
+    let mut iter = arr.iter();
+    assert iter.next() matches { None };
+    assert iter.next() matches { None };
+}
+
+test "into_iter" {
+    let arr: Array<i32> = [1, 2, 3];
+    let mut iter = arr.into_iter();
+    let mut sum = 0;
+    loop {
+        if let Some(x) = iter.next() {
+            sum += x;
+        } else {
+            break;
+        }
+    }
+    assert sum == 6;
+}
+
+test "strings" {
+    let arr: Array<String> = ["hello", "world", "!"];
+    let mut iter = arr.iter();
+
+    if let Some(s) = iter.next() {
+        assert s == "hello";
+    }
+    if let Some(s) = iter.next() {
+        assert s == "world";
+    }
+    if let Some(s) = iter.next() {
+        assert s == "!";
+    }
+    assert iter.next() matches { None };
+}
+
+__DATA__
+{"test": {}}

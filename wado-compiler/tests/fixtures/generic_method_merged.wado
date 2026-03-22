@@ -1,0 +1,192 @@
+struct Container {
+    value: i32,
+}
+
+impl Container {
+    fn transform_val<T>(&self, other: T) -> T {
+        return other;
+    }
+}
+
+struct MethodPair {
+    first: i32,
+    second: i32,
+}
+
+impl MethodPair {
+    fn combine<T, U>(&self, a: T, b: U) -> T {
+        return a;
+    }
+    fn swap<T, U>(&self, a: T, b: U) -> U {
+        return b;
+    }
+}
+
+struct MethodWrapper {
+    value: i32,
+}
+
+impl MethodWrapper {
+    fn convert<U>(&self, other: U) -> U {
+        return other;
+    }
+}
+
+struct Holder {
+    base: i32,
+}
+
+impl Holder {
+    fn add_to<T>(&self, x: T) -> T {
+        return x;
+    }
+    fn get_base(&self) -> i32 {
+        return self.base;
+    }
+}
+
+test "basic turbofish" {
+    let c = Container { value: 42 };
+    let result = c.transform_val::<i64>(100 as i64);
+    assert result == 100 as i64;
+}
+
+test "multi params" {
+    let p = MethodPair { first: 1, second: 2 };
+    let x = p.combine::<i32, i64>(10, 20 as i64);
+    let y = p.swap::<i32, i64>(30, 40 as i64);
+    assert x == 10;
+    assert y == 40 as i64;
+}
+
+test "on generic struct" {
+    let w = MethodWrapper { value: 42 };
+    let x = w.convert::<i64>(100 as i64);
+    let y = w.convert::<f64>(3.14);
+    assert x == 100 as i64;
+    assert y == 3.14;
+}
+
+test "returns self field" {
+    let h = Holder { base: 10 };
+    let x = h.add_to::<i32>(5);
+    assert x == 5;
+    assert h.get_base() == 10;
+}
+
+struct DGContainer<T> {
+    value: T,
+}
+
+impl<T> DGContainer<T> {
+    pub fn new(value: T) -> DGContainer<T> {
+        return DGContainer { value };
+    }
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+    pub fn transform<U>(&self, f_result: U) -> U {
+        let _ = self.value;
+        return f_result;
+    }
+    pub fn combine<U, V>(&self, u: U, v: V) -> U {
+        let _v = self.value;
+        let _w = v;
+        return u;
+    }
+}
+
+test "double generics" {
+    let c = DGContainer::<i32>::new(42);
+    assert c.get() == 42;
+    let result = c.transform::<i32>(100);
+    assert result == 100;
+    let combined_same = c.combine::<i32, i32>(200, 300);
+    assert combined_same == 200;
+    let combined_mixed = c.combine::<i32, i64>(400, 500 as i64);
+    assert combined_mixed == 400;
+    let c2 = DGContainer::<i64>::new(1000 as i64);
+    assert c2.transform::<i32>(99) == 99;
+}
+
+trait Constructable {
+    fn create(val: i32) -> Self;
+}
+
+impl Constructable for i32 {
+    fn create(val: i32) -> i32 {
+        return val;
+    }
+}
+
+impl Constructable for String {
+    fn create(val: i32) -> String {
+        return `{val}`;
+    }
+}
+
+fn make<T: Constructable>(val: i32) -> T {
+    return T::create(val);
+}
+
+test "static trait method through type param" {
+    let a = make::<i32>(42);
+    assert a == 42;
+    let b = make::<String>(99);
+    assert b == "99";
+}
+
+struct SelfCallWrapper<T> {
+    value: T,
+}
+
+impl<T> SelfCallWrapper<T> {
+    fn new(value: T) -> SelfCallWrapper<T> {
+        return SelfCallWrapper { value };
+    }
+    fn get(&self) -> T {
+        return self.value;
+    }
+    fn get_twice(&self) -> [T, T] {
+        let a = self.get();
+        let b = self.get();
+        return [a, b];
+    }
+}
+
+test "self call" {
+    let w = SelfCallWrapper::<i32>::new(42);
+    assert w.get() == 42;
+    let pair = w.get_twice();
+    assert pair.0 == 42;
+    assert pair.1 == 42;
+}
+
+struct ClosureContainer<T> {
+    value: T,
+}
+
+impl<T> ClosureContainer<T> {
+    fn new(value: T) -> ClosureContainer<T> {
+        return ClosureContainer { value };
+    }
+    fn transform(&self, f: fn(&T) -> T) -> T {
+        return f(&self.value);
+    }
+    fn double_transform(&self, f: fn(&T) -> T) -> T {
+        let intermediate = self.transform(f);
+        let c2 = ClosureContainer::<T>::new(intermediate);
+        return c2.transform(f);
+    }
+}
+
+test "closure param" {
+    let c = ClosureContainer::<i32>::new(5);
+    let result1 = c.transform(|x: &i32| *x * 2);
+    assert result1 == 10;
+    let result2 = c.double_transform(|x: &i32| *x * 2);
+    assert result2 == 20;
+}
+
+__DATA__
+{"test": {}}

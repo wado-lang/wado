@@ -1,0 +1,69 @@
+test "break" {
+    let mut count = 0;
+    while count < 10 {
+        count = count + 1;
+        if count >= 3 {
+            break;
+        }
+    }
+    assert count == 3;
+}
+
+test "continue" {
+    let mut sum = 0;
+    let mut count = 0;
+    while count < 5 {
+        count = count + 1;
+        if count == 3 {
+            continue;
+        }
+        sum += count;
+    }
+    assert sum == 1 + 2 + 4 + 5;
+}
+
+test "while let basic" {
+    let items: Array<i32> = [1, 2, 3];
+    let mut iter = items.iter();
+    let mut sum = 0;
+    while let Some(x) = iter.next() {
+        sum += x;
+    }
+    assert sum == 6;
+}
+
+test "while let chain" {
+    // while let with guard - exits when guard fails (x >= 5)
+    let arr: Array<i32> = [1, 2, 3, 8, 9];
+    let mut iter = arr.iter();
+    let mut sum = 0;
+    while let Some(x) = iter.next() && x < 5 {
+        sum += x;
+    }
+    assert sum == 6; // 1+2+3
+
+    // Chained lets: consume two iterators in lockstep
+    let xs: Array<i32> = [1, 2, 3];
+    let ys: Array<i32> = [10, 20, 30];
+    let mut ix = xs.iter();
+    let mut iy = ys.iter();
+    let mut total = 0;
+    while let Some(x) = ix.next() && let Some(y) = iy.next() {
+        total += x + y;
+    }
+    assert total == 66; // (1+10)+(2+20)+(3+30)
+
+    // Parenthesised logical && inside guard
+    let arr3: Array<i32> = [2, 4, 7, 8];
+    let mut iter3 = arr3.iter();
+    let min = 1;
+    let max = 6;
+    let mut count = 0;
+    while let Some(v) = iter3.next() && (v > min && v < max) {
+        count += 1;
+    }
+    assert count == 2; // 2 and 4
+}
+
+__DATA__
+{"test": {}}

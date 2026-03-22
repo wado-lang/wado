@@ -1,0 +1,122 @@
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+fn first<T, U>(x: T, y: U) -> T {
+    return x;
+}
+
+fn second<T, U>(x: T, y: U) -> U {
+    return y;
+}
+
+test "basic turbofish" {
+    let a = identity::<i32>(42);
+    let b = identity::<i64>(100 as i64);
+    assert a == 42;
+    assert b == 100 as i64;
+}
+
+test "with string" {
+    let s = identity::<String>("hello");
+    assert s == "hello";
+}
+
+fn wrap_identity_i32(x: i32) -> i32 {
+    return identity::<i32>(x);
+}
+
+fn wrap_identity_i64(x: i64) -> i64 {
+    return identity::<i64>(x);
+}
+
+test "calls generic" {
+    let a = wrap_identity_i32(42);
+    let b = wrap_identity_i64(100 as i64);
+    assert a == 42;
+    assert b == 100 as i64;
+}
+
+test "multi instantiations" {
+    let a = identity::<i32>(1);
+    let b = identity::<i64>(2 as i64);
+    let c = identity::<f32>(3.5 as f32);
+    let d = identity::<f64>(4.5);
+    let e = identity::<bool>(true);
+    assert a == 1;
+    assert b == 2 as i64;
+    assert c == 3.5 as f32;
+    assert d == 4.5;
+    assert e == true;
+}
+
+test "multi params" {
+    let a = first::<i32, i64>(10, 20 as i64);
+    let b = second::<i32, i64>(30, 40 as i64);
+    assert a == 10;
+    assert b == 40 as i64;
+}
+
+test "nested calls" {
+    let result = identity::<i32>(identity::<i32>(identity::<i32>(42)));
+    assert result == 42;
+}
+
+struct FnBox<T> {
+    value: T,
+}
+
+impl<T> FnBox<T> {
+    pub fn new(value: T) -> FnBox<T> {
+        return FnBox { value };
+    }
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+}
+
+fn make_box<T>(value: T) -> FnBox<T> {
+    return FnBox::<T>::new(value);
+}
+
+fn unwrap_box<T>(b: FnBox<T>) -> T {
+    return b.get();
+}
+
+fn transform_box<T>(b: FnBox<T>) -> FnBox<T> {
+    let v = b.get();
+    return FnBox::<T>::new(v);
+}
+
+test "returns struct" {
+    let b1 = make_box::<i32>(42);
+    assert b1.get() == 42;
+    let v = unwrap_box::<i32>(b1);
+    assert v == 42;
+    let b2 = make_box::<i64>(100 as i64);
+    let b3 = transform_box::<i64>(b2);
+    assert b3.get() == 100 as i64;
+}
+
+test "two params swap" {
+    let x = first::<i32, i64>(10, 20 as i64);
+    let y = second::<i32, i64>(10, 20 as i64);
+    let z = first::<String, i32>("hello", 42);
+    assert x == 10;
+    assert y == 20 as i64;
+    assert z == "hello";
+}
+
+fn get_value<T>(r: &T) -> T {
+    return *r;
+}
+
+test "with ref" {
+    let x = 42;
+    let y = 100 as i64;
+    assert get_value::<i32>(&x) == 42;
+    assert get_value::<i64>(&y) == 100 as i64;
+}
+
+__DATA__
+{"test": {}}
