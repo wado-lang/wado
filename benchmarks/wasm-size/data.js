@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774185719930,
+  "lastUpdate": 1774187500254,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6419,6 +6419,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b5a96793b8635d2cf3846f8f0d85f8fc92633885"
         },
         "date": 1774185719682,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3110803205f45209de43cc650e891459e454b855",
+          "message": "Merge pull request #666 from wado-lang/claude/consolidate-e2e-fixtures-hNqQC\n\nConsolidate test fixtures by merging related test files",
+          "timestamp": "2026-03-22T22:49:05+09:00",
+          "tree_id": "d34c416758c05c48b87919968b020ba44379e3b2",
+          "url": "https://github.com/wado-lang/wado/commit/3110803205f45209de43cc650e891459e454b855"
+        },
+        "date": 1774187500050,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
