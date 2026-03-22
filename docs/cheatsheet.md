@@ -803,6 +803,13 @@ test "panics on invalid input" {
 test "not yet implemented" {
     panic("TODO: implement this");
 }
+
+// Custom timeout (default is 1000ms)
+#[timeout_ms(5000)]
+test "slow computation" {
+    let result = expensive_computation();
+    assert result == 42;
+}
 ```
 
 Test blocks compile to the `test` world. Files with test blocks are discovered and executed by `wado test`:

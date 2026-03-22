@@ -421,7 +421,10 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
                 if is_timeout {
                     (
                         false,
-                        Some(format!("test timed out after {}ms", job.timeout_ms)),
+                        Some(format!(
+                            "test timed out after {}ms (use #[timeout_ms(N)] to increase)",
+                            job.timeout_ms
+                        )),
                     )
                 } else if job.expect_trap || job.is_todo {
                     (true, None) // expected trap: pass
