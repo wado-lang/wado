@@ -7,7 +7,6 @@ Quick reference for Wado syntax.
 ```wado
 #!/usr/bin/env wado
 // Shebang is only valid on the first line and is ignored by the compiler.
-// Note: #![ is an inner attribute, not a shebang.
 ```
 
 ## Comments
@@ -39,24 +38,27 @@ let y: u8 = 255;               // integer literal → u8
 let z: u128 = 1_000_000_000;   // integer literal → u128
 let f: f32 = 3.14;             // float literal → f32
 fn foo(n: i64) { ... }
-foo(100);                       // integer literal coerced to i64
+foo(100);                      // integer literal coerced to i64
 
 // Strings
 "Hello"         // String
 `Hello, {name}` // Template string
 `\{"key"\}`     // Escaped braces in template string → {"key"}
+"Hello,
+world!"         // Multi-line string
 
 // Characters
 'A'
 '\n'
 '\u0041'
+'\u{1F600}'
 
 // Booleans
 true
 false
 
 // Null
-null // same as Option::None
+null // coerce to Option::None
 
 // Unit
 ()
@@ -95,8 +97,8 @@ Global variables map directly to WebAssembly globals. Constant expressions are e
 i8, i16, i32, i64         // signed integers
 u8, u16, u32, u64         // unsigned integers
 f32, f64                  // floats
-char                      // unicode scalar
-bool, char
+char                      // a valid unicode scalar
+bool
 
 // 128-bit integers (prelude types, work like primitives)
 i128, u128
@@ -118,6 +120,8 @@ Result<T, E>            // result type (prelude type)
 
 ## Newtype
 
+Newtypes are distinct types that inherit methods/operators/traits from the base type, require explicit `as` cast, and have zero runtime cost.
+
 See [WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md).
 
 ```wado
@@ -128,11 +132,7 @@ let m: Meters = 1000.0;       // literal coercion
 let sum = m + m;              // OK: Meters + Meters -> Meters
 // let bad = m + km;          // ERROR: cannot mix Meters and Kilometers
 let raw: f64 = m as f64;      // explicit cast required
-```
 
-Newtypes are distinct types that inherit methods/operators/traits from the base type, require explicit `as` cast, and have zero runtime cost.
-
-```wado
 type Location = Point;
 let loc: Location = Point { x: 0, y: 0 } as Location;
 loc.distance(&loc2);  // inherits Point methods, params expect &Location
@@ -156,7 +156,7 @@ let y = t[1];                 // bracket notation (constant index only)
 let a: Array<i32> = [1, 2, 3];           // type annotation
 let b = [1, 2, 3] as Array<i32>;         // explicit cast
 fn takes(arr: Array<i32>) {}
-takes([1, 2, 3]);                        // implicit coercion
+takes([1, 2, 3]);                        // coercion to Array
 
 // Array methods
 let mut arr: Array<i32> = [];
@@ -178,14 +178,9 @@ nums.sort_by(|a: &i32, b: &i32| { ... });  // sort with custom Ordering comparat
 ```wado
 let s = "hello";                         // String literal
 
-// Multiline strings (newlines preserved)
-let poem = "Line 1
-Line 2";
-
 // Template strings (interpolation)
 let name = "Alice";
 let greeting = `Hello, {name}!`;         // "Hello, Alice!"
-let json = `\{"key": "{name}"\}`;        // escaped braces
 
 // Float-to-string: shortest roundtrip representation (no trailing .0)
 let s = `{5.0}`;                         // "5"
@@ -293,11 +288,10 @@ let name = match c {
     Blue => "blue",
 };
 
-if let Red = c { println("it's red"); }
-if c matches { Green } { println("it's green"); }
+if c matches { Red } { println("it's red"); }
 ```
 
-Enums auto-derive `Display`, `Eq`, and `Ord` (ordered by declaration order). Enums can have methods via `impl` blocks.
+Enums auto-derive `Display`, `Inspect`, `Eq`, and `Ord` (ordered by declaration order). Enums can have methods via `impl` blocks.
 
 ## Flags
 
@@ -318,7 +312,6 @@ let none = Perms::none();  // 0 (no bits set)
 let all  = Perms::all();   // 7 (all bits set)
 
 assert rw as u32 == 3;     // cast to/from u32
-// Arithmetic operators (+, -, *, /) are NOT allowed — use |, &, ^
 ```
 
 ## Variants
@@ -344,7 +337,7 @@ variant Maybe<T> {
 
 // Construction
 let some_val = Option::Some(42);
-let none_val: Option<i32> = null;         // null = Option::None
+let none_val: Option<i32> = null;                        // Option::None
 let ok_val: Result<i32, String> = Result::Ok(42);
 let err_val: Result<i32, String> = Result::Err("fail");
 
@@ -353,17 +346,15 @@ let opt = Option::<i32>::Some(42);
 let res = Result::<i32, String>::Ok(42);
 
 // Pattern matching
-if let Some(x) = some_val {
-    println(`Got value: {x}`);
+match ome_val {
+    Some(x) => println(`Got value: {x}`);
+    None    => println(`Got null`);
 }
 
-// Custom variant pattern: uses case name only, not Type::CaseName
 if let Number(n) = parse_result {
     println(`Got: {n}`);
 }
 ```
-
-Generic variant pattern matching works with `match`, `if let`, and `matches`.
 
 ## Functions
 
@@ -386,7 +377,7 @@ pub fn api_function() -> i32 {
 export fn run() { ... }
 ```
 
-A function must have `return` if it returns a value.
+A function must have `return` if it returns a value. Semicolons does not have particular semantics; they are just separators to statements.
 
 ## Mut Parameters
 
@@ -463,29 +454,30 @@ impl f64 {
     pub const PI: f64 = 3.14159265358979323846;
 }
 
-let pi = f64::PI;       // Type::CONST syntax
+let pi = f64::PI;    // Type::CONST syntax
 let max = i32::MAX;
 ```
 
-Primitives provide built-in constants: `f64::PI`, `f64::TAU`, `f64::E`, `f64::INFINITY`, `f64::NAN`, `i32::MAX`, `i32::MIN`, etc. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md#primitive-types).
+Primitives provide built-in constants: `f64::PI`, `f64::INFINITY`, `f64::NAN`, `i32::MAX`, `i32::MIN`, etc. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md#primitive-types).
 
 ## Primitive Type Methods
 
 See [Core Standard Library Reference](./cheatsheet-stdlib-core.md#primitive-types) for the full API.
 
 ```wado
-// Math (static methods on f64/f32)
 f64::sin(x)    f64::cos(x)    f64::sqrt(x)
 f64::abs(x)    f64::ceil(x)   f64::floor(x)
 f64::pow(x, y) f64::ln(x)     f64::exp(x)
 
-x.is_nan()     x.is_finite()
+x.is_nan()     x.is_finite()    // where x is f64 or f32
 f64::parse("3.14")              // Option<f64>
+
 i32::min(a, b)  i32::max(a, b)
 
 // char conversion
-let code = 'A' as i32;              // 65
-let c = char::from_i32(65);         // Option::<char>::Some('A')
+let code = 'A' as i32;                // 65
+let c = char::from_u32(65);           // Option::<char>::Some('A')
+let d = char::from_u32_unchecked(65); // if you already validates the u32 value
 ```
 
 ## Traits
@@ -506,6 +498,7 @@ impl Greet for Person {
 // Default method
 trait Summary {
     fn title(&self) -> String;
+
     fn summary(&self) -> String {
         return `Title: {self.title()}`;
     }
@@ -514,6 +507,7 @@ trait Summary {
 // Associated type
 trait Container {
     type Item;
+
     fn get(&self) -> Self::Item;
 }
 
@@ -525,22 +519,22 @@ impl Container for IntBox {
 
 Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
 
-### Builtin Traits
+### Prelude Traits
 
 ```wado
-// Ordering enum (prelude)
+// Ordering enum
 enum Ordering { Less, Equal, Greater }
 
-// Eq - enables == and !=
+// For == and != operators
 trait Eq { fn eq(&self, other: &Self) -> bool; }
 
-// Ord - enables <, <=, >, >=
+// For <, <=, >, >= operators
 trait Ord { fn cmp(&self, other: &Self) -> Ordering; }
 
-// Default - default value
+// For default value
 trait Default { fn default() -> Self; }
 
-// IndexValue / IndexAssign / Index - for [] operator
+// For [] operators
 trait IndexValue<I> { type Output; fn index_value(&self, index: I) -> Self::Output; }
 trait IndexAssign<I> { type Input; fn index_assign(&mut self, index: I, value: Self::Input); }
 trait Index<I> { type Output; fn index(&self, index: I) -> &Self::Output; }
@@ -596,7 +590,7 @@ impl<T: Eq> Eq for Pair<T> {
 }
 ```
 
-Built-in: all primitives implement `Eq` and `Ord`. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `Array<T: Eq>` implement `Eq`. `Array<T: Ord>` implements `Ord`.
+All primitives implement `Eq` and `Ord`. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `Array<T: Eq>` implement `Eq`. `Array<T: Ord>` implements `Ord`.
 
 ## Control Flow
 
@@ -635,7 +629,7 @@ while i < 10 { i += 1; }
 // While let
 while let Some(x) = iter.next() { println(`{x}`); }
 
-// For (C-style)
+// C-style for
 for let mut i = 0; i < 10; i += 1 {
     println(`{i}`);
 }
@@ -648,7 +642,7 @@ for let item of items {
 // Tuple for-of (compile-time expansion, each element may have a different type)
 let t = [42, "hello", true];
 for let v of t {
-    println(`{v}`);  // body is expanded once per element
+    println(`{v}`);
 }
 // break, continue, and return are not allowed inside tuple for-of
 
@@ -734,7 +728,7 @@ See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-prece
 // Type cast
 42 as f64
 'A' as i32              // char -> i32: 65
-// 65 as char           // compile error: use char::from_i32()
+// 65 as char           // compile error: use char::from_u32()
 
 // Pattern testing (returns bool)
 opt matches { Some(_) }
@@ -772,7 +766,7 @@ read(&mut y);         // OK: &mut i32 coerced to &i32
 
 See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
-Value types (primitives, String, Array, Tuple, Struct) have **value semantics**: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
+Primitives and composite types have **value semantics**: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
 ## Assert
 
@@ -855,7 +849,7 @@ fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
 
 // E is inferred from the closure's effects at each call site
 wrapper(|| { println("hello"); });           // E = Stdout
-let x = apply(|n: i32| n + 1, 41);          // E = (none)
+let x = apply(|n: i32| n + 1, 41);           // E = (none)
 let y = apply(|n: i32| {                     // E = Stdout
     println(`{n}`);
     return n * 2;
@@ -907,7 +901,7 @@ Rules:
 - Without `stores[param]`, a function cannot return, store in struct fields, or assign to globals the reference parameter
 - In function type position, use positional indices: `fn(&Data) with stores[0]`
 
-## Entrypoint
+## Entrypoints
 
 The entrypoint is defined in a World, which requires `export` keyword.
 
@@ -954,22 +948,15 @@ unreachable();            // trap
 // core:cli
 use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
 
-// core:collections - TreeMap
-use { TreeMap } from "core:collections";
+// core:collections - TreeMap, TreeSet
+use { TreeMap, TreeSet } from "core:collections";
 let mut map = TreeMap::<String, i32>::new();
 map["key"] = 42;          // index assignment
 let v = map["key"];       // index access (panics if not found)
 let opt = map.get("key"); // fallible access returns Option<V>
 
-// core:serde + core:json
-use { Serialize, Deserialize } from "core:serde";
-use { to_string, from_string } from "core:json";
-
-impl Serialize for User;    // compiler generates serialize method
-impl Deserialize for User;  // compiler generates deserialize method
-
-let json = to_string::<User>(&user);     // Ok("{\"name\":\"Alice\",\"age\":30}")
-let parsed = from_string::<User>(json);  // Ok(User { ... })
+let set = ["foo", "bar", "baz"] as TreeSet<String>;
+assert set.contains("foo");
 ```
 
 ## Generic Functions and Methods
@@ -1008,8 +995,6 @@ let b = [..a, true];   // [i32, String, bool]
 fn make_defaults<..T: Default>() -> [..T] {
     return [..T::default()];   // expands to [T_0::default(), T_1::default(), ...]
 }
-
-// Note: `...` (three dots) is not valid; use `..` (two dots)
 ```
 
 ## Closures
@@ -1098,7 +1083,7 @@ Paths in `#include_str` and `#include_bytes` are resolved relative to the source
 
 struct Foo {
     #[hidden]
-    secret: String,        // won't be shown in debug stringify
+    secret: String,        // won't be shown in Display / Inspect
 }
 
 #[inline]                  // hint: prefer inlining
@@ -1113,13 +1098,6 @@ Wado intentionally does not support macros.
 ## SIMD
 
 See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for design and rationale. Includes Relaxed SIMD.
-
-## Not Yet Implemented
-
-- Effect handlers
-- `reactive` values and `observe()`
-- JSX
-- Generic function/method call type inference
 
 ## See Also
 
