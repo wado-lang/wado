@@ -185,18 +185,25 @@ impl G4Parser {
     }
 
     fn parse_postfix(&mut self, elem: Element) -> Result<Element, ParseError> {
-        let kind = match self.peek_kind() {
-            _ && self.is_kind(G4Token::Star) => RepeatKind::Star,
-            _ && self.is_kind(G4Token::Plus) => RepeatKind::Plus,
-            _ && self.is_kind(G4Token::Question) => RepeatKind::Optional,
-            _ => {
-                return Result::<Element, ParseError>::Ok(elem);
-            },
-        };
-        self.advance();
-        return Result::<Element, ParseError>::Ok(
-            Element::Repeat(RepeatElement { kind, element: elem }),
-        );
+        if self.is_kind(G4Token::Star) {
+            self.advance();
+            return Result::<Element, ParseError>::Ok(
+                Element::Repeat(RepeatElement { kind: RepeatKind::Star, element: elem }),
+            );
+        }
+        if self.is_kind(G4Token::Plus) {
+            self.advance();
+            return Result::<Element, ParseError>::Ok(
+                Element::Repeat(RepeatElement { kind: RepeatKind::Plus, element: elem }),
+            );
+        }
+        if self.is_kind(G4Token::Question) {
+            self.advance();
+            return Result::<Element, ParseError>::Ok(
+                Element::Repeat(RepeatElement { kind: RepeatKind::Optional, element: elem }),
+            );
+        }
+        return Result::<Element, ParseError>::Ok(elem);
     }
 
     fn parse_lexer_rule(&mut self, name: String, is_fragment: bool) -> Result<LexerRule, ParseError> {
@@ -322,18 +329,25 @@ impl G4Parser {
     }
 
     fn parse_lexer_postfix(&mut self, elem: LexerElement) -> Result<LexerElement, ParseError> {
-        let kind = match self.peek_kind() {
-            _ && self.is_kind(G4Token::Star) => RepeatKind::Star,
-            _ && self.is_kind(G4Token::Plus) => RepeatKind::Plus,
-            _ && self.is_kind(G4Token::Question) => RepeatKind::Optional,
-            _ => {
-                return Result::<LexerElement, ParseError>::Ok(elem);
-            },
-        };
-        self.advance();
-        return Result::<LexerElement, ParseError>::Ok(
-            LexerElement::Repeat(LexerRepeatElement { kind, element: elem }),
-        );
+        if self.is_kind(G4Token::Star) {
+            self.advance();
+            return Result::<LexerElement, ParseError>::Ok(
+                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Star, element: elem }),
+            );
+        }
+        if self.is_kind(G4Token::Plus) {
+            self.advance();
+            return Result::<LexerElement, ParseError>::Ok(
+                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Plus, element: elem }),
+            );
+        }
+        if self.is_kind(G4Token::Question) {
+            self.advance();
+            return Result::<LexerElement, ParseError>::Ok(
+                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Optional, element: elem }),
+            );
+        }
+        return Result::<LexerElement, ParseError>::Ok(elem);
     }
 }
 
