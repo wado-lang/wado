@@ -213,6 +213,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         };
 
+        // Static methods (no self parameter) cannot be called with instance method syntax.
+        // e.g., `obj.static_method()` should be `Type::static_method()` instead.
+        if self_kind == ast::SelfKind::None {
+            let type_name = self.type_table.borrow().type_name(base_type_id);
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected: format!(
+                    "'{}' to be an instance method (with &self or &mut self)",
+                    method_call.method
+                ),
+                found: format!(
+                    "'{}' is a static method; use {}::{}() instead",
+                    method_call.method, type_name, method_call.method
+                ),
+                span: method_call.span,
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, method_call.span);
+        }
+
         // Type check method arguments against expected parameter types (newtype-aware)
         // If method was inherited from a newtype's base type, substitute base->newtype in params
         let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = inherited_from_base {

@@ -1,0 +1,18 @@
+// Test: calling a generic static method with instance method syntax should produce a clear error
+struct Converter {
+    dummy: i32,
+}
+
+impl Converter {
+    pub fn convert<U>(value: U) -> U {
+        return value;
+    }
+}
+
+export fn run() {
+    let c = Converter { dummy: 0 };
+    let s = c.convert::<i32>(42);
+}
+
+__DATA__
+{"compile_error": "'convert' is a static method; use Converter::convert() instead"}
