@@ -40,6 +40,7 @@ mise run update-gale-golden
 This runs `gale gen` against each `.g4` in `tests/grammars/` and overwrites the corresponding file in `tests/golden/`. Commit the updated golden files.
 
 **Adding a new golden test**:
+
 1. Add the `.g4` file to `tests/grammars/`
 2. Add a `mise run update-gale-golden` entry in `mise.toml` for it
 3. Run `mise run update-gale-golden` to generate the initial golden file

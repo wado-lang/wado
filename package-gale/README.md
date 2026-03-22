@@ -62,10 +62,10 @@ package-gale/
 
 ## Implementation Status
 
-| Phase | Description | Status |
-| ----- | ----------- | ------ |
-| 0 | Project scaffold, runtime types | Done |
-| 1 | G4 lexer and parser | Done |
-| 2 | Code generation (CST types, visitor, walk functions) | In progress |
-| 2 | Lexer function generation (`fn tokenize`) | Planned |
-| 2 | Recursive descent parser function generation | Planned |
+| Phase | Description                                          | Status      |
+| ----- | ---------------------------------------------------- | ----------- |
+| 0     | Project scaffold, runtime types                      | Done        |
+| 1     | G4 lexer and parser                                  | Done        |
+| 2     | Code generation (CST types, visitor, walk functions) | In progress |
+| 2     | Lexer function generation (`fn tokenize`)            | Planned     |
+| 2     | Recursive descent parser function generation         | Planned     |
