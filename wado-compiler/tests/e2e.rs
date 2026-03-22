@@ -361,7 +361,7 @@ async fn run_http_request_async(
     // Channel to receive the response
     let (tx, rx) = tokio::sync::oneshot::channel();
 
-    let timeout_duration = Duration::from_secs(5);
+    let timeout_duration = Duration::from_secs(1);
 
     // Run handler + request body I/O inside run_concurrent, while collecting
     // the response body **outside** run_concurrent.  This follows the pattern
