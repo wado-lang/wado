@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774142092296,
+  "lastUpdate": 1774147653230,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5951,6 +5951,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e31e515e2e08effbd184790826fcd81fa4f18f1e"
         },
         "date": 1774142092075,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "41613ee8c0df5a37ef4a763de7e155897a57a4a8",
+          "message": "Merge pull request #655 from wado-lang/claude/generic-static-method-support-Yk3G1\n\nSupport generic type arguments in static method calls",
+          "timestamp": "2026-03-22T11:45:13+09:00",
+          "tree_id": "bbfecd567a0ce67aaa273d90cdb230c1549dd61f",
+          "url": "https://github.com/wado-lang/wado/commit/41613ee8c0df5a37ef4a763de7e155897a57a4a8"
+        },
+        "date": 1774147653006,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
