@@ -1,0 +1,25 @@
+// Bounds check elimination via dominating if-guard.
+// When `if (i + 2) < n`, then arr[i], arr[i+1], arr[i+2] are all in bounds.
+fn sliding_sum(input: &Array<i32>) -> i32 {
+    let n = input.len();
+    let mut sum = 0;
+    for let mut i = 0; i < n; i += 1 {
+        if i + 2 < n {
+            sum += input[i] + input[i + 1] + input[i + 2];
+        }
+    }
+    return sum;
+}
+
+export fn run() {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let s = sliding_sum(&arr);
+    // (10+20+30) + (20+30+40) + (30+40+50) = 60 + 90 + 120 = 270
+    assert s == 270;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["index out of bounds"]
+}
