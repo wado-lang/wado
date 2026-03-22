@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774156913344,
+  "lastUpdate": 1774162497262,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6068,6 +6068,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7f5b80ba87709c93ca96c397996bb1285c34ab5a"
         },
         "date": 1774156913120,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e4cd440119ed61824267229b9493ba573da7b2c1",
+          "message": "Merge pull request #658 from wado-lang/claude/setup-gale-scaffold-yWYIN\n\nAdd Gale G4 parser and fix LICM alias tracking for mutable references",
+          "timestamp": "2026-03-22T15:52:34+09:00",
+          "tree_id": "7204ac23e5814cbceceae1e4c2a8b961d9d8c5d7",
+          "url": "https://github.com/wado-lang/wado/commit/e4cd440119ed61824267229b9493ba573da7b2c1"
+        },
+        "date": 1774162497168,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
