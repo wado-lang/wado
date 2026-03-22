@@ -290,81 +290,6 @@ fn type_to_cm_primitive_with_resources(
     wado_type_to_cm_primitive(ty)
 }
 
-/// Build CM `ComponentValType` entries for tuple elements, handling `Stream<T>` and
-/// `Future<T>` elements by emitting the necessary local types into `instance_type`.
-///
-/// Returns the `ComponentValType` list ready to pass to `instance_type.defined_type().tuple(...)`.
-#[allow(clippy::too_many_arguments)]
-fn build_cm_tuple_types(
-    elems: &[Type],
-    instance_type: &mut InstanceType,
-    local_type_idx: &mut u32,
-    error_code_idx: Option<u32>,
-    has_local_error_code: bool,
-    enum_export_indices: &IndexMap<String, u32>,
-    own_resource_type_indices: &IndexMap<String, u32>,
-    ctx: &mut ComponentModelContext,
-) -> Vec<ComponentValType> {
-    let mut tuple_types = Vec::new();
-    for t in elems {
-        match t {
-            Type::Generic(g) if g.name == "Stream" => {
-                // Emit stream<u8> local type (only u8 streams are supported in WASI P3)
-                instance_type
-                    .ty()
-                    .defined_type()
-                    .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
-                tuple_types.push(ComponentValType::Type(*local_type_idx));
-                *local_type_idx += 1;
-            }
-            Type::Generic(g) if g.name == "Future" => {
-                // Emit future<result<_, error-code>> local type.
-                // Determine the error-code type index.
-                let inner_cm = if let Some(inner_g) = g.args.first()
-                    && let Type::Generic(inner) = inner_g
-                    && inner.name == "Result"
-                {
-                    let err_idx = if let Some(idx) = error_code_idx {
-                        idx
-                    } else if has_local_error_code && enum_export_indices.contains_key("ErrorCode")
-                    {
-                        enum_export_indices["ErrorCode"]
-                    } else {
-                        // Alias the outer error-code type.
-                        let outer_ec = ctx.type_idx("error-code");
-                        instance_type.alias(Alias::Outer {
-                            kind: ComponentOuterAliasKind::Type,
-                            count: 1,
-                            index: outer_ec,
-                        });
-                        let idx = *local_type_idx;
-                        *local_type_idx += 1;
-                        idx
-                    };
-                    instance_type
-                        .ty()
-                        .defined_type()
-                        .result(None, Some(ComponentValType::Type(err_idx)));
-                    let result_idx = *local_type_idx;
-                    *local_type_idx += 1;
-                    Some(ComponentValType::Type(result_idx))
-                } else {
-                    None
-                };
-                instance_type.ty().defined_type().future(inner_cm);
-                tuple_types.push(ComponentValType::Type(*local_type_idx));
-                *local_type_idx += 1;
-            }
-            _ => {
-                tuple_types.push(type_to_cm_primitive_with_resources(
-                    t,
-                    own_resource_type_indices,
-                ));
-            }
-        }
-    }
-    tuple_types
-}
 
 /// Collect resource type names referenced anywhere in a type tree.
 ///
@@ -397,11 +322,20 @@ fn collect_resources_in_type(
     }
 }
 
+/// Returns true if the type (at any nesting depth) references `ErrorCode`.
+fn contains_error_code_in_type(ty: &Type) -> bool {
+    match ty {
+        Type::Named(n) => n.name == "ErrorCode",
+        Type::Generic(g) => g.args.iter().any(contains_error_code_in_type),
+        Type::Tuple(elems) => elems.iter().any(contains_error_code_in_type),
+        _ => false,
+    }
+}
+
 fn wado_type_to_cm_val_type(
     _project: &Project,
     ty: &Type,
     stream_type_idx: Option<u32>,
-    _error_code_idx: Option<u32>,
     result_param_type_idx: Option<u32>,
     enum_type_indices: &IndexMap<String, u32>,
     flags_type_indices: &IndexMap<String, u32>,
@@ -1193,8 +1127,9 @@ fn generate_wasi_imports(
 
             let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
 
-            // Shared CmInstanceTypeGen for complex ok types across all functions.
-            // Reusing one instance avoids duplicate type definitions and exports.
+            // Shared CmInstanceTypeGen drives all return-type encoding for this interface.
+            // Pre-registering known enums and flags lets ast_type_to_cm find them in cache
+            // without re-emitting their definitions.
             let mut shared_type_gen = CmInstanceTypeGen::new(local_type_idx);
             for (name, &idx) in &enum_export_indices {
                 shared_type_gen.register_existing(&format!("enum:{name}"), idx);
@@ -1203,15 +1138,16 @@ fn generate_wasi_imports(
                 shared_type_gen.register_existing(&format!("flags:{name}"), idx);
             }
 
+            // For interfaces without a local ErrorCode, we alias the outer wasi:cli/types
+            // error-code once and register it in shared_type_gen so that ast_type_to_cm
+            // resolves ErrorCode via the alias rather than emitting a new enum definition.
+            let mut outer_error_code_emitted = false;
+
             for func in &supported_functions {
                 let needs_stream_u8 = func
                     .params
                     .iter()
                     .any(|(_, _, ty)| matches!(ty, Type::Generic(g) if g.name == "Stream"));
-                let needs_error_code = func
-                    .return_type
-                    .as_ref()
-                    .is_some_and(|ty| matches!(ty, Type::Generic(g) if g.name == "Result"));
                 let needs_result_param = func
                     .params
                     .iter()
@@ -1229,70 +1165,6 @@ fn generate_wasi_imports(
                     None
                 };
 
-                let error_code_idx = if needs_error_code {
-                    let uses_local_error_code =
-                        has_local_error_code && enum_export_indices.contains_key("ErrorCode");
-
-                    if uses_local_error_code {
-                        Some(enum_export_indices["ErrorCode"])
-                    } else {
-                        let outer_error_code = ctx.type_idx("error-code");
-                        instance_type.alias(Alias::Outer {
-                            kind: ComponentOuterAliasKind::Type,
-                            count: 1,
-                            index: outer_error_code,
-                        });
-                        let idx = local_type_idx;
-                        local_type_idx += 1;
-                        Some(idx)
-                    }
-                } else {
-                    None
-                };
-
-                let result_type_idx = if let Some(err_idx) = error_code_idx {
-                    let ok_type = if let Some(Type::Generic(g)) = &func.return_type
-                        && g.name == "Result"
-                        && !g.args.is_empty()
-                    {
-                        if let Type::Named(named) = &g.args[0]
-                            && let Some(&own_idx) = own_resource_type_indices.get(&named.name)
-                        {
-                            Some(ComponentValType::Type(own_idx))
-                        } else if let Type::Named(named) = &g.args[0]
-                            && named.name == "()"
-                        {
-                            None
-                        } else {
-                            // Use shared CmInstanceTypeGen for complex ok types (records, options, etc.)
-                            shared_type_gen.set_next_idx(local_type_idx);
-                            let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
-                                .iter()
-                                .map(|(k, &v)| (k.as_str(), v))
-                                .collect();
-                            let ok_val = shared_type_gen.ast_type_to_cm(
-                                &g.args[0],
-                                &mut instance_type,
-                                project.wasi_registry,
-                                &resource_exports,
-                            );
-                            local_type_idx = shared_type_gen.next_idx();
-                            Some(ok_val)
-                        }
-                    } else {
-                        None
-                    };
-                    instance_type
-                        .ty()
-                        .defined_type()
-                        .result(ok_type, Some(ComponentValType::Type(err_idx)));
-                    let idx = local_type_idx;
-                    local_type_idx += 1;
-                    Some(idx)
-                } else {
-                    None
-                };
-
                 let result_param_type_idx = if needs_result_param {
                     instance_type.ty().defined_type().result(None, None);
                     let idx = local_type_idx;
@@ -1302,118 +1174,28 @@ fn generate_wasi_imports(
                     None
                 };
 
-                let array_type_idx = if let Some(Type::Generic(g)) = &func.return_type {
-                    if g.name == "Array" && !g.args.is_empty() {
-                        let element_type = &g.args[0];
-                        let element_val_type = match element_type {
-                            Type::Generic(elem_g)
-                                if elem_g.name == "Tuple" && !elem_g.args.is_empty() =>
-                            {
-                                let tuple_types: Vec<ComponentValType> = elem_g
-                                    .args
-                                    .iter()
-                                    .map(|t| {
-                                        type_to_cm_primitive_with_resources(
-                                            t,
-                                            &own_resource_type_indices,
-                                        )
-                                    })
-                                    .collect();
-                                instance_type.ty().defined_type().tuple(tuple_types);
-                                let tuple_idx = local_type_idx;
-                                local_type_idx += 1;
-                                ComponentValType::Type(tuple_idx)
-                            }
-                            Type::Tuple(elems) if !elems.is_empty() => {
-                                let tuple_types: Vec<ComponentValType> = elems
-                                    .iter()
-                                    .map(|t| {
-                                        type_to_cm_primitive_with_resources(
-                                            t,
-                                            &own_resource_type_indices,
-                                        )
-                                    })
-                                    .collect();
-                                instance_type.ty().defined_type().tuple(tuple_types);
-                                let tuple_idx = local_type_idx;
-                                local_type_idx += 1;
-                                ComponentValType::Type(tuple_idx)
-                            }
-                            _ => type_to_cm_primitive_with_resources(
-                                element_type,
-                                &own_resource_type_indices,
-                            ),
-                        };
-                        instance_type.ty().defined_type().list(element_val_type);
-                        let idx = local_type_idx;
-                        local_type_idx += 1;
-                        Some(idx)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-
-                let option_type_idx = if let Some(Type::Generic(g)) = &func.return_type {
-                    if g.name == "Option" && !g.args.is_empty() {
-                        let element_type = &g.args[0];
-                        let element_val_type = type_to_cm_primitive_with_resources(
-                            element_type,
-                            &own_resource_type_indices,
-                        );
-                        instance_type.ty().defined_type().option(element_val_type);
-                        let idx = local_type_idx;
-                        local_type_idx += 1;
-                        Some(idx)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-
-                let tuple_type_idx = if let Some(Type::Tuple(elems)) = &func.return_type {
-                    if elems.is_empty() {
-                        None
-                    } else {
-                        let tuple_types = build_cm_tuple_types(
-                            elems,
-                            &mut instance_type,
-                            &mut local_type_idx,
-                            error_code_idx,
-                            has_local_error_code,
-                            &enum_export_indices,
-                            &own_resource_type_indices,
-                            ctx,
-                        );
-                        instance_type.ty().defined_type().tuple(tuple_types);
-                        let idx = local_type_idx;
-                        local_type_idx += 1;
-                        Some(idx)
-                    }
-                } else if let Some(Type::Generic(g)) = &func.return_type {
-                    if g.name == "Tuple" && !g.args.is_empty() {
-                        let tuple_types = build_cm_tuple_types(
-                            &g.args,
-                            &mut instance_type,
-                            &mut local_type_idx,
-                            error_code_idx,
-                            has_local_error_code,
-                            &enum_export_indices,
-                            &own_resource_type_indices,
-                            ctx,
-                        );
-                        instance_type.ty().defined_type().tuple(tuple_types);
-                        let idx = local_type_idx;
-                        local_type_idx += 1;
-                        Some(idx)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
+                // If this function's return type references ErrorCode and the interface has no
+                // local ErrorCode definition, emit an outer alias once and register it so that
+                // ast_type_to_cm can resolve ErrorCode at any nesting depth (including inside
+                // Future<Result<_, ErrorCode>>).
+                if !has_local_error_code
+                    && !outer_error_code_emitted
+                    && func
+                        .return_type
+                        .as_ref()
+                        .is_some_and(contains_error_code_in_type)
+                {
+                    let outer_ec = ctx.type_idx("error-code");
+                    instance_type.alias(Alias::Outer {
+                        kind: ComponentOuterAliasKind::Type,
+                        count: 1,
+                        index: outer_ec,
+                    });
+                    let ec_idx = local_type_idx;
+                    local_type_idx += 1;
+                    shared_type_gen.register_existing("enum:ErrorCode", ec_idx);
+                    outer_error_code_emitted = true;
+                }
 
                 let kebab_params: Vec<(String, ComponentValType)> = func
                     .params
@@ -1423,7 +1205,6 @@ fn generate_wasi_imports(
                             project,
                             ty,
                             stream_type_idx,
-                            error_code_idx,
                             result_param_type_idx,
                             &enum_export_indices,
                             &flags_export_indices,
@@ -1437,15 +1218,23 @@ fn generate_wasi_imports(
                     .map(|(name, val_type)| (name.as_str(), *val_type))
                     .collect();
 
+                // Build the return type using the shared metadata-driven type generator.
+                // This handles Result, Future, Array, Option, Tuple, and any nesting thereof.
                 let result_type = func.return_type.as_ref().map(|ty| {
                     let resolved_ty = project.wasi_registry.resolve_type(ty);
-                    wado_type_to_cm_result_type(
+                    shared_type_gen.set_next_idx(local_type_idx);
+                    let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
+                        .iter()
+                        .map(|(k, &v)| (k.as_str(), v))
+                        .collect();
+                    let cm_type = shared_type_gen.ast_type_to_cm(
                         &resolved_ty,
-                        result_type_idx,
-                        array_type_idx,
-                        option_type_idx,
-                        tuple_type_idx,
-                    )
+                        &mut instance_type,
+                        project.wasi_registry,
+                        &resource_exports,
+                    );
+                    local_type_idx = shared_type_gen.next_idx();
+                    cm_type
                 });
 
                 let mut func_encoder = instance_type.ty().function();
