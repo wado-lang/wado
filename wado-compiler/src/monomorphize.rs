@@ -4624,7 +4624,7 @@ impl Monomorphizer {
                                     {
                                         new_func_name.clone()
                                     } else {
-                                        old_func_name.clone()
+                                        old_func_name
                                     };
                                     Some(MonomorphInfo {
                                         generic_name: blanket_name,
