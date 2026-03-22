@@ -4112,32 +4112,39 @@ impl Monomorphizer {
                                 (names, tids)
                             };
 
-                        let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
+                        let mut new_info = if info.is_type_param_receiver && !type_names.is_empty()
+                        {
                             let base = type_table.base_type_name(*sorted_entries[0].1);
-                            let mut substituted =
-                                info.with_substituted_struct_name(&type_names[0], &base);
-                            if let FunctionRef {
-                                monomorph_info: Some(mi),
-                                ..
-                            } = &*call_func
-                            {
-                                let new_method_type_args: Vec<String> = mi
-                                    .type_args
-                                    .iter()
-                                    .map(|&tid| {
-                                        let sub =
-                                            self.substitute_type(tid, substitution, type_table);
-                                        type_table.mangle_type_name(sub)
-                                    })
-                                    .collect();
-                                substituted.method_type_args = new_method_type_args;
-                            }
-                            substituted
+                            info.with_substituted_struct_name(&type_names[0], &base)
                         } else if needs_struct_type_args {
                             info.with_struct_type_args(&type_names)
                         } else {
                             info.clone()
                         };
+                        // Substitute type params in monomorph_info.type_args and update
+                        // method_type_args accordingly (e.g., R → FixedReader in a default
+                        // trait method body calling Self::read::<R>(r)).
+                        if let FunctionRef {
+                            monomorph_info: Some(mi),
+                            ..
+                        } = &*call_func
+                        {
+                            let substituted_type_args: Vec<TypeId> = mi
+                                .type_args
+                                .iter()
+                                .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                                .collect();
+                            let any_changed = substituted_type_args
+                                .iter()
+                                .zip(mi.type_args.iter())
+                                .any(|(a, b)| a != b);
+                            if any_changed {
+                                new_info.method_type_args = substituted_type_args
+                                    .iter()
+                                    .map(|&tid| type_table.mangle_type_name(tid))
+                                    .collect();
+                            }
+                        }
                         let new_func_name = new_info.to_mangled_name();
 
                         if new_func_name != old_func_name {

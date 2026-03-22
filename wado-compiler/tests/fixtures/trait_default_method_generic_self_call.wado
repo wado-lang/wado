@@ -1,0 +1,45 @@
+// Test: default trait method body calling Self::method<R>() where R
+// is the default method's own type parameter.
+use { println, Stdout } from "core:cli";
+
+trait Reader {
+    fn read_i32(&mut self) -> i32;
+}
+
+struct FixedReader {
+    value: i32,
+}
+
+impl Reader for FixedReader {
+    fn read_i32(&mut self) -> i32 {
+        return self.value;
+    }
+}
+
+trait Readable {
+    fn read<R: Reader>(r: &mut R) -> Self;
+
+    fn read_with_default<R: Reader>(r: &mut R, default: Self) -> Self {
+        return Self::read::<R>(r);
+    }
+}
+
+impl Readable for i32 {
+    fn read<R: Reader>(r: &mut R) -> i32 {
+        return r.read_i32();
+    }
+}
+
+fn read_item<T: Readable>(r: &mut FixedReader) -> T {
+    return T::read_with_default(r, T::read(r));
+}
+
+export fn run() with Stdout {
+    let mut reader = FixedReader { value: 42 };
+    let result = read_item::<i32>(&mut reader);
+    assert result == 42;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
