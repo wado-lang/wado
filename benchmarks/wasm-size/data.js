@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774147653230,
+  "lastUpdate": 1774150289245,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5990,6 +5990,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/41613ee8c0df5a37ef4a763de7e155897a57a4a8"
         },
         "date": 1774147653006,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ebbe1df6fd993a35c35b3f42cfa7f7f7b2399ee0",
+          "message": "Merge pull request #656 from wado-lang/claude/optimize-compress-zlib-DWE6g\n\nExtend bounds check elimination to dominating if-conditions",
+          "timestamp": "2026-03-22T12:28:58+09:00",
+          "tree_id": "b7149030d67021fc43adce21aeccde0006a2a2c1",
+          "url": "https://github.com/wado-lang/wado/commit/ebbe1df6fd993a35c35b3f42cfa7f7f7b2399ee0"
+        },
+        "date": 1774150289046,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
