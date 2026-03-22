@@ -5793,8 +5793,7 @@ impl FunctionTranslator<'_, '_> {
                 if matches!(lit, TirLiteralPattern::Null) {
                     WirInstr::RefIsNull(Box::new(scrut_get))
                 } else {
-                    // String comparison: not yet handled, return false
-                    WirInstr::I32Const(0)
+                    panic!("string literal patterns should be lowered before WIR translation")
                 }
             }
         }

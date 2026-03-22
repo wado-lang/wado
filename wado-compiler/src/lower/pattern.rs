@@ -2034,6 +2034,38 @@ impl<'a> PatternLowerer<'a> {
                     self.extract_refutable_sub_patterns(arm, scrutinee_type_id, type_table);
                 }
 
+                // Lower top-level string literal patterns into binding + guard
+                for arm in arms.iter_mut() {
+                    if matches!(&arm.pattern, TirPattern::Literal(TirLiteralPattern::String(_)))
+                    {
+                        let span = arm.span;
+                        let temp_index = self.alloc_local(scrutinee_type_id);
+                        let lit = match &arm.pattern {
+                            TirPattern::Literal(lit) => lit.clone(),
+                            _ => unreachable!(),
+                        };
+                        let cond =
+                            self.literal_eq_condition(temp_index, scrutinee_type_id, &lit, span);
+                        arm.pattern = TirPattern::Binding {
+                            name: format!("__lit_{temp_index}"),
+                            local_index: temp_index,
+                            type_id: scrutinee_type_id,
+                        };
+                        arm.guard = Some(match arm.guard.take() {
+                            Some(existing) => TirExpr::new(
+                                TirExprKind::Binary {
+                                    op: TirBinaryOp::And,
+                                    left: Box::new(cond),
+                                    right: Box::new(existing),
+                                },
+                                TypeTable::BOOL,
+                                span,
+                            ),
+                            None => cond,
+                        });
+                    }
+                }
+
                 // Analyze if this Match can be converted to Switch (for br_table)
                 let scrutinee_type = type_table.get(scrutinee.type_id).clone();
                 if let Some(analysis) = analyze_match_for_switch(&scrutinee_type, arms) {
