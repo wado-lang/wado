@@ -1460,11 +1460,45 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let return_type = method_info_result.return_type;
 
             // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)
-            let method_type_args: Vec<TypeId> = call
+            let mut method_type_args: Vec<TypeId> = call
                 .type_args
                 .iter()
                 .map(|ty| self.resolve_type(ty))
                 .collect();
+
+            // If no explicit type args, infer method-level type params from argument types.
+            // e.g., T::read_from(r) where r: &mut FixedReader infers R = FixedReader.
+            if method_type_args.is_empty() && !method_info_result.param_types.is_empty() {
+                let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::default();
+                for (param_type, arg) in method_info_result.param_types.iter().zip(args.iter()) {
+                    self.unify_types_for_inference(*param_type, arg.type_id, &mut type_param_map);
+                }
+                if !type_param_map.is_empty() {
+                    // Collect inferred types sorted by TypeParam index
+                    let mut inferred: Vec<(u32, TypeId)> = type_param_map
+                        .iter()
+                        .filter_map(|(&tp_id, &concrete_id)| {
+                            if let ResolvedType::TypeParam { index, .. } =
+                                self.type_table.borrow().get(tp_id)
+                            {
+                                Some((*index, concrete_id))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    inferred.sort_by_key(|(idx, _)| *idx);
+                    let all_concrete = inferred.iter().all(|(_, id)| {
+                        !matches!(
+                            self.type_table.borrow().get(*id),
+                            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                        )
+                    });
+                    if all_concrete && !inferred.is_empty() {
+                        method_type_args = inferred.into_iter().map(|(_, id)| id).collect();
+                    }
+                }
+            }
 
             // Don't substitute method-level type params in the return type here.
             // The return type contains function-level TypeParams (e.g., Self -> TypeParam{T})

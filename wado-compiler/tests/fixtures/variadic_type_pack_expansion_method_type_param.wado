@@ -1,0 +1,53 @@
+// Test: type pack expansion where the static method has its own type param
+// inferred from arguments (method-level generics in type pack expansion).
+use { println, Stdout } from "core:cli";
+
+trait Source {
+    fn read_from<R: Reader>(r: &mut R) -> Self;
+}
+
+trait Reader {
+    fn read_i32(&mut self) -> i32;
+    fn read_string(&mut self) -> String;
+}
+
+struct FixedReader {
+    value: i32,
+}
+
+impl Reader for FixedReader {
+    fn read_i32(&mut self) -> i32 {
+        return self.value;
+    }
+
+    fn read_string(&mut self) -> String {
+        return `{self.value}`;
+    }
+}
+
+impl Source for i32 {
+    fn read_from<R: Reader>(r: &mut R) -> i32 {
+        return r.read_i32();
+    }
+}
+
+impl Source for String {
+    fn read_from<R: Reader>(r: &mut R) -> String {
+        return r.read_string();
+    }
+}
+
+fn read_all<..T: Source>(r: &mut FixedReader) -> [..T] {
+    return [..T::read_from(r)];
+}
+
+export fn run() with Stdout {
+    let mut reader = FixedReader { value: 42 };
+    let result = read_all::<[i32, String]>(&mut reader);
+    assert result.0 == 42;
+    assert result.1 == "42";
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

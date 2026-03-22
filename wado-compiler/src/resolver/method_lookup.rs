@@ -398,6 +398,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 },
                 None,
             ),
+            ResolvedType::Tuple(elems) => {
+                if method_name == "len" {
+                    return Some(MethodInfo {
+                        return_type: TypeTable::I32,
+                        self_kind: ast::SelfKind::Ref,
+                        param_types: vec![],
+                        param_is_mut: vec![],
+                        inherited_from_base: None,
+                        cm_name: None,
+                    });
+                }
+                // For non-len methods, use "Tuple" as struct name to search trait impls
+                (
+                    "Tuple".to_string(),
+                    None,
+                    Some(elems.clone()),
+                    None,
+                )
+            }
             _ => return None,
         };
 
