@@ -132,7 +132,7 @@ fn process_loop(body: &mut TirBlock, defs: &mut DefMap) -> bool {
     }
 
     // Eliminate bitmask-bounded checks in the loop body
-    for stmt in body.stmts.iter_mut() {
+    for stmt in &mut body.stmts {
         changed |= eliminate_bitmask_bounded(stmt, &loop_defs);
     }
 
@@ -717,9 +717,7 @@ fn eliminate_bitmask_in_expr(expr: &mut TirExpr, defs: &DefMap) -> bool {
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::GlobalVarSet { value: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner, .. } => {
-            eliminate_bitmask_in_expr(inner, defs)
-        }
+        | TirExprKind::TupleSpread { expr: inner, .. } => eliminate_bitmask_in_expr(inner, defs),
         TirExprKind::If {
             condition,
             then_branch,
@@ -791,8 +789,7 @@ fn is_bitmask_bounded(condition: &TirExpr, defs: &DefMap) -> bool {
         return false;
     };
     let TirExprKind::Local {
-        index: check_bound,
-        ..
+        index: check_bound, ..
     } = &right.kind
     else {
         return false;

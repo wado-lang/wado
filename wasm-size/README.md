@@ -49,7 +49,7 @@ Reads gzip data from stdin and decompresses it.
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
 | zig      |       20,072 | stdin + gzip decompress (std.compress) |
-| wado     |       22,175 | stdin + gzip decompress (core:zlib)    |
+| wado     |       21,928 | stdin + gzip decompress (core:zlib)    |
 | c        |       30,270 | stdin + gzip decompress (zlib 1.3.1)   |
 | rust     |       88,014 | stdin + gzip decompress (zlib-rs)      |
 
