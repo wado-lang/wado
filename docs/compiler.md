@@ -263,6 +263,8 @@ The `tm{N}` segment encodes a custom timeout in milliseconds (default: 1000ms). 
 
 Both `wado test` and the e2e test runner detect these prefixes and handle pass/fail accordingly.
 
+Test functions use the same async wrapper as `run()`, ensuring compatibility with WASI P3's async model. Each test properly completes its async task before reporting results.
+
 ### WASI Registry
 
 The `WasiRegistry` module (`component_model.rs`) collects WASI import information from `lib/wasi/*.wado` files and provides it to the code generator for dynamic Component Model generation.

@@ -3393,21 +3393,6 @@ test "add negative numbers" {
 }
 ```
 
-### Implementation Notes
-
-**Component Model Export:**
-
-Test functions are exported at the Component Model level with kebab-case names:
-
-- `test "simple addition"` → exported as `test-0-simple-addition`
-- `test { ... }` (unnamed, line 10) → exported as `test-1`
-
-The numeric prefix preserves declaration order for deterministic execution.
-
-**Async Support:**
-
-Test functions use the same async wrapper as `run()`, ensuring compatibility with WASI P3's async model. Each test properly completes its async task before reporting results.
-
 ## Reactive System
 
 Wado has built-in reactive signals (called "signals" in other frameworks like SolidJS, Svelte 5). The compiler analyzes dependencies at compile-time and generates efficient update code.
