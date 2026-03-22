@@ -11,8 +11,8 @@ FIXTURES_DIR="wado-compiler/tests/format.fixtures"
 GOLDEN_DIR="wado-compiler/tests/format.fixtures.golden"
 mkdir -p "$GOLDEN_DIR"
 
-WADO="./target/dev-optimized/wado"
-DUMP="./target/dev-optimized/wado-dev-tools"
+WADO="./target/debug/wado"
+DUMP="./target/debug/wado-dev-tools"
 
 # Generate formatted (clean) versions
 for f in "$FIXTURES_DIR"/*.dirty.wado; do

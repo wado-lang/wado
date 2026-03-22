@@ -41,7 +41,7 @@ run = """
 set -xe -o pipefail
 mise run clippy-fix
 mise run update-bundled
-cargo build --profile dev-optimized --bin wado --bin wado-dev-tools
+cargo build --bin wado --bin wado-dev-tools
 mise run update-golden-fixtures
 mise run update-golden-format-fixtures
 mise run update-gale-golden
@@ -86,12 +86,12 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 touch wado-compiler/tests/e2e.rs
-cargo test --profile dev-optimized
+cargo test
 """
 
 [tasks.test-wado]
 description = "Run Wado module tests"
-run = "cargo run --profile dev-optimized -p wado-cli -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado package-gale"
+run = "cargo run -p wado-cli -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado package-gale"
 
 [tasks.test-cov]
 description = "Run tests with coverage"
@@ -126,7 +126,7 @@ run = "cargo clippy --all --all-features -- -D warnings"
 
 [tasks.clippy-fix]
 description = "Run clippy auto-fix"
-run = "cargo clippy --all --all-features --profile dev-optimized --fix --allow-dirty --allow-staged"
+run = "cargo clippy --all --all-features --fix --allow-dirty --allow-staged"
 
 [tasks.update-golden-fixtures]
 description = "Regenerate WIR golden fixtures"
@@ -135,7 +135,7 @@ run = """
 set -xe -o pipefail
 mkdir -p wado-compiler/tests/fixtures.golden
 rm -rf wado-compiler/tests/fixtures.golden/*.*
-./target/dev-optimized/wado-dev-tools golden-dump \
+./target/debug/wado-dev-tools golden-dump \
     --in 'wado-compiler/tests/fixtures/{name}.wado' \
     --out 'wado-compiler/tests/fixtures.golden/{name}.wir.wado' \
     --phase wir -O2
@@ -147,16 +147,16 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 mkdir -p package-gale/tests/golden
-./target/dev-optimized/wado run package-gale/src/main.wado \
+./target/debug/wado run package-gale/src/main.wado \
     gen "package-gale/tests/grammars/sexpression.g4" \
     > "package-gale/tests/golden/sexpression.wado"
-./target/dev-optimized/wado run package-gale/src/main.wado \
+./target/debug/wado run package-gale/src/main.wado \
     gen "package-gale/tests/grammars/JSON.g4" \
     > "package-gale/tests/golden/json.wado"
-./target/dev-optimized/wado run package-gale/src/main.wado \
+./target/debug/wado run package-gale/src/main.wado \
     gen "package-gale/tests/grammars/calculator.g4" \
     > "package-gale/tests/golden/calculator.wado"
-./target/dev-optimized/wado run package-gale/src/main.wado \
+./target/debug/wado run package-gale/src/main.wado \
     gen "package-gale/tests/grammars/SQLite.g4" \
     > "package-gale/tests/golden/sqlite.wado"
 """
@@ -170,18 +170,18 @@ description = "Generate stdlib cheatsheet docs (core + wasi)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo build --bin wado --profile dev-optimized --quiet
+cargo build --bin wado --quiet
 
 CORE_MODULES="core:prelude core:cli core:collections core:base64 core:zlib"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets"
 
-cargo run --bin wado --profile dev-optimized --quiet -- doc -f simple --title "Core Standard Library" \
+cargo run --bin wado --quiet -- doc -f simple --title "Core Standard Library" \
   $CORE_MODULES > docs/cheatsheet-stdlib-core.md
-cargo run --bin wado --profile dev-optimized --quiet -- doc -f simple --title "WASI Standard Library" \
+cargo run --bin wado --quiet -- doc -f simple --title "WASI Standard Library" \
   $WASI_MODULES > docs/cheatsheet-stdlib-wasi.md
-cargo run --bin wado --profile dev-optimized --quiet -- doc -f markdown --title "Core Standard Library" \
+cargo run --bin wado --quiet -- doc -f markdown --title "Core Standard Library" \
   $CORE_MODULES > docs/stdlib-core.md
-cargo run --bin wado --profile dev-optimized --quiet -- doc -f markdown --title "WASI Standard Library" \
+cargo run --bin wado --quiet -- doc -f markdown --title "WASI Standard Library" \
   $WASI_MODULES > docs/stdlib-wasi.md
 """
 

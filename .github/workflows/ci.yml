@@ -32,7 +32,7 @@ jobs:
 
       - run: mise run clippy-fix
       - run: mise run update-bundled
-      - run: cargo build --profile dev-optimized --bin wado --bin wado-dev-tools
+      - run: cargo build --bin wado --bin wado-dev-tools
       - run: mise run update-golden-fixtures
       - run: mise run update-golden-format-fixtures
       - run: mise run doc-stdlib
@@ -92,7 +92,7 @@ jobs:
           save-if: false
       - uses: rui314/setup-mold@v1
 
-      - run: cargo test --locked --profile dev-optimized --all -- --skip fixture_test_
+      - run: cargo test --locked --all -- --skip fixture_test_
 
   test-e2e-o0:
     name: Test (E2E O0)
@@ -107,7 +107,7 @@ jobs:
           save-if: false
       - uses: rui314/setup-mold@v1
 
-      - run: cargo test --locked --profile dev-optimized -p wado-compiler --test e2e -- fixture_test_o0
+      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o0
 
   test-e2e-o1:
     name: Test (E2E O1)
@@ -122,7 +122,7 @@ jobs:
           save-if: false
       - uses: rui314/setup-mold@v1
 
-      - run: cargo test --locked --profile dev-optimized -p wado-compiler --test e2e -- fixture_test_o1
+      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o1
 
   test-e2e-o3:
     name: Test (E2E O3)
@@ -137,7 +137,7 @@ jobs:
           save-if: false
       - uses: rui314/setup-mold@v1
 
-      - run: cargo test --locked --profile dev-optimized -p wado-compiler --test e2e -- fixture_test_o3
+      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o3
 
   test-e2e-os:
     name: Test (E2E Os)
@@ -152,7 +152,7 @@ jobs:
           save-if: false
       - uses: rui314/setup-mold@v1
 
-      - run: cargo test --locked --profile dev-optimized -p wado-compiler --test e2e -- fixture_test_os
+      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_os
 
   test-wado:
     name: Test (Wado)
