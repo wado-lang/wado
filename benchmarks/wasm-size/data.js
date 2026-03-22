@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774137890456,
+  "lastUpdate": 1774142092296,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5927,6 +5927,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22175,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e31e515e2e08effbd184790826fcd81fa4f18f1e",
+          "message": "Merge pull request #654 from wado-lang/claude/optimize-zlib-compress-CYN80\n\nEliminate bounds checks for bitmask-bounded array indices",
+          "timestamp": "2026-03-22T10:12:26+09:00",
+          "tree_id": "7dfef665087aa7e211a66c6ed6da37ebc62fd5d9",
+          "url": "https://github.com/wado-lang/wado/commit/e31e515e2e08effbd184790826fcd81fa4f18f1e"
+        },
+        "date": 1774142092075,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
             "unit": "bytes"
           }
         ]
