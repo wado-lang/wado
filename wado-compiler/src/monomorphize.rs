@@ -1612,15 +1612,32 @@ impl Monomorphizer {
                                 generic_functions.get(&generic_method_name)
                             {
                                 let generic_func = generic_func_rc.borrow();
-                                if mono_type_args.len() >= generic_func.impl_type_params.len() {
+                                // For variadic impls (e.g., impl<..T> Deserialize for [..T]),
+                                // mono_type_args only has method type args. Extract the struct's
+                                // type args from the struct name and prepend them.
+                                let combined_type_args = if !generic_func.impl_type_params.is_empty()
+                                    && mono_type_args.len() < generic_func.impl_type_params.len() + generic_func.type_params.len()
+                                    && info.struct_name != info.base_struct_name
+                                {
+                                    // Extract struct type args by finding the mangled struct in type table
+                                    let struct_type_args = type_table
+                                        .find_type_args_by_mangled_name(&info.struct_name)
+                                        .unwrap_or_default();
+                                    let mut combined = struct_type_args;
+                                    combined.extend(mono_type_args.iter().copied());
+                                    combined
+                                } else {
+                                    mono_type_args.clone()
+                                };
+                                if combined_type_args.len() >= generic_func.impl_type_params.len() {
                                     let method_info = generic_func.method_info.clone();
                                     let key = InstantiationKey {
                                         name: generic_method_name,
-                                        type_args: mono_type_args.clone(),
+                                        type_args: combined_type_args.clone(),
                                         method_info,
                                     };
                                     if !self.function_instantiated.contains_key(&key) {
-                                        let impl_type_arg_count = mono_type_args
+                                        let impl_type_arg_count = combined_type_args
                                             .len()
                                             .saturating_sub(generic_func.type_params.len());
                                         let mangled = self.method_instantiation_name(
