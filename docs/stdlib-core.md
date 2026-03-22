@@ -1395,6 +1395,15 @@ Matches POSIX isspace() for the ASCII range.
 Returns true if the character is a Unicode whitespace character.
 Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
+##### `pub fn is_hexdigit(&self) -> bool`
+
+Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
+
+##### `pub fn hex_digit_value(&self) -> i32`
+
+Returns the numeric value of an ASCII hexadecimal digit (0–15).
+Panics if the character is not a valid hex digit.
+
 ##### `impl Display for char`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`

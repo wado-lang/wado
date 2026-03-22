@@ -396,10 +396,10 @@ fn collect_modified_vars_in_stmt(
             modified.insert_full(*local_index);
             // Track GC aliases: `let a = b` where b is a local with GC type
             // means a and b point to the same heap object.
-            if let TirExprKind::Local { index: src_idx, .. } = &value.kind {
-                if is_gc_heap_type(value.type_id, type_table) {
-                    modified.add_alias(*local_index, *src_idx);
-                }
+            if let TirExprKind::Local { index: src_idx, .. } = &value.kind
+                && is_gc_heap_type(value.type_id, type_table)
+            {
+                modified.add_alias(*local_index, *src_idx);
             }
             // Also check the value expression for mutable references
             collect_modified_vars_in_expr(value, modified, type_table);

@@ -4133,6 +4133,25 @@ pub fn char::is_whitespace(self: Box<char>) -> bool {
     };
 }
 
+pub fn char::is_hexdigit(self: Box<char>) -> bool {
+    let c: char = self.value;
+    return ((((c >= '0') && (c <= '9')) || ((c >= 'a') && (c <= 'f'))) || ((c >= 'A') && (c <= 'F')));
+}
+
+pub fn char::hex_digit_value(self: Box<char>) -> i32 {
+    let c: char = self.value;
+    if ((c >= '0') && (c <= '9')) {
+        return (c as i32 - '0' as i32);
+    }
+    if ((c >= 'a') && (c <= 'f')) {
+        return ((c as i32 - 'a' as i32) + 10);
+    }
+    if ((c >= 'A') && (c <= 'F')) {
+        return ((c as i32 - 'A' as i32) + 10);
+    }
+    core::internal::panic("char::hex_digit_value: not a hex digit");
+}
+
 pub fn i8::max(a: i8, b: i8) -> i8 {
     return "core::prelude/primitive.wado::core/builtin/select<i8>"((a > b), a, b);
 }
