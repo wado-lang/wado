@@ -1278,7 +1278,10 @@ fn compute_reachable_types(project: &Project) -> IndexSet<TypeId> {
                     }
                     // Monomorphization type args are used by WIR for name mangling
                     if let Some(info) = &tir_struct.monomorph_info {
-                        for &ta in &info.type_args {
+                        for &ta in &info.impl_type_args {
+                            collect_type_transitive(ta, &type_table, &mut reachable_types);
+                        }
+                        for &ta in &info.method_type_args {
                             collect_type_transitive(ta, &type_table, &mut reachable_types);
                         }
                     }
@@ -1346,7 +1349,10 @@ fn collect_types_from_function(
 
     // Collect monomorphization type args (used by WIR for name mangling)
     if let Some(info) = &func.monomorph_info {
-        for &ta in &info.type_args {
+        for &ta in &info.impl_type_args {
+            collect_type_transitive(ta, type_table, reachable);
+        }
+        for &ta in &info.method_type_args {
             collect_type_transitive(ta, type_table, reachable);
         }
     }

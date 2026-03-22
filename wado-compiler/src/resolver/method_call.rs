@@ -435,18 +435,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 MethodName::format_local(blanket_param, trait_name.as_deref(), &method_call.method);
             Some(MonomorphInfo {
                 generic_name,
-                type_args: vec![base_type_id],
+                impl_type_args: vec![base_type_id],
+                method_type_args: vec![],
                 is_blanket: true,
             })
         } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
-            // Generic struct, generic method, or both
-            let mut all_type_args = receiver_type_args.unwrap_or_default();
-            all_type_args.extend_from_slice(&method_type_args);
             let generic_name =
                 MethodName::format_local(&base_struct_name, None, &method_call.method);
             Some(MonomorphInfo {
                 generic_name,
-                type_args: all_type_args,
+                impl_type_args: receiver_type_args.unwrap_or_default(),
+                method_type_args: method_type_args.clone(),
                 is_blanket: false,
             })
         } else {
@@ -1077,12 +1076,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Build monomorph_info for generic instantiations
-        let all_type_args: Vec<TypeId> = struct_type_args
-            .iter()
-            .chain(method_type_args.iter())
-            .copied()
-            .collect();
-        let monomorph_info = if all_type_args.is_empty() {
+        let monomorph_info = if struct_type_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
             let generic_name = MethodName::format_local(
@@ -1092,7 +1086,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             );
             Some(MonomorphInfo {
                 generic_name,
-                type_args: all_type_args,
+                impl_type_args: struct_type_args.clone(),
+                method_type_args: method_type_args.clone(),
                 is_blanket: false,
             })
         };
@@ -1891,7 +1886,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         } else {
             Some(MonomorphInfo {
                 generic_name: final_mangled_name.clone(),
-                type_args: method_type_args.to_vec(),
+                impl_type_args: vec![],
+                method_type_args: method_type_args.to_vec(),
                 is_blanket: false,
             })
         };

@@ -1552,7 +1552,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             } else {
                 Some(MonomorphInfo {
                     generic_name: mangled_name.clone(),
-                    type_args: method_type_args,
+                    impl_type_args: vec![],
+                    method_type_args,
                     is_blanket: false,
                 })
             };

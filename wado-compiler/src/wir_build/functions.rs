@@ -447,13 +447,21 @@ fn register_single_function(
         generic_origin: tir_func
             .monomorph_info
             .as_ref()
-            .map(|info| WirGenericOrigin {
-                base_name: info.generic_name.clone(),
-                type_args: info
-                    .type_args
+            .map(|info| {
+                let mut type_arg_names: Vec<String> = info
+                    .impl_type_args
                     .iter()
                     .map(|&ta| type_table.mangle_type_name(ta))
-                    .collect(),
+                    .collect();
+                type_arg_names.extend(
+                    info.method_type_args
+                        .iter()
+                        .map(|&ta| type_table.mangle_type_name(ta)),
+                );
+                WirGenericOrigin {
+                    base_name: info.generic_name.clone(),
+                    type_args: type_arg_names,
+                }
             }),
         effects,
         stores: tir_func.stores.clone(),
