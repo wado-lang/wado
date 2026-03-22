@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774137637289,
+  "lastUpdate": 1774137890456,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5873,6 +5873,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9ea1b5f692d12d5c4f23a06701f60294330a33b4"
         },
         "date": 1774137637071,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22175,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6ead6c8ebf92a6b6a52eed867f9cc558b1827083",
+          "message": "Merge pull request #651 from wado-lang/claude/type-pack-expansion-YIHQF\n\nImplement type pack expansion with method calls",
+          "timestamp": "2026-03-22T09:02:25+09:00",
+          "tree_id": "da59bfd2d0ea22e6bbdb1f2e74294a5de4859908",
+          "url": "https://github.com/wado-lang/wado/commit/6ead6c8ebf92a6b6a52eed867f9cc558b1827083"
+        },
+        "date": 1774137890279,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
