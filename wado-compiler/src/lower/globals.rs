@@ -281,7 +281,11 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
                 }
             }
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
             collect_global_refs(inner, refs);
         }
         TirExprKind::Index {
@@ -459,6 +463,9 @@ fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
         }
         TirExprKind::TupleSpread { expr } => {
             renumber_locals_in_expr(expr, offset);
+        }
+        TirExprKind::TypePackExpansion { call_expr, .. } => {
+            renumber_locals_in_expr(call_expr, offset);
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
             renumber_locals_in_block(block, offset);

@@ -2337,15 +2337,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let contains_pack = self.type_contains_pack(spread_expr.type_id);
                 let spread_type = self.type_table.borrow().get(spread_expr.type_id).clone();
                 if contains_pack {
-                    // Keep as TupleSpread for monomorphization to expand later
-                    elem_types.push(spread_expr.type_id);
-                    elements.push(TirExpr::new(
-                        TirExprKind::TupleSpread {
-                            expr: Box::new(spread_expr),
-                        },
-                        *elem_types.last().unwrap(),
-                        elem.span(),
-                    ));
+                    // Check if the expression's type IS a TypePack directly.
+                    // If so, this is a type pack expansion (e.g., [..T::method()])
+                    // where the expression template is instantiated per element.
+                    // If the type is a Tuple containing TypePack, this is a value
+                    // spread (e.g., [..rest] where rest: [..T]).
+                    let is_direct_pack = matches!(
+                        self.type_table.borrow().get(spread_expr.type_id),
+                        ResolvedType::TypePack { .. }
+                    );
+                    if is_direct_pack {
+                        let pack_type_id = spread_expr.type_id;
+                        elem_types.push(spread_expr.type_id);
+                        elements.push(TirExpr::new(
+                            TirExprKind::TypePackExpansion {
+                                call_expr: Box::new(spread_expr),
+                                pack_type_id,
+                            },
+                            *elem_types.last().unwrap(),
+                            elem.span(),
+                        ));
+                    } else {
+                        // Keep as TupleSpread for monomorphization to expand later
+                        elem_types.push(spread_expr.type_id);
+                        elements.push(TirExpr::new(
+                            TirExprKind::TupleSpread {
+                                expr: Box::new(spread_expr),
+                            },
+                            *elem_types.last().unwrap(),
+                            elem.span(),
+                        ));
+                    }
                 } else if let ResolvedType::Tuple(inner_elems) = spread_type {
                     // For concrete tuples, expand inline via FieldAccess.
                     // If the expression is non-trivial (not a local), bind it to a

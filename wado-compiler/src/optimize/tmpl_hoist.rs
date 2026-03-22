@@ -300,7 +300,11 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
         TirExprKind::Unary { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
             collect_escaping_in_expr(inner, escaping);
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
             collect_escaping_in_expr(inner, escaping);
         }
         TirExprKind::If {
@@ -650,7 +654,11 @@ fn transform_expr(
                 );
             }
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
             transform_expr(
                 inner,
                 escaping_locals,

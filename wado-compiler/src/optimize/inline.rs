@@ -3,6 +3,7 @@
 //! This module provides function inlining for small functions.
 //! It uses labeled block expressions for cleaner value handling.
 
+use super::visitor::block_has_break_to;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
@@ -27,9 +28,11 @@ fn count_expr(expr: &TirExpr) -> usize {
         TirExprKind::MethodCall { receiver, args, .. } => {
             count_expr(receiver) + args.iter().map(|a| count_expr(&a.expr)).sum::<usize>()
         }
-        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr } => {
-            count_expr(expr)
-        }
+        TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TypePackExpansion {
+            call_expr: expr, ..
+        } => count_expr(expr),
         TirExprKind::Index { expr, index, .. } => count_expr(expr) + count_expr(index),
         TirExprKind::TupleLiteral { elements } => elements.iter().map(count_expr).sum(),
         TirExprKind::StructLiteral { fields, .. } => {
@@ -363,7 +366,11 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
         TirExprKind::Cast { expr, .. } => {
             collect_callees_from_expr(expr, callees);
         }
-        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr } => {
+        TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TypePackExpansion {
+            call_expr: expr, ..
+        } => {
             collect_callees_from_expr(expr, callees);
         }
         TirExprKind::Index { expr, index } => {
@@ -1351,9 +1358,19 @@ fn remap_and_convert_returns(
     for stmt in &block.stmts {
         match &stmt.kind {
             TirStmtKind::Return { value } => {
-                // Convert return to break with the inline label
+                // Convert return to break with the inline label.
+                // Use label-aware remapping because the return value expression
+                // may itself contain nested blocks with return statements
+                // (e.g., try-op expansions inside tuple/struct literals).
                 let break_value = value.as_ref().map(|v| {
-                    remap_expr(v, param_to_local, local_offset, param_count, source_module)
+                    remap_expr_inner(
+                        v,
+                        param_to_local,
+                        local_offset,
+                        param_count,
+                        Some(label),
+                        source_module,
+                    )
                 });
                 stmts.push(TirStmt::new(
                     TirStmtKind::Break {
@@ -1395,76 +1412,6 @@ fn remap_and_convert_returns(
     stmts
 }
 
-/// Check if any `break` statement in the block targets the given label.
-fn block_has_break_to(label: &str, block: &TirBlock) -> bool {
-    block.stmts.iter().any(|s| stmt_has_break_to(label, s))
-}
-
-fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
-    match &stmt.kind {
-        TirStmtKind::Break { label: Some(l), .. } => l == label,
-        TirStmtKind::Let { value, .. } => expr_has_break_to(label, value),
-        TirStmtKind::Expr(expr) => expr_has_break_to(label, expr),
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            expr_has_break_to(label, condition)
-                || block_has_break_to(label, then_block)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|b| block_has_break_to(label, b))
-        }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            block_has_break_to(label, body)
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_has_break_to(label, scrutinee)
-                || block_has_break_to(label, then_block)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|b| block_has_break_to(label, b))
-        }
-        TirStmtKind::Return { value } => {
-            value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
-        }
-        TirStmtKind::LetDestructure { value, .. } => expr_has_break_to(label, value),
-        TirStmtKind::TaskReturn { value } => expr_has_break_to(label, value),
-        _ => false,
-    }
-}
-
-fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
-    match &expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            block_has_break_to(label, block)
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            expr_has_break_to(label, condition)
-                || block_has_break_to(label, then_branch)
-                || else_branch
-                    .as_ref()
-                    .is_some_and(|b| block_has_break_to(label, b))
-        }
-        TirExprKind::Match { expr, arms } => {
-            expr_has_break_to(label, expr)
-                || arms.iter().any(|arm| expr_has_break_to(label, &arm.body))
-        }
-        _ => false,
-    }
-}
-
-/// Remap local indices in a statement, converting nested returns to breaks
 fn remap_stmt_with_label(
     stmt: &TirStmt,
     param_to_local: &IndexMap<u32, u32>,
@@ -1473,181 +1420,14 @@ fn remap_stmt_with_label(
     label: &str,
     source_module: &ModuleSource,
 ) -> TirStmt {
-    let kind = match &stmt.kind {
-        TirStmtKind::Let {
-            name,
-            local_index,
-            is_mut,
-            is_reactive,
-            type_id,
-            value,
-            skip_value_copy,
-        } => {
-            let new_index =
-                remap_local_index(*local_index, param_to_local, local_offset, param_count);
-            TirStmtKind::Let {
-                name: name.clone(),
-                local_index: new_index,
-                is_mut: *is_mut,
-                is_reactive: *is_reactive,
-                type_id: *type_id,
-                value: remap_expr_with_label(
-                    value,
-                    param_to_local,
-                    local_offset,
-                    param_count,
-                    label,
-                    source_module,
-                ),
-                skip_value_copy: *skip_value_copy,
-            }
-        }
-        TirStmtKind::Expr(expr) => TirStmtKind::Expr(remap_expr_with_label(
-            expr,
-            param_to_local,
-            local_offset,
-            param_count,
-            label,
-            source_module,
-        )),
-        TirStmtKind::Return { value } => {
-            // Convert return to break with label
-            TirStmtKind::Break {
-                label: Some(label.to_string()),
-                value: value.as_ref().map(|v| {
-                    remap_expr_with_label(
-                        v,
-                        param_to_local,
-                        local_offset,
-                        param_count,
-                        label,
-                        source_module,
-                    )
-                }),
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => TirStmtKind::If {
-            condition: remap_expr(
-                condition,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
-            then_block: remap_block_with_label(
-                then_block,
-                param_to_local,
-                local_offset,
-                param_count,
-                label,
-                source_module,
-            ),
-            else_block: else_block.as_ref().map(|b| {
-                remap_block_with_label(
-                    b,
-                    param_to_local,
-                    local_offset,
-                    param_count,
-                    label,
-                    source_module,
-                )
-            }),
-        },
-        TirStmtKind::Loop { body } => TirStmtKind::Loop {
-            body: remap_block_with_label(
-                body,
-                param_to_local,
-                local_offset,
-                param_count,
-                label,
-                source_module,
-            ),
-        },
-        TirStmtKind::LabeledBlock {
-            label: inner_label,
-            block,
-        } => TirStmtKind::LabeledBlock {
-            label: inner_label.clone(),
-            block: remap_block_with_label(
-                block,
-                param_to_local,
-                local_offset,
-                param_count,
-                label,
-                source_module,
-            ),
-        },
-        TirStmtKind::IfLet {
-            scrutinee,
-            pattern,
-            then_block,
-            else_block,
-        } => TirStmtKind::IfLet {
-            scrutinee: remap_expr(
-                scrutinee,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
-            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
-            then_block: remap_block_with_label(
-                then_block,
-                param_to_local,
-                local_offset,
-                param_count,
-                label,
-                source_module,
-            ),
-            else_block: else_block.as_ref().map(|b| {
-                remap_block_with_label(
-                    b,
-                    param_to_local,
-                    local_offset,
-                    param_count,
-                    label,
-                    source_module,
-                )
-            }),
-        },
-        TirStmtKind::Break {
-            label: break_label,
-            value,
-        } => TirStmtKind::Break {
-            label: break_label.clone(),
-            value: value
-                .as_ref()
-                .map(|v| remap_expr(v, param_to_local, local_offset, param_count, source_module)),
-        },
-        TirStmtKind::Continue => TirStmtKind::Continue,
-        TirStmtKind::LetDestructure {
-            pattern,
-            is_mut,
-            value,
-        } => TirStmtKind::LetDestructure {
-            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
-            is_mut: *is_mut,
-            value: remap_expr(
-                value,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
-        },
-        TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        TirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
-        }
-    };
-
-    TirStmt::new(kind, stmt.span)
+    remap_stmt_inner(
+        stmt,
+        param_to_local,
+        local_offset,
+        param_count,
+        Some(label),
+        source_module,
+    )
 }
 
 /// Remap local indices in a pattern
@@ -1717,159 +1497,6 @@ fn remap_pattern(
     }
 }
 
-/// Remap local indices in a block with label for return conversion.
-///
-/// Like `remap_and_convert_returns`, this flattens scope blocks whose labels
-/// are not targeted by any break.
-fn remap_block_with_label(
-    block: &TirBlock,
-    param_to_local: &IndexMap<u32, u32>,
-    local_offset: u32,
-    param_count: u32,
-    label: &str,
-    source_module: &ModuleSource,
-) -> TirBlock {
-    let mut stmts = Vec::new();
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            TirStmtKind::LabeledBlock {
-                label: inner_label,
-                block: inner_block,
-            } if !block_has_break_to(inner_label, inner_block) => {
-                let inner = remap_and_convert_returns(
-                    inner_block,
-                    param_to_local,
-                    local_offset,
-                    param_count,
-                    label,
-                    source_module,
-                );
-                stmts.extend(inner);
-            }
-            _ => {
-                stmts.push(remap_stmt_with_label(
-                    stmt,
-                    param_to_local,
-                    local_offset,
-                    param_count,
-                    label,
-                    source_module,
-                ));
-            }
-        }
-    }
-    TirBlock::new(stmts, block.span)
-}
-
-/// Remap an expression while converting `return` inside blocks/match arms to
-/// `break label: value`.  This is needed so that inlined function bodies whose
-/// arms/branches use `return` correctly exit the inline labeled block rather
-/// than the enclosing function.
-fn remap_expr_with_label(
-    expr: &TirExpr,
-    param_to_local: &IndexMap<u32, u32>,
-    local_offset: u32,
-    param_count: u32,
-    label: &str,
-    source_module: &ModuleSource,
-) -> TirExpr {
-    let kind = match &expr.kind {
-        TirExprKind::Block(block) => TirExprKind::Block(remap_block_with_label(
-            block,
-            param_to_local,
-            local_offset,
-            param_count,
-            label,
-            source_module,
-        )),
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => TirExprKind::If {
-            condition: Box::new(remap_expr_with_label(
-                condition,
-                param_to_local,
-                local_offset,
-                param_count,
-                label,
-                source_module,
-            )),
-            then_branch: remap_block_with_label(
-                then_branch,
-                param_to_local,
-                local_offset,
-                param_count,
-                label,
-                source_module,
-            ),
-            else_branch: else_branch.as_ref().map(|b| {
-                remap_block_with_label(
-                    b,
-                    param_to_local,
-                    local_offset,
-                    param_count,
-                    label,
-                    source_module,
-                )
-            }),
-        },
-        TirExprKind::Match { expr: inner, arms } => TirExprKind::Match {
-            expr: Box::new(remap_expr(
-                inner,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
-            arms: arms
-                .iter()
-                .map(|arm| crate::tir::TirMatchArm {
-                    pattern: remap_pattern(&arm.pattern, param_to_local, local_offset, param_count),
-                    guard: arm.guard.as_ref().map(|g| {
-                        remap_expr(g, param_to_local, local_offset, param_count, source_module)
-                    }),
-                    body: remap_expr_with_label(
-                        &arm.body,
-                        param_to_local,
-                        local_offset,
-                        param_count,
-                        label,
-                        source_module,
-                    ),
-                    span: arm.span,
-                })
-                .collect(),
-        },
-        TirExprKind::LabeledBlock {
-            label: inner_label,
-            block,
-            result_type,
-        } => TirExprKind::LabeledBlock {
-            label: inner_label.clone(),
-            block: remap_block_with_label(
-                block,
-                param_to_local,
-                local_offset,
-                param_count,
-                label,
-                source_module,
-            ),
-            result_type: *result_type,
-        },
-        _ => {
-            return remap_expr(
-                expr,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            );
-        }
-    };
-    TirExpr::new(kind, expr.type_id, expr.span)
-}
-
 /// Remap a local index
 fn remap_local_index(
     index: u32,
@@ -1890,9 +1517,6 @@ fn remap_local_index(
     }
 }
 
-/// Remap local indices in an expression
-/// `source_module` is the module path where the inlined function came from,
-/// used to convert local calls to use the full module path.
 fn remap_expr(
     expr: &TirExpr,
     param_to_local: &IndexMap<u32, u32>,
@@ -1900,69 +1524,78 @@ fn remap_expr(
     param_count: u32,
     source_module: &ModuleSource,
 ) -> TirExpr {
+    remap_expr_inner(
+        expr,
+        param_to_local,
+        local_offset,
+        param_count,
+        None,
+        source_module,
+    )
+}
+
+/// Remap local indices in an expression, optionally converting `return` to `break`.
+///
+/// When `label` is `Some`, any `return` statement reachable from this expression
+/// (e.g. inside blocks nested in struct literals, tuple literals, variant payloads)
+/// is converted to `break label: value`. This is critical for correct inlining of
+/// functions whose bodies contain early returns inside nested expressions.
+fn remap_expr_inner(
+    expr: &TirExpr,
+    param_to_local: &IndexMap<u32, u32>,
+    local_offset: u32,
+    param_count: u32,
+    label: Option<&str>,
+    source_module: &ModuleSource,
+) -> TirExpr {
+    let re = |e: &TirExpr| {
+        remap_expr_inner(
+            e,
+            param_to_local,
+            local_offset,
+            param_count,
+            label,
+            source_module,
+        )
+    };
+    let re_box = |e: &TirExpr| Box::new(re(e));
+    let rb = |b: &TirBlock| {
+        remap_block_inner(
+            b,
+            param_to_local,
+            local_offset,
+            param_count,
+            label,
+            source_module,
+        )
+    };
+
     let kind = match &expr.kind {
         TirExprKind::Local { index, name } => {
             let new_index = remap_local_index(*index, param_to_local, local_offset, param_count);
-            // Keep the original name - labeled blocks provide scoping
             TirExprKind::Local {
                 index: new_index,
                 name: name.clone(),
             }
         }
         TirExprKind::Binary { left, op, right } => TirExprKind::Binary {
-            left: Box::new(remap_expr(
-                left,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            left: re_box(left),
             op: *op,
-            right: Box::new(remap_expr(
-                right,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            right: re_box(right),
         },
         TirExprKind::Unary { op, expr: inner } => TirExprKind::Unary {
             op: *op,
-            expr: Box::new(remap_expr(
-                inner,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            expr: re_box(inner),
         },
         TirExprKind::Assign { target, value } => TirExprKind::Assign {
-            target: Box::new(remap_expr(
-                target,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
-            value: Box::new(remap_expr(
-                value,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            target: re_box(target),
+            value: re_box(value),
         },
         TirExprKind::Cast {
             expr: inner,
             target_type,
         } => TirExprKind::Cast {
-            expr: Box::new(remap_expr(
-                inner,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            expr: re_box(inner),
             target_type: *target_type,
         },
         TirExprKind::Call {
@@ -1976,18 +1609,7 @@ fn remap_expr(
                 type_args: type_args.clone(),
                 args: args
                     .iter()
-                    .map(|a| {
-                        CallArg::new(
-                            remap_expr(
-                                &a.expr,
-                                param_to_local,
-                                local_offset,
-                                param_count,
-                                source_module,
-                            ),
-                            a.is_mut,
-                        )
-                    })
+                    .map(|a| CallArg::new(re(&a.expr), a.is_mut))
                     .collect(),
             }
         }
@@ -1999,131 +1621,60 @@ fn remap_expr(
         } => {
             let remapped_func = remap_function_ref(func, source_module);
             TirExprKind::MethodCall {
-                receiver: Box::new(remap_expr(
-                    receiver,
-                    param_to_local,
-                    local_offset,
-                    param_count,
-                    source_module,
-                )),
+                receiver: re_box(receiver),
                 func: remapped_func,
                 type_args: type_args.clone(),
                 args: args
                     .iter()
-                    .map(|a| {
-                        CallArg::new(
-                            remap_expr(
-                                &a.expr,
-                                param_to_local,
-                                local_offset,
-                                param_count,
-                                source_module,
-                            ),
-                            a.is_mut,
-                        )
-                    })
+                    .map(|a| CallArg::new(re(&a.expr), a.is_mut))
                     .collect(),
             }
         }
         TirExprKind::CmRawCall { local_name, args } => TirExprKind::CmRawCall {
             local_name: local_name.clone(),
-            args: args
-                .iter()
-                .map(|a| remap_expr(a, param_to_local, local_offset, param_count, source_module))
-                .collect(),
+            args: args.iter().map(&re).collect(),
         },
         TirExprKind::FieldAccess {
             expr: inner,
             field_index,
             field_name,
         } => TirExprKind::FieldAccess {
-            expr: Box::new(remap_expr(
-                inner,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            expr: re_box(inner),
             field_index: *field_index,
             field_name: field_name.clone(),
         },
         TirExprKind::TupleSpread { expr: inner } => TirExprKind::TupleSpread {
-            expr: Box::new(remap_expr(
-                inner,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            expr: re_box(inner),
+        },
+        TirExprKind::TypePackExpansion {
+            call_expr: inner,
+            pack_type_id,
+        } => TirExprKind::TypePackExpansion {
+            call_expr: re_box(inner),
+            pack_type_id: *pack_type_id,
         },
         TirExprKind::Index { expr: inner, index } => TirExprKind::Index {
-            expr: Box::new(remap_expr(
-                inner,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
-            index: Box::new(remap_expr(
-                index,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            expr: re_box(inner),
+            index: re_box(index),
         },
-        TirExprKind::Block(block) => TirExprKind::Block(remap_block(
-            block,
-            param_to_local,
-            local_offset,
-            param_count,
-            source_module,
-        )),
+        TirExprKind::Block(block) => TirExprKind::Block(rb(block)),
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => TirExprKind::If {
-            condition: Box::new(remap_expr(
-                condition,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
-            then_branch: remap_block(
-                then_branch,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
-            else_branch: else_branch
-                .as_ref()
-                .map(|b| remap_block(b, param_to_local, local_offset, param_count, source_module)),
+            condition: re_box(condition),
+            then_branch: rb(then_branch),
+            else_branch: else_branch.as_ref().map(&rb),
         },
         TirExprKind::Match { expr: inner, arms } => TirExprKind::Match {
-            expr: Box::new(remap_expr(
-                inner,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            expr: re_box(inner),
             arms: arms
                 .iter()
                 .map(|arm| crate::tir::TirMatchArm {
                     pattern: remap_pattern(&arm.pattern, param_to_local, local_offset, param_count),
-                    guard: arm.guard.as_ref().map(|g| {
-                        remap_expr(g, param_to_local, local_offset, param_count, source_module)
-                    }),
-                    body: remap_expr(
-                        &arm.body,
-                        param_to_local,
-                        local_offset,
-                        param_count,
-                        source_module,
-                    ),
+                    guard: arm.guard.as_ref().map(&re),
+                    body: re(&arm.body),
                     span: arm.span,
                 })
                 .collect(),
@@ -2139,22 +1690,13 @@ fn remap_expr(
                 .iter()
                 .map(|f| crate::tir::TirStructField {
                     name: f.name.clone(),
-                    value: remap_expr(
-                        &f.value,
-                        param_to_local,
-                        local_offset,
-                        param_count,
-                        source_module,
-                    ),
+                    value: re(&f.value),
                     field_index: f.field_index,
                 })
                 .collect(),
         },
         TirExprKind::TupleLiteral { elements } => TirExprKind::TupleLiteral {
-            elements: elements
-                .iter()
-                .map(|e| remap_expr(e, param_to_local, local_offset, param_count, source_module))
-                .collect(),
+            elements: elements.iter().map(&re).collect(),
         },
         TirExprKind::Closure {
             params,
@@ -2164,6 +1706,7 @@ fn remap_expr(
             source_text,
         } => TirExprKind::Closure {
             params: params.clone(),
+            // Closures have their own return scope — don't propagate label
             body: Box::new(remap_expr(
                 body,
                 param_to_local,
@@ -2171,35 +1714,20 @@ fn remap_expr(
                 param_count,
                 source_module,
             )),
-            captures: captures.clone(), // Captures reference outer scope, not remapped
+            captures: captures.clone(),
             functor_id: *functor_id,
             source_text: source_text.clone(),
         },
         TirExprKind::IndirectCall { callee, args } => TirExprKind::IndirectCall {
-            callee: Box::new(remap_expr(
-                callee,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
-            args: args
-                .iter()
-                .map(|a| remap_expr(a, param_to_local, local_offset, param_count, source_module))
-                .collect(),
+            callee: re_box(callee),
+            args: args.iter().map(&re).collect(),
         },
         TirExprKind::ClosureToCanonical {
             functor,
             functor_id,
             target_fn_type,
         } => TirExprKind::ClosureToCanonical {
-            functor: Box::new(remap_expr(
-                functor,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            functor: re_box(functor),
             functor_id: *functor_id,
             target_fn_type: *target_fn_type,
         },
@@ -2212,29 +1740,15 @@ fn remap_expr(
             variant_type: *variant_type,
             case_index: *case_index,
             case_name: case_name.clone(),
-            payload: payload.as_ref().map(|p| {
-                Box::new(remap_expr(
-                    p,
-                    param_to_local,
-                    local_offset,
-                    param_count,
-                    source_module,
-                ))
-            }),
+            payload: payload.as_ref().map(|p| Box::new(re(p))),
         },
         TirExprKind::LabeledBlock {
-            label,
+            label: inner_label,
             block,
             result_type,
         } => TirExprKind::LabeledBlock {
-            label: label.clone(),
-            block: remap_block(
-                block,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
+            label: inner_label.clone(),
+            block: rb(block),
             result_type: *result_type,
         },
         TirExprKind::GlobalVarSet {
@@ -2244,35 +1758,15 @@ fn remap_expr(
         } => TirExprKind::GlobalVarSet {
             module_source: module_source.clone(),
             name: name.clone(),
-            value: Box::new(remap_expr(
-                value,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            value: re_box(value),
         },
-        TirExprKind::VariantTag { expr } => TirExprKind::VariantTag {
-            expr: Box::new(remap_expr(
-                expr,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
-        },
+        TirExprKind::VariantTag { expr } => TirExprKind::VariantTag { expr: re_box(expr) },
         TirExprKind::VariantTest {
             expr,
             case_index,
             case_name,
         } => TirExprKind::VariantTest {
-            expr: Box::new(remap_expr(
-                expr,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            expr: re_box(expr),
             case_index: *case_index,
             case_name: case_name.clone(),
         },
@@ -2281,13 +1775,7 @@ fn remap_expr(
             case_index,
             payload_type,
         } => TirExprKind::VariantPayload {
-            expr: Box::new(remap_expr(
-                expr,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            expr: re_box(expr),
             case_index: *case_index,
             payload_type: *payload_type,
         },
@@ -2297,33 +1785,10 @@ fn remap_expr(
             arms,
             default,
         } => TirExprKind::Switch {
-            scrutinee: Box::new(remap_expr(
-                scrutinee,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            scrutinee: re_box(scrutinee),
             min_value: *min_value,
-            arms: arms
-                .iter()
-                .map(|arm| {
-                    remap_block(
-                        arm,
-                        param_to_local,
-                        local_offset,
-                        param_count,
-                        source_module,
-                    )
-                })
-                .collect(),
-            default: remap_block(
-                default,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
+            arms: arms.iter().map(&rb).collect(),
+            default: rb(default),
         },
         // Leaf nodes - no remapping needed
         TirExprKind::IntLiteral { .. }
@@ -2382,32 +1847,78 @@ fn remap_function_ref(func: &FunctionRef, source_module: &ModuleSource) -> Funct
     }
 }
 
-/// Remap local indices in a block (without label for return conversion)
-fn remap_block(
+fn remap_block_inner(
     block: &TirBlock,
     param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
+    label: Option<&str>,
     source_module: &ModuleSource,
 ) -> TirBlock {
-    TirBlock::new(
-        block
-            .stmts
-            .iter()
-            .map(|s| remap_stmt(s, param_to_local, local_offset, param_count, source_module))
-            .collect(),
-        block.span,
-    )
+    let mut stmts = Vec::new();
+    for stmt in &block.stmts {
+        if let Some(label) = label {
+            match &stmt.kind {
+                TirStmtKind::LabeledBlock {
+                    label: inner_label,
+                    block: inner_block,
+                } if !block_has_break_to(inner_label, inner_block) => {
+                    // Flatten: scope block has no breaks targeting its own label
+                    let inner = remap_and_convert_returns(
+                        inner_block,
+                        param_to_local,
+                        local_offset,
+                        param_count,
+                        label,
+                        source_module,
+                    );
+                    stmts.extend(inner);
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        stmts.push(remap_stmt_inner(
+            stmt,
+            param_to_local,
+            local_offset,
+            param_count,
+            label,
+            source_module,
+        ));
+    }
+    TirBlock::new(stmts, block.span)
 }
 
-/// Remap local indices in a statement (without return conversion)
-fn remap_stmt(
+fn remap_stmt_inner(
     stmt: &TirStmt,
     param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
+    label: Option<&str>,
     source_module: &ModuleSource,
 ) -> TirStmt {
+    let re = |e: &TirExpr| {
+        remap_expr_inner(
+            e,
+            param_to_local,
+            local_offset,
+            param_count,
+            label,
+            source_module,
+        )
+    };
+    let rb = |b: &TirBlock| {
+        remap_block_inner(
+            b,
+            param_to_local,
+            local_offset,
+            param_count,
+            label,
+            source_module,
+        )
+    };
+
     let kind = match &stmt.kind {
         TirStmtKind::Let {
             name,
@@ -2426,69 +1937,40 @@ fn remap_stmt(
                 is_mut: *is_mut,
                 is_reactive: *is_reactive,
                 type_id: *type_id,
-                value: remap_expr(
-                    value,
-                    param_to_local,
-                    local_offset,
-                    param_count,
-                    source_module,
-                ),
+                value: re(value),
                 skip_value_copy: *skip_value_copy,
             }
         }
-        TirStmtKind::Expr(expr) => TirStmtKind::Expr(remap_expr(
-            expr,
-            param_to_local,
-            local_offset,
-            param_count,
-            source_module,
-        )),
-        TirStmtKind::Return { value } => TirStmtKind::Return {
-            value: value
-                .as_ref()
-                .map(|v| remap_expr(v, param_to_local, local_offset, param_count, source_module)),
-        },
+        TirStmtKind::Expr(expr) => TirStmtKind::Expr(re(expr)),
+        TirStmtKind::Return { value } => {
+            if let Some(label) = label {
+                // Convert return to break with the inline label
+                TirStmtKind::Break {
+                    label: Some(label.to_string()),
+                    value: value.as_ref().map(&re),
+                }
+            } else {
+                TirStmtKind::Return {
+                    value: value.as_ref().map(&re),
+                }
+            }
+        }
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => TirStmtKind::If {
-            condition: remap_expr(
-                condition,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
-            then_block: remap_block(
-                then_block,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
-            else_block: else_block
-                .as_ref()
-                .map(|b| remap_block(b, param_to_local, local_offset, param_count, source_module)),
+            condition: re(condition),
+            then_block: rb(then_block),
+            else_block: else_block.as_ref().map(&rb),
         },
-        TirStmtKind::Loop { body } => TirStmtKind::Loop {
-            body: remap_block(
-                body,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
-        },
-        TirStmtKind::LabeledBlock { label, block } => TirStmtKind::LabeledBlock {
-            label: label.clone(),
-            block: remap_block(
-                block,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
+        TirStmtKind::Loop { body } => TirStmtKind::Loop { body: rb(body) },
+        TirStmtKind::LabeledBlock {
+            label: inner_label,
+            block,
+        } => TirStmtKind::LabeledBlock {
+            label: inner_label.clone(),
+            block: rb(block),
         },
         TirStmtKind::IfLet {
             scrutinee,
@@ -2496,30 +1978,17 @@ fn remap_stmt(
             then_block,
             else_block,
         } => TirStmtKind::IfLet {
-            scrutinee: remap_expr(
-                scrutinee,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
+            scrutinee: re(scrutinee),
             pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
-            then_block: remap_block(
-                then_block,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
-            else_block: else_block
-                .as_ref()
-                .map(|b| remap_block(b, param_to_local, local_offset, param_count, source_module)),
+            then_block: rb(then_block),
+            else_block: else_block.as_ref().map(rb),
         },
-        TirStmtKind::Break { label, value } => TirStmtKind::Break {
-            label: label.clone(),
-            value: value
-                .as_ref()
-                .map(|v| remap_expr(v, param_to_local, local_offset, param_count, source_module)),
+        TirStmtKind::Break {
+            label: break_label,
+            value,
+        } => TirStmtKind::Break {
+            label: break_label.clone(),
+            value: value.as_ref().map(&re),
         },
         TirStmtKind::Continue => TirStmtKind::Continue,
         TirStmtKind::LetDestructure {
@@ -2529,13 +1998,7 @@ fn remap_stmt(
         } => TirStmtKind::LetDestructure {
             pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
             is_mut: *is_mut,
-            value: remap_expr(
-                value,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            ),
+            value: re(value),
         },
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -2723,7 +2186,11 @@ fn inline_calls_in_expr(
                 );
             }
         }
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
             inline_calls_in_expr(
                 inner,
                 candidates,

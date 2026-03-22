@@ -1,0 +1,40 @@
+// Type pack expansion: [..T::method()] calls a static method on each type in the pack
+trait MakeDefault {
+    fn make_default() -> Self;
+}
+
+impl MakeDefault for i32 {
+    fn make_default() -> i32 {
+        return 0;
+    }
+}
+
+impl MakeDefault for String {
+    fn make_default() -> String {
+        return "";
+    }
+}
+
+impl MakeDefault for bool {
+    fn make_default() -> bool {
+        return false;
+    }
+}
+
+fn make_defaults<..T: MakeDefault>() -> [..T] {
+    return [..T::make_default()];
+}
+
+export fn run() {
+    let result = make_defaults::<[i32, String, bool]>();
+    assert result.0 == 0;
+    assert result.1 == "";
+    assert result.2 == false;
+
+    // Single element pack
+    let single = make_defaults::<[i32]>();
+    assert single.0 == 0;
+}
+
+__DATA__
+{"stdout": ""}

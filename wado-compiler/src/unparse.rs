@@ -4268,6 +4268,11 @@ impl<'a> TirUnparser<'a> {
                 self.unparse_expr(expr);
                 self.output.push(']');
             }
+            TirExprKind::TypePackExpansion { call_expr, .. } => {
+                self.output.push_str("[..");
+                self.unparse_expr(call_expr);
+                self.output.push(']');
+            }
             TirExprKind::Closure {
                 params,
                 body,

@@ -896,7 +896,10 @@ impl Monomorphizer {
                 self.rewrite_types_in_expr(inner, type_table);
             }
             TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } => {
                 self.rewrite_types_in_expr(inner, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -2016,7 +2019,10 @@ impl Monomorphizer {
                 self.collect_func_instantiation_sites_in_expr(inner, generic_functions, type_table);
             }
             TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } => {
                 self.collect_func_instantiation_sites_in_expr(inner, generic_functions, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -2380,6 +2386,8 @@ impl Monomorphizer {
             self.substitute_types_in_block(&mut new_body, &substitution, type_table);
             // Fixup VariadicForOf: allocate separate locals for each element iteration
             Self::fixup_variadic_for_of_locals(&mut new_body, &mut local_count, &mut local_types);
+            // Fixup TypePackExpansion: allocate separate locals for each expanded element
+            Self::fixup_pack_expansion_locals(&mut new_body, &mut local_count, &mut local_types);
             new_body
         });
 
@@ -2903,6 +2911,700 @@ impl Monomorphizer {
         }
     }
 
+    /// Fix up local variable indices in expanded `TypePackExpansion` elements.
+    ///
+    /// When `[..T::method()?]` is expanded, the `?` operator's match expression
+    /// creates local variables (`__qm_v`, `__qm_e`). All expanded elements share
+    /// the same local indices but need different types. This allocates new locals
+    /// for each element to avoid type conflicts.
+    fn fixup_pack_expansion_locals(
+        block: &mut TirBlock,
+        local_count: &mut u32,
+        local_types: &mut Vec<TypeId>,
+    ) {
+        for stmt in &mut block.stmts {
+            Self::fixup_pack_expansion_locals_in_stmt(stmt, local_count, local_types);
+        }
+    }
+
+    fn fixup_pack_expansion_locals_in_stmt(
+        stmt: &mut TirStmt,
+        local_count: &mut u32,
+        local_types: &mut Vec<TypeId>,
+    ) {
+        match &mut stmt.kind {
+            TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
+                Self::fixup_pack_expansion_locals_in_expr(expr, local_count, local_types);
+            }
+            TirStmtKind::Let { value, .. } => {
+                Self::fixup_pack_expansion_locals_in_expr(value, local_count, local_types);
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                Self::fixup_pack_expansion_locals_in_expr(condition, local_count, local_types);
+                Self::fixup_pack_expansion_locals(then_block, local_count, local_types);
+                if let Some(eb) = else_block {
+                    Self::fixup_pack_expansion_locals(eb, local_count, local_types);
+                }
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                Self::fixup_pack_expansion_locals(body, local_count, local_types);
+            }
+            _ => {}
+        }
+    }
+
+    fn fixup_pack_expansion_locals_in_expr(
+        expr: &mut TirExpr,
+        local_count: &mut u32,
+        local_types: &mut Vec<TypeId>,
+    ) {
+        match &mut expr.kind {
+            TirExprKind::TupleLiteral { elements } if elements.len() > 1 => {
+                // Collect local definitions from each element.
+                // If multiple elements define the same local, allocate new locals.
+                let mut first_seen_locals: IndexSet<u32> = IndexSet::default();
+                for (elem_idx, elem) in elements.iter_mut().enumerate() {
+                    let mut locals_in_elem: Vec<u32> = Vec::new();
+                    Self::collect_locals_in_expr(elem, &mut locals_in_elem);
+                    if elem_idx == 0 {
+                        // Update local_types for element 0's locals from expression types
+                        for &local_idx in &locals_in_elem {
+                            if let Some(correct_type) =
+                                Self::find_local_type_in_expr(elem, local_idx)
+                                && let Some(entry) = local_types.get_mut(local_idx as usize)
+                            {
+                                *entry = correct_type;
+                            }
+                        }
+                        first_seen_locals.extend(locals_in_elem);
+                    } else {
+                        // Reallocate locals shared with previous elements;
+                        // for new locals, update local_types from the expression's
+                        // actual types (pattern bindings have correct per-element types
+                        // but local_types may have wrong types from pack substitution).
+                        let mut new_locals: Vec<u32> = Vec::new();
+                        for old_idx in &locals_in_elem {
+                            if first_seen_locals.contains(old_idx) {
+                                let new_idx = *local_count;
+                                *local_count += 1;
+                                let local_type = Self::find_local_type_in_expr(elem, *old_idx)
+                                    .unwrap_or(
+                                        local_types
+                                            .get(*old_idx as usize)
+                                            .copied()
+                                            .unwrap_or(TypeTable::UNIT),
+                                    );
+                                local_types.push(local_type);
+                                Self::rewrite_local_index_in_expr(elem, *old_idx, new_idx);
+                            } else {
+                                if let Some(correct_type) =
+                                    Self::find_local_type_in_expr(elem, *old_idx)
+                                    && let Some(entry) = local_types.get_mut(*old_idx as usize)
+                                {
+                                    *entry = correct_type;
+                                }
+                                new_locals.push(*old_idx);
+                            }
+                        }
+                        first_seen_locals.extend(new_locals);
+                    }
+                }
+            }
+            TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+                for arg in args {
+                    Self::fixup_pack_expansion_locals_in_expr(
+                        &mut arg.expr,
+                        local_count,
+                        local_types,
+                    );
+                }
+            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                Self::fixup_pack_expansion_locals(block, local_count, local_types);
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                Self::fixup_pack_expansion_locals_in_expr(scrutinee, local_count, local_types);
+                for arm in arms {
+                    Self::fixup_pack_expansion_locals_in_expr(
+                        &mut arm.body,
+                        local_count,
+                        local_types,
+                    );
+                }
+            }
+            TirExprKind::VariantConstruct {
+                payload: Some(p), ..
+            }
+            | TirExprKind::FieldAccess { expr: p, .. }
+            | TirExprKind::Cast { expr: p, .. }
+            | TirExprKind::Unary { expr: p, .. } => {
+                Self::fixup_pack_expansion_locals_in_expr(p, local_count, local_types);
+            }
+            TirExprKind::Binary { left, right, .. }
+            | TirExprKind::Assign {
+                target: left,
+                value: right,
+            } => {
+                Self::fixup_pack_expansion_locals_in_expr(left, local_count, local_types);
+                Self::fixup_pack_expansion_locals_in_expr(right, local_count, local_types);
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for f in fields {
+                    Self::fixup_pack_expansion_locals_in_expr(
+                        &mut f.value,
+                        local_count,
+                        local_types,
+                    );
+                }
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                Self::fixup_pack_expansion_locals_in_expr(condition, local_count, local_types);
+                Self::fixup_pack_expansion_locals(then_branch, local_count, local_types);
+                if let Some(eb) = else_branch {
+                    Self::fixup_pack_expansion_locals(eb, local_count, local_types);
+                }
+            }
+            TirExprKind::Index { expr: array, index } => {
+                Self::fixup_pack_expansion_locals_in_expr(array, local_count, local_types);
+                Self::fixup_pack_expansion_locals_in_expr(index, local_count, local_types);
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect all local indices that are defined (via Let or pattern binding) inside an expression.
+    fn collect_locals_in_expr(expr: &TirExpr, locals: &mut Vec<u32>) {
+        match &expr.kind {
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                Self::collect_locals_in_expr(scrutinee, locals);
+                for arm in arms {
+                    Self::collect_locals_in_pattern(&arm.pattern, locals);
+                    if let Some(guard) = &arm.guard {
+                        Self::collect_locals_in_expr(guard, locals);
+                    }
+                    Self::collect_locals_in_expr(&arm.body, locals);
+                }
+            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                Self::collect_locals_in_block(block, locals);
+            }
+            TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+                for arg in args {
+                    Self::collect_locals_in_expr(&arg.expr, locals);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    Self::collect_locals_in_expr(elem, locals);
+                }
+            }
+            TirExprKind::VariantConstruct {
+                payload: Some(p), ..
+            }
+            | TirExprKind::FieldAccess { expr: p, .. }
+            | TirExprKind::Cast { expr: p, .. }
+            | TirExprKind::Unary { expr: p, .. } => {
+                Self::collect_locals_in_expr(p, locals);
+            }
+            TirExprKind::Binary { left, right, .. }
+            | TirExprKind::Assign {
+                target: left,
+                value: right,
+            } => {
+                Self::collect_locals_in_expr(left, locals);
+                Self::collect_locals_in_expr(right, locals);
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for f in fields {
+                    Self::collect_locals_in_expr(&f.value, locals);
+                }
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                Self::collect_locals_in_expr(condition, locals);
+                Self::collect_locals_in_block(then_branch, locals);
+                if let Some(eb) = else_branch {
+                    Self::collect_locals_in_block(eb, locals);
+                }
+            }
+            TirExprKind::Index { expr: array, index } => {
+                Self::collect_locals_in_expr(array, locals);
+                Self::collect_locals_in_expr(index, locals);
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_locals_in_block(block: &TirBlock, locals: &mut Vec<u32>) {
+        for stmt in &block.stmts {
+            match &stmt.kind {
+                TirStmtKind::Let { local_index, .. } => {
+                    locals.push(*local_index);
+                }
+                TirStmtKind::Expr(expr) => Self::collect_locals_in_expr(expr, locals),
+                TirStmtKind::Return { value: Some(v) } => Self::collect_locals_in_expr(v, locals),
+                TirStmtKind::If {
+                    condition,
+                    then_block,
+                    else_block,
+                } => {
+                    Self::collect_locals_in_expr(condition, locals);
+                    Self::collect_locals_in_block(then_block, locals);
+                    if let Some(eb) = else_block {
+                        Self::collect_locals_in_block(eb, locals);
+                    }
+                }
+                TirStmtKind::LabeledBlock { block, .. } | TirStmtKind::Loop { body: block } => {
+                    Self::collect_locals_in_block(block, locals);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn collect_locals_in_pattern(pattern: &TirPattern, locals: &mut Vec<u32>) {
+        match pattern {
+            TirPattern::Binding { local_index, .. } => {
+                locals.push(*local_index);
+            }
+            TirPattern::Variant { bindings, .. } => {
+                for b in bindings {
+                    Self::collect_locals_in_pattern(b, locals);
+                }
+            }
+            TirPattern::Tuple(patterns) => {
+                for p in patterns {
+                    Self::collect_locals_in_pattern(p, locals);
+                }
+            }
+            TirPattern::Struct { fields, .. } => {
+                for f in fields {
+                    Self::collect_locals_in_pattern(&f.pattern, locals);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Find the type of a local variable definition inside an expression.
+    fn find_local_type_in_expr(expr: &TirExpr, local_idx: u32) -> Option<TypeId> {
+        match &expr.kind {
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                if let Some(t) = Self::find_local_type_in_expr(scrutinee, local_idx) {
+                    return Some(t);
+                }
+                for arm in arms {
+                    if let Some(t) = Self::find_local_type_in_pattern(&arm.pattern, local_idx) {
+                        return Some(t);
+                    }
+                    if let Some(t) = Self::find_local_type_in_expr(&arm.body, local_idx) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                Self::find_local_type_in_block(block, local_idx)
+            }
+            TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+                for arg in args {
+                    if let Some(t) = Self::find_local_type_in_expr(&arg.expr, local_idx) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    if let Some(t) = Self::find_local_type_in_expr(elem, local_idx) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            TirExprKind::VariantConstruct {
+                payload: Some(p), ..
+            }
+            | TirExprKind::FieldAccess { expr: p, .. }
+            | TirExprKind::Cast { expr: p, .. }
+            | TirExprKind::Unary { expr: p, .. } => Self::find_local_type_in_expr(p, local_idx),
+            TirExprKind::Binary { left, right, .. }
+            | TirExprKind::Assign {
+                target: left,
+                value: right,
+            } => Self::find_local_type_in_expr(left, local_idx)
+                .or_else(|| Self::find_local_type_in_expr(right, local_idx)),
+            TirExprKind::StructLiteral { fields, .. } => {
+                for f in fields {
+                    if let Some(t) = Self::find_local_type_in_expr(&f.value, local_idx) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                if let Some(t) = Self::find_local_type_in_expr(condition, local_idx) {
+                    return Some(t);
+                }
+                if let Some(t) = Self::find_local_type_in_block(then_branch, local_idx) {
+                    return Some(t);
+                }
+                if let Some(eb) = else_branch {
+                    return Self::find_local_type_in_block(eb, local_idx);
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    fn find_local_type_in_block(block: &TirBlock, local_idx: u32) -> Option<TypeId> {
+        for stmt in &block.stmts {
+            match &stmt.kind {
+                TirStmtKind::Let {
+                    local_index,
+                    type_id,
+                    ..
+                } if *local_index == local_idx => return Some(*type_id),
+                TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
+                    if let Some(t) = Self::find_local_type_in_expr(expr, local_idx) {
+                        return Some(t);
+                    }
+                }
+                TirStmtKind::If {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    if let Some(t) = Self::find_local_type_in_block(then_block, local_idx) {
+                        return Some(t);
+                    }
+                    if let Some(eb) = else_block
+                        && let Some(t) = Self::find_local_type_in_block(eb, local_idx)
+                    {
+                        return Some(t);
+                    }
+                }
+                TirStmtKind::LabeledBlock { block, .. } | TirStmtKind::Loop { body: block } => {
+                    if let Some(t) = Self::find_local_type_in_block(block, local_idx) {
+                        return Some(t);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    fn find_local_type_in_pattern(pattern: &TirPattern, local_idx: u32) -> Option<TypeId> {
+        match pattern {
+            TirPattern::Binding {
+                local_index,
+                type_id,
+                ..
+            } if *local_index == local_idx => Some(*type_id),
+            TirPattern::Variant { bindings, .. } => {
+                for b in bindings {
+                    if let Some(t) = Self::find_local_type_in_pattern(b, local_idx) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            TirPattern::Tuple(patterns) => {
+                for p in patterns {
+                    if let Some(t) = Self::find_local_type_in_pattern(p, local_idx) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            TirPattern::Struct { fields, .. } => {
+                for f in fields {
+                    if let Some(t) = Self::find_local_type_in_pattern(&f.pattern, local_idx) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    fn rewrite_local_index_in_pattern(pattern: &mut TirPattern, old_idx: u32, new_idx: u32) {
+        match pattern {
+            TirPattern::Binding { local_index, .. } => {
+                if *local_index == old_idx {
+                    *local_index = new_idx;
+                }
+            }
+            TirPattern::Variant { bindings, .. } => {
+                for b in bindings {
+                    Self::rewrite_local_index_in_pattern(b, old_idx, new_idx);
+                }
+            }
+            TirPattern::Tuple(patterns) => {
+                for p in patterns {
+                    Self::rewrite_local_index_in_pattern(p, old_idx, new_idx);
+                }
+            }
+            TirPattern::Struct { fields, .. } => {
+                for f in fields {
+                    Self::rewrite_local_index_in_pattern(&mut f.pattern, old_idx, new_idx);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect all unique `type_ids` from Return statement values in an expression.
+    /// These are the GENERIC types before any substitution, used to compute
+    /// wrong/correct type pairs for pack expansion fixup.
+    fn collect_return_value_types(expr: &TirExpr) -> IndexSet<TypeId> {
+        let mut types = IndexSet::default();
+        Self::collect_return_value_types_in_expr(expr, &mut types);
+        types
+    }
+
+    fn collect_return_value_types_in_expr(expr: &TirExpr, types: &mut IndexSet<TypeId>) {
+        match &expr.kind {
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                Self::collect_return_value_types_in_expr(scrutinee, types);
+                for arm in arms {
+                    Self::collect_return_value_types_in_expr(&arm.body, types);
+                }
+            }
+            TirExprKind::Block(block) => {
+                for stmt in &block.stmts {
+                    match &stmt.kind {
+                        TirStmtKind::Return { value: Some(v) } => {
+                            Self::collect_return_value_type_ids(v, types);
+                        }
+                        TirStmtKind::Expr(e) => {
+                            Self::collect_return_value_types_in_expr(e, types);
+                        }
+                        TirStmtKind::If {
+                            then_block,
+                            else_block,
+                            ..
+                        } => {
+                            for s in &then_block.stmts {
+                                if let TirStmtKind::Return { value: Some(v) } = &s.kind {
+                                    Self::collect_return_value_type_ids(v, types);
+                                }
+                            }
+                            if let Some(eb) = else_block {
+                                for s in &eb.stmts {
+                                    if let TirStmtKind::Return { value: Some(v) } = &s.kind {
+                                        Self::collect_return_value_type_ids(v, types);
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_return_value_type_ids(expr: &TirExpr, types: &mut IndexSet<TypeId>) {
+        types.insert(expr.type_id);
+        if let TirExprKind::VariantConstruct {
+            variant_type,
+            payload,
+            ..
+        } = &expr.kind
+        {
+            types.insert(*variant_type);
+            if let Some(p) = payload {
+                Self::collect_return_value_type_ids(p, types);
+            }
+        }
+    }
+
+    /// Fix up Return statements inside a type pack expansion element.
+    ///
+    /// The per-element substitution turns `[..T]` into `[elem_type]` (a single-element
+    /// tuple) in Return statements, but it should be `concrete_pack` (the full tuple).
+    /// This walks the expression tree and replaces the wrong type in Return values.
+    fn fixup_return_types_in_expr(
+        expr: &mut TirExpr,
+        wrong_type: TypeId,
+        correct_type: TypeId,
+        type_table: &mut TypeTable,
+    ) {
+        match &mut expr.kind {
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                Self::fixup_return_types_in_expr(scrutinee, wrong_type, correct_type, type_table);
+                for arm in arms {
+                    Self::fixup_return_types_in_expr(
+                        &mut arm.body,
+                        wrong_type,
+                        correct_type,
+                        type_table,
+                    );
+                }
+            }
+            TirExprKind::Block(block) => {
+                Self::fixup_return_types_in_block(block, wrong_type, correct_type, type_table);
+            }
+            _ => {}
+        }
+    }
+
+    fn fixup_return_types_in_block(
+        block: &mut TirBlock,
+        wrong_type: TypeId,
+        correct_type: TypeId,
+        type_table: &mut TypeTable,
+    ) {
+        for stmt in &mut block.stmts {
+            match &mut stmt.kind {
+                TirStmtKind::Return { value: Some(value) } => {
+                    Self::fixup_return_value_type(value, wrong_type, correct_type, type_table);
+                }
+                TirStmtKind::Expr(expr) => {
+                    Self::fixup_return_types_in_expr(expr, wrong_type, correct_type, type_table);
+                }
+                TirStmtKind::If {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    Self::fixup_return_types_in_block(
+                        then_block,
+                        wrong_type,
+                        correct_type,
+                        type_table,
+                    );
+                    if let Some(else_blk) = else_block {
+                        Self::fixup_return_types_in_block(
+                            else_blk,
+                            wrong_type,
+                            correct_type,
+                            type_table,
+                        );
+                    }
+                }
+                TirStmtKind::LabeledBlock { block, .. } | TirStmtKind::Loop { body: block } => {
+                    Self::fixup_return_types_in_block(block, wrong_type, correct_type, type_table);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Replace the wrong single-element tuple type with the correct full tuple type
+    /// inside a Return statement's value expression (recursively in `type_ids`).
+    fn fixup_return_value_type(
+        expr: &mut TirExpr,
+        wrong_type: TypeId,
+        correct_type: TypeId,
+        type_table: &mut TypeTable,
+    ) {
+        expr.type_id =
+            Self::replace_type_in_generic(expr.type_id, wrong_type, correct_type, type_table);
+        match &mut expr.kind {
+            TirExprKind::VariantConstruct {
+                variant_type,
+                payload,
+                ..
+            } => {
+                *variant_type = Self::replace_type_in_generic(
+                    *variant_type,
+                    wrong_type,
+                    correct_type,
+                    type_table,
+                );
+                if let Some(p) = payload {
+                    Self::fixup_return_value_type(p, wrong_type, correct_type, type_table);
+                }
+            }
+            TirExprKind::Call { args, .. } => {
+                for arg in args {
+                    Self::fixup_return_value_type(
+                        &mut arg.expr,
+                        wrong_type,
+                        correct_type,
+                        type_table,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Replace `old_type` with `new_type` inside generic instances.
+    /// For example, Result<[i32], String> → Result<[i32,String,bool], String>
+    /// when `old_type` = [i32] and `new_type` = [i32,String,bool].
+    fn replace_type_in_generic(
+        type_id: TypeId,
+        old_type: TypeId,
+        new_type: TypeId,
+        type_table: &mut TypeTable,
+    ) -> TypeId {
+        if type_id == old_type {
+            return new_type;
+        }
+        match type_table.get(type_id).clone() {
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&arg| Self::replace_type_in_generic(arg, old_type, new_type, type_table))
+                    .collect();
+                if new_args == type_args {
+                    type_id
+                } else {
+                    type_table.intern(ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        type_args: new_args,
+                    })
+                }
+            }
+            _ => type_id,
+        }
+    }
+
     /// Fix up local indices in expanded `VariadicForOf` blocks.
     ///
     /// After expansion, each element iteration uses the same `binding_local` index.
@@ -3142,6 +3844,29 @@ impl Monomorphizer {
                 for s in &mut block.stmts {
                     Self::rewrite_local_index_in_stmt(s, old_idx, new_idx);
                 }
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                Self::rewrite_local_index_in_expr(scrutinee, old_idx, new_idx);
+                for arm in arms {
+                    Self::rewrite_local_index_in_pattern(&mut arm.pattern, old_idx, new_idx);
+                    if let Some(guard) = &mut arm.guard {
+                        Self::rewrite_local_index_in_expr(guard, old_idx, new_idx);
+                    }
+                    Self::rewrite_local_index_in_expr(&mut arm.body, old_idx, new_idx);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    Self::rewrite_local_index_in_expr(elem, old_idx, new_idx);
+                }
+            }
+            TirExprKind::VariantConstruct {
+                payload: Some(p), ..
+            } => {
+                Self::rewrite_local_index_in_expr(p, old_idx, new_idx);
             }
             _ => {}
         }
@@ -3617,15 +4342,21 @@ impl Monomorphizer {
                 }
             }
             TirExprKind::TupleLiteral { elements } => {
-                // First pass: substitute types in all elements
+                // First pass: substitute types in all elements (skip TypePackExpansion —
+                // those are expanded with per-element substitution in the second pass)
                 for elem in elements.iter_mut() {
-                    self.substitute_types_in_expr(elem, substitution, type_table);
+                    if !matches!(elem.kind, TirExprKind::TypePackExpansion { .. }) {
+                        self.substitute_types_in_expr(elem, substitution, type_table);
+                    }
                 }
-                // Second pass: expand TupleSpread nodes into FieldAccess elements
-                let has_spread = elements
-                    .iter()
-                    .any(|e| matches!(e.kind, TirExprKind::TupleSpread { .. }));
-                if has_spread {
+                // Second pass: expand TupleSpread and TypePackExpansion nodes
+                let has_expansion = elements.iter().any(|e| {
+                    matches!(
+                        e.kind,
+                        TirExprKind::TupleSpread { .. } | TirExprKind::TypePackExpansion { .. }
+                    )
+                });
+                if has_expansion {
                     let old_elements = std::mem::take(elements);
                     for elem in old_elements {
                         if let TirExprKind::TupleSpread { ref expr } = elem.kind {
@@ -3645,6 +4376,57 @@ impl Monomorphizer {
                             } else {
                                 // Single-type spread (not a tuple), keep as-is
                                 elements.push(*expr.clone());
+                            }
+                        } else if let TirExprKind::TypePackExpansion {
+                            ref call_expr,
+                            pack_type_id,
+                        } = elem.kind
+                        {
+                            // Expand type pack: for each concrete type in the pack,
+                            // clone the expression and substitute with per-element types.
+                            let pack_index = match type_table.get(pack_type_id) {
+                                ResolvedType::TypePack { index, .. } => *index,
+                                _ => 0,
+                            };
+                            let concrete_pack =
+                                self.substitute_type(pack_type_id, substitution, type_table);
+                            let pack_elems = match type_table.get(concrete_pack) {
+                                ResolvedType::Tuple(elems) => elems.clone(),
+                                _ => vec![concrete_pack],
+                            };
+                            for &elem_type in &pack_elems {
+                                let mut elem_call = call_expr.as_ref().clone();
+                                // Per-element substitution: pack → single element type.
+                                // This correctly rewrites the static call (T::method → i32::method)
+                                // and the expression's own type (TypePack → i32).
+                                let mut elem_sub = substitution.clone();
+                                elem_sub.insert(pack_index, elem_type);
+                                self.substitute_types_in_expr(
+                                    &mut elem_call,
+                                    &elem_sub,
+                                    type_table,
+                                );
+                                // Fix up Return statements: the per-element substitution
+                                // incorrectly maps pack types in return positions.
+                                // Compute per-element-substituted return types from the
+                                // original call_expr and replace with full-sub versions.
+                                for wrong_type in
+                                    Self::collect_return_value_types(call_expr.as_ref())
+                                {
+                                    let wrong =
+                                        self.substitute_type(wrong_type, &elem_sub, type_table);
+                                    let correct =
+                                        self.substitute_type(wrong_type, substitution, type_table);
+                                    if wrong != correct {
+                                        Self::fixup_return_types_in_expr(
+                                            &mut elem_call,
+                                            wrong,
+                                            correct,
+                                            type_table,
+                                        );
+                                    }
+                                }
+                                elements.push(elem_call);
                             }
                         } else {
                             elements.push(elem);
@@ -3669,6 +4451,18 @@ impl Monomorphizer {
             TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table);
+            }
+            TirExprKind::TypePackExpansion {
+                call_expr,
+                pack_type_id,
+            } => {
+                // Don't substitute inside call_expr here — it's expanded in TupleLiteral.
+                // But do substitute the pack_type_id so we can look it up later.
+                *pack_type_id = self.substitute_type(*pack_type_id, substitution, type_table);
+                // Note: call_expr substitution happens during TupleLiteral expansion
+                // with per-element substitutions. We still need to handle it if somehow
+                // encountered outside TupleLiteral context.
+                self.substitute_types_in_expr(call_expr, substitution, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
                 self.substitute_types_in_expr(array, substitution, type_table);
@@ -3986,7 +4780,10 @@ impl Monomorphizer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } => {
                 Self::update_local_expr_types_in_expr(inner, local_types);
             }
             TirExprKind::Block(block) => {
@@ -4477,7 +5274,10 @@ impl Monomorphizer {
                 self.rewrite_function_calls_in_expr(inner, type_table);
             }
             TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } => {
                 self.rewrite_function_calls_in_expr(inner, type_table);
             }
             TirExprKind::Index { expr: array, index } => {
@@ -4887,6 +5687,9 @@ impl Monomorphizer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            }
             | TirExprKind::GlobalVarSet { value: inner, .. }
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }

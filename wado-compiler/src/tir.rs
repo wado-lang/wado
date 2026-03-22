@@ -1792,6 +1792,20 @@ pub enum TirExprKind {
         expr: Box<TirExpr>,
     },
 
+    /// Type pack expansion: `[..T::method()]` inside a `TupleLiteral`.
+    /// Expands at monomorphization to one call per concrete type in the pack:
+    /// `[T_0::method(), T_1::method(), ...]`.
+    ///
+    /// The `call_expr` is a resolved Call whose receiver/return type references
+    /// the `TypePack`. During monomorphization, the pack type is substituted
+    /// with each concrete element type to produce individual calls.
+    TypePackExpansion {
+        /// The call expression template (resolved with `TypePack` type)
+        call_expr: Box<TirExpr>,
+        /// The `TypePack` type ID (index into type table, pre-substitution)
+        pack_type_id: TypeId,
+    },
+
     /// Access to a captured variable inside a closure body
     Capture {
         /// Index into the closure's captures array

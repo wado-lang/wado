@@ -203,7 +203,10 @@ impl StringCollector {
                 self.collect_expr(inner);
             }
             TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } => {
                 self.collect_expr(inner);
             }
             TirExprKind::Index { expr: array, index } => {

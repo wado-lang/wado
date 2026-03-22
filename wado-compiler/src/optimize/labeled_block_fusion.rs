@@ -38,6 +38,7 @@
 //! This eliminates the GC-allocated `temp: Option<T>` entirely. Subsequent passes
 //! (copy propagation, DCE) clean up the remaining `break '__fused_L;` bookkeeping.
 
+use super::visitor::expr_has_break_to;
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId};
 
@@ -143,12 +144,19 @@ fn try_inline_trivial_labeled_block(expr: &mut TirExpr) -> bool {
     }
     let TirStmtKind::Break {
         label: Some(break_label),
-        value: Some(_),
+        value: Some(break_value),
     } = &block.stmts[0].kind
     else {
         return false;
     };
     if break_label != label {
+        return false;
+    }
+    // Don't inline if the break value itself contains breaks to the same label.
+    // This happens with try-op (?) expansions inside nested expressions: the
+    // error path breaks to the inline label, and removing the labeled block
+    // would leave those breaks without a target.
+    if expr_has_break_to(label, break_value) {
         return false;
     }
     // Extract the break value, replacing expr in place.
@@ -454,12 +462,19 @@ fn check_lb_breaks_in_stmt(
             match value.as_ref().map(|v| &v.kind) {
                 // null → None case, always valid
                 None | Some(TirExprKind::Null) => true,
-                // VariantConstruct → valid; record payload_type for the tested case
+                // VariantConstruct → valid if payload doesn't contain breaks to this label
                 Some(TirExprKind::VariantConstruct {
                     case_index: ci,
                     payload,
                     ..
                 }) => {
+                    // Reject if the payload contains nested breaks to the same label
+                    // (e.g., try-op error paths inside tuple literals in the payload)
+                    if let Some(p) = payload
+                        && expr_has_break_to(label, p)
+                    {
+                        return false;
+                    }
                     if *ci == case_index
                         && let Some(p) = payload
                     {
@@ -545,7 +560,11 @@ fn check_lb_breaks_in_expr(
                     .as_ref()
                     .is_none_or(|eb| check_lb_breaks_in_block(eb, label, case_index, payload_type))
         }
-        _ => true,
+        // For any other expression type, reject fusion if it contains breaks
+        // to the target label. The transform_lb_stmt function only handles
+        // breaks at the statement level, not those nested inside expression
+        // types like VariantConstruct, TupleLiteral, StructLiteral, Match, etc.
+        _ => !expr_has_break_to(label, expr),
     }
 }
 

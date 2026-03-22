@@ -1,0 +1,34 @@
+// Type pack expansion with try-op: minimum 2-element pack
+use { println, Stdout } from "core:cli";
+
+trait TryDefault {
+    fn try_default() -> Result<Self, String>;
+}
+
+impl TryDefault for i32 {
+    fn try_default() -> Result<i32, String> {
+        return Result::<i32, String>::Ok(99);
+    }
+}
+
+impl TryDefault for bool {
+    fn try_default() -> Result<bool, String> {
+        return Result::<bool, String>::Ok(true);
+    }
+}
+
+fn make_defaults<..T: TryDefault>() -> Result<[..T], String> {
+    return Result::<[..T], String>::Ok([..T::try_default()?]);
+}
+
+export fn run() with Stdout {
+    let result = make_defaults::<[i32, bool]>();
+    if let Ok(t) = result {
+        assert t.0 == 99;
+        assert t.1 == true;
+        println("ok");
+    }
+}
+
+__DATA__
+{"stdout": "ok\n"}

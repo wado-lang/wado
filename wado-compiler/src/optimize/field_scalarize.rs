@@ -531,7 +531,10 @@ fn collect_param_field_usage_in_expr(
                 );
             }
         }
-        TirExprKind::TupleSpread { expr: inner } => {
+        TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
             collect_param_field_usage_in_expr(
                 inner,
                 struct_params,
@@ -1192,7 +1195,10 @@ fn count_field_accesses_in_expr(
                 count_field_accesses_in_expr(elem, counts, false, type_table);
             }
         }
-        TirExprKind::TupleSpread { expr: inner } => {
+        TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
             count_field_accesses_in_expr(inner, counts, false, type_table);
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
@@ -1640,7 +1646,11 @@ fn compute_sync_fields_in_expr(
         TirExprKind::Cast { expr, .. } => {
             compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
         }
-        TirExprKind::FieldAccess { expr, .. } | TirExprKind::TupleSpread { expr } => {
+        TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TypePackExpansion {
+            call_expr: expr, ..
+        } => {
             compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
         }
         TirExprKind::Index { expr, index } => {
@@ -1957,7 +1967,11 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
 
     // Recurse into sub-expressions
     match &mut expr.kind {
-        TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::TupleSpread { expr: inner } => {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
             replace_in_expr(inner, candidates);
         }
         TirExprKind::Binary { left, right, .. } => {
