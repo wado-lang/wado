@@ -622,12 +622,16 @@ impl<..T: Serialize> Serialize for [..T] {
     }
 }
 
-/// Deserialize for tuples: `[1,"hello",true]` → `[1, "hello", true]`
-impl<..T: Deserialize> Deserialize for [..T] {
-    fn deserialize<D: Deserializer>(d: &mut D) -> Result<[..T], DeserializeError> {
-        let mut seq = d.begin_seq()?;
-        let tuple = [..T::deserialize_next_element_from_seq(&mut seq)?];
-        seq.end()?;
-        return Result::<[..T], DeserializeError>::Ok(tuple);
-    }
-}
+// TODO: Deserialize for tuples via variadic generics.
+// The impl below is the desired implementation, but it requires compiler fixes
+// for TypePackExpansion + method type params + cross-module instantiation.
+// For now, tuple Deserialize is still synthesized by the Rust compiler (serde_synth.rs).
+//
+// impl<..T: Deserialize> Deserialize for [..T] {
+//     fn deserialize<D: Deserializer>(d: &mut D) -> Result<[..T], DeserializeError> {
+//         let mut seq = d.begin_seq()?;
+//         let tuple = [..T::deserialize_next_element_from_seq(&mut seq)?];
+//         seq.end()?;
+//         return Result::<[..T], DeserializeError>::Ok(tuple);
+//     }
+// }
