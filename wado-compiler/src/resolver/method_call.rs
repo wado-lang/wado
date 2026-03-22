@@ -84,10 +84,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             } => (name.clone(), module_source.clone()),
             // Tuple types use "Tuple" as the struct name for method/trait impl lookup,
             // matching how impl<..T> Trait for [..T] is indexed under "Tuple".
-            ResolvedType::Tuple(_) => (
-                "Tuple".to_string(),
-                self.current_module_source.clone(),
-            ),
+            ResolvedType::Tuple(_) => ("Tuple".to_string(), self.current_module_source.clone()),
             _ => (
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 self.current_module_source.clone(),

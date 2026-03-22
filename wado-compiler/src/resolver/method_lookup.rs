@@ -1520,10 +1520,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // For variadic pack params (..T in impl<..T> Trait for [..T]),
                 // map the pack to a TypePack so that the method body can reference it.
                 if let Some((pack_name, pack_idx)) = &variadic_pack_entry {
-                    let pack_type = self
-                        .type_table
-                        .borrow_mut()
-                        .make_tuple(type_args.to_vec());
+                    let pack_type = self.type_table.borrow_mut().make_tuple(type_args.to_vec());
                     self.trait_ctx
                         .type_params
                         .insert(pack_name.clone(), (*pack_idx, pack_type));

@@ -11,9 +11,9 @@ use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_local_trait_method};
 use crate::project::Project;
 use crate::tir::{
-    CallArg, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStructField, TirTypeParam, TypeId, TypeTable,
+    CallArg, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
+    TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -129,7 +129,6 @@ pub fn synthesize_serde(project: &mut Project) {
 
         module.functions.extend(generated);
     }
-
 }
 
 fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
@@ -2715,7 +2714,6 @@ fn generate_variant_deserialize(
         allocator_tag: None,
     })
 }
-
 
 #[cfg(test)]
 mod tests {
