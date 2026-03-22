@@ -162,3 +162,530 @@ pub struct ValueAlt6 {
     pub lit_null: Token,
 }
 
+global TK_STRING: i32 = 0;
+global TK_NUMBER: i32 = 1;
+global TK_WS: i32 = 2;
+global TK_EOF: i32 = 3;
+global TK_ERROR: i32 = 4;
+global TK_LIT_LBRACE: i32 = 5;
+global TK_LIT_COMMA: i32 = 6;
+global TK_LIT_RBRACE: i32 = 7;
+global TK_LIT_COLON: i32 = 8;
+global TK_LIT_LBRACKET: i32 = 9;
+global TK_LIT_RBRACKET: i32 = 10;
+global TK_LIT_TRUE: i32 = 11;
+global TK_LIT_FALSE: i32 = 12;
+global TK_LIT_NULL: i32 = 13;
+
+struct Lexer {
+    chars: Array<char>,
+    pos: i32,
+}
+
+impl Lexer {
+    fn new(input: &String) -> Lexer {
+        return Lexer { chars: input.chars().collect(), pos: 0 };
+    }
+
+    fn at_end(&self) -> bool {
+        return self.pos >= self.chars.len();
+    }
+
+    fn slice(&self, start: i32, end: i32) -> String {
+        let mut s = String::with_capacity(end - start);
+        for let mut i = start; i < end; i += 1 {
+            s.append_char(self.chars[i]);
+        }
+        return s;
+    }
+}
+
+fn try_string(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_1 = pos;
+            let mut alts_ok_1 = false;
+            alts_1_0: {
+                pos = alts_saved_1;
+                if pos >= chars.len() || chars[pos] != '\\' { break alts_1_0; }
+                pos += 1;
+                let alts_saved_2 = pos;
+                let mut alts_ok_2 = false;
+                alts_2_0: {
+                    pos = alts_saved_2;
+                    if pos >= chars.len() { break alts_2_0; }
+                    if !(false || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == '/' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't') { break alts_2_0; }
+                    pos += 1;
+                    alts_ok_2 = true;
+                }
+                if !alts_ok_2 {
+                alts_2_1: {
+                    pos = alts_saved_2;
+                    if pos >= chars.len() || chars[pos] != 'u' { break alts_2_1; }
+                    pos += 1;
+                    if pos >= chars.len() { break alts_2_1; }
+                    if !(false || chars[pos] >= '0' && chars[pos] <= '9' || chars[pos] >= 'a' && chars[pos] <= 'f' || chars[pos] >= 'A' && chars[pos] <= 'F') { break alts_2_1; }
+                    pos += 1;
+                    if pos >= chars.len() { break alts_2_1; }
+                    if !(false || chars[pos] >= '0' && chars[pos] <= '9' || chars[pos] >= 'a' && chars[pos] <= 'f' || chars[pos] >= 'A' && chars[pos] <= 'F') { break alts_2_1; }
+                    pos += 1;
+                    if pos >= chars.len() { break alts_2_1; }
+                    if !(false || chars[pos] >= '0' && chars[pos] <= '9' || chars[pos] >= 'a' && chars[pos] <= 'f' || chars[pos] >= 'A' && chars[pos] <= 'F') { break alts_2_1; }
+                    pos += 1;
+                    if pos >= chars.len() { break alts_2_1; }
+                    if !(false || chars[pos] >= '0' && chars[pos] <= '9' || chars[pos] >= 'a' && chars[pos] <= 'f' || chars[pos] >= 'A' && chars[pos] <= 'F') { break alts_2_1; }
+                    pos += 1;
+                    alts_ok_2 = true;
+                }
+                }
+                if !alts_ok_2 { break alts_1_0; }
+                alts_ok_1 = true;
+            }
+            if !alts_ok_1 {
+            alts_1_1: {
+                pos = alts_saved_1;
+                if pos >= chars.len() { break alts_1_1; }
+                if false || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] >= '\u{0}' && chars[pos] <= '\u{1f}' { break alts_1_1; }
+                pos += 1;
+                alts_ok_1 = true;
+            }
+            }
+            if !alts_ok_1 { break rep_0; }
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
+    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_number(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    let opt_saved_0 = pos;
+    let mut opt_ok_0 = false;
+    opt_0: {
+        if pos >= chars.len() || chars[pos] != '-' { break opt_0; }
+        pos += 1;
+        opt_ok_0 = true;
+    }
+    if !opt_ok_0 { pos = opt_saved_0; }
+    let alts_saved_1 = pos;
+    let mut alts_ok_1 = false;
+    alts_1_0: {
+        pos = alts_saved_1;
+        if pos >= chars.len() || chars[pos] != '0' { break alts_1_0; }
+        pos += 1;
+        alts_ok_1 = true;
+    }
+    if !alts_ok_1 {
+    alts_1_1: {
+        pos = alts_saved_1;
+        if pos >= chars.len() { break alts_1_1; }
+        if !(false || chars[pos] >= '1' && chars[pos] <= '9') { break alts_1_1; }
+        pos += 1;
+        loop {
+            let rep_saved_2 = pos;
+            rep_2: {
+                if pos >= chars.len() { break rep_2; }
+                if !(false || chars[pos] >= '0' && chars[pos] <= '9') { break rep_2; }
+                pos += 1;
+                continue;
+            }
+            pos = rep_saved_2;
+            break;
+        }
+        alts_ok_1 = true;
+    }
+    }
+    if !alts_ok_1 { return -1; }
+    let opt_saved_3 = pos;
+    let mut opt_ok_3 = false;
+    opt_3: {
+        if pos >= chars.len() || chars[pos] != '.' { break opt_3; }
+        pos += 1;
+        if pos >= chars.len() { break opt_3; }
+        if !(false || chars[pos] >= '0' && chars[pos] <= '9') { break opt_3; }
+        pos += 1;
+        loop {
+            let rep_saved_4 = pos;
+            rep_4: {
+                if pos >= chars.len() { break rep_4; }
+                if !(false || chars[pos] >= '0' && chars[pos] <= '9') { break rep_4; }
+                pos += 1;
+                continue;
+            }
+            pos = rep_saved_4;
+            break;
+        }
+        opt_ok_3 = true;
+    }
+    if !opt_ok_3 { pos = opt_saved_3; }
+    let opt_saved_5 = pos;
+    let mut opt_ok_5 = false;
+    opt_5: {
+        if pos >= chars.len() { break opt_5; }
+        if !(false || chars[pos] == 'E' || chars[pos] == 'e') { break opt_5; }
+        pos += 1;
+        let opt_saved_6 = pos;
+        let mut opt_ok_6 = false;
+        opt_6: {
+            if pos >= chars.len() { break opt_6; }
+            if !(false || chars[pos] == '+' || chars[pos] == '-') { break opt_6; }
+            pos += 1;
+            opt_ok_6 = true;
+        }
+        if !opt_ok_6 { pos = opt_saved_6; }
+        if pos >= chars.len() { break opt_5; }
+        if !(false || chars[pos] >= '0' && chars[pos] <= '9') { break opt_5; }
+        pos += 1;
+        loop {
+            let rep_saved_7 = pos;
+            rep_7: {
+                if pos >= chars.len() { break rep_7; }
+                if !(false || chars[pos] >= '0' && chars[pos] <= '9') { break rep_7; }
+                pos += 1;
+                continue;
+            }
+            pos = rep_saved_7;
+            break;
+        }
+        opt_ok_5 = true;
+    }
+    if !opt_ok_5 { pos = opt_saved_5; }
+    return pos;
+}
+
+fn try_ws(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\n' || chars[pos] == '\r') { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= chars.len() { break rep_0; }
+            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\n' || chars[pos] == '\r') { break rep_0; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
+    return pos;
+}
+
+fn try_lit_lbrace(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '{' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_comma(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != ',' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_rbrace(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '}' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_colon(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != ':' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_lbracket(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '[' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_rbracket(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != ']' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_true(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 't' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != 'r' { return -1; }
+    if pos + 2 >= chars.len() || chars[pos + 2] != 'u' { return -1; }
+    if pos + 3 >= chars.len() || chars[pos + 3] != 'e' { return -1; }
+    return pos + 4;
+}
+
+fn try_lit_false(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'f' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != 'a' { return -1; }
+    if pos + 2 >= chars.len() || chars[pos + 2] != 'l' { return -1; }
+    if pos + 3 >= chars.len() || chars[pos + 3] != 's' { return -1; }
+    if pos + 4 >= chars.len() || chars[pos + 4] != 'e' { return -1; }
+    return pos + 5;
+}
+
+fn try_lit_null(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'n' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != 'u' { return -1; }
+    if pos + 2 >= chars.len() || chars[pos + 2] != 'l' { return -1; }
+    if pos + 3 >= chars.len() || chars[pos + 3] != 'l' { return -1; }
+    return pos + 4;
+}
+
+pub fn tokenize(input: &String) -> Array<Token> {
+    let mut lexer = Lexer::new(input);
+    let mut tokens: Array<Token> = [];
+    while !lexer.at_end() {
+        let start = lexer.pos;
+        let mut best_end: i32 = -1;
+        let mut best_kind: i32 = TK_ERROR;
+        let end = try_lit_lbrace(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; }
+        let end = try_lit_comma(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
+        let end = try_lit_rbrace(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; }
+        let end = try_lit_colon(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
+        let end = try_lit_lbracket(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
+        let end = try_lit_rbracket(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
+        let end = try_lit_true(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_TRUE; }
+        let end = try_lit_false(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_FALSE; }
+        let end = try_lit_null(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_NULL; }
+        let end = try_string(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_STRING; }
+        let end = try_number(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_NUMBER; }
+        let end = try_ws(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_WS; }
+        if best_end <= start {
+            tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));
+            lexer.pos = start + 1;
+        } else {
+            let is_skip = false || best_kind == TK_WS;
+            if !is_skip {
+                tokens.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+            }
+            lexer.pos = best_end;
+        }
+    }
+    tokens.append(Token::new(TK_EOF, "", Span::new(lexer.pos, lexer.pos)));
+    return tokens;
+}
+
+struct Parser {
+    tokens: Array<Token>,
+    pos: i32,
+}
+
+impl Parser {
+    fn new(tokens: Array<Token>) -> Parser {
+        return Parser { tokens, pos: 0 };
+    }
+
+    fn peek(&self) -> &Token {
+        return &self.tokens[self.pos];
+    }
+
+    fn peek_kind(&self) -> i32 {
+        return self.tokens[self.pos].kind;
+    }
+
+    fn advance(&mut self) -> Token {
+        let tok = self.tokens[self.pos];
+        self.pos += 1;
+        return tok;
+    }
+
+    fn last_end(&self) -> i32 {
+        if self.pos == 0 { return 0; }
+        return self.tokens[self.pos - 1].span.end;
+    }
+
+    fn expect(&mut self, kind: i32, name: String) -> Result<Token, ParseError> {
+        if self.tokens[self.pos].kind == kind {
+            return Result::<Token, ParseError>::Ok(self.advance());
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+}
+
+fn parse_json(p: &mut Parser) -> Result<JsonNode, ParseError> {
+    let start = p.peek().span.start;
+    let value = parse_value(p)?;
+    let eof = p.expect(TK_EOF, "EOF")?;
+    return Result::<JsonNode, ParseError>::Ok(JsonNode {
+        span: Span::new(start, p.last_end()),
+        value,
+        eof,
+    });
+}
+
+fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
+    let start = p.peek().span.start;
+    let kind = p.peek_kind();
+    if kind == TK_LIT_LBRACE {
+        let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+        let pair = parse_pair(p)?;
+        while p.peek_kind() == TK_LIT_COMMA {
+            p.expect(TK_LIT_COMMA, "','")?;
+            parse_pair(p)?;
+        }
+        let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+        return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt0(ObjAlt0 {
+            span: Span::new(start, p.last_end()),
+            lbrace,
+            pair,
+            rbrace,
+        }));
+    }
+    if kind == TK_LIT_LBRACE {
+        let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+        let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+        return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt1(ObjAlt1 {
+            span: Span::new(start, p.last_end()),
+            lbrace,
+            rbrace,
+        }));
+    }
+    return Result::<ObjNode, ParseError>::Err(ParseError::new(
+        "expected obj",
+        p.peek().span,
+        ["TK_LIT_LBRACE"],
+    ));
+}
+
+fn parse_pair(p: &mut Parser) -> Result<PairNode, ParseError> {
+    let start = p.peek().span.start;
+    let string = p.expect(TK_STRING, "STRING")?;
+    let colon = p.expect(TK_LIT_COLON, "':'")?;
+    let value = parse_value(p)?;
+    return Result::<PairNode, ParseError>::Ok(PairNode {
+        span: Span::new(start, p.last_end()),
+        string,
+        colon,
+        value,
+    });
+}
+
+fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
+    let start = p.peek().span.start;
+    let kind = p.peek_kind();
+    if kind == TK_LIT_LBRACKET {
+        let lbracket = p.expect(TK_LIT_LBRACKET, "'['")?;
+        let value = parse_value(p)?;
+        while p.peek_kind() == TK_LIT_COMMA {
+            p.expect(TK_LIT_COMMA, "','")?;
+            parse_value(p)?;
+        }
+        let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
+        return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt0(ArrAlt0 {
+            span: Span::new(start, p.last_end()),
+            lbracket,
+            value,
+            rbracket,
+        }));
+    }
+    if kind == TK_LIT_LBRACKET {
+        let lbracket = p.expect(TK_LIT_LBRACKET, "'['")?;
+        let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
+        return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt1(ArrAlt1 {
+            span: Span::new(start, p.last_end()),
+            lbracket,
+            rbracket,
+        }));
+    }
+    return Result::<ArrNode, ParseError>::Err(ParseError::new(
+        "expected arr",
+        p.peek().span,
+        ["TK_LIT_LBRACKET"],
+    ));
+}
+
+fn parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
+    let start = p.peek().span.start;
+    let kind = p.peek_kind();
+    if kind == TK_STRING {
+        let string = p.expect(TK_STRING, "STRING")?;
+        return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt0(ValueAlt0 {
+            span: Span::new(start, p.last_end()),
+            string,
+        }));
+    }
+    if kind == TK_NUMBER {
+        let number = p.expect(TK_NUMBER, "NUMBER")?;
+        return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt1(ValueAlt1 {
+            span: Span::new(start, p.last_end()),
+            number,
+        }));
+    }
+    if kind == TK_LIT_LBRACE {
+        let obj = parse_obj(p)?;
+        return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt2(ValueAlt2 {
+            span: Span::new(start, p.last_end()),
+            obj,
+        }));
+    }
+    if kind == TK_LIT_LBRACKET {
+        let arr = parse_arr(p)?;
+        return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt3(ValueAlt3 {
+            span: Span::new(start, p.last_end()),
+            arr,
+        }));
+    }
+    if kind == TK_LIT_TRUE {
+        let lit_true = p.expect(TK_LIT_TRUE, "'true'")?;
+        return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt4(ValueAlt4 {
+            span: Span::new(start, p.last_end()),
+            lit_true,
+        }));
+    }
+    if kind == TK_LIT_FALSE {
+        let lit_false = p.expect(TK_LIT_FALSE, "'false'")?;
+        return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt5(ValueAlt5 {
+            span: Span::new(start, p.last_end()),
+            lit_false,
+        }));
+    }
+    if kind == TK_LIT_NULL {
+        let lit_null = p.expect(TK_LIT_NULL, "'null'")?;
+        return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt6(ValueAlt6 {
+            span: Span::new(start, p.last_end()),
+            lit_null,
+        }));
+    }
+    return Result::<ValueNode, ParseError>::Err(ParseError::new(
+        "expected value",
+        p.peek().span,
+        ["TK_STRING", "TK_NUMBER", "TK_LIT_LBRACE", "TK_LIT_LBRACKET", "TK_LIT_TRUE", "TK_LIT_FALSE", "TK_LIT_NULL"],
+    ));
+}
+
+pub fn parse(input: &String) -> Result<JsonNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return parse_json(&mut parser);
+}
+

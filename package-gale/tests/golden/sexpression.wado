@@ -137,3 +137,591 @@ pub struct AtomAlt3 {
     pub dot: Token,
 }
 
+global TK_STRING: i32 = 0;
+global TK_WHITESPACE: i32 = 1;
+global TK_NUMBER: i32 = 2;
+global TK_SYMBOL: i32 = 3;
+global TK_LPAREN: i32 = 4;
+global TK_RPAREN: i32 = 5;
+global TK_DOT: i32 = 6;
+global TK_EOF: i32 = 7;
+global TK_ERROR: i32 = 8;
+
+struct Lexer {
+    chars: Array<char>,
+    pos: i32,
+}
+
+impl Lexer {
+    fn new(input: &String) -> Lexer {
+        return Lexer { chars: input.chars().collect(), pos: 0 };
+    }
+
+    fn at_end(&self) -> bool {
+        return self.pos >= self.chars.len();
+    }
+
+    fn slice(&self, start: i32, end: i32) -> String {
+        let mut s = String::with_capacity(end - start);
+        for let mut i = start; i < end; i += 1 {
+            s.append_char(self.chars[i]);
+        }
+        return s;
+    }
+}
+
+fn try_string(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_1 = pos;
+            let mut alts_ok_1 = false;
+            alts_1_0: {
+                pos = alts_saved_1;
+                if pos >= chars.len() || chars[pos] != '\\' { break alts_1_0; }
+                pos += 1;
+                if pos >= chars.len() { break alts_1_0; }
+                pos += 1;
+                alts_ok_1 = true;
+            }
+            if !alts_ok_1 {
+            alts_1_1: {
+                pos = alts_saved_1;
+                if pos >= chars.len() { break alts_1_1; }
+                let not_saved_2 = pos;
+                let mut not_matched_2 = false;
+                not_2: {
+                    let alts_saved_3 = pos;
+                    let mut alts_ok_3 = false;
+                    alts_3_0: {
+                        pos = alts_saved_3;
+                        if pos >= chars.len() || chars[pos] != '\\' { break alts_3_0; }
+                        pos += 1;
+                        alts_ok_3 = true;
+                    }
+                    if !alts_ok_3 {
+                    alts_3_1: {
+                        pos = alts_saved_3;
+                        if pos >= chars.len() || chars[pos] != '"' { break alts_3_1; }
+                        pos += 1;
+                        alts_ok_3 = true;
+                    }
+                    }
+                    if !alts_ok_3 { break not_2; }
+                    not_matched_2 = true;
+                }
+                pos = not_saved_2;
+                if not_matched_2 { break alts_1_1; }
+                pos += 1;
+                alts_ok_1 = true;
+            }
+            }
+            if !alts_ok_1 { break rep_0; }
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
+    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_whitespace(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    let alts_saved_1 = pos;
+    let mut alts_ok_1 = false;
+    alts_1_0: {
+        pos = alts_saved_1;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_1_0; }
+        pos += 1;
+        alts_ok_1 = true;
+    }
+    if !alts_ok_1 {
+    alts_1_1: {
+        pos = alts_saved_1;
+        if pos >= chars.len() || chars[pos] != 'n' { break alts_1_1; }
+        pos += 1;
+        alts_ok_1 = true;
+    }
+    if !alts_ok_1 {
+    alts_1_2: {
+        pos = alts_saved_1;
+        if pos >= chars.len() || chars[pos] != 't' { break alts_1_2; }
+        pos += 1;
+        alts_ok_1 = true;
+    }
+    if !alts_ok_1 {
+    alts_1_3: {
+        pos = alts_saved_1;
+        if pos >= chars.len() || chars[pos] != 'r' { break alts_1_3; }
+        pos += 1;
+        alts_ok_1 = true;
+    }
+    }
+    }
+    }
+    if !alts_ok_1 { return -1; }
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_2 = pos;
+            let mut alts_ok_2 = false;
+            alts_2_0: {
+                pos = alts_saved_2;
+                if pos >= chars.len() || chars[pos] != ' ' { break alts_2_0; }
+                pos += 1;
+                alts_ok_2 = true;
+            }
+            if !alts_ok_2 {
+            alts_2_1: {
+                pos = alts_saved_2;
+                if pos >= chars.len() || chars[pos] != 'n' { break alts_2_1; }
+                pos += 1;
+                alts_ok_2 = true;
+            }
+            if !alts_ok_2 {
+            alts_2_2: {
+                pos = alts_saved_2;
+                if pos >= chars.len() || chars[pos] != 't' { break alts_2_2; }
+                pos += 1;
+                alts_ok_2 = true;
+            }
+            if !alts_ok_2 {
+            alts_2_3: {
+                pos = alts_saved_2;
+                if pos >= chars.len() || chars[pos] != 'r' { break alts_2_3; }
+                pos += 1;
+                alts_ok_2 = true;
+            }
+            }
+            }
+            }
+            if !alts_ok_2 { break rep_0; }
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
+    return pos;
+}
+
+fn try_number(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    let opt_saved_0 = pos;
+    let mut opt_ok_0 = false;
+    opt_0: {
+        let alts_saved_1 = pos;
+        let mut alts_ok_1 = false;
+        alts_1_0: {
+            pos = alts_saved_1;
+            if pos >= chars.len() || chars[pos] != '+' { break alts_1_0; }
+            pos += 1;
+            alts_ok_1 = true;
+        }
+        if !alts_ok_1 {
+        alts_1_1: {
+            pos = alts_saved_1;
+            if pos >= chars.len() || chars[pos] != '-' { break alts_1_1; }
+            pos += 1;
+            alts_ok_1 = true;
+        }
+        }
+        if !alts_ok_1 { break opt_0; }
+        opt_ok_0 = true;
+    }
+    if !opt_ok_0 { pos = opt_saved_0; }
+    if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_2; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_2;
+        break;
+    }
+    let opt_saved_3 = pos;
+    let mut opt_ok_3 = false;
+    opt_3: {
+        if pos >= chars.len() || chars[pos] != '.' { break opt_3; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break opt_3; }
+        pos += 1;
+        loop {
+            let rep_saved_4 = pos;
+            rep_4: {
+                if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_4; }
+                pos += 1;
+                continue;
+            }
+            pos = rep_saved_4;
+            break;
+        }
+        opt_ok_3 = true;
+    }
+    if !opt_ok_3 { pos = opt_saved_3; }
+    return pos;
+}
+
+fn try_symbol(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    let alts_saved_0 = pos;
+    let mut alts_ok_0 = false;
+    alts_0_0: {
+        pos = alts_saved_0;
+        if pos >= chars.len() || chars[pos] < 'a' || chars[pos] > 'z' { break alts_0_0; }
+        pos += 1;
+        alts_ok_0 = true;
+    }
+    if !alts_ok_0 {
+    alts_0_1: {
+        pos = alts_saved_0;
+        if pos >= chars.len() || chars[pos] < 'A' || chars[pos] > 'Z' { break alts_0_1; }
+        pos += 1;
+        alts_ok_0 = true;
+    }
+    if !alts_ok_0 {
+    alts_0_2: {
+        pos = alts_saved_0;
+        if pos >= chars.len() || chars[pos] != '+' { break alts_0_2; }
+        pos += 1;
+        alts_ok_0 = true;
+    }
+    if !alts_ok_0 {
+    alts_0_3: {
+        pos = alts_saved_0;
+        if pos >= chars.len() || chars[pos] != '-' { break alts_0_3; }
+        pos += 1;
+        alts_ok_0 = true;
+    }
+    if !alts_ok_0 {
+    alts_0_4: {
+        pos = alts_saved_0;
+        if pos >= chars.len() || chars[pos] != '*' { break alts_0_4; }
+        pos += 1;
+        alts_ok_0 = true;
+    }
+    if !alts_ok_0 {
+    alts_0_5: {
+        pos = alts_saved_0;
+        if pos >= chars.len() || chars[pos] != '/' { break alts_0_5; }
+        pos += 1;
+        alts_ok_0 = true;
+    }
+    if !alts_ok_0 {
+    alts_0_6: {
+        pos = alts_saved_0;
+        if pos >= chars.len() || chars[pos] != '.' { break alts_0_6; }
+        pos += 1;
+        alts_ok_0 = true;
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    if !alts_ok_0 { return -1; }
+    loop {
+        let rep_saved_1 = pos;
+        rep_1: {
+            let alts_saved_2 = pos;
+            let mut alts_ok_2 = false;
+            alts_2_0: {
+                pos = alts_saved_2;
+                let alts_saved_3 = pos;
+                let mut alts_ok_3 = false;
+                alts_3_0: {
+                    pos = alts_saved_3;
+                    if pos >= chars.len() || chars[pos] < 'a' || chars[pos] > 'z' { break alts_3_0; }
+                    pos += 1;
+                    alts_ok_3 = true;
+                }
+                if !alts_ok_3 {
+                alts_3_1: {
+                    pos = alts_saved_3;
+                    if pos >= chars.len() || chars[pos] < 'A' || chars[pos] > 'Z' { break alts_3_1; }
+                    pos += 1;
+                    alts_ok_3 = true;
+                }
+                if !alts_ok_3 {
+                alts_3_2: {
+                    pos = alts_saved_3;
+                    if pos >= chars.len() || chars[pos] != '+' { break alts_3_2; }
+                    pos += 1;
+                    alts_ok_3 = true;
+                }
+                if !alts_ok_3 {
+                alts_3_3: {
+                    pos = alts_saved_3;
+                    if pos >= chars.len() || chars[pos] != '-' { break alts_3_3; }
+                    pos += 1;
+                    alts_ok_3 = true;
+                }
+                if !alts_ok_3 {
+                alts_3_4: {
+                    pos = alts_saved_3;
+                    if pos >= chars.len() || chars[pos] != '*' { break alts_3_4; }
+                    pos += 1;
+                    alts_ok_3 = true;
+                }
+                if !alts_ok_3 {
+                alts_3_5: {
+                    pos = alts_saved_3;
+                    if pos >= chars.len() || chars[pos] != '/' { break alts_3_5; }
+                    pos += 1;
+                    alts_ok_3 = true;
+                }
+                if !alts_ok_3 {
+                alts_3_6: {
+                    pos = alts_saved_3;
+                    if pos >= chars.len() || chars[pos] != '.' { break alts_3_6; }
+                    pos += 1;
+                    alts_ok_3 = true;
+                }
+                }
+                }
+                }
+                }
+                }
+                }
+                if !alts_ok_3 { break alts_2_0; }
+                alts_ok_2 = true;
+            }
+            if !alts_ok_2 {
+            alts_2_1: {
+                pos = alts_saved_2;
+                if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break alts_2_1; }
+                pos += 1;
+                alts_ok_2 = true;
+            }
+            }
+            if !alts_ok_2 { break rep_1; }
+            continue;
+        }
+        pos = rep_saved_1;
+        break;
+    }
+    return pos;
+}
+
+fn try_lparen(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '(' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_rparen(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != ')' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_dot(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '.' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+pub fn tokenize(input: &String) -> Array<Token> {
+    let mut lexer = Lexer::new(input);
+    let mut tokens: Array<Token> = [];
+    while !lexer.at_end() {
+        let start = lexer.pos;
+        let mut best_end: i32 = -1;
+        let mut best_kind: i32 = TK_ERROR;
+        let end = try_string(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_STRING; }
+        let end = try_whitespace(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_WHITESPACE; }
+        let end = try_number(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_NUMBER; }
+        let end = try_symbol(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_SYMBOL; }
+        let end = try_lparen(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LPAREN; }
+        let end = try_rparen(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_RPAREN; }
+        let end = try_dot(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_DOT; }
+        if best_end <= start {
+            tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));
+            lexer.pos = start + 1;
+        } else {
+            let is_skip = false || best_kind == TK_WHITESPACE;
+            if !is_skip {
+                tokens.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+            }
+            lexer.pos = best_end;
+        }
+    }
+    tokens.append(Token::new(TK_EOF, "", Span::new(lexer.pos, lexer.pos)));
+    return tokens;
+}
+
+struct Parser {
+    tokens: Array<Token>,
+    pos: i32,
+}
+
+impl Parser {
+    fn new(tokens: Array<Token>) -> Parser {
+        return Parser { tokens, pos: 0 };
+    }
+
+    fn peek(&self) -> &Token {
+        return &self.tokens[self.pos];
+    }
+
+    fn peek_kind(&self) -> i32 {
+        return self.tokens[self.pos].kind;
+    }
+
+    fn advance(&mut self) -> Token {
+        let tok = self.tokens[self.pos];
+        self.pos += 1;
+        return tok;
+    }
+
+    fn last_end(&self) -> i32 {
+        if self.pos == 0 { return 0; }
+        return self.tokens[self.pos - 1].span.end;
+    }
+
+    fn expect(&mut self, kind: i32, name: String) -> Result<Token, ParseError> {
+        if self.tokens[self.pos].kind == kind {
+            return Result::<Token, ParseError>::Ok(self.advance());
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+}
+
+fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
+    let start = p.peek().span.start;
+    let mut item_list: Array<ItemNode> = [];
+    while p.peek_kind() == TK_STRING || p.peek_kind() == TK_SYMBOL || p.peek_kind() == TK_NUMBER || p.peek_kind() == TK_DOT || p.peek_kind() == TK_LPAREN {
+        let item = parse_item(p)?;
+        item_list.append(item);
+    }
+    let eof = p.expect(TK_EOF, "EOF")?;
+    return Result::<SexprNode, ParseError>::Ok(SexprNode {
+        span: Span::new(start, p.last_end()),
+        item_list,
+        eof,
+    });
+}
+
+fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
+    let start = p.peek().span.start;
+    let kind = p.peek_kind();
+    if kind == TK_STRING || kind == TK_SYMBOL || kind == TK_NUMBER || kind == TK_DOT {
+        let atom = parse_atom(p)?;
+        return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt0(ItemAlt0 {
+            span: Span::new(start, p.last_end()),
+            atom,
+        }));
+    }
+    if kind == TK_LPAREN {
+        let list_ = parse_list_(p)?;
+        return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt1(ItemAlt1 {
+            span: Span::new(start, p.last_end()),
+            list_,
+        }));
+    }
+    if kind == TK_LPAREN {
+        let lparen = p.expect(TK_LPAREN, "LPAREN")?;
+        let item = parse_item(p)?;
+        let dot = p.expect(TK_DOT, "DOT")?;
+        let item = parse_item(p)?;
+        let rparen = p.expect(TK_RPAREN, "RPAREN")?;
+        return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt2(ItemAlt2 {
+            span: Span::new(start, p.last_end()),
+            lparen,
+            item,
+            dot,
+            item_2,
+            rparen,
+        }));
+    }
+    return Result::<ItemNode, ParseError>::Err(ParseError::new(
+        "expected item",
+        p.peek().span,
+        ["TK_STRING", "TK_SYMBOL", "TK_NUMBER", "TK_DOT", "TK_LPAREN"],
+    ));
+}
+
+fn parse_list_(p: &mut Parser) -> Result<ListNode, ParseError> {
+    let start = p.peek().span.start;
+    let lparen = p.expect(TK_LPAREN, "LPAREN")?;
+    let mut item_list: Array<ItemNode> = [];
+    while p.peek_kind() == TK_STRING || p.peek_kind() == TK_SYMBOL || p.peek_kind() == TK_NUMBER || p.peek_kind() == TK_DOT || p.peek_kind() == TK_LPAREN {
+        let item = parse_item(p)?;
+        item_list.append(item);
+    }
+    let rparen = p.expect(TK_RPAREN, "RPAREN")?;
+    return Result::<ListNode, ParseError>::Ok(ListNode {
+        span: Span::new(start, p.last_end()),
+        lparen,
+        item_list,
+        rparen,
+    });
+}
+
+fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
+    let start = p.peek().span.start;
+    let kind = p.peek_kind();
+    if kind == TK_STRING {
+        let string = p.expect(TK_STRING, "STRING")?;
+        return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt0(AtomAlt0 {
+            span: Span::new(start, p.last_end()),
+            string,
+        }));
+    }
+    if kind == TK_SYMBOL {
+        let symbol = p.expect(TK_SYMBOL, "SYMBOL")?;
+        return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt1(AtomAlt1 {
+            span: Span::new(start, p.last_end()),
+            symbol,
+        }));
+    }
+    if kind == TK_NUMBER {
+        let number = p.expect(TK_NUMBER, "NUMBER")?;
+        return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt2(AtomAlt2 {
+            span: Span::new(start, p.last_end()),
+            number,
+        }));
+    }
+    if kind == TK_DOT {
+        let dot = p.expect(TK_DOT, "DOT")?;
+        return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt3(AtomAlt3 {
+            span: Span::new(start, p.last_end()),
+            dot,
+        }));
+    }
+    return Result::<AtomNode, ParseError>::Err(ParseError::new(
+        "expected atom",
+        p.peek().span,
+        ["TK_STRING", "TK_SYMBOL", "TK_NUMBER", "TK_DOT"],
+    ));
+}
+
+pub fn parse(input: &String) -> Result<SexprNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return parse_sexpr(&mut parser);
+}
+
