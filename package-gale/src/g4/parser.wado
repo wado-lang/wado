@@ -1,0 +1,443 @@
+use { Span, Token, ParseError } from "../runtime.wado";
+use {
+    Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement,
+    RepeatKind, LexerRule, LexerAlt, LexerElement, LexerRepeatElement, LexerNotElement,
+    CharClass, CharRange,
+} from "../ir.wado";
+use { G4Token, make_token } from "./token.wado";
+use { tokenize } from "./lexer.wado";
+
+pub struct G4Parser {
+    tokens: Array<Token>,
+    pos: i32,
+}
+
+fn first_char(s: &String) -> Option<char> {
+    let mut iter = s.chars();
+    return iter.next();
+}
+
+fn is_parser_rule_name(name: &String) -> bool {
+    if let Some(c) = first_char(name) {
+        return c >= 'a' && c <= 'z';
+    }
+    return false;
+}
+
+fn is_lexer_rule_name(name: &String) -> bool {
+    if let Some(c) = first_char(name) {
+        return c >= 'A' && c <= 'Z';
+    }
+    return false;
+}
+
+impl G4Parser {
+    pub fn new(tokens: Array<Token>) -> G4Parser {
+        return G4Parser { tokens, pos: 0 };
+    }
+
+    fn peek(&self) -> &Token {
+        return &self.tokens[self.pos];
+    }
+
+    fn peek_kind(&self) -> i32 {
+        return self.tokens[self.pos].kind;
+    }
+
+    fn at_eof(&self) -> bool {
+        return self.peek_kind() == G4Token::Eof as i32;
+    }
+
+    fn advance(&mut self) -> &Token {
+        let tok = &self.tokens[self.pos];
+        self.pos += 1;
+        return tok;
+    }
+
+    fn expect(&mut self, kind: G4Token) -> Result<&Token, ParseError> {
+        let tok = self.peek();
+        if tok.kind == kind as i32 {
+            self.pos += 1;
+            return Result::<&Token, ParseError>::Ok(tok);
+        }
+        let expected: Array<String> = [kind.name()];
+        return Result::<&Token, ParseError>::Err(
+            ParseError::new(`expected {kind.name()}, got "{tok.text}"`, tok.span, expected),
+        );
+    }
+
+    fn is_kind(&self, kind: G4Token) -> bool {
+        return self.peek_kind() == kind as i32;
+    }
+
+    pub fn parse_grammar(&mut self) -> Result<Grammar, ParseError> {
+        self.expect(G4Token::Grammar)?;
+        let name_tok = self.expect(G4Token::Identifier)?;
+        let name = name_tok.text;
+        self.expect(G4Token::Semicolon)?;
+
+        let mut parser_rules: Array<ParserRule> = [];
+        let mut lexer_rules: Array<LexerRule> = [];
+
+        while !self.at_eof() {
+            let is_frag = self.is_kind(G4Token::Fragment);
+            if is_frag {
+                self.advance();
+            }
+
+            let rule_name_tok = self.expect(G4Token::Identifier)?;
+            let rule_name = rule_name_tok.text;
+
+            if is_frag || is_lexer_rule_name(&rule_name) {
+                let rule = self.parse_lexer_rule(rule_name, is_frag)?;
+                lexer_rules.append(rule);
+            } else {
+                let rule = self.parse_parser_rule(rule_name)?;
+                parser_rules.append(rule);
+            }
+        }
+
+        return Result::<Grammar, ParseError>::Ok(Grammar { name, parser_rules, lexer_rules });
+    }
+
+    fn parse_parser_rule(&mut self, name: String) -> Result<ParserRule, ParseError> {
+        self.expect(G4Token::Colon)?;
+        let alternatives = self.parse_alternatives()?;
+        self.expect(G4Token::Semicolon)?;
+        return Result::<ParserRule, ParseError>::Ok(ParserRule { name, alternatives });
+    }
+
+    fn parse_alternatives(&mut self) -> Result<Array<Alternative>, ParseError> {
+        let mut alts: Array<Alternative> = [];
+        let first = self.parse_alternative()?;
+        alts.append(first);
+
+        while self.is_kind(G4Token::Pipe) {
+            self.advance();
+            let alt = self.parse_alternative()?;
+            alts.append(alt);
+        }
+        return Result::<Array<Alternative>, ParseError>::Ok(alts);
+    }
+
+    fn parse_alternative(&mut self) -> Result<Alternative, ParseError> {
+        let mut elements: Array<Element> = [];
+        let mut label: Option<String> = null;
+
+        loop {
+            if self.at_eof()
+                || self.is_kind(G4Token::Pipe)
+                || self.is_kind(G4Token::Semicolon)
+                || self.is_kind(G4Token::RParen)
+                || self.is_kind(G4Token::Hash) {
+                break;
+            }
+            let elem = self.parse_element()?;
+            elements.append(elem);
+        }
+
+        if self.is_kind(G4Token::Hash) {
+            self.advance();
+            let label_tok = self.expect(G4Token::Identifier)?;
+            label = Option::<String>::Some(label_tok.text);
+        }
+
+        return Result::<Alternative, ParseError>::Ok(Alternative { label, elements });
+    }
+
+    fn parse_element(&mut self) -> Result<Element, ParseError> {
+        let mut elem = self.parse_atom()?;
+        elem = self.parse_postfix(elem)?;
+        return Result::<Element, ParseError>::Ok(elem);
+    }
+
+    fn parse_atom(&mut self) -> Result<Element, ParseError> {
+        if self.is_kind(G4Token::Identifier) {
+            let tok = self.advance();
+            let name = tok.text;
+            if self.is_kind(G4Token::Assign) {
+                self.advance();
+                let inner = self.parse_atom()?;
+                return Result::<Element, ParseError>::Ok(
+                    Element::Label(LabelElement { name, element: inner }),
+                );
+            }
+            if is_lexer_rule_name(&name) || name == "EOF" {
+                return Result::<Element, ParseError>::Ok(Element::TokenRef(name));
+            }
+            return Result::<Element, ParseError>::Ok(Element::RuleRef(name));
+        }
+        if self.is_kind(G4Token::StringLit) {
+            let tok = self.advance();
+            return Result::<Element, ParseError>::Ok(Element::Literal(tok.text));
+        }
+        if self.is_kind(G4Token::LParen) {
+            self.advance();
+            let alts = self.parse_alternatives()?;
+            self.expect(G4Token::RParen)?;
+            return Result::<Element, ParseError>::Ok(Element::Group(alts));
+        }
+        let tok = self.peek();
+        let expected: Array<String> = ["identifier", "string", "("];
+        return Result::<Element, ParseError>::Err(
+            ParseError::new(`unexpected token "{tok.text}"`, tok.span, expected),
+        );
+    }
+
+    fn parse_postfix(&mut self, elem: Element) -> Result<Element, ParseError> {
+        if self.is_kind(G4Token::Star) {
+            self.advance();
+            return Result::<Element, ParseError>::Ok(
+                Element::Repeat(RepeatElement { kind: RepeatKind::Star, element: elem }),
+            );
+        }
+        if self.is_kind(G4Token::Plus) {
+            self.advance();
+            return Result::<Element, ParseError>::Ok(
+                Element::Repeat(RepeatElement { kind: RepeatKind::Plus, element: elem }),
+            );
+        }
+        if self.is_kind(G4Token::Question) {
+            self.advance();
+            return Result::<Element, ParseError>::Ok(
+                Element::Repeat(RepeatElement { kind: RepeatKind::Optional, element: elem }),
+            );
+        }
+        return Result::<Element, ParseError>::Ok(elem);
+    }
+
+    fn parse_lexer_rule(&mut self, name: String, is_fragment: bool) -> Result<LexerRule, ParseError> {
+        self.expect(G4Token::Colon)?;
+        let body = self.parse_lexer_alternatives()?;
+
+        let mut skip = false;
+        if self.is_kind(G4Token::Arrow) {
+            self.advance();
+            let action_tok = self.advance();
+            if action_tok.text == "skip" {
+                skip = true;
+            }
+        }
+
+        self.expect(G4Token::Semicolon)?;
+        return Result::<LexerRule, ParseError>::Ok(
+            LexerRule { name, is_fragment, skip, body },
+        );
+    }
+
+    fn parse_lexer_alternatives(&mut self) -> Result<Array<LexerAlt>, ParseError> {
+        let mut alts: Array<LexerAlt> = [];
+        let first = self.parse_lexer_alt()?;
+        alts.append(first);
+
+        while self.is_kind(G4Token::Pipe) {
+            self.advance();
+            let alt = self.parse_lexer_alt()?;
+            alts.append(alt);
+        }
+        return Result::<Array<LexerAlt>, ParseError>::Ok(alts);
+    }
+
+    fn parse_lexer_alt(&mut self) -> Result<LexerAlt, ParseError> {
+        let mut elements: Array<LexerElement> = [];
+        loop {
+            if self.at_eof()
+                || self.is_kind(G4Token::Pipe)
+                || self.is_kind(G4Token::Semicolon)
+                || self.is_kind(G4Token::RParen)
+                || self.is_kind(G4Token::Arrow) {
+                break;
+            }
+            let elem = self.parse_lexer_element()?;
+            elements.append(elem);
+        }
+        return Result::<LexerAlt, ParseError>::Ok(LexerAlt { elements });
+    }
+
+    fn parse_lexer_element(&mut self) -> Result<LexerElement, ParseError> {
+        let mut elem = self.parse_lexer_atom()?;
+        elem = self.parse_lexer_postfix(elem)?;
+        return Result::<LexerElement, ParseError>::Ok(elem);
+    }
+
+    fn peek_kind_at(&self, offset: i32) -> i32 {
+        let i = self.pos + offset;
+        if i >= self.tokens.len() {
+            return G4Token::Eof as i32;
+        }
+        return self.tokens[i].kind;
+    }
+
+    fn parse_lexer_atom(&mut self) -> Result<LexerElement, ParseError> {
+        if self.is_kind(G4Token::StringLit) {
+            let tok = self.advance();
+            let text = tok.text;
+            let text_chars = text.chars().collect();
+            let is_dot_dot = self.is_kind(G4Token::Dot)
+                && self.peek_kind_at(1) == G4Token::Dot as i32;
+            if is_dot_dot && text_chars.len() == 1 {
+                self.advance();
+                self.advance();
+                let end_tok = self.expect(G4Token::StringLit)?;
+                let end_chars = end_tok.text.chars().collect();
+                let start_char = text_chars[0];
+                let end_char = end_chars[0];
+                return Result::<LexerElement, ParseError>::Ok(
+                    LexerElement::CharRange([start_char, end_char]),
+                );
+            }
+            return Result::<LexerElement, ParseError>::Ok(LexerElement::Literal(text));
+        }
+        if self.is_kind(G4Token::CharClass) {
+            let tok = self.advance();
+            let cc = parse_char_class(&tok.text)?;
+            return Result::<LexerElement, ParseError>::Ok(LexerElement::CharClass(cc));
+        }
+        if self.is_kind(G4Token::Dot) {
+            self.advance();
+            if self.is_kind(G4Token::Dot) {
+                let tok = self.peek();
+                let expected: Array<String> = ["element"];
+                return Result::<LexerElement, ParseError>::Err(
+                    ParseError::new("unexpected '..' without preceding char literal", tok.span, expected),
+                );
+            }
+            return Result::<LexerElement, ParseError>::Ok(LexerElement::AnyChar);
+        }
+        if self.is_kind(G4Token::Identifier) {
+            let tok = self.advance();
+            return Result::<LexerElement, ParseError>::Ok(LexerElement::RuleRef(tok.text));
+        }
+        if self.is_kind(G4Token::LParen) {
+            self.advance();
+            let alts = self.parse_lexer_alternatives()?;
+            self.expect(G4Token::RParen)?;
+            return Result::<LexerElement, ParseError>::Ok(LexerElement::Group(alts));
+        }
+        if self.is_kind(G4Token::Tilde) {
+            self.advance();
+            let inner = self.parse_lexer_atom()?;
+            return Result::<LexerElement, ParseError>::Ok(
+                LexerElement::Not(LexerNotElement { element: inner }),
+            );
+        }
+        let tok = self.peek();
+        let expected: Array<String> = ["string", "char-class", "identifier", "(", "~", "."];
+        return Result::<LexerElement, ParseError>::Err(
+            ParseError::new(`unexpected token "{tok.text}" in lexer rule`, tok.span, expected),
+        );
+    }
+
+    fn parse_lexer_postfix(&mut self, elem: LexerElement) -> Result<LexerElement, ParseError> {
+        if self.is_kind(G4Token::Star) {
+            self.advance();
+            return Result::<LexerElement, ParseError>::Ok(
+                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Star, element: elem }),
+            );
+        }
+        if self.is_kind(G4Token::Plus) {
+            self.advance();
+            return Result::<LexerElement, ParseError>::Ok(
+                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Plus, element: elem }),
+            );
+        }
+        if self.is_kind(G4Token::Question) {
+            self.advance();
+            return Result::<LexerElement, ParseError>::Ok(
+                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Optional, element: elem }),
+            );
+        }
+        return Result::<LexerElement, ParseError>::Ok(elem);
+    }
+}
+
+struct CharClassParser {
+    chars: Array<char>,
+    pos: i32,
+    end: i32,
+}
+
+impl CharClassParser {
+    fn new(text: &String) -> CharClassParser {
+        let chars = text.chars().collect();
+        let end = chars.len() - 1;
+        return CharClassParser { chars, pos: 1, end };
+    }
+
+    fn at_end(&self) -> bool {
+        return self.pos >= self.end;
+    }
+
+    fn peek(&self) -> char {
+        return self.chars[self.pos];
+    }
+
+    fn advance(&mut self) -> char {
+        let c = self.chars[self.pos];
+        self.pos += 1;
+        return c;
+    }
+
+    fn resolve_char(&mut self) -> char {
+        let c = self.advance();
+        if c == '\\' {
+            let ec = self.advance();
+            if ec == 'n' { return '\n'; }
+            if ec == 'r' { return '\r'; }
+            if ec == 't' { return '\t'; }
+            if ec == '\\' { return '\\'; }
+            if ec == ']' { return ']'; }
+            if ec == '-' { return '-'; }
+            if ec == 'u' {
+                let mut val = 0;
+                for let mut i = 0; i < 4; i += 1 {
+                    val = val * 16 + hex_digit_value(self.advance());
+                }
+                return char::from_i32(val).unwrap();
+            }
+            return ec;
+        }
+        return c;
+    }
+
+    fn parse(&mut self) -> CharClass {
+        let mut negated = false;
+        let mut ranges: Array<CharRange> = [];
+
+        if !self.at_end() && self.peek() == '^' {
+            negated = true;
+            self.advance();
+        }
+
+        while !self.at_end() {
+            let c = self.resolve_char();
+            if !self.at_end() && self.peek() == '-' && self.pos + 1 < self.end {
+                self.advance();
+                let c2 = self.resolve_char();
+                ranges.append(CharRange::range(c, c2));
+            } else {
+                ranges.append(CharRange::single(c));
+            }
+        }
+
+        return CharClass { ranges, negated };
+    }
+}
+
+fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
+    let mut parser = CharClassParser::new(text);
+    return Result::<CharClass, ParseError>::Ok(parser.parse());
+}
+
+fn hex_digit_value(c: char) -> i32 {
+    if c >= '0' && c <= '9' { return c as i32 - '0' as i32; }
+    if c >= 'a' && c <= 'f' { return c as i32 - 'a' as i32 + 10; }
+    if c >= 'A' && c <= 'F' { return c as i32 - 'A' as i32 + 10; }
+    return 0;
+}
+
+pub fn parse(input: String) -> Result<Grammar, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = G4Parser::new(tokens);
+    return parser.parse_grammar();
+}

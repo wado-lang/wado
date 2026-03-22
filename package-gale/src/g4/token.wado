@@ -1,0 +1,59 @@
+use { Span, Token } from "../runtime.wado";
+
+pub enum G4Token {
+    Grammar,
+    Fragment,
+    Skip,
+    Channel,
+    Arrow,
+    Colon,
+    Semicolon,
+    Pipe,
+    LParen,
+    RParen,
+    Star,
+    Plus,
+    Question,
+    Dot,
+    Tilde,
+    Assign,
+    Hash,
+    StringLit,
+    CharClass,
+    Identifier,
+    Eof,
+    Error,
+}
+
+impl G4Token {
+    pub fn name(&self) -> String {
+        return match *self {
+            Grammar => "grammar",
+            Fragment => "fragment",
+            Skip => "skip",
+            Channel => "channel",
+            Arrow => "->",
+            Colon => ":",
+            Semicolon => ";",
+            Pipe => "|",
+            LParen => "(",
+            RParen => ")",
+            Star => "*",
+            Plus => "+",
+            Question => "?",
+            Dot => ".",
+            Tilde => "~",
+            Assign => "=",
+            Hash => "#",
+            StringLit => "string",
+            CharClass => "char-class",
+            Identifier => "identifier",
+            Eof => "EOF",
+            Error => "error",
+        };
+    }
+}
+
+pub fn make_token(kind: G4Token, text: String, start: i32, end: i32) -> Token {
+    return Token::new(kind as i32, text, Span::new(start, end));
+}

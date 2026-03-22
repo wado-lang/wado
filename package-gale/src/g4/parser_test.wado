@@ -1,0 +1,212 @@
+use {
+    Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement,
+    RepeatKind, LexerRule, LexerAlt, LexerElement, CharClass, CharRange,
+} from "../ir.wado";
+use { parse } from "./parser.wado";
+
+test "minimal grammar" {
+    let g = parse("grammar Foo;").unwrap();
+    assert g.name == "Foo";
+    assert g.parser_rules.is_empty();
+    assert g.lexer_rules.is_empty();
+}
+
+test "grammar with simple parser rule" {
+    let input = "grammar Test;
+json : value EOF ;";
+    let g = parse(input).unwrap();
+    assert g.name == "Test";
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "json";
+    assert g.parser_rules[0].alternatives.len() == 1;
+    assert g.parser_rules[0].alternatives[0].elements.len() == 2;
+}
+
+test "parser rule with alternatives" {
+    let input = "grammar Test;
+value : STRING | NUMBER | 'true' | 'false' ;";
+    let g = parse(input).unwrap();
+    let rule = &g.parser_rules[0];
+    assert rule.alternatives.len() == 4;
+    if let TokenRef(name) = rule.alternatives[0].elements[0] {
+        assert name == "STRING";
+    } else {
+        panic("expected TokenRef");
+    }
+    if let Literal(text) = rule.alternatives[2].elements[0] {
+        assert text == "true";
+    } else {
+        panic("expected Literal");
+    }
+}
+
+test "parser rule with labels" {
+    let input = "grammar Test;
+value : STRING # Str | NUMBER # Num ;";
+    let g = parse(input).unwrap();
+    let rule = &g.parser_rules[0];
+    assert rule.alternatives.len() == 2;
+    if let Some(label) = rule.alternatives[0].label {
+        assert label == "Str";
+    } else {
+        panic("expected label");
+    }
+    if let Some(label) = rule.alternatives[1].label {
+        assert label == "Num";
+    } else {
+        panic("expected label");
+    }
+}
+
+test "parser rule with repetition" {
+    let input = "grammar Test;
+obj : '{' pair (',' pair)* '}' ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 4;
+    if let Literal(text) = elems[0] {
+        assert text == "{";
+    } else {
+        panic("expected Literal");
+    }
+    if let Repeat(r) = elems[2] {
+        // group with * repetition
+    } else {
+        panic("expected Repeat");
+    }
+}
+
+test "parser rule with label assignment" {
+    let input = "grammar Test;
+expr : expr op=('+' | '-') term ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Label(lbl) = elems[1] {
+        assert lbl.name == "op";
+    } else {
+        panic("expected Label element");
+    }
+}
+
+test "simple lexer rule" {
+    let input = "grammar Test;
+INT : [0-9]+ ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    let rule = &g.lexer_rules[0];
+    assert rule.name == "INT";
+    assert rule.is_fragment == false;
+    assert rule.skip == false;
+}
+
+test "fragment lexer rule" {
+    let input = "grammar Test;
+fragment DIGIT : [0-9] ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules[0].is_fragment == true;
+    assert g.lexer_rules[0].name == "DIGIT";
+}
+
+test "lexer rule with skip" {
+    let input = "grammar Test;
+WS : [ \\t\\n\\r]+ -> skip ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules[0].skip == true;
+    assert g.lexer_rules[0].name == "WS";
+}
+
+test "lexer rule with char range" {
+    let input = "grammar Test;
+LETTER : 'a' .. 'z' ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    assert body.len() == 1;
+    if let CharRange(pair) = body[0].elements[0] {
+        assert pair.0 == 'a';
+        assert pair.1 == 'z';
+    } else {
+        panic("expected CharRange");
+    }
+}
+
+test "lexer rule with alternatives" {
+    let input = "grammar Test;
+SIGN : '+' | '-' ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    assert body.len() == 2;
+}
+
+test "char class parsing" {
+    let input = "grammar Test;
+HEX : [0-9a-fA-F] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.negated == false;
+        assert cc.ranges.len() == 3;
+        assert cc.ranges[0].start == '0';
+        assert cc.ranges[0].end == '9';
+        assert cc.ranges[1].start == 'a';
+        assert cc.ranges[1].end == 'f';
+        assert cc.ranges[2].start == 'A';
+        assert cc.ranges[2].end == 'F';
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "negated char class" {
+    let input = "grammar Test;
+SAFE : [^\"\\\\] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.negated == true;
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "not element" {
+    let input = "grammar Test;
+SAFE : ~ '\"' ;";
+    let g = parse(input).unwrap();
+    if let Not(n) = g.lexer_rules[0].body[0].elements[0] {
+        if let Literal(text) = n.element {
+            assert text == "\"";
+        } else {
+            panic("expected Literal inside Not");
+        }
+    } else {
+        panic("expected Not");
+    }
+}
+
+test "any char" {
+    let input = "grammar Test;
+ESC : '\\\\' . ;";
+    let g = parse(input).unwrap();
+    let elems = &g.lexer_rules[0].body[0].elements;
+    assert elems.len() == 2;
+    if let AnyChar = elems[1] {
+        // ok
+    } else {
+        panic("expected AnyChar");
+    }
+}
+
+test "mixed parser and lexer rules" {
+    let input = "grammar JSON;
+json : value EOF ;
+value : STRING | NUMBER ;
+STRING : '\"' SAFE* '\"' ;
+fragment SAFE : [a-z] ;
+WS : [ \\t\\n\\r]+ -> skip ;";
+    let g = parse(input).unwrap();
+    assert g.name == "JSON";
+    assert g.parser_rules.len() == 2;
+    assert g.lexer_rules.len() == 3;
+    assert g.lexer_rules[1].is_fragment == true;
+    assert g.lexer_rules[2].skip == true;
+}
