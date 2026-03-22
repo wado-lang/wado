@@ -1,0 +1,25 @@
+// Test: generic method with turbofish on a non-generic struct
+use { println, Stdout } from "core:cli";
+
+struct Converter {
+    dummy: i32,
+}
+
+impl Converter {
+    // Instance method with generic type param
+    pub fn convert<U>(&self, value: U) -> U {
+        return value;
+    }
+}
+
+export fn run() with Stdout {
+    let c = Converter { dummy: 0 };
+    let s = c.convert::<String>("hello");
+    println(`{s}`);
+
+    let n = c.convert::<i32>(42);
+    println(`{n}`);
+}
+
+__DATA__
+{"stdout": "hello\n42\n"}

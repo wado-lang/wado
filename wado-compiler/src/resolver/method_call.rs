@@ -382,7 +382,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             &method_call.method,
         );
 
-        // Build monomorph_info for method calls on generic types
+        // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if let Some(ref blanket_param) = blanket_type_param {
             // For blanket impls, the template function uses the type param name (e.g., "I").
             // The call site uses the concrete receiver (e.g., "ArrayIter<i32>").
@@ -394,16 +394,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 type_args: vec![base_type_id],
                 is_blanket: true,
             })
-        } else {
-            receiver_type_args.map(|type_args| {
-                let generic_name =
-                    MethodName::format_local(&base_struct_name, None, &method_call.method);
-                MonomorphInfo {
-                    generic_name,
-                    type_args,
-                    is_blanket: false,
-                }
+        } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
+            // Generic struct, generic method, or both
+            let mut all_type_args = receiver_type_args.unwrap_or_default();
+            all_type_args.extend_from_slice(&method_type_args);
+            let generic_name =
+                MethodName::format_local(&base_struct_name, None, &method_call.method);
+            Some(MonomorphInfo {
+                generic_name,
+                type_args: all_type_args,
+                is_blanket: false,
             })
+        } else {
+            None
         };
 
         // Convert method type args to string names for method_info
@@ -535,59 +538,61 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|ty| self.resolve_type(ty))
             .collect();
 
-        // Substitute UNKNOWN param types with concrete types from call-site type args.
+        // Re-resolve param types with concrete type args in scope for literal coercion.
         // lookup_static_method_param_types resolves without type params in scope, so
-        // generic params like T and U become UNKNOWN. We substitute them by matching AST
-        // param type names against impl block type param names and method type param names.
-        if !param_types.is_empty() && param_types.iter().any(|t| *t == TypeTable::UNKNOWN) {
-            let method_def = self.find_static_method_def(
-                struct_name_for_lookup.as_deref().unwrap_or(""),
-                &static_call.method,
-            );
-            if let Some((impl_type_param_names, method_def)) = method_def {
-                // Build name→concrete type maps
-                // impl type params: names from impl block, concrete types from call-site turbofish
-                let call_site_impl_args: Vec<TypeId> = match &static_call.target_type {
-                    ast::Type::Generic(g) => {
-                        g.args.iter().map(|t| self.resolve_type(t)).collect()
-                    }
-                    _ => vec![],
-                };
+        // generic params (T, U, Array<T>, etc.) resolve to UNKNOWN or contain UNKNOWN.
+        // We re-resolve them by temporarily mapping type param names directly to concrete
+        // types from the call-site turbofish, then resolving the AST param types.
+        // NOTE: We cannot change lookup_static_method_param_types itself to add type params,
+        // because that would cause variant constructor param types to become non-empty,
+        // bypassing the variant payload substitution path (line ~494).
+        {
+            let has_type_args = matches!(&static_call.target_type, ast::Type::Generic(_))
+                || !method_type_args.is_empty();
+            if has_type_args && !param_types.is_empty() {
+                let method_def = self.find_static_method_def(
+                    struct_name_for_lookup.as_deref().unwrap_or(""),
+                    &static_call.method,
+                );
+                if let Some((impl_type_param_names, method_def)) = method_def {
+                    let call_site_impl_args: Vec<TypeId> = match &static_call.target_type {
+                        ast::Type::Generic(g) => {
+                            g.args.iter().map(|t| self.resolve_type(t)).collect()
+                        }
+                        _ => vec![],
+                    };
 
-                let non_self_params: Vec<_> = method_def
-                    .params
-                    .iter()
-                    .filter(|p| p.self_kind == ast::SelfKind::None)
-                    .collect();
-                for (i, param_type) in param_types.iter_mut().enumerate() {
-                    if *param_type != TypeTable::UNKNOWN {
-                        continue;
-                    }
-                    let Some(param) = non_self_params.get(i) else {
-                        continue;
-                    };
-                    let ast::Type::Named(named) = &param.ty else {
-                        continue;
-                    };
-                    // Check impl type params (e.g., T in impl<T> Container<T>)
-                    if let Some(idx) = impl_type_param_names
-                        .iter()
-                        .position(|name| *name == named.name)
-                    {
-                        if let Some(&concrete) = call_site_impl_args.get(idx) {
-                            *param_type = concrete;
+                    // Temporarily map type param names directly to concrete types
+                    let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+                    for (i, name) in impl_type_param_names.iter().enumerate() {
+                        if let Some(&concrete) = call_site_impl_args.get(i) {
+                            self.trait_ctx
+                                .type_params
+                                .insert(name.clone(), (i as u32, concrete));
                         }
                     }
-                    // Check method type params (e.g., U in fn make<U>)
-                    else if let Some(idx) = method_def
-                        .type_params
-                        .iter()
-                        .position(|tp| tp.name == named.name)
-                    {
-                        if let Some(&concrete) = method_type_args.get(idx) {
-                            *param_type = concrete;
+                    let impl_offset = impl_type_param_names.len();
+                    for (i, tp) in method_def.type_params.iter().enumerate() {
+                        if let Some(&concrete) = method_type_args.get(i) {
+                            self.trait_ctx
+                                .type_params
+                                .insert(tp.name.clone(), ((impl_offset + i) as u32, concrete));
                         }
                     }
+
+                    // Re-resolve all param types from AST with concrete type mappings
+                    let non_self_params: Vec<_> = method_def
+                        .params
+                        .iter()
+                        .filter(|p| p.self_kind == ast::SelfKind::None)
+                        .collect();
+                    for (i, param_type) in param_types.iter_mut().enumerate() {
+                        if let Some(param) = non_self_params.get(i) {
+                            *param_type = self.resolve_type(&param.ty);
+                        }
+                    }
+
+                    self.trait_ctx.type_params = old_type_params;
                 }
             }
         }
