@@ -108,12 +108,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut blanket_type_param: Option<String> = None;
         let mut trait_impl_struct_name: Option<String> = None;
 
-        // TODO: When the monomorphizer properly handles ref-type impls (impl Trait for &Container<T>),
-        // enable this block to prioritize ref-type trait impls over base type impls.
-        // Currently disabled because the monomorphizer rewrites function names incorrectly
-        // for ref-type impls, causing Wasm validation errors.
-        // See: impl IntoIterator for &Array<T> in lib/core/prelude/array.wado
-        #[cfg(any())]
+        // If receiver is a reference type, try ref-type trait impls first.
+        // e.g., impl IntoIterator for &Array<T> takes priority over impl IntoIterator for Array<T>.
+        // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
         {
             let is_ref = matches!(
                 self.type_table.borrow().get(receiver.type_id),

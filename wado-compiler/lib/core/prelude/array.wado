@@ -287,10 +287,9 @@ pub struct ArrayRefIter<T> {
 }
 
 // NOTE: ArrayRefIter uses an inherent `next` method instead of `impl Iterator`
-// because the codegen has a bug with `impl Iterator` when `type Item = &T` —
-// it creates spurious `Array<Box<T>>` struct definitions that corrupt array
-// literal codegen. Once that bug is fixed, this should become a proper
-// `impl Iterator for ArrayRefIter<T>` with `type Item = &T`.
+// because the monomorphizer creates spurious `Array<Box<T>>` struct definitions
+// from Iterator's default `collect()` method when `type Item = &T`.
+// TODO: Once that bug is fixed, this should become `impl Iterator for ArrayRefIter<T>`.
 impl ArrayRefIter<T> {
     pub fn next(&mut self) -> Option<&T> {
         if self.index >= self.used {

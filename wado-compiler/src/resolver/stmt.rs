@@ -1670,13 +1670,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let iter_var = format!("__iter_{unique_id}");
         let label = format!("__for_of_{unique_id}");
 
-        // Detect if the iterable is a reference type for yielding &T.
-        // Check syntactically (&expr, &mut expr) and by looking up ident types.
-        let ref_mode = if is_enumerate {
-            RefBinding::None
-        } else {
-            self.detect_for_of_ref_mode(&for_of.iterable, ctx)
-        };
+        // Reference iteration is handled by IntoIterator impls on &T (e.g., impl IntoIterator for &Array<T>).
+        // No special ref_mode detection is needed — the iterator's Item type determines the binding type.
+        let ref_mode = RefBinding::None;
 
         // Build the iterable: either raw or with .enumerate()
         let into_iter_receiver = if is_enumerate {
@@ -1815,28 +1811,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )];
         ctx.active_labels.pop();
         result
-    }
-
-    /// Detect whether a for-of iterable expression has a reference type.
-    /// Returns `RefBinding::Ref` or `RefBinding::MutRef` if the iterable is a reference,
-    /// so that the loop variable should be bound as `&T` or `&mut T`.
-    fn detect_for_of_ref_mode(&self, expr: &Expr, ctx: &FunctionContext) -> RefBinding {
-        match expr {
-            Expr::Unary(u) if u.op == UnaryOp::Ref => RefBinding::Ref,
-            Expr::Unary(u) if u.op == UnaryOp::MutRef => RefBinding::MutRef,
-            Expr::Ident(ident) => {
-                if let Some(var_ref) = ctx.peek_local(&ident.name) {
-                    match self.type_table.borrow().get(var_ref.type_id).clone() {
-                        ResolvedType::Ref(_) => RefBinding::Ref,
-                        ResolvedType::MutRef(_) => RefBinding::MutRef,
-                        _ => RefBinding::None,
-                    }
-                } else {
-                    RefBinding::None
-                }
-            }
-            _ => RefBinding::None,
-        }
     }
 
     /// Check if a block contains `break`, `continue`, or `return` at the top level
