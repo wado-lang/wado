@@ -86,11 +86,18 @@ fn analyze_copy_binding(stmt: &TirStmt) -> Option<CopyBinding> {
         local_index,
         is_mut,
         value,
+        skip_value_copy,
         ..
     } = &stmt.kind
     else {
         return None;
     };
+
+    // skip_value_copy bindings (from tmpl_hoist, SROA, LICM, etc.) intentionally
+    // alias a hoisted buffer. Eliminating them would break that aliasing contract.
+    if *skip_value_copy {
+        return None;
+    }
 
     let source = match &value.kind {
         TirExprKind::Local { index, name } => CopySource::Local {
