@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774301739574,
+  "lastUpdate": 1774309113687,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6653,6 +6653,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7216367993acca291fd7a0cd616a7ca47e44d826"
         },
         "date": 1774301739360,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a38063329ce280fdac9a7be04d3244cfed78a534",
+          "message": "Merge pull request #674 from wado-lang/claude/rust-reference-research-Vq2hu\n\nImplement match ergonomics for references in patterns and for-of loops",
+          "timestamp": "2026-03-24T08:36:02+09:00",
+          "tree_id": "b7be5ad681f3412c12512e07801542688ccabadb",
+          "url": "https://github.com/wado-lang/wado/commit/a38063329ce280fdac9a7be04d3244cfed78a534"
+        },
+        "date": 1774309113480,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
