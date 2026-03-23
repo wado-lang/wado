@@ -491,7 +491,7 @@ pub struct TypeTable {
     assoc_type_resolutions: IndexMap<(TypeId, String), TypeId>,
     /// Generic associated type definitions: `(base_struct_name, assoc_name)` → `TypeId`.
     /// The `TypeId` is typically a `TypeParam` that can be substituted using the
-    /// `GenericInstance`'s type_args. Populated when processing generic impl blocks
+    /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
     /// (e.g., `impl Iterator for ArrayIter<T> { type Item = T; }`).
     /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
     generic_assoc_type_defs: IndexMap<(String, String), TypeId>,
@@ -1062,7 +1062,7 @@ impl TypeTable {
 
     /// Resolve an associated type for a `GenericInstance` type using generic definitions.
     /// For `ArrayIter<i32>::Item`: looks up `("ArrayIter", "Item")` → `TypeParam(0)`,
-    /// then substitutes using the instance's type_args to get `i32`.
+    /// then substitutes using the instance's `type_args` to get `i32`.
     pub fn resolve_generic_assoc_type(
         &self,
         concrete_id: TypeId,

@@ -1398,8 +1398,7 @@ impl Monomorphizer {
                 let concrete_id = self.substitute_type(param_id, substitution, type_table);
                 if concrete_id != param_id {
                     // Direct lookup for pre-registered concrete types
-                    if let Some(resolved) =
-                        type_table.resolve_assoc_type(concrete_id, &assoc_name)
+                    if let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name)
                     {
                         return resolved;
                     }

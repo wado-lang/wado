@@ -3856,6 +3856,28 @@ pub fn char::is_whitespace(self: Box<char>) -> bool {
     };
 }
 
+pub fn char::is_ascii_lowercase(self: Box<char>) -> bool {
+    return ((self.value >= 'a') && (self.value <= 'z'));
+}
+
+pub fn char::is_ascii_uppercase(self: Box<char>) -> bool {
+    return ((self.value >= 'A') && (self.value <= 'Z'));
+}
+
+pub fn char::to_ascii_lowercase(self: Box<char>) -> char {
+    if ((self.value >= 'A') && (self.value <= 'Z')) {
+        return "core::prelude/primitive.wado::char::from_u32_unchecked"(((self.value as u32 - 'A' as u32) + 'a' as u32));
+    }
+    return self.value;
+}
+
+pub fn char::to_ascii_uppercase(self: Box<char>) -> char {
+    if ((self.value >= 'a') && (self.value <= 'z')) {
+        return "core::prelude/primitive.wado::char::from_u32_unchecked"(((self.value as u32 - 'a' as u32) + 'A' as u32));
+    }
+    return self.value;
+}
+
 pub fn char::is_hexdigit(self: Box<char>) -> bool {
     let c: char = self.value;
     return ((((c >= '0') && (c <= '9')) || ((c >= 'a') && (c <= 'f'))) || ((c >= 'A') && (c <= 'F')));
@@ -6470,7 +6492,7 @@ pub fn String::truncate_bytes(self: &mut String, byte_len: i32) {
                 __r.String::append("core:prelude/string.wado");
                 __r.String::append(":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 355 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 377 }."i32^Display::fmt"(&mut __f);
                 __r.String::append(": ");
                 __r.String::append("negative length");
                 __r.String::append("\ncondition: byte_len >= 0\n");
@@ -6499,7 +6521,7 @@ pub fn String::truncate_bytes(self: &mut String, byte_len: i32) {
                     __r.String::append("core:prelude/string.wado");
                     __r.String::append(":");
                     let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                    Box<i32> { value: 360 }."i32^Display::fmt"(&mut __f);
+                    Box<i32> { value: 382 }."i32^Display::fmt"(&mut __f);
                     __r.String::append(": ");
                     __r.String::append("not on a UTF-8 character boundary");
                     __r.String::append("\ncondition: b < 0x80 || b >= 0xC0\n");
@@ -6673,6 +6695,40 @@ pub fn String::trim(self: &String) -> String {
     return self.String::trim_start().String::trim_end();
 }
 
+pub fn String::to_ascii_lowercase(self: &String) -> String {
+    let mut s: String = "core::prelude/string.wado::String::with_capacity"(self.used);
+    __for_of_2: {
+        let mut __iter_2: StrCharIter = self.String::chars()."StrCharIter^IntoIterator::into_iter"();
+        loop {
+            let __pattern_temp_0: Option<char> = __iter_2."StrCharIter^Iterator::next"();
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let c: char = __variant_payload(__pattern_temp_0, case=0);
+                s.String::append_char(Box<char> { value: c }.char::to_ascii_lowercase());
+            } else {
+                break;
+            }
+        }
+    }
+    return s;
+}
+
+pub fn String::to_ascii_uppercase(self: &String) -> String {
+    let mut s: String = "core::prelude/string.wado::String::with_capacity"(self.used);
+    __for_of_2: {
+        let mut __iter_2: StrCharIter = self.String::chars()."StrCharIter^IntoIterator::into_iter"();
+        loop {
+            let __pattern_temp_0: Option<char> = __iter_2."StrCharIter^Iterator::next"();
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let c: char = __variant_payload(__pattern_temp_0, case=0);
+                s.String::append_char(Box<char> { value: c }.char::to_ascii_uppercase());
+            } else {
+                break;
+            }
+        }
+    }
+    return s;
+}
+
 fn String::internal_substr_bytes(self: &String, start: i32, end: i32) -> String {
     let len: i32 = (end - start);
     if (len <= 0) {
@@ -6815,6 +6871,10 @@ pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+fn "StrCharIter^IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {
+    return *self;
 }
 
 pub fn "Array<char>::append"(self: &mut Array<char>, value: char) with stores[value] {
