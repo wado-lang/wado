@@ -94,7 +94,8 @@ fn try_lower_to_select(
         name: "select".to_string(),
         monomorph_info: Some(MonomorphInfo {
             generic_name: "select".to_string(),
-            type_args: vec![result_type],
+            impl_type_args: vec![result_type],
+            method_type_args: vec![],
             is_blanket: false,
         }),
         method_info: None,

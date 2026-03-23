@@ -514,7 +514,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     } else {
                         Some(MonomorphInfo {
                             generic_name: format!("{builder_base_name}::new_literal"),
-                            type_args: type_arg_ids.clone(),
+                            impl_type_args: type_arg_ids.clone(),
+                            method_type_args: vec![],
                             is_blanket: false,
                         })
                     },
@@ -646,7 +647,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             } else {
                 Some(MonomorphInfo {
                     generic_name: format!("{builder_base_name}::build"),
-                    type_args: type_arg_ids,
+                    impl_type_args: type_arg_ids,
+                    method_type_args: vec![],
                     is_blanket: false,
                 })
             };
@@ -772,7 +774,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     } else {
                         Some(MonomorphInfo {
                             generic_name: format!("{builder_base_name}::new_literal"),
-                            type_args: type_arg_ids.clone(),
+                            impl_type_args: type_arg_ids.clone(),
+                            method_type_args: vec![],
                             is_blanket: false,
                         })
                     },
@@ -861,7 +864,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         } else {
                             Some(MonomorphInfo {
                                 generic_name: format!("{builder_base_name}::push_literal"),
-                                type_args: type_arg_ids.clone(),
+                                impl_type_args: type_arg_ids.clone(),
+                                method_type_args: vec![],
                                 is_blanket: false,
                             })
                         },
@@ -905,7 +909,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     } else {
                         Some(MonomorphInfo {
                             generic_name: format!("{builder_base_name}::build"),
-                            type_args: type_arg_ids,
+                            impl_type_args: type_arg_ids,
+                            method_type_args: vec![],
                             is_blanket: false,
                         })
                     },
@@ -959,6 +964,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ///
     /// Does NOT perform general type equality — only rejects `&T → non-ref`.
     /// Allows `&mut T → &T` coercion.
+    ///
+    /// Also rejects `T → &T` when T is a variant or primitive type, since these
+    /// require boxing (`Box<T>`) at the Wasm level. Struct/array/string types
+    /// are already GC references and don't need boxing, so `T → &T` is safe for them.
     pub(super) fn check_ref_type_mismatch(&mut self, actual: TypeId, expected: TypeId, span: Span) {
         if actual == expected
             || actual == TypeTable::UNKNOWN
@@ -970,35 +979,71 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         let type_table = self.type_table.borrow();
 
-        // Only check if actual is a reference type
-        if !matches!(
+        let actual_is_ref = matches!(
             type_table.get(actual),
             ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) {
-            return;
-        }
-
-        // Allow &T → &T or &mut T → &T (ref-to-ref is fine)
-        if matches!(
+        );
+        let expected_is_ref = matches!(
             type_table.get(expected),
             ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) {
+        );
+
+        // Allow &T → &T or &mut T → &T (ref-to-ref is fine)
+        if actual_is_ref && expected_is_ref {
             return;
         }
 
-        // Skip if expected is a type parameter (generic placeholder)
-        if matches!(type_table.get(expected), ResolvedType::TypeParam { .. }) {
+        // Check &T → non-ref (original check)
+        if actual_is_ref && !expected_is_ref {
+            // Skip if expected is a type parameter (generic placeholder)
+            if matches!(type_table.get(expected), ResolvedType::TypeParam { .. }) {
+                return;
+            }
+
+            let expected_name = type_table.type_name(expected);
+            let found_name = type_table.type_name(actual);
+            drop(type_table);
+
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected: expected_name,
+                found: found_name,
+                span,
+            });
             return;
         }
 
-        let expected_name = type_table.type_name(expected);
-        let found_name = type_table.type_name(actual);
-        drop(type_table);
+        // Check non-ref → &T when the inner type requires boxing (variant/primitive).
+        // For struct/array/string types, &T ≈ T at the Wasm level, so this coercion is safe.
+        // For variant and primitive types, &T requires Box<T>, so passing T directly is invalid.
+        if !actual_is_ref && expected_is_ref {
+            let inner = match type_table.get(expected) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                _ => return,
+            };
 
-        let _ = self.logger.error(TypeError::TypeMismatch {
-            expected: expected_name,
-            found: found_name,
-            span,
-        });
+            // Skip if expected inner is a type parameter
+            if matches!(type_table.get(inner), ResolvedType::TypeParam { .. }) {
+                return;
+            }
+
+            let needs_box = matches!(
+                type_table.get(inner),
+                ResolvedType::Variant { .. }
+                    | ResolvedType::Primitive(_)
+                    | ResolvedType::Enum { .. }
+            );
+
+            if needs_box {
+                let expected_name = type_table.type_name(expected);
+                let found_name = type_table.type_name(actual);
+                drop(type_table);
+
+                let _ = self.logger.error(TypeError::TypeMismatch {
+                    expected: expected_name,
+                    found: found_name,
+                    span,
+                });
+            }
+        }
     }
 }

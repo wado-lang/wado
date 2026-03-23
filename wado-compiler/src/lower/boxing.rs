@@ -73,7 +73,8 @@ impl BoxLowerer {
             type_params: Vec::new(),
             monomorph_info: Some(MonomorphInfo {
                 generic_name: "Box".to_string(),
-                type_args: vec![inner_type_id],
+                impl_type_args: vec![inner_type_id],
+                method_type_args: vec![],
                 is_blanket: false,
             }),
             fields: vec![TirField {

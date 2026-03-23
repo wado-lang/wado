@@ -1,0 +1,22 @@
+pub variant Elem {
+    TokenRef(String),
+    Literal(String),
+    RuleRef(String),
+    Repeat(RepeatElem),
+    Group(Array<Alt>),
+    Label(LabelElem),
+}
+
+pub struct RepeatElem {
+    pub element: Elem,
+}
+
+pub struct LabelElem {
+    pub name: String,
+    pub element: Elem,
+}
+
+pub struct Alt {
+    pub label: Option<String>,
+    pub elements: Array<Elem>,
+}

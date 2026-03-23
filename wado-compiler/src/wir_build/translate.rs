@@ -4107,9 +4107,9 @@ impl FunctionTranslator<'_, '_> {
     /// Get the CM future payload type from `MonomorphInfo` (for static methods like `Future::new`).
     fn cm_future_payload_from_monomorph(&self, func: &FunctionRef) -> CmFuturePayload {
         if let Some(ref info) = func.monomorph_info
-            && !info.type_args.is_empty()
+            && !info.impl_type_args.is_empty()
         {
-            return self.classify_future_payload(info.type_args[0]);
+            return self.classify_future_payload(info.impl_type_args[0]);
         }
         CmFuturePayload::Trailers
     }

@@ -246,12 +246,12 @@ fn register_struct(
     // reuse the existing Array<Tuple<String,Array<u8>>> when FieldName/FieldValue are newtypes.
     if let Some(ref mono) = tir_struct.monomorph_info {
         let has_newtypes = mono
-            .type_args
+            .impl_type_args
             .iter()
             .any(|t| type_table.resolve_newtype_base(*t) != *t);
         if has_newtypes {
             let resolved_args: Vec<String> = mono
-                .type_args
+                .impl_type_args
                 .iter()
                 .map(|t| type_table.mangle_type_name_resolving_newtypes(*t))
                 .collect();
@@ -300,7 +300,7 @@ fn register_struct(
         .map(|info| WirGenericOrigin {
             base_name: info.generic_name.clone(),
             type_args: info
-                .type_args
+                .impl_type_args
                 .iter()
                 .map(|&ta| type_table.mangle_type_name(ta))
                 .collect(),

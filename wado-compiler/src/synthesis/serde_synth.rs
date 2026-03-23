@@ -460,7 +460,8 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
     } else {
         Some(crate::tir::MonomorphInfo {
             generic_name: method_info.base_struct_name.clone(),
-            type_args,
+            impl_type_args: type_args,
+            method_type_args: vec![],
             is_blanket: false,
         })
     };

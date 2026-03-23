@@ -634,8 +634,17 @@ fn collect_modified_vars_in_expr(
         | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::Match { expr, arms } => {
+            collect_modified_vars_in_expr(expr, modified, type_table);
+            for arm in arms {
+                collect_pattern_bindings(&arm.pattern, modified);
+                if let Some(guard) = &arm.guard {
+                    collect_modified_vars_in_expr(guard, modified, type_table);
+                }
+                collect_modified_vars_in_expr(&arm.body, modified, type_table);
+            }
+        }
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
@@ -931,8 +940,16 @@ fn collect_licm_ref_bindings_in_expr(
         | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::Match { expr, arms } => {
+            collect_licm_ref_bindings_in_expr(expr, type_table, bindings);
+            for arm in arms {
+                collect_licm_ref_bindings_in_expr(&arm.body, type_table, bindings);
+                if let Some(guard) = &arm.guard {
+                    collect_licm_ref_bindings_in_expr(guard, type_table, bindings);
+                }
+            }
+        }
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
@@ -1535,8 +1552,37 @@ fn find_hoist_candidates_in_expr(
         | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::Match { expr, arms } => {
+            find_hoist_candidates_in_expr(
+                expr,
+                modified_vars,
+                ref_bindings,
+                candidates,
+                seen,
+                next_local,
+            );
+            for arm in arms {
+                find_hoist_candidates_in_expr(
+                    &arm.body,
+                    modified_vars,
+                    ref_bindings,
+                    candidates,
+                    seen,
+                    next_local,
+                );
+                if let Some(guard) = &arm.guard {
+                    find_hoist_candidates_in_expr(
+                        guard,
+                        modified_vars,
+                        ref_bindings,
+                        candidates,
+                        seen,
+                        next_local,
+                    );
+                }
+            }
+        }
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
@@ -1786,8 +1832,16 @@ fn replace_hoisted_in_expr(
         | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::Match { expr, arms } => {
+            replace_hoisted_in_expr(expr, candidates, ref_bindings);
+            for arm in arms {
+                replace_hoisted_in_expr(&mut arm.body, candidates, ref_bindings);
+                if let Some(guard) = &mut arm.guard {
+                    replace_hoisted_in_expr(guard, candidates, ref_bindings);
+                }
+            }
+        }
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }

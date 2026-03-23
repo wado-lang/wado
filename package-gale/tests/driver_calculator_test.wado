@@ -1,0 +1,20 @@
+use calc from "./golden/calculator.wado";
+
+test "tokenize expression" {
+    let tokens = calc::tokenize(&"1 + 2");
+    assert tokens.len() >= 3, `expected at least 3 tokens, got {tokens.len()}`;
+}
+
+test "parse simple equation" {
+    let result = calc::parse(&"1 + 2 = 3");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse multiplication" {
+    let result = calc::parse(&"2 * 3 = 6");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}

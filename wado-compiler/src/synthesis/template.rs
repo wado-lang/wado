@@ -995,7 +995,8 @@ fn method_call_info_for_type(
                 local_name,
                 monomorph_info: Some(MonomorphInfo {
                     generic_name,
-                    type_args: vec![inner],
+                    impl_type_args: vec![inner],
+                    method_type_args: vec![],
                     is_blanket: true,
                 }),
                 impl_module: ModuleSource::format(),

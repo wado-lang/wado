@@ -2386,7 +2386,8 @@ fn inspect_alt_call(
             );
             Some(MonomorphInfo {
                 generic_name: base_info.to_mangled_name(),
-                type_args: vec![*inner_id],
+                impl_type_args: vec![*inner_id],
+                method_type_args: vec![],
                 is_blanket: true,
             })
         }
@@ -3205,7 +3206,8 @@ fn inspect_call(
             );
             Some(MonomorphInfo {
                 generic_name: base_info.to_mangled_name(),
-                type_args: vec![*inner_id],
+                impl_type_args: vec![*inner_id],
+                method_type_args: vec![],
                 is_blanket: true,
             })
         }
