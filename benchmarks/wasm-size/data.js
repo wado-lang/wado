@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774192940934,
+  "lastUpdate": 1774256992573,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6497,6 +6497,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/323445645b54ad32e9a2768964cf1ff08576c5bf"
         },
         "date": 1774192940732,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9080,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2210db620ca0c54de5eabc2d91b16fc7cf3d6ee1",
+          "message": "Merge pull request #670 from wado-lang/claude/lexer-parser-generation-hftIZ\n\nAdd lexer and parser code generation for grammar rules",
+          "timestamp": "2026-03-23T18:07:25+09:00",
+          "tree_id": "ae66dc94957ccdbb1f78ba91b1f3025adc09a630",
+          "url": "https://github.com/wado-lang/wado/commit/2210db620ca0c54de5eabc2d91b16fc7cf3d6ee1"
+        },
+        "date": 1774256992365,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
