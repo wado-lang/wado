@@ -333,6 +333,66 @@ test "hex_digit_value" {
     assert 'F'.hex_digit_value() == 15;
 }
 
+test "is_ascii_lowercase" {
+    assert 'a'.is_ascii_lowercase();
+    assert 'z'.is_ascii_lowercase();
+    assert !'A'.is_ascii_lowercase();
+    assert !'0'.is_ascii_lowercase();
+    assert !'é'.is_ascii_lowercase();
+}
+
+test "is_ascii_uppercase" {
+    assert 'A'.is_ascii_uppercase();
+    assert 'Z'.is_ascii_uppercase();
+    assert !'a'.is_ascii_uppercase();
+    assert !'0'.is_ascii_uppercase();
+    assert !'É'.is_ascii_uppercase();
+}
+
+test "char to_ascii_lowercase" {
+    assert 'A'.to_ascii_lowercase() == 'a';
+    assert 'Z'.to_ascii_lowercase() == 'z';
+    assert 'a'.to_ascii_lowercase() == 'a';
+    assert '0'.to_ascii_lowercase() == '0';
+    assert 'é'.to_ascii_lowercase() == 'é';
+}
+
+test "char to_ascii_uppercase" {
+    assert 'a'.to_ascii_uppercase() == 'A';
+    assert 'z'.to_ascii_uppercase() == 'Z';
+    assert 'A'.to_ascii_uppercase() == 'A';
+    assert '0'.to_ascii_uppercase() == '0';
+    assert 'é'.to_ascii_uppercase() == 'é';
+}
+
+test "String from_iter" {
+    let s = String::from_iter("hello".chars());
+    assert s == "hello";
+    let empty = String::from_iter("".chars());
+    assert empty == "";
+    // Multi-byte chars
+    let utf8 = String::from_iter("café".chars());
+    assert utf8 == "café";
+}
+
+test "String to_ascii_lowercase" {
+    assert "Hello, World!".to_ascii_lowercase() == "hello, world!";
+    assert "ABC".to_ascii_lowercase() == "abc";
+    assert "abc".to_ascii_lowercase() == "abc";
+    assert "123".to_ascii_lowercase() == "123";
+    assert "".to_ascii_lowercase() == "";
+    assert "Héllo".to_ascii_lowercase() == "héllo";
+}
+
+test "String to_ascii_uppercase" {
+    assert "Hello, World!".to_ascii_uppercase() == "HELLO, WORLD!";
+    assert "abc".to_ascii_uppercase() == "ABC";
+    assert "ABC".to_ascii_uppercase() == "ABC";
+    assert "123".to_ascii_uppercase() == "123";
+    assert "".to_ascii_uppercase() == "";
+    assert "héllo".to_ascii_uppercase() == "HéLLO";
+}
+
 test "trim_ascii both sides" {
     assert "  hello  ".trim_ascii() == "hello";
     assert "\t\nhello\r\n".trim_ascii() == "hello";

@@ -1,0 +1,17 @@
+// Generic map iterator defined in a separate module
+
+pub struct GenericMapIter<I: Iterator, U> {
+    pub inner: I,
+    pub f: fn(I::Item) -> U,
+}
+
+impl<I: Iterator, U> Iterator for GenericMapIter<I, U> {
+    type Item = U;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(item) = self.inner.next() {
+            return Option::Some((self.f)(item));
+        }
+        return null;
+    }
+}

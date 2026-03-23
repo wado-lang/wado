@@ -2621,6 +2621,7 @@ impl ClosureLowerer {
                         functor: Box::new(specialized_arg),
                         functor_id: functor.id,
                         target_fn_type: original_type_id,
+                        closure_module: self.module_source.clone(),
                     },
                     original_type_id,
                     span,
@@ -2719,11 +2720,13 @@ impl ClosureLowerer {
                 functor,
                 functor_id,
                 target_fn_type,
+                closure_module,
             } => TirExpr::new(
                 TirExprKind::ClosureToCanonical {
                     functor: Box::new(self.specialize_expr(functor, param_to_functor, type_table)),
                     functor_id: *functor_id,
                     target_fn_type: *target_fn_type,
+                    closure_module: closure_module.clone(),
                 },
                 expr.type_id,
                 expr.span,
@@ -3724,6 +3727,7 @@ impl ClosureLowerer {
                         functor: Box::new(struct_literal),
                         functor_id: *closure_id,
                         target_fn_type,
+                        closure_module: self.module_source.clone(),
                     };
                     // Keep original function type for type compatibility
                 }

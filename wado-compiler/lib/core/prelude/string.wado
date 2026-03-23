@@ -297,6 +297,28 @@ impl Iterator for StrCharIter {
 // StrCharIter uses Iterator::collect() and Iterator::count() default methods
 // IntoIterator is provided by the blanket impl for Iterator
 
+pub struct StrCharMapIter<U> {
+    inner: StrCharIter,
+    f: fn(char) -> U,
+}
+
+impl<U> Iterator for StrCharMapIter<U> {
+    type Item = U;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(c) = self.inner.next() {
+            return Option::Some((self.f)(c));
+        }
+        return null;
+    }
+}
+
+impl StrCharIter {
+    pub fn map<U>(&self, f: fn(char) -> U) -> StrCharMapIter<U> {
+        return StrCharMapIter { inner: *self, f };
+    }
+}
+
 impl String {
     /// Returns an iterator over the UTF-8 bytes of the string.
     pub fn bytes(&self) -> StrUtf8ByteIter {
@@ -489,6 +511,26 @@ impl String {
         return self.trim_start().trim_end();
     }
 
+    /// Returns a new string with all ASCII uppercase letters converted to lowercase.
+    /// Non-ASCII bytes are left unchanged.
+    pub fn to_ascii_lowercase(&self) -> String {
+        let mut s = String::with_capacity(self.used);
+        for let c of self.chars() {
+            s.append_char(c.to_ascii_lowercase());
+        }
+        return s;
+    }
+
+    /// Returns a new string with all ASCII lowercase letters converted to uppercase.
+    /// Non-ASCII bytes are left unchanged.
+    pub fn to_ascii_uppercase(&self) -> String {
+        let mut s = String::with_capacity(self.used);
+        for let c of self.chars() {
+            s.append_char(c.to_ascii_uppercase());
+        }
+        return s;
+    }
+
     /// Internal: extract a substring by byte range [start, end).
     fn internal_substr_bytes(&self, start: i32, end: i32) -> String {
         let len = end - start;
@@ -504,6 +546,17 @@ impl String {
 impl Default for String {
     pub fn default() -> String {
         return "";
+    }
+}
+
+impl String {
+    /// Build a String from any iterable of chars.
+    pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String {
+        let mut s = String::with_capacity(8);
+        for let c of iter {
+            s.append_char(c);
+        }
+        return s;
     }
 }
 

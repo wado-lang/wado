@@ -386,16 +386,9 @@ fn lit_try_fn_name(const_name: &String) -> String {
     result.append("try_lit_");
     let chars: Array<char> = const_name.chars().collect();
     for let mut i = 7; i < chars.len(); i += 1 {
-        result.append_char(to_lower_char(chars[i]));
+        result.append_char(chars[i].to_ascii_lowercase());
     }
     return result;
-}
-
-fn to_lower_char(c: char) -> char {
-    if c >= 'A' && c <= 'Z' {
-        return char::from_i32(c as i32 - 'A' as i32 + 'a' as i32).unwrap();
-    }
-    return c;
 }
 
 fn gen_tokenize_fn(

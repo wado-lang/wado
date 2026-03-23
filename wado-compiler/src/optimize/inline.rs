@@ -1726,10 +1726,12 @@ fn remap_expr_inner(
             functor,
             functor_id,
             target_fn_type,
+            closure_module,
         } => TirExprKind::ClosureToCanonical {
             functor: re_box(functor),
             functor_id: *functor_id,
             target_fn_type: *target_fn_type,
+            closure_module: closure_module.clone(),
         },
         TirExprKind::VariantConstruct {
             variant_type,

@@ -1111,6 +1111,20 @@ Returns a new string with trailing Unicode whitespace removed.
 
 Returns a new string with leading and trailing Unicode whitespace removed.
 
+##### `pub fn to_ascii_lowercase(&self) -> String`
+
+Returns a new string with all ASCII uppercase letters converted to lowercase.
+Non-ASCII bytes are left unchanged.
+
+##### `pub fn to_ascii_uppercase(&self) -> String`
+
+Returns a new string with all ASCII lowercase letters converted to uppercase.
+Non-ASCII bytes are left unchanged.
+
+##### `pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String`
+
+Build a String from any iterable of chars.
+
 ##### `pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>`
 
 Build a String from any iterable of bytes, validating that they form valid UTF-8.
@@ -1172,6 +1186,8 @@ Iterator over Unicode scalar values (chars) of a String.
 Decodes UTF-8 and yields each character.
 
 _Fields are private._
+
+##### `pub fn map<U>(&self, f: Fn(char) -> U) -> StrCharMapIter<U>`
 
 ##### `impl Iterator for StrCharIter`
 
@@ -1398,6 +1414,24 @@ Matches POSIX isspace() for the ASCII range.
 
 Returns true if the character is a Unicode whitespace character.
 Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
+
+##### `pub fn is_ascii_lowercase(&self) -> bool`
+
+Returns true if the character is an ASCII lowercase letter: a-z.
+
+##### `pub fn is_ascii_uppercase(&self) -> bool`
+
+Returns true if the character is an ASCII uppercase letter: A-Z.
+
+##### `pub fn to_ascii_lowercase(&self) -> char`
+
+Converts an ASCII uppercase letter to lowercase. Non-ASCII and
+non-uppercase characters are returned unchanged.
+
+##### `pub fn to_ascii_uppercase(&self) -> char`
+
+Converts an ASCII lowercase letter to uppercase. Non-ASCII and
+non-lowercase characters are returned unchanged.
 
 ##### `pub fn is_hexdigit(&self) -> bool`
 

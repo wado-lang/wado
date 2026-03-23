@@ -584,6 +584,9 @@ impl String {
     pub fn trim_start(&self) -> String;
     pub fn trim_end(&self) -> String;
     pub fn trim(&self) -> String;
+    pub fn to_ascii_lowercase(&self) -> String;
+    pub fn to_ascii_uppercase(&self) -> String;
+    pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String;
     pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>;
     pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String;
     pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String;
@@ -623,6 +626,10 @@ impl Iterator for StrUtf8ByteIter {
 ```wado
 pub struct StrCharIter {
     ..
+}
+
+impl StrCharIter {
+    pub fn map<U>(&self, f: Fn(char) -> U) -> StrCharMapIter<U>;
 }
 
 impl Iterator for StrCharIter {
@@ -804,6 +811,10 @@ impl char {
     pub fn to_string(&self) -> String;
     pub fn is_ascii_whitespace(&self) -> bool;
     pub fn is_whitespace(&self) -> bool;
+    pub fn is_ascii_lowercase(&self) -> bool;
+    pub fn is_ascii_uppercase(&self) -> bool;
+    pub fn to_ascii_lowercase(&self) -> char;
+    pub fn to_ascii_uppercase(&self) -> char;
     pub fn is_hexdigit(&self) -> bool;
     pub fn hex_digit_value(&self) -> i32;
 }

@@ -489,6 +489,12 @@ pub struct TypeTable {
     /// Associated type resolutions: `(concrete_type_id, assoc_name)` → `resolved_type_id`.
     /// Populated when impl blocks with associated type bindings are processed.
     assoc_type_resolutions: IndexMap<(TypeId, String), TypeId>,
+    /// Generic associated type definitions: `(base_struct_name, assoc_name)` → `TypeId`.
+    /// The `TypeId` is typically a `TypeParam` that can be substituted using the
+    /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
+    /// (e.g., `impl Iterator for ArrayIter<T> { type Item = T; }`).
+    /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
+    generic_assoc_type_defs: IndexMap<(String, String), TypeId>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -537,6 +543,7 @@ impl TypeTable {
             from_trait_module_source: None,
             tuple_module_source: None,
             assoc_type_resolutions: IndexMap::default(),
+            generic_assoc_type_defs: IndexMap::default(),
             redirects: IndexMap::default(),
             newtype_to_base_name: IndexMap::default(),
         };
@@ -1038,6 +1045,42 @@ impl TypeTable {
         self.assoc_type_resolutions
             .get(&(concrete_id, assoc_name.to_string()))
             .copied()
+    }
+
+    /// Register a generic associated type definition.
+    /// E.g., for `impl Iterator for ArrayIter<T> { type Item = T; }`,
+    /// register `("ArrayIter", "Item") → TypeParam(0, "T")`.
+    pub fn register_generic_assoc_type_def(
+        &mut self,
+        base_struct_name: String,
+        assoc_name: String,
+        type_param_id: TypeId,
+    ) {
+        self.generic_assoc_type_defs
+            .insert((base_struct_name, assoc_name), type_param_id);
+    }
+
+    /// Resolve an associated type for a `GenericInstance` type using generic definitions.
+    /// For `ArrayIter<i32>::Item`: looks up `("ArrayIter", "Item")` → `TypeParam(0)`,
+    /// then substitutes using the instance's `type_args` to get `i32`.
+    pub fn resolve_generic_assoc_type(
+        &self,
+        concrete_id: TypeId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        let (base_name, type_args) = match self.get(concrete_id).clone() {
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => (name, type_args),
+            _ => return None,
+        };
+        let def_type_id = self
+            .generic_assoc_type_defs
+            .get(&(base_name, assoc_name.to_string()))?;
+        match self.get(*def_type_id) {
+            ResolvedType::TypeParam { index, .. } => type_args.get(*index as usize).copied(),
+            _ => Some(*def_type_id),
+        }
     }
 
     /// Create a generic instance (e.g., `Box<i32>`)
@@ -1861,6 +1904,8 @@ pub enum TirExprKind {
         functor_id: u32,
         /// Target function type (for canonical closure type lookup)
         target_fn_type: TypeId,
+        /// Module where the closure was defined (needed for cross-module DCE)
+        closure_module: ModuleSource,
     },
 
     /// Custom variant construction: `Shape::Circle(5.0)` or `MyVariant::Unit`

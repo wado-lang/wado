@@ -942,12 +942,17 @@ fn analyze_expr(
         TirExprKind::ClosureToCanonical {
             functor,
             functor_id,
+            closure_module,
             ..
         } => {
             analyze_expr(functor, current_module, type_table, analysis);
-            // Mark the __call method as reachable (it's referenced via ref.func)
+            // Mark the __call method as reachable (it's referenced via ref.func).
+            // Use closure_module (where the closure was defined) instead of
+            // current_module, because after cross-module inlining the
+            // ClosureToCanonical may appear in a different module than
+            // where __Closure_N::__call is defined.
             let method_name = MethodName::new(
-                current_module.clone(),
+                closure_module.clone(),
                 format!("__Closure_{functor_id}"),
                 None,
                 "__call".to_string(),

@@ -259,6 +259,34 @@ impl char {
         };
     }
 
+    /// Returns true if the character is an ASCII lowercase letter: a-z.
+    pub fn is_ascii_lowercase(&self) -> bool {
+        return *self >= 'a' && *self <= 'z';
+    }
+
+    /// Returns true if the character is an ASCII uppercase letter: A-Z.
+    pub fn is_ascii_uppercase(&self) -> bool {
+        return *self >= 'A' && *self <= 'Z';
+    }
+
+    /// Converts an ASCII uppercase letter to lowercase. Non-ASCII and
+    /// non-uppercase characters are returned unchanged.
+    pub fn to_ascii_lowercase(&self) -> char {
+        if *self >= 'A' && *self <= 'Z' {
+            return char::from_u32_unchecked(*self as u32 - 'A' as u32 + 'a' as u32);
+        }
+        return *self;
+    }
+
+    /// Converts an ASCII lowercase letter to uppercase. Non-ASCII and
+    /// non-lowercase characters are returned unchanged.
+    pub fn to_ascii_uppercase(&self) -> char {
+        if *self >= 'a' && *self <= 'z' {
+            return char::from_u32_unchecked(*self as u32 - 'a' as u32 + 'A' as u32);
+        }
+        return *self;
+    }
+
     /// Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
     pub fn is_hexdigit(&self) -> bool {
         let c = *self;
