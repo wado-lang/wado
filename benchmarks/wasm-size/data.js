@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774256992573,
+  "lastUpdate": 1774263412311,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6551,6 +6551,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 21928,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fb55d97146457fed42341c1e9afaec0dfa84e906",
+          "message": "Merge pull request #671 from wado-lang/claude/optimize-json-canada-U0N4H\n\nImplement per-case variant SROA and improve copy propagation",
+          "timestamp": "2026-03-23T19:54:24+09:00",
+          "tree_id": "71624ce80a71e4036d85e9457dab22c9e4c9c635",
+          "url": "https://github.com/wado-lang/wado/commit/fb55d97146457fed42341c1e9afaec0dfa84e906"
+        },
+        "date": 1774263412206,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
             "unit": "bytes"
           }
         ]
