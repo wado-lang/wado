@@ -20,12 +20,14 @@ for x in vec { /* x: i32 */ }
 ```
 
 Slices:
+
 ```rust
 for x in &[1, 2, 3] { /* x: &i32 */ }  // &[i32; 3] coerces to &[i32]
 for x in [1, 2, 3] { /* x: i32 */ }     // since Rust 2021, array IntoIterator yields T
 ```
 
 `Option` and `Result` also implement `IntoIterator` (0-or-1 element iterator):
+
 ```rust
 for x in &opt { /* x: &T, runs 0 or 1 times */ }
 for x in opt { /* x: T, consumes opt */ }
@@ -77,6 +79,7 @@ if let Some(s) = opt.as_mut() { s.push('!'); } // mutate in-place
 Forgetting `as_ref()` before `.map()` consumes the Option (ownership pitfall).
 
 `Option<&T>` has `.copied()` and `.cloned()`:
+
 ```rust
 let opt: Option<&i32> = Some(&42);
 let owned: Option<i32> = opt.copied();  // Option<&T> → Option<T> for Copy types
@@ -155,11 +158,13 @@ if let Some(ref mut x) = opt {
 ### Wado implications
 
 Wado already has:
+
 - `let mut x = ...` for mutable bindings
 - `&T` and `&mut T` for references
 - `let mut { x, y } = p` for mutable destructuring
 
 Key decisions:
+
 - **`ref` in patterns**: Unnecessary in Wado. With value semantics, matching on an owned value copies it. `ref` exists in Rust to avoid moves; Wado has no moves.
 - **`mut` in individual destructured fields**: Rust allows `let Some(mut x) = ...`. Wado currently uses `let mut { x, y } = ...` (all-or-nothing). Per-field `mut` is less critical without ownership.
 - **`let mut x = &val` vs `let x = &mut val`**: This distinction is valid in Wado and should be maintained. But the need for `let mut x = &val` (rebinding a reference) is rare.
@@ -295,6 +300,7 @@ let r = &String::from("hello");  // temporary extended to live as long as r
 ### Wado implications
 
 **None of this applies to Wado.** GC-based memory means:
+
 - No lifetime annotations needed (Wado uses `stores[...]` for escape analysis instead)
 - No temporary lifetime concerns — GC keeps values alive
 - `&T` in struct fields just works
@@ -333,6 +339,7 @@ let r2: &mut i32 = r;  // REBORROW (not move) in modern Rust
 ```
 
 Reborrowing does NOT happen through generics:
+
 ```rust
 fn generic<T>(x: T) -> T { x }
 let r = &mut val;
@@ -416,6 +423,7 @@ let r2 = r;    // MOVE
 ### Wado implications
 
 **Both `&T` and `&mut T` should be Copy-like in Wado.** Since Wado has no borrow checker and allows multiple mutable references, there's no uniqueness invariant to protect. This simplifies:
+
 - Closures capturing `&mut T` don't need special handling
 - No need for reborrowing
 - `let r2 = r` where `r: &mut T` doesn't invalidate `r`
@@ -452,6 +460,7 @@ let closure = move || x;  // x is still valid outside
 ```
 
 Subtle: `move` closure capturing `&T` copies the reference (since `&T` is `Copy`):
+
 ```rust
 let r = &x;
 let closure = move || *r;  // r (the reference) is copied into closure
@@ -471,6 +480,7 @@ println!("{}", val);  // OK after last use of c (NLL)
 ### Wado implications
 
 Wado's closure design is simpler due to GC:
+
 - **No `Fn`/`FnMut`/`FnOnce` distinction**: Wado uses `fn(...)` type and `&mut ||` syntax for mutable captures. No ownership-based hierarchy needed.
 - **No `move` keyword**: With value semantics, closures capture by copy (primitives) or by reference (heap types). `&mut ||` explicitly opts into mutable capture.
 - **No uniqueness conflicts**: Multiple closures can capture `&mut` to the same variable without compiler errors. This is a deliberate design choice (no borrow checker).
@@ -479,26 +489,26 @@ Wado's closure design is simpler due to GC:
 
 ### Adopt (Rust-compatible)
 
-| Feature | Notes |
-|---------|-------|
-| `&mut T → &T` coercion | Already implemented |
-| Auto-deref for method calls | Already implemented |
-| Match ergonomics (peel `&` in patterns) | Already implemented |
-| `if let Some(x) = &opt` gives `x: &i32` | Already implemented |
-| `Option<&T>` nullable optimization | Already implemented |
-| `let mut x = &val` (rebindable reference) | Standard meaning |
+| Feature                                   | Notes               |
+| ----------------------------------------- | ------------------- |
+| `&mut T → &T` coercion                    | Already implemented |
+| Auto-deref for method calls               | Already implemented |
+| Match ergonomics (peel `&` in patterns)   | Already implemented |
+| `if let Some(x) = &opt` gives `x: &i32`   | Already implemented |
+| `Option<&T>` nullable optimization        | Already implemented |
+| `let mut x = &val` (rebindable reference) | Standard meaning    |
 
 ### Skip (Rust-specific, unnecessary with GC)
 
-| Feature | Reason |
-|---------|--------|
-| Lifetime annotations (`'a`) | GC manages memory; `stores[...]` handles escape analysis |
-| Reborrowing | `&mut T` is Copy-like in Wado; no uniqueness invariant |
-| `ref` / `ref mut` in patterns | No move semantics; pattern matching always copies values |
-| `Fn`/`FnMut`/`FnOnce` hierarchy | Wado uses `fn(...)` + `&mut \|\|` |
-| `into_iter()` (consuming) | No ownership transfer; one iteration mode suffices |
-| Temporary lifetime extension | GC keeps values alive |
-| `&mut T` is non-Copy | No borrow checker; both `&T` and `&mut T` are freely copyable |
+| Feature                         | Reason                                                        |
+| ------------------------------- | ------------------------------------------------------------- |
+| Lifetime annotations (`'a`)     | GC manages memory; `stores[...]` handles escape analysis      |
+| Reborrowing                     | `&mut T` is Copy-like in Wado; no uniqueness invariant        |
+| `ref` / `ref mut` in patterns   | No move semantics; pattern matching always copies values      |
+| `Fn`/`FnMut`/`FnOnce` hierarchy | Wado uses `fn(...)` + `&mut \|\|`                             |
+| `into_iter()` (consuming)       | No ownership transfer; one iteration mode suffices            |
+| Temporary lifetime extension    | GC keeps values alive                                         |
+| `&mut T` is non-Copy            | No borrow checker; both `&T` and `&mut T` are freely copyable |
 
 ### Open Design Questions
 
