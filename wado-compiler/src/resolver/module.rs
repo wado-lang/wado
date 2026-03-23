@@ -356,8 +356,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
 
                     // Also collect type params from generic type: impl Array<T> {...}
-                    // The type args in Array<T> are type parameters
-                    if let ast::Type::Generic(generic) = &impl_block.ty {
+                    // The type args in Array<T> are type parameters.
+                    // For ref types (impl Trait for &Container<T>), unwrap the reference first.
+                    let impl_inner_ty = match &impl_block.ty {
+                        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+                            inner.as_ref()
+                        }
+                        other => other,
+                    };
+                    if let ast::Type::Generic(generic) = impl_inner_ty {
                         let offset = actual_idx as usize;
                         for (i, arg) in generic.args.iter().enumerate() {
                             if let ast::Type::Named(named) = arg {

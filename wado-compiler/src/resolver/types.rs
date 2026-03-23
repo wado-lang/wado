@@ -447,6 +447,9 @@ pub(super) struct MethodInfo {
     pub(super) inherited_from_base: Option<TypeId>,
     /// CM canonical name from `#[cm("...")]` on resource methods.
     pub(super) cm_name: Option<String>,
+    /// True when the method was found on a reference type impl (e.g., `impl Trait for &T`).
+    /// The receiver needs an additional auto-ref for `&self` methods (Self is &T, so &self is &&T).
+    pub(super) is_ref_impl: bool,
 }
 
 /// Labeled block expression target for tracking break types
@@ -736,6 +739,11 @@ pub(super) struct TraitMethodMatch {
     /// The struct name that actually has the trait impl (may differ from the
     /// receiver's struct name when the impl was found through the newtype chain).
     pub(super) impl_struct_name: String,
+    /// True for blanket ref impls like `impl<T: Inspect> Inspect for &T` where
+    /// the inner type is a type parameter. False for specific ref impls like
+    /// `impl IntoIterator for &Array<T>` where the inner type is a concrete generic.
+    #[allow(dead_code)] // Used when ref-type impl priority is enabled
+    pub(super) is_blanket_ref_impl: bool,
 }
 
 /// Cached per-module type maps for cross-module type resolution.

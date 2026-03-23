@@ -280,6 +280,56 @@ impl IntoIterator for Array<T> {
         };
     }
 }
+pub struct ArrayRefIter<T> {
+    repr: builtin::array<T>,
+    used: i32,
+    index: i32,
+}
+
+// NOTE: ArrayRefIter uses an inherent `next` method instead of `impl Iterator`
+// because the monomorphizer creates spurious `Array<Box<T>>` struct definitions
+// from Iterator's default `collect()` method when `type Item = &T`.
+// TODO: Once that bug is fixed, this should become `impl Iterator for ArrayRefIter<T>`.
+impl ArrayRefIter<T> {
+    pub fn next(&mut self) -> Option<&T> {
+        if self.index >= self.used {
+            return null;
+        }
+        let val = builtin::array_get::<T>(self.repr, self.index);
+        let ref_val = &val;
+        self.index += 1;
+        return Option::Some(ref_val);
+    }
+}
+
+impl IntoIterator for &Array<T> {
+    type Item = &T;
+    type Iter = ArrayRefIter<T>;
+
+    fn into_iter(&self) -> Self::Iter {
+        let arr = *self;
+        return ArrayRefIter {
+            repr: arr.repr,
+            used: arr.used,
+            index: 0,
+        };
+    }
+}
+
+impl IntoIterator for &mut Array<T> {
+    type Item = &T;
+    type Iter = ArrayRefIter<T>;
+
+    fn into_iter(&self) -> Self::Iter {
+        let arr = *self;
+        return ArrayRefIter {
+            repr: arr.repr,
+            used: arr.used,
+            index: 0,
+        };
+    }
+}
+
 impl Array<T> {
     pub fn iter(&self) -> ArrayIter<T> {
         return self.into_iter();

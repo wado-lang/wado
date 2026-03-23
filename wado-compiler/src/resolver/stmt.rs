@@ -3,7 +3,7 @@
 use crate::ast::{
     self, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt, ForOfStmt,
     IdentExpr, IfStmt, LetStmt, Literal, LoopStmt, MethodCallExpr, Pattern, ReturnStmt, Stmt,
-    TaskReturnStmt,
+    TaskReturnStmt, UnaryExpr, UnaryOp,
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
@@ -15,6 +15,15 @@ use crate::token::Span;
 use super::Resolver;
 use super::types::{FunctionContext, TypeError};
 use super::util;
+
+/// Tracks the reference binding mode for match ergonomics.
+/// When matching a reference-typed scrutinee, bindings inherit the reference kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RefBinding {
+    None,
+    Ref,
+    MutRef,
+}
 
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_block(
@@ -453,7 +462,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Resolve a let pattern (for tuple destructuring)
+    /// Resolve a let pattern (for tuple/struct destructuring).
+    /// Applies match ergonomics: if `type_id` is `&T` or `&mut T` and the pattern is
+    /// a compound pattern (tuple/struct), peels the reference and wraps bindings.
     pub(super) fn resolve_let_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -462,14 +473,64 @@ impl<H: CompilerHost> Resolver<'_, H> {
         span: Span,
         ctx: &mut FunctionContext,
     ) -> TirPattern {
+        // Match ergonomics for let patterns: peel references from the type
+        // when the pattern is a compound (tuple/struct) pattern.
+        let (peeled_type, ref_binding) = match pattern {
+            ast::Pattern::Tuple(_) | ast::Pattern::Struct { .. } => {
+                let mut current = type_id;
+                let mut rb = RefBinding::None;
+                while let resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) =
+                    self.type_table.borrow().get(current).clone()
+                {
+                    match resolved {
+                        ResolvedType::Ref(inner) => {
+                            current = inner;
+                            rb = RefBinding::Ref;
+                        }
+                        ResolvedType::MutRef(inner) => {
+                            current = inner;
+                            if rb == RefBinding::None {
+                                rb = RefBinding::MutRef;
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                (current, rb)
+            }
+            _ => (type_id, RefBinding::None),
+        };
+        self.resolve_let_pattern_inner(pattern, peeled_type, is_mut, span, ctx, ref_binding)
+    }
+
+    fn resolve_let_pattern_inner(
+        &mut self,
+        pattern: &ast::Pattern,
+        type_id: TypeId,
+        is_mut: bool,
+        span: Span,
+        ctx: &mut FunctionContext,
+        ref_binding: RefBinding,
+    ) -> TirPattern {
         match pattern {
             ast::Pattern::Ident(name) | ast::Pattern::MutIdent(name) => {
                 let pat_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent(_));
-                let local_index = ctx.add_local(name.clone(), type_id, pat_mut);
+                let binding_type = match ref_binding {
+                    RefBinding::Ref => self
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(type_id)),
+                    RefBinding::MutRef => self
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::MutRef(type_id)),
+                    RefBinding::None => type_id,
+                };
+                let local_index = ctx.add_local(name.clone(), binding_type, pat_mut);
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index,
-                    type_id,
+                    type_id: binding_type,
                 }
             }
             ast::Pattern::Tuple(patterns) => {
@@ -507,7 +568,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
                     )
                     .map(|(p, &elem_type)| {
-                        self.resolve_let_pattern(p, elem_type, is_mut, span, ctx)
+                        self.resolve_let_pattern_inner(p, elem_type, is_mut, span, ctx, ref_binding)
                     })
                     .collect();
 
@@ -557,12 +618,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 for field in fields {
                     let (field_index, field_type) =
                         self.lookup_field_type(type_id, &field.field_name, field.span);
-                    let sub_pattern = self.resolve_let_pattern(
+                    let sub_pattern = self.resolve_let_pattern_inner(
                         &field.pattern,
                         field_type,
                         is_mut,
                         field.span,
                         ctx,
+                        ref_binding,
                     );
                     tir_fields.push(TirStructPatternField {
                         field_name: field.field_name.clone(),
@@ -809,12 +871,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
         span: Span,
     ) -> TirPattern {
         let mut peeled_type = scrutinee_type;
-        let mut ref_binding = false;
-        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+        let mut ref_binding = RefBinding::None;
+        while let resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) =
             self.type_table.borrow().get(peeled_type).clone()
         {
-            peeled_type = inner;
-            ref_binding = true;
+            match resolved {
+                ResolvedType::Ref(inner) => {
+                    peeled_type = inner;
+                    // &T always downgrades to Ref (most restrictive wins)
+                    ref_binding = RefBinding::Ref;
+                }
+                ResolvedType::MutRef(inner) => {
+                    peeled_type = inner;
+                    // &mut T only sets MutRef if not already downgraded to Ref
+                    if ref_binding == RefBinding::None {
+                        ref_binding = RefBinding::MutRef;
+                    }
+                }
+                _ => unreachable!(),
+            }
         }
         self.resolve_if_pattern_inner(pattern, peeled_type, ctx, span, ref_binding)
     }
@@ -825,7 +900,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
         span: Span,
-        ref_binding: bool,
+        ref_binding: RefBinding,
     ) -> TirPattern {
         match pattern {
             Pattern::Wildcard => TirPattern::Wildcard,
@@ -851,12 +926,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     );
                 }
                 let is_mut = matches!(pattern, Pattern::MutIdent(_));
-                let binding_type = if ref_binding {
-                    self.type_table
+                let binding_type = match ref_binding {
+                    RefBinding::Ref => self
+                        .type_table
                         .borrow_mut()
-                        .intern(ResolvedType::Ref(scrutinee_type))
-                } else {
-                    scrutinee_type
+                        .intern(ResolvedType::Ref(scrutinee_type)),
+                    RefBinding::MutRef => self
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::MutRef(scrutinee_type)),
+                    RefBinding::None => scrutinee_type,
                 };
                 let index = ctx.add_local(name.clone(), binding_type, is_mut);
                 TirPattern::Binding {
@@ -954,12 +1033,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // is treated as a variable binding (e.g. `if let VAL = opt`).
                 if bindings.is_empty() && !self.is_known_case_of_type(scrutinee_type, variant_name)
                 {
-                    let binding_type = if ref_binding {
-                        self.type_table
+                    let binding_type = match ref_binding {
+                        RefBinding::Ref => self
+                            .type_table
                             .borrow_mut()
-                            .intern(ResolvedType::Ref(scrutinee_type))
-                    } else {
-                        scrutinee_type
+                            .intern(ResolvedType::Ref(scrutinee_type)),
+                        RefBinding::MutRef => self
+                            .type_table
+                            .borrow_mut()
+                            .intern(ResolvedType::MutRef(scrutinee_type)),
+                        RefBinding::None => scrutinee_type,
                     };
                     let index = ctx.add_local(variant_name.clone(), binding_type, false);
                     return TirPattern::Binding {
@@ -1587,6 +1670,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let iter_var = format!("__iter_{unique_id}");
         let label = format!("__for_of_{unique_id}");
 
+        // Reference iteration is handled by IntoIterator impls on &T (e.g., impl IntoIterator for &Array<T>).
+        // No special ref_mode detection is needed — the iterator's Item type determines the binding type.
+        let ref_mode = RefBinding::None;
+
         // Build the iterable: either raw or with .enumerate()
         let into_iter_receiver = if is_enumerate {
             // iterable.enumerate().into_iter() — construct enumerate() call AST
@@ -1633,11 +1720,56 @@ impl<H: CompilerHost> Resolver<'_, H> {
             span,
         }));
 
-        // Pattern: Some(binding)
-        let some_pattern = Pattern::Variant {
-            variant_name: "Some".to_string(),
-            bindings: vec![for_of.binding.clone()],
-            span,
+        // For reference iterables, use a temp variable and wrap with &/&mut:
+        //   if let Some(__elem_N) = iter.next() { let binding = &__elem_N; body }
+        // For value iterables:
+        //   if let Some(binding) = iter.next() { body }
+        let (some_pattern, then_block) = if ref_mode == RefBinding::None {
+            let pattern = Pattern::Variant {
+                variant_name: "Some".to_string(),
+                bindings: vec![for_of.binding.clone()],
+                span,
+            };
+            (pattern, for_of.body.clone())
+        } else {
+            let elem_var = format!("__elem_{unique_id}");
+            // For &mut mode, the temp variable must be mutable
+            let elem_pattern = if ref_mode == RefBinding::MutRef {
+                Pattern::MutIdent(elem_var.clone())
+            } else {
+                Pattern::Ident(elem_var.clone())
+            };
+            let pattern = Pattern::Variant {
+                variant_name: "Some".to_string(),
+                bindings: vec![elem_pattern],
+                span,
+            };
+            let ref_op = match ref_mode {
+                RefBinding::MutRef => UnaryOp::MutRef,
+                _ => UnaryOp::Ref,
+            };
+            let ref_let = Stmt::Let(LetStmt {
+                pattern: for_of.binding.clone(),
+                is_mut: for_of.is_mut,
+                is_reactive: false,
+                ty: None,
+                value: Some(Expr::Unary(Box::new(UnaryExpr {
+                    op: ref_op,
+                    expr: Expr::Ident(IdentExpr {
+                        name: elem_var,
+                        span,
+                    }),
+                    span,
+                }))),
+                span,
+            });
+            let mut body_stmts = vec![ref_let];
+            body_stmts.extend(for_of.body.stmts.clone());
+            let body = Block {
+                stmts: body_stmts,
+                span: for_of.body.span,
+            };
+            (pattern, body)
         };
 
         // if let Some(v) = __iter_N.next() { body } else { break; }
@@ -1650,7 +1782,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }],
                 span,
             },
-            then_block: for_of.body.clone(),
+            then_block,
             else_block: Some(Block {
                 stmts: vec![Stmt::Break(BreakStmt {
                     label: None,

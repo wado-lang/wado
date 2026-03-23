@@ -1,0 +1,49 @@
+use { println, Stdout } from "core:cli";
+
+fn test_mut_ref_if_let() with Stdout {
+    // &mut Option<T>: x should bind as &mut T
+    let mut opt = Option::<i32>::Some(42);
+    let rmo = &mut opt;
+    if let Some(x) = rmo {
+        // x is &mut i32 (wraps a copy of the payload)
+        assert *x == 42;
+        *x = 100;
+        assert *x == 100;
+    }
+    println("ok");
+}
+
+fn test_mut_ref_match() with Stdout {
+    // Match on &mut Option<T>
+    let mut opt = Option::<i32>::Some(10);
+    let rmo = &mut opt;
+    let val = match rmo {
+        Some(x) => {
+            assert *x == 10;
+            *x = 20;
+            *x
+        },
+        None => 0,
+    };
+    assert val == 20;
+    println("ok");
+}
+
+fn test_ref_if_let_unchanged() with Stdout {
+    // &Option<T>: x should bind as &i32 (read-only, existing behavior)
+    let opt = Option::<i32>::Some(42);
+    let ro = &opt;
+    if let Some(x) = ro {
+        assert *x == 42;
+    }
+    println("ok");
+}
+
+export fn run() with Stdout {
+    test_mut_ref_if_let();
+    test_mut_ref_match();
+    test_ref_if_let_unchanged();
+}
+
+__DATA__
+{"stdout": "ok\nok\nok\n"}

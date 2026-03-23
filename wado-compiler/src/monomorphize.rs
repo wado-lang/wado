@@ -1761,6 +1761,19 @@ impl Monomorphizer {
                                         ),
                                         Some(tn.clone()),
                                     ));
+                                    // For ref-type impls, also try "&^Trait::method"
+                                    if let Some(ref info) = method_func.method_info
+                                        && info.base_struct_name != base_struct
+                                    {
+                                        dg_names.push((
+                                            MethodName::format_local(
+                                                &info.base_struct_name,
+                                                Some(tn),
+                                                &method_name,
+                                            ),
+                                            Some(tn.clone()),
+                                        ));
+                                    }
                                 }
 
                                 for (generic_method_name, tn) in &dg_names {
@@ -1811,9 +1824,20 @@ impl Monomorphizer {
                 {
                     // Try both regular method and trait method formats
                     // Method names to try: BaseStruct::method, BaseStruct^Trait::method (from method_info)
-                    let mut names_to_try =
-                        vec![MethodName::format_local(&base_struct, None, &method_name)];
-                    // If the function is a trait method, also try the trait method format
+                    let mut names_to_try = Vec::new();
+                    // For ref-type impls (e.g., impl Trait for &Array<T>),
+                    // try the ref struct name FIRST so it takes priority
+                    if let Some(ref info) = method_func.method_info.clone()
+                        && let Some(ref trait_name) = info.trait_name
+                        && info.base_struct_name != base_struct
+                    {
+                        names_to_try.push(MethodName::format_local(
+                            &info.base_struct_name,
+                            Some(trait_name),
+                            &method_name,
+                        ));
+                    }
+                    names_to_try.push(MethodName::format_local(&base_struct, None, &method_name));
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
@@ -1884,6 +1908,15 @@ impl Monomorphizer {
                             Some(trait_name),
                             &method_name,
                         ));
+                        // For ref-type impls (e.g., impl Trait for &Array<T>),
+                        // the template function is registered under "&^Trait::method"
+                        if info.base_struct_name != *base_struct {
+                            names_to_try.push(MethodName::format_local(
+                                &info.base_struct_name,
+                                Some(trait_name),
+                                &method_name,
+                            ));
+                        }
                     }
 
                     for generic_method_name in names_to_try {
@@ -5577,6 +5610,19 @@ impl Monomorphizer {
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
+                        // For ref-type impls, try the ref struct name first (e.g., "&^IntoIterator::into_iter")
+                        if info.base_struct_name != base_struct {
+                            possible_keys.push(InstantiationKey {
+                                name: MethodName::format_local(
+                                    &info.base_struct_name,
+                                    Some(trait_name),
+                                    &method_name,
+                                ),
+                                impl_type_args: impl_type_args.clone(),
+                                method_type_args: vec![],
+                                method_info: None,
+                            });
+                        }
                         let trait_method_name =
                             MethodName::format_local(&base_struct, Some(trait_name), &method_name);
                         possible_keys.push(InstantiationKey {
