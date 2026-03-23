@@ -1011,6 +1011,30 @@ impl<'a> PatternLowerer<'a> {
         let mut value = value;
         self.lower_expr(&mut value, type_table);
 
+        // Match ergonomics for let patterns: if the value is a reference type
+        // but the pattern is a compound (tuple/struct), deref the value first.
+        let value = match pattern {
+            TirPattern::Tuple(_) | TirPattern::Struct { .. } => {
+                let mut current = value;
+                loop {
+                    match type_table.get(current.type_id).clone() {
+                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                            current = TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: TirUnaryOp::Deref,
+                                    expr: Box::new(current),
+                                },
+                                inner,
+                                span,
+                            );
+                        }
+                        _ => break current,
+                    }
+                }
+            }
+            _ => value,
+        };
+
         match pattern {
             TirPattern::Tuple(sub_patterns) => {
                 // Allocate temp local for the tuple
@@ -1077,7 +1101,38 @@ impl<'a> PatternLowerer<'a> {
                 local_index,
                 type_id,
             } => {
-                // Direct binding - just create a Let
+                // Match ergonomics: if binding type is &T or &mut T but value
+                // is a non-reference T, wrap in Ref/MutRef.
+                let value = {
+                    let binding_resolved = type_table.get(*type_id).clone();
+                    let value_is_ref = matches!(
+                        type_table.get(value.type_id),
+                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                    );
+                    if value_is_ref {
+                        value
+                    } else {
+                        match binding_resolved {
+                            ResolvedType::Ref(_) => TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: TirUnaryOp::Ref,
+                                    expr: Box::new(value),
+                                },
+                                *type_id,
+                                span,
+                            ),
+                            ResolvedType::MutRef(_) => TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: TirUnaryOp::MutRef,
+                                    expr: Box::new(value),
+                                },
+                                *type_id,
+                                span,
+                            ),
+                            _ => value,
+                        }
+                    }
+                };
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
@@ -1234,23 +1289,37 @@ impl<'a> PatternLowerer<'a> {
                 local_index,
                 type_id,
             } => {
-                // Match ergonomics: if binding type is &T but value type is T,
-                // wrap value in a Ref operation to create the reference.
-                let value = if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
-                    && !matches!(
+                // Match ergonomics: if binding type is &T or &mut T but value type
+                // is a non-reference T, wrap value in a Ref/MutRef operation.
+                let value = {
+                    let binding_resolved = type_table.get(*type_id).clone();
+                    let value_is_ref = matches!(
                         type_table.get(value.type_id),
                         ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                    ) {
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(value),
-                        },
-                        *type_id,
-                        span,
-                    )
-                } else {
-                    value
+                    );
+                    if value_is_ref {
+                        value
+                    } else {
+                        match binding_resolved {
+                            ResolvedType::Ref(_) => TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: TirUnaryOp::Ref,
+                                    expr: Box::new(value),
+                                },
+                                *type_id,
+                                span,
+                            ),
+                            ResolvedType::MutRef(_) => TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: TirUnaryOp::MutRef,
+                                    expr: Box::new(value),
+                                },
+                                *type_id,
+                                span,
+                            ),
+                            _ => value,
+                        }
+                    }
                 };
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
@@ -1784,23 +1853,37 @@ impl<'a> PatternLowerer<'a> {
                 local_index,
                 type_id,
             } => {
-                // Match ergonomics: if binding type is &T but value type is T,
-                // wrap value in a Ref operation.
-                let value = if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
-                    && !matches!(
+                // Match ergonomics: if binding type is &T or &mut T but value
+                // is a non-reference T, wrap in Ref/MutRef.
+                let value = {
+                    let binding_resolved = type_table.get(*type_id).clone();
+                    let scrutinee_is_ref = matches!(
                         type_table.get(scrutinee.type_id),
                         ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                    ) {
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(scrutinee),
-                        },
-                        *type_id,
-                        span,
-                    )
-                } else {
-                    scrutinee
+                    );
+                    if scrutinee_is_ref {
+                        scrutinee
+                    } else {
+                        match binding_resolved {
+                            ResolvedType::Ref(_) => TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: TirUnaryOp::Ref,
+                                    expr: Box::new(scrutinee),
+                                },
+                                *type_id,
+                                span,
+                            ),
+                            ResolvedType::MutRef(_) => TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: TirUnaryOp::MutRef,
+                                    expr: Box::new(scrutinee),
+                                },
+                                *type_id,
+                                span,
+                            ),
+                            _ => scrutinee,
+                        }
+                    }
                 };
                 // Always matches, bind the value
                 let let_stmt = TirStmt::new(

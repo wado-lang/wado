@@ -1,0 +1,45 @@
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn test_let_struct_ref() with Stdout {
+    // let { x, y } = &point should give x: &i32, y: &i32
+    let p = Point { x: 10, y: 20 };
+    let { x, y } = &p;
+    assert *x == 10;
+    assert *y == 20;
+    println("ok");
+}
+
+fn test_let_struct_mut_ref() with Stdout {
+    // let { x, y } = &mut point should give x: &mut i32, y: &mut i32
+    let mut p = Point { x: 10, y: 20 };
+    let { x, y } = &mut p;
+    // x, y are &mut i32 wrapping copies of the fields
+    assert *x == 10;
+    assert *y == 20;
+    *x = 100;
+    assert *x == 100;
+    println("ok");
+}
+
+fn test_let_tuple_ref() with Stdout {
+    // let [a, b] = &tuple should give a: &T, b: &U
+    let t = [10, 20];
+    let [a, b] = &t;
+    assert *a == 10;
+    assert *b == 20;
+    println("ok");
+}
+
+export fn run() with Stdout {
+    test_let_struct_ref();
+    test_let_struct_mut_ref();
+    test_let_tuple_ref();
+}
+
+__DATA__
+{"stdout": "ok\nok\nok\n"}

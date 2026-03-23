@@ -605,6 +605,17 @@ impl FunctionContext {
         None
     }
 
+    /// Peek at a local variable's info without triggering capture logic.
+    /// Used for type inspection (e.g., detecting reference types on for-of iterables).
+    pub(super) fn peek_local(&self, name: &str) -> Option<&LocalVar> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(local) = scope.get(name) {
+                return Some(local);
+            }
+        }
+        None
+    }
+
     /// Look up a variable, checking outer context for captures if in a closure.
     /// Returns either a local variable reference or a capture reference.
     pub(super) fn lookup_or_capture(&mut self, name: &str) -> Option<VarRef> {
