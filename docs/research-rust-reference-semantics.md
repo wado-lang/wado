@@ -242,7 +242,15 @@ let val: i32 = ***rrr;  // explicit deref needed for operators
 assert_eq!(r, &42);     // compares i32 values, not addresses
 ```
 
-### Coercion in function arguments vs generic contexts
+### Deref coercions chain transitively
+
+```rust
+fn takes_ref(x: &i32) {}
+let r: &&&i32 = &&&42;
+takes_ref(r);  // OK: &&&i32 → &&i32 → &i32 (transitive deref coercion)
+```
+
+Deref coercions chain at coercion sites (function arguments, `let` bindings, struct field init, return expressions). But NOT in generic type parameter positions:
 
 ```rust
 // Coercion works at call sites with known target types:
@@ -252,6 +260,10 @@ takes_str(&String::from("hi"));  // OK: coercion site
 // Does NOT work through generics:
 fn identity<T>(x: T) -> T { x }
 let r = identity(&String::from("hi"));  // r: &String, NOT &str
+
+// Does NOT work inside generic containers:
+let v: Vec<&str> = vec![];
+// v.push(&String::from("hi"));  // ERROR: no coercion site for generic type arg
 ```
 
 ### Wado implications
@@ -307,7 +319,18 @@ let r2 = r;    // r is MOVED (not reborrowed)
 // r is invalid
 ```
 
-The rule: `&mut T` to function parameter → reborrow. `&mut T` to `let` binding → move.
+The traditional rule: `&mut T` to function parameter → reborrow. `&mut T` to `let` binding → move.
+
+However, modern Rust (NLL) is more nuanced: `let r2: &mut i32 = r` actually reborrows when the target type is known to be `&mut T`. The original `r` is "frozen" while `r2` is alive but becomes usable again after `r2` is dropped:
+
+```rust
+let mut val = 42;
+let r = &mut val;
+let r2: &mut i32 = r;  // REBORROW (not move) in modern Rust
+*r2 = 100;
+// r2's borrow ends here (NLL)
+*r = 200;  // r is usable again!
+```
 
 Reborrowing does NOT happen through generics:
 ```rust
