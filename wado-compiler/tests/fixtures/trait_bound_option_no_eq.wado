@@ -1,12 +1,18 @@
 // Test: Option<Foo> == fails when Foo doesn't implement Eq
+// Use a struct with a variant field that doesn't implement Eq
+variant NoEq {
+    A(i32),
+    B,
+}
+
 struct Foo {
-    x: i32,
+    x: NoEq,
 }
 
 export fn run() {
-    let a: Option<Foo> = Option::<Foo>::Some(Foo { x: 1 });
-    let b: Option<Foo> = Option::<Foo>::Some(Foo { x: 1 });
-    // Foo doesn't implement Eq, so Option<Foo> == should fail
+    let a: Option<Foo> = Option::<Foo>::Some(Foo { x: NoEq::A(1) });
+    let b: Option<Foo> = Option::<Foo>::Some(Foo { x: NoEq::A(1) });
+    // Foo doesn't implement Eq (NoEq variant field), so Option<Foo> == should fail
     assert a == b;
 }
 

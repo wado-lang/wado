@@ -14,12 +14,15 @@ impl Wrapper<T: Ord> {
     }
 }
 
-struct Foo {}
+variant Foo {
+    A(i32),
+    B,
+}
 
 export fn run() {
-    let w1 = Wrapper { value: Foo {} };
-    let w2 = Wrapper { value: Foo {} };
-    // Foo does not implement Ord, so max_with() should not be available
+    let w1 = Wrapper { value: Foo::A(1) };
+    let w2 = Wrapper { value: Foo::A(2) };
+    // Foo (variant) does not implement Ord, so max_with() should not be available
     let m = w1.max_with(&w2);
 }
 

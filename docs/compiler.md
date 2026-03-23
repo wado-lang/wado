@@ -20,7 +20,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Load         | AST           | All modules     | Load dependencies; each module: parse → bind → desugar    |
 | Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                      |
 | Resolve      | AST + Symbols | Project         | Type resolution, produce Project                          |
-| Synthesis    | Project       | Project         | Enum/serde/CM binding/template/inspect synthesis          |
+| Synthesis    | Project       | Project         | Eq/Ord/serde/CM binding/template/inspect synthesis        |
 | Effect Check | Project       | Project         | Validate function effect requirements                     |
 | Stores Check | Project       | Project         | Validate reference storage declarations                   |
 | Erase Types  | Project       | Project         | Erase newtypes and flags to base types                    |

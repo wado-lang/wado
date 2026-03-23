@@ -5814,8 +5814,12 @@ impl Monomorphizer {
             ResolvedType::Struct {
                 name,
                 module_source,
+                base_name,
                 ..
-            } => (name.clone(), vec![], Some(module_source.clone())),
+            } => {
+                let struct_name = base_name.as_deref().unwrap_or(name).to_string();
+                (struct_name, vec![], Some(module_source.clone()))
+            }
             ResolvedType::Variant {
                 name,
                 module_source,

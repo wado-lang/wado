@@ -779,6 +779,10 @@ impl InspectAlt for bool {
     pub fn inspect_alt(&self, f: &mut Formatter);
 }
 
+impl Eq for bool {
+    pub fn eq(&self, other: &Self) -> bool;
+}
+
 impl Ord for bool {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -814,6 +818,10 @@ impl Inspect for char {
 
 impl InspectAlt for char {
     pub fn inspect_alt(&self, f: &mut Formatter);
+}
+
+impl Eq for char {
+    pub fn eq(&self, other: &Self) -> bool;
 }
 
 impl Ord for char {
@@ -876,6 +884,10 @@ impl LowerHexAlt for i8 {
 
 impl UpperHexAlt for i8 {
     pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl Eq for i8 {
+    pub fn eq(&self, other: &Self) -> bool;
 }
 
 impl Ord for i8 {
@@ -952,6 +964,10 @@ impl UpperHexAlt for u8 {
     pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
+impl Eq for u8 {
+    pub fn eq(&self, other: &Self) -> bool;
+}
+
 impl Ord for u8 {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -1020,6 +1036,10 @@ impl LowerHexAlt for i16 {
 
 impl UpperHexAlt for i16 {
     pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl Eq for i16 {
+    pub fn eq(&self, other: &Self) -> bool;
 }
 
 impl Ord for i16 {
@@ -1100,6 +1120,10 @@ impl UpperHexAlt for u16 {
     pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
+impl Eq for u16 {
+    pub fn eq(&self, other: &Self) -> bool;
+}
+
 impl Ord for u16 {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -1171,6 +1195,10 @@ impl LowerHexAlt for i32 {
 
 impl UpperHexAlt for i32 {
     pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl Eq for i32 {
+    pub fn eq(&self, other: &Self) -> bool;
 }
 
 impl Ord for i32 {
@@ -1259,6 +1287,10 @@ impl UpperHexAlt for u32 {
     pub fn fmt_alt(&self, f: &mut Formatter);
 }
 
+impl Eq for u32 {
+    pub fn eq(&self, other: &Self) -> bool;
+}
+
 impl Ord for u32 {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -1342,6 +1374,10 @@ impl LowerHexAlt for i64 {
 
 impl UpperHexAlt for i64 {
     pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl Eq for i64 {
+    pub fn eq(&self, other: &Self) -> bool;
 }
 
 impl Ord for i64 {
@@ -1436,6 +1472,10 @@ impl LowerHexAlt for u64 {
 
 impl UpperHexAlt for u64 {
     pub fn fmt_alt(&self, f: &mut Formatter);
+}
+
+impl Eq for u64 {
+    pub fn eq(&self, other: &Self) -> bool;
 }
 
 impl Ord for u64 {
@@ -1544,6 +1584,10 @@ impl UpperExp for f32 {
     pub fn fmt(&self, f: &mut Formatter);
 }
 
+impl Eq for f32 {
+    pub fn eq(&self, other: &Self) -> bool;
+}
+
 impl Ord for f32 {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -1644,6 +1688,10 @@ impl LowerExp for f64 {
 
 impl UpperExp for f64 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Eq for f64 {
+    pub fn eq(&self, other: &Self) -> bool;
 }
 
 impl Ord for f64 {

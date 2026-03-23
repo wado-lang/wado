@@ -2092,6 +2092,12 @@ for let { x, y } of points {
 }
 ```
 
+**Auto-derived Traits:**
+
+Structs auto-derive `Eq` (field-wise equality) and `Ord` (lexicographic comparison by field declaration order) when all fields implement those traits. A user-provided `impl Eq` or `impl Ord` takes precedence over the auto-derived implementation.
+
+For generic structs, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Foo<T>`, `impl<T: Ord> Ord for Foo<T>`.
+
 ### Generic Type Inference
 
 Wado infers type arguments for generic type constructors (struct literals and variant constructors) using two complementary mechanisms:

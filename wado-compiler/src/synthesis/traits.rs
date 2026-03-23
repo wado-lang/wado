@@ -34,6 +34,7 @@ pub fn synthesize_traits(project: Project) -> Project {
     let mut project = project;
     for module in project.tir_modules.values_mut() {
         generate_enum_trait_impls(module);
+        generate_struct_eq_ord_impls(module);
         generate_inspect_impls(module);
         generate_inspect_alt_impls(module);
         generate_display_fallback_impls(module);
@@ -101,6 +102,135 @@ fn generate_enum_trait_impls(module: &mut TirModule) {
     }
 
     module.functions.extend(generated_functions);
+}
+
+/// Generate auto-derived Eq and Ord trait implementations for struct types in a module.
+///
+/// For each struct whose fields all support Eq/Ord, generates:
+/// - `StructName^Eq::eq(&self, &Self) -> bool` — field-wise equality
+/// - `StructName^Ord::cmp(&self, &Self) -> Ordering` — lexicographic field comparison
+///
+/// Skips structs that already have user-provided implementations.
+fn generate_struct_eq_ord_impls(module: &mut TirModule) {
+    if module.structs.is_empty() {
+        return;
+    }
+
+    let module_source = module.module_source.clone();
+    let existing = collect_existing_trait_methods(module);
+    let mut generated = Vec::new();
+
+    let mut tt = module.type_table.borrow_mut();
+
+    // Non-generic structs
+    let struct_infos: Vec<_> = module
+        .structs
+        .iter()
+        .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
+        .map(|s| {
+            let fields: Vec<_> = s
+                .fields
+                .iter()
+                .map(|f| (f.name.clone(), f.type_id, f.index))
+                .collect();
+            (s.name.clone(), fields, s.span)
+        })
+        .collect();
+
+    for (name, fields, span) in &struct_infos {
+        let struct_type = tt.make_struct(name.clone(), module_source.clone());
+        let ref_struct_type = tt.make_ref(struct_type);
+
+        // Eq
+        let eq_key = MethodName::format_local(name, Some("Eq"), "eq");
+        if !existing.contains(&eq_key) {
+            let func = generate_struct_eq_fn(
+                name,
+                fields,
+                ref_struct_type,
+                &module_source,
+                &mut tt,
+                *span,
+            );
+            generated.push(Rc::new(RefCell::new(func)));
+        }
+
+        // Ord
+        let cmp_key = MethodName::format_local(name, Some("Ord"), "cmp");
+        if !existing.contains(&cmp_key) {
+            let ordering_type = tt.make_enum("Ordering".to_string(), ModuleSource::traits());
+            let func = generate_struct_ord_fn(
+                name,
+                fields,
+                ref_struct_type,
+                ordering_type,
+                &module_source,
+                &mut tt,
+                *span,
+            );
+            generated.push(Rc::new(RefCell::new(func)));
+        }
+    }
+
+    // Generic structs
+    let generic_struct_infos: Vec<_> = module
+        .structs
+        .iter()
+        .filter(|s| !s.type_params.is_empty() && s.monomorph_info.is_none())
+        .map(|s| {
+            let fields: Vec<_> = s
+                .fields
+                .iter()
+                .map(|f| (f.name.clone(), f.type_id, f.index))
+                .collect();
+            (s.name.clone(), s.type_params.clone(), fields, s.span)
+        })
+        .collect();
+
+    for (name, type_params, fields, span) in &generic_struct_infos {
+        let type_param_ids: Vec<TypeId> = type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        let struct_type =
+            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let ref_struct_type = tt.make_ref(struct_type);
+
+        // Eq
+        let eq_key = MethodName::format_local(name, Some("Eq"), "eq");
+        if !existing.contains(&eq_key) {
+            let func = generate_generic_struct_eq_fn(
+                name,
+                type_params,
+                fields,
+                ref_struct_type,
+                &module_source,
+                &mut tt,
+                *span,
+            );
+            generated.push(Rc::new(RefCell::new(func)));
+        }
+
+        // Ord
+        let cmp_key = MethodName::format_local(name, Some("Ord"), "cmp");
+        if !existing.contains(&cmp_key) {
+            let ordering_type = tt.make_enum("Ordering".to_string(), ModuleSource::traits());
+            let func = generate_generic_struct_ord_fn(
+                name,
+                type_params,
+                fields,
+                ref_struct_type,
+                ordering_type,
+                &module_source,
+                &mut tt,
+                *span,
+            );
+            generated.push(Rc::new(RefCell::new(func)));
+        }
+    }
+
+    drop(tt);
+    module.functions.extend(generated);
 }
 
 // ─── Inspect synthesis ───
@@ -3686,4 +3816,820 @@ fn generate_enum_ord_fn(
         body,
         vec![ref_enum_type, ref_enum_type, enum_type, enum_type],
     )
+}
+
+/// Build an `Eq::eq` method call on a field value: `self.field.eq(&other.field)`.
+///
+/// Produces `FieldType^Eq::eq(&self.field, &other.field) -> bool`.
+fn eq_call_expr(
+    self_field: TirExpr,
+    other_field: TirExpr,
+    field_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirExpr {
+    let ref_type = tt.make_ref(field_type);
+    let receiver = ref_expr(self_field, ref_type, span);
+    let arg = ref_expr(other_field, ref_type, span);
+
+    let resolved = tt.get(field_type).clone();
+    let (base_name, is_type_param, type_arg_names) =
+        decompose_type_for_method_name(&resolved, field_type, tt);
+
+    let mut info = LocalMethodName::new(base_name, Some("Eq".to_string()), "eq".to_string());
+    if !type_arg_names.is_empty() {
+        info = info.with_struct_type_args(&type_arg_names);
+    }
+    info.is_type_param_receiver = is_type_param;
+
+    let impl_module = if is_type_param {
+        module_source.clone()
+    } else {
+        eq_impl_module(field_type, tt, module_source)
+    };
+
+    let fn_name = info.to_mangled_name();
+    TirExpr::new(
+        TirExprKind::MethodCall {
+            receiver: Box::new(receiver),
+            func: FunctionRef {
+                module_source: impl_module,
+                name: fn_name,
+                monomorph_info: None,
+                method_info: Some(info),
+                is_cm_binding: false,
+            },
+            type_args: vec![],
+            args: vec![CallArg::new(arg, false)],
+        },
+        TypeTable::BOOL,
+        span,
+    )
+}
+
+/// Build an `Ord::cmp` method call on a field value: `self.field.cmp(&other.field)`.
+///
+/// Produces `FieldType^Ord::cmp(&self.field, &other.field) -> Ordering`.
+fn cmp_call_expr(
+    self_field: TirExpr,
+    other_field: TirExpr,
+    field_type: TypeId,
+    ordering_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirExpr {
+    let ref_type = tt.make_ref(field_type);
+    let receiver = ref_expr(self_field, ref_type, span);
+    let arg = ref_expr(other_field, ref_type, span);
+
+    let resolved = tt.get(field_type).clone();
+    let (base_name, is_type_param, type_arg_names) =
+        decompose_type_for_method_name(&resolved, field_type, tt);
+
+    let mut info = LocalMethodName::new(base_name, Some("Ord".to_string()), "cmp".to_string());
+    if !type_arg_names.is_empty() {
+        info = info.with_struct_type_args(&type_arg_names);
+    }
+    info.is_type_param_receiver = is_type_param;
+
+    let impl_module = if is_type_param {
+        module_source.clone()
+    } else {
+        eq_impl_module(field_type, tt, module_source)
+    };
+
+    let fn_name = info.to_mangled_name();
+    TirExpr::new(
+        TirExprKind::MethodCall {
+            receiver: Box::new(receiver),
+            func: FunctionRef {
+                module_source: impl_module,
+                name: fn_name,
+                monomorph_info: None,
+                method_info: Some(info),
+                is_cm_binding: false,
+            },
+            type_args: vec![],
+            args: vec![CallArg::new(arg, false)],
+        },
+        ordering_type,
+        span,
+    )
+}
+
+/// Resolve the module source for a type's Eq/Ord implementation.
+fn eq_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) -> ModuleSource {
+    match tt.get(type_id).clone() {
+        ResolvedType::Primitive(_) => ModuleSource::primitive(),
+        ResolvedType::Struct { ref name, .. } if name == "String" => ModuleSource::string(),
+        ResolvedType::Struct {
+            ref module_source, ..
+        }
+        | ResolvedType::Enum {
+            ref module_source, ..
+        }
+        | ResolvedType::Variant {
+            ref module_source, ..
+        }
+        | ResolvedType::GenericInstance {
+            ref module_source, ..
+        } => module_source.clone(),
+        _ => default.clone(),
+    }
+}
+
+/// Generate `StructName^Eq::eq(&self, &Self) -> bool` for non-generic structs.
+///
+/// Body: `return self.f0 == other.f0 && self.f1 == other.f1 && ...`
+/// Empty structs: `return true;`
+fn generate_struct_eq_fn(
+    struct_name: &str,
+    fields: &[(String, TypeId, u32)],
+    ref_struct_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        struct_name.to_string(),
+        Some("Eq".to_string()),
+        "eq".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let params = vec![
+        TirParam {
+            name: "self".to_string(),
+            type_id: ref_struct_type,
+            local_index: 0,
+            is_mut: false,
+            span,
+        },
+        TirParam {
+            name: "other".to_string(),
+            type_id: ref_struct_type,
+            local_index: 1,
+            is_mut: false,
+            span,
+        },
+    ];
+
+    let self_ref = |span: Span| {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 0,
+                name: "self".to_string(),
+            },
+            ref_struct_type,
+            span,
+        )
+    };
+    let other_ref = |span: Span| {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 1,
+                name: "other".to_string(),
+            },
+            ref_struct_type,
+            span,
+        )
+    };
+
+    let result = if fields.is_empty() {
+        // Empty struct: always equal
+        TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span)
+    } else {
+        // Build: self.f0.eq(&other.f0) && self.f1.eq(&other.f1) && ...
+        let mut iter = fields.iter();
+        let (first_name, first_type, first_index) = iter.next().unwrap();
+        let self_field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(self_ref(span)),
+                field_index: *first_index,
+                field_name: first_name.clone(),
+            },
+            *first_type,
+            span,
+        );
+        let other_field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(other_ref(span)),
+                field_index: *first_index,
+                field_name: first_name.clone(),
+            },
+            *first_type,
+            span,
+        );
+        let mut result = eq_call_expr(
+            self_field,
+            other_field,
+            *first_type,
+            module_source,
+            tt,
+            span,
+        );
+
+        for (field_name, field_type, field_index) in iter {
+            let self_field = TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(self_ref(span)),
+                    field_index: *field_index,
+                    field_name: field_name.clone(),
+                },
+                *field_type,
+                span,
+            );
+            let other_field = TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(other_ref(span)),
+                    field_index: *field_index,
+                    field_name: field_name.clone(),
+                },
+                *field_type,
+                span,
+            );
+            let cmp = eq_call_expr(
+                self_field,
+                other_field,
+                *field_type,
+                module_source,
+                tt,
+                span,
+            );
+            result = TirExpr::new(
+                TirExprKind::Binary {
+                    op: TirBinaryOp::And,
+                    left: Box::new(result),
+                    right: Box::new(cmp),
+                },
+                TypeTable::BOOL,
+                span,
+            );
+        }
+        result
+    };
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(result),
+            },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        params,
+        TypeTable::BOOL,
+        body,
+        vec![ref_struct_type, ref_struct_type],
+    )
+}
+
+/// Generate `StructName^Ord::cmp(&self, &Self) -> Ordering` for non-generic structs.
+///
+/// Body (lexicographic):
+/// ```text
+/// let c = self.f0.cmp(&other.f0);
+/// if c != Ordering::Equal { return c; }
+/// let c = self.f1.cmp(&other.f1);
+/// if c != Ordering::Equal { return c; }
+/// ...
+/// return Ordering::Equal;
+/// ```
+fn generate_struct_ord_fn(
+    struct_name: &str,
+    fields: &[(String, TypeId, u32)],
+    ref_struct_type: TypeId,
+    ordering_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        struct_name.to_string(),
+        Some("Ord".to_string()),
+        "cmp".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let params = vec![
+        TirParam {
+            name: "self".to_string(),
+            type_id: ref_struct_type,
+            local_index: 0,
+            is_mut: false,
+            span,
+        },
+        TirParam {
+            name: "other".to_string(),
+            type_id: ref_struct_type,
+            local_index: 1,
+            is_mut: false,
+            span,
+        },
+    ];
+
+    let self_ref = |span: Span| {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 0,
+                name: "self".to_string(),
+            },
+            ref_struct_type,
+            span,
+        )
+    };
+    let other_ref = |span: Span| {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 1,
+                name: "other".to_string(),
+            },
+            ref_struct_type,
+            span,
+        )
+    };
+
+    let ordering_equal = TirExpr::new(
+        TirExprKind::EnumConstruct {
+            enum_type: ordering_type,
+            case_index: 1,
+            case_name: "Equal".to_string(),
+        },
+        ordering_type,
+        span,
+    );
+
+    let mut stmts = Vec::new();
+    let mut local_types = vec![ref_struct_type, ref_struct_type];
+    let mut next_local: u32 = 2;
+
+    for (field_name, field_type, field_index) in fields {
+        let self_field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(self_ref(span)),
+                field_index: *field_index,
+                field_name: field_name.clone(),
+            },
+            *field_type,
+            span,
+        );
+        let other_field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(other_ref(span)),
+                field_index: *field_index,
+                field_name: field_name.clone(),
+            },
+            *field_type,
+            span,
+        );
+        let cmp_result = cmp_call_expr(
+            self_field,
+            other_field,
+            *field_type,
+            ordering_type,
+            module_source,
+            tt,
+            span,
+        );
+
+        let local_idx = next_local;
+        next_local += 1;
+        local_types.push(ordering_type);
+
+        // let c = self.field.cmp(&other.field);
+        stmts.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: "c".to_string(),
+                local_index: local_idx,
+                is_mut: false,
+                is_reactive: false,
+                type_id: ordering_type,
+                value: cmp_result,
+                skip_value_copy: false,
+            },
+            span,
+        ));
+
+        // if c != Ordering::Equal { return c; }
+        let local_c = TirExpr::new(
+            TirExprKind::Local {
+                index: local_idx,
+                name: "c".to_string(),
+            },
+            ordering_type,
+            span,
+        );
+        let cond = TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::NotEq,
+                left: Box::new(local_c.clone()),
+                right: Box::new(ordering_equal.clone()),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+        stmts.push(TirStmt::new(
+            TirStmtKind::If {
+                condition: cond,
+                then_block: TirBlock::new(
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            value: Some(local_c),
+                        },
+                        span,
+                    )],
+                    span,
+                ),
+                else_block: None,
+            },
+            span,
+        ));
+    }
+
+    // return Ordering::Equal;
+    stmts.push(TirStmt::new(
+        TirStmtKind::Return {
+            value: Some(ordering_equal),
+        },
+        span,
+    ));
+
+    let body = TirBlock::new(stmts, span);
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        params,
+        ordering_type,
+        body,
+        local_types,
+    )
+}
+
+/// Generate `StructName^Eq::eq(&self, &Self) -> bool` for generic structs.
+///
+/// Sets `impl_type_params` with Eq bounds so the monomorphizer can
+/// specialize field eq calls for concrete types.
+fn generate_generic_struct_eq_fn(
+    struct_name: &str,
+    type_params: &[TirTypeParam],
+    fields: &[(String, TypeId, u32)],
+    ref_struct_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        struct_name.to_string(),
+        Some("Eq".to_string()),
+        "eq".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let params = vec![
+        TirParam {
+            name: "self".to_string(),
+            type_id: ref_struct_type,
+            local_index: 0,
+            is_mut: false,
+            span,
+        },
+        TirParam {
+            name: "other".to_string(),
+            type_id: ref_struct_type,
+            local_index: 1,
+            is_mut: false,
+            span,
+        },
+    ];
+
+    let self_ref = |span: Span| {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 0,
+                name: "self".to_string(),
+            },
+            ref_struct_type,
+            span,
+        )
+    };
+    let other_ref = |span: Span| {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 1,
+                name: "other".to_string(),
+            },
+            ref_struct_type,
+            span,
+        )
+    };
+
+    let result = if fields.is_empty() {
+        TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span)
+    } else {
+        let mut iter = fields.iter();
+        let (first_name, first_type, first_index) = iter.next().unwrap();
+        let self_field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(self_ref(span)),
+                field_index: *first_index,
+                field_name: first_name.clone(),
+            },
+            *first_type,
+            span,
+        );
+        let other_field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(other_ref(span)),
+                field_index: *first_index,
+                field_name: first_name.clone(),
+            },
+            *first_type,
+            span,
+        );
+        let mut result = eq_call_expr(
+            self_field,
+            other_field,
+            *first_type,
+            module_source,
+            tt,
+            span,
+        );
+
+        for (field_name, field_type, field_index) in iter {
+            let self_field = TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(self_ref(span)),
+                    field_index: *field_index,
+                    field_name: field_name.clone(),
+                },
+                *field_type,
+                span,
+            );
+            let other_field = TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(other_ref(span)),
+                    field_index: *field_index,
+                    field_name: field_name.clone(),
+                },
+                *field_type,
+                span,
+            );
+            let cmp = eq_call_expr(
+                self_field,
+                other_field,
+                *field_type,
+                module_source,
+                tt,
+                span,
+            );
+            result = TirExpr::new(
+                TirExprKind::Binary {
+                    op: TirBinaryOp::And,
+                    left: Box::new(result),
+                    right: Box::new(cmp),
+                },
+                TypeTable::BOOL,
+                span,
+            );
+        }
+        result
+    };
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(result),
+            },
+            span,
+        )],
+        span,
+    );
+
+    let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
+
+    TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params,
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params,
+        return_type: TypeTable::BOOL,
+        effects: Vec::new(),
+        stores: vec![],
+        body: Some(body),
+        span,
+        local_count: 2,
+        local_types: vec![ref_struct_type, ref_struct_type],
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+        export_name: None,
+        allocator_tag: None,
+    }
+}
+
+/// Generate `StructName^Ord::cmp(&self, &Self) -> Ordering` for generic structs.
+///
+/// Sets `impl_type_params` with Ord bounds so the monomorphizer can
+/// specialize field cmp calls for concrete types.
+fn generate_generic_struct_ord_fn(
+    struct_name: &str,
+    type_params: &[TirTypeParam],
+    fields: &[(String, TypeId, u32)],
+    ref_struct_type: TypeId,
+    ordering_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        struct_name.to_string(),
+        Some("Ord".to_string()),
+        "cmp".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let params = vec![
+        TirParam {
+            name: "self".to_string(),
+            type_id: ref_struct_type,
+            local_index: 0,
+            is_mut: false,
+            span,
+        },
+        TirParam {
+            name: "other".to_string(),
+            type_id: ref_struct_type,
+            local_index: 1,
+            is_mut: false,
+            span,
+        },
+    ];
+
+    let self_ref = |span: Span| {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 0,
+                name: "self".to_string(),
+            },
+            ref_struct_type,
+            span,
+        )
+    };
+    let other_ref = |span: Span| {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 1,
+                name: "other".to_string(),
+            },
+            ref_struct_type,
+            span,
+        )
+    };
+
+    let ordering_equal = TirExpr::new(
+        TirExprKind::EnumConstruct {
+            enum_type: ordering_type,
+            case_index: 1,
+            case_name: "Equal".to_string(),
+        },
+        ordering_type,
+        span,
+    );
+
+    let mut stmts = Vec::new();
+    let mut local_types = vec![ref_struct_type, ref_struct_type];
+    let mut next_local: u32 = 2;
+
+    for (field_name, field_type, field_index) in fields {
+        let self_field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(self_ref(span)),
+                field_index: *field_index,
+                field_name: field_name.clone(),
+            },
+            *field_type,
+            span,
+        );
+        let other_field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(other_ref(span)),
+                field_index: *field_index,
+                field_name: field_name.clone(),
+            },
+            *field_type,
+            span,
+        );
+        let cmp_result = cmp_call_expr(
+            self_field,
+            other_field,
+            *field_type,
+            ordering_type,
+            module_source,
+            tt,
+            span,
+        );
+
+        let local_idx = next_local;
+        next_local += 1;
+        local_types.push(ordering_type);
+
+        stmts.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: "c".to_string(),
+                local_index: local_idx,
+                is_mut: false,
+                is_reactive: false,
+                type_id: ordering_type,
+                value: cmp_result,
+                skip_value_copy: false,
+            },
+            span,
+        ));
+
+        let local_c = TirExpr::new(
+            TirExprKind::Local {
+                index: local_idx,
+                name: "c".to_string(),
+            },
+            ordering_type,
+            span,
+        );
+        let cond = TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::NotEq,
+                left: Box::new(local_c.clone()),
+                right: Box::new(ordering_equal.clone()),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+        stmts.push(TirStmt::new(
+            TirStmtKind::If {
+                condition: cond,
+                then_block: TirBlock::new(
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            value: Some(local_c),
+                        },
+                        span,
+                    )],
+                    span,
+                ),
+                else_block: None,
+            },
+            span,
+        ));
+    }
+
+    stmts.push(TirStmt::new(
+        TirStmtKind::Return {
+            value: Some(ordering_equal),
+        },
+        span,
+    ));
+
+    let body = TirBlock::new(stmts, span);
+
+    let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
+
+    TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params,
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params,
+        return_type: ordering_type,
+        effects: Vec::new(),
+        stores: vec![],
+        body: Some(body),
+        span,
+        local_count: local_types.len() as u32,
+        local_types,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+        export_name: None,
+        allocator_tag: None,
+    }
 }

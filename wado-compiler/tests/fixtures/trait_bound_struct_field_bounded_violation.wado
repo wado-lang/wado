@@ -1,6 +1,7 @@
 // Test: bounded impl block method unavailable for unbounded type
-struct NoOrd {
-    x: i32,
+variant NoOrd {
+    A(i32),
+    B,
 }
 
 struct Holder<T> {
@@ -14,8 +15,8 @@ impl Holder<T: Ord> {
 }
 
 export fn run() {
-    let h = Holder { items: [NoOrd { x: 1 }] as Array<NoOrd> };
-    // NoOrd doesn't implement Ord, so min() should not be available
+    let h = Holder { items: [NoOrd::A(1)] as Array<NoOrd> };
+    // NoOrd (variant) doesn't implement Ord, so min() should not be available
     let m = h.min();
 }
 
