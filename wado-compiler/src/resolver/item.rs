@@ -2,6 +2,7 @@
 
 use crate::ast::{self, Function, GlobalDecl, Type};
 use crate::compiler_host::CompilerHost;
+use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
     TirFunction, TirGlobal, TirParam, TirStruct, TirTest, TirVariantCase, TirVariantDecl, TypeTable,
@@ -446,6 +447,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
+            stores_aliased_locals: IndexSet::default(),
             // Scratch local fields - computed by lower phase
             is_cm_binding: false,
             inline_hint: Self::extract_inline_hint(&func.attrs),
@@ -523,6 +525,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
+            stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,
             inline_hint: crate::tir::InlineHint::Auto,
             comp_features: 0,
@@ -847,6 +850,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
+            stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,
             inline_hint: Self::extract_inline_hint(&func.attrs),
             comp_features: extract_comp_features(&func.attrs),

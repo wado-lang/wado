@@ -175,6 +175,7 @@ fn __test_0_spread_append() {
     let __local_11: ref Formatter;
     let __local_28: ref Formatter;
     let __sroa_a_1: ref String;
+    let __sroa_b_1: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -183,7 +184,8 @@ fn __test_0_spread_append() {
         __modules_initialized = 1;
     };
     __sroa_a_1 = String { repr: array.new_data<u8>("hello"), used: 5 };
-    __v0 = __sroa_a_1;
+    __sroa_b_1 = __sroa_a_1;
+    __v0 = __sroa_b_1;
     __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("hello"), used: 5 });
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -223,6 +225,7 @@ fn __test_1_spread_prepend() {
     let __local_13: ref Formatter;
     let __local_39: ref Formatter;
     let __sroa_a_1: ref String;
+    let __sroa_c_2: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -231,7 +234,8 @@ fn __test_1_spread_prepend() {
         __modules_initialized = 1;
     };
     __sroa_a_1 = String { repr: array.new_data<u8>("hello"), used: 5 };
-    __v0 = __sroa_a_1;
+    __sroa_c_2 = __sroa_a_1;
+    __v0 = __sroa_c_2;
     __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("hello"), used: 5 });
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -559,6 +563,7 @@ fn __test_3_spread_multiple_sources() {
     let __local_14: ref Formatter;
     let __local_33: ref Formatter;
     let __sroa_a_1: ref String;
+    let __sroa_c_1: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -567,7 +572,8 @@ fn __test_3_spread_multiple_sources() {
         __modules_initialized = 1;
     };
     __sroa_a_1 = String { repr: array.new_data<u8>("hello"), used: 5 };
-    __v0 = __sroa_a_1;
+    __sroa_c_1 = __sroa_a_1;
+    __v0 = __sroa_c_1;
     __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("hello"), used: 5 });
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -607,6 +613,7 @@ fn __test_4_spread_with_literal_elements_mixed() {
     let __local_15: ref Formatter;
     let __local_43: ref Formatter;
     let __sroa_a_1: ref String;
+    let __sroa_d_2: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -615,7 +622,8 @@ fn __test_4_spread_with_literal_elements_mixed() {
         __modules_initialized = 1;
     };
     __sroa_a_1 = String { repr: array.new_data<u8>("hello"), used: 5 };
-    __v0 = __sroa_a_1;
+    __sroa_d_2 = __sroa_a_1;
+    __v0 = __sroa_d_2;
     __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("hello"), used: 5 });
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -649,12 +657,91 @@ condition: d.2 == \"hello\"
 }
 
 fn __test_5_spread_vs_field_access() {
+    let __v0_1: i32;
+    let __cond_2: bool;
+    let __v0_3: i32;
+    let __cond_4: bool;
+    let __local_5: ref String;
+    let __local_6: ref Formatter;
+    let __local_7: ref String;
+    let __local_8: ref Formatter;
+    let __local_14: ref Formatter;
+    let __local_19: ref Formatter;
+    let __local_25: ref Formatter;
+    let __local_30: ref Formatter;
+    let __local_33: i32;
+    let __local_34: i32;
+    let __local_35: i32;
+    let __local_36: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __initialize_module();
         __modules_initialized = 1;
+    };
+    drop(__inline_combine_Tuple_i32_i32___1: block -> ref "tuple/[i32, i32, i32]" {
+        __local_33 = 10;
+        __local_34 = 20;
+        __local_35 = 30;
+        __local_36 = 40;
+        break __inline_combine_Tuple_i32_i32___1: "tuple/[i32, i32, i32]" { 0: 10, 1: 30, 2: 40 };
+    });
+    __v0_1 = 10;
+    __cond_2 = __v0_1 == 10;
+    if __cond_2 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_5 = String { repr: builtin::array_new<u8>(127), used: 0 };
+            String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append(__local_5, String { repr: array.new_data<u8>("__test_5_spread_vs_field_access"), used: 31 });
+            String::append_char(__local_5, 32);
+            String::append_char(__local_5, 97);
+            String::append_char(__local_5, 116);
+            String::append_char(__local_5, 32);
+            String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_2.wado"), used: 44 });
+            String::append_char(__local_5, 58);
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+            __local_14 = __local_6;
+            i32::fmt_decimal(70, __local_14);
+            String::append(__local_5, String { repr: array.new_data<u8>("
+condition: result.0 == 10
+"), used: 27 });
+            String::append(__local_5, String { repr: array.new_data<u8>("result.0: "), used: 10 });
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+            __local_19 = __local_6;
+            i32::fmt_decimal(__v0_1, __local_19);
+            String::append_char(__local_5, 10);
+            break __tmpl: __local_5;
+        });
+        unreachable;
+    };
+    __v0_3 = 30;
+    __cond_4 = __v0_3 == 30;
+    if __cond_4 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_7 = String { repr: builtin::array_new<u8>(127), used: 0 };
+            String::append(__local_7, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append(__local_7, String { repr: array.new_data<u8>("__test_5_spread_vs_field_access"), used: 31 });
+            String::append_char(__local_7, 32);
+            String::append_char(__local_7, 97);
+            String::append_char(__local_7, 116);
+            String::append_char(__local_7, 32);
+            String::append(__local_7, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variadic_2.wado"), used: 44 });
+            String::append_char(__local_7, 58);
+            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+            __local_25 = __local_8;
+            i32::fmt_decimal(71, __local_25);
+            String::append(__local_7, String { repr: array.new_data<u8>("
+condition: result.1 == 30
+"), used: 27 });
+            String::append(__local_7, String { repr: array.new_data<u8>("result.1: "), used: 10 });
+            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+            __local_30 = __local_8;
+            i32::fmt_decimal(__v0_3, __local_30);
+            String::append_char(__local_7, 10);
+            break __tmpl: __local_7;
+        });
+        unreachable;
     };
 }
 
@@ -726,13 +813,7 @@ fn __cm_export____test_4_spread_with_literal_elements_mixed() {
 }
 
 fn __cm_export____test_5_spread_vs_field_access() {
-    __inline___initialize_modules_0: block {
-        if __modules_initialized {
-            break __inline___initialize_modules_0;
-        };
-        __initialize_module();
-        __modules_initialized = 1;
-    };
+    __test_5_spread_vs_field_access();
     "wasi/task-return"(0);
 }
 
@@ -743,10 +824,20 @@ fn __cm_export____test_6_for_of_try_op() {
 
 fn process_all<Tuple<i32,String,bool>>(items) {
     let __local_3: ref String;
+    let __tuple_1: ref "tuple/[i32, String, bool]";
+    let v_5: i32;
     let __local_8: ref String;
+    let v_9: bool;
     let __local_11: ref String;
+    let __local_15: i32;
+    let __local_16: bool;
+    __tuple_1 = items;
+    v_5 = __tuple_1.0;
     let __match_scrut_0: ref null String;
-    __match_scrut_0 = ref.null none;
+    __match_scrut_0 = __inline_i32_Processable__process_0: block -> ref null String {
+        __local_15 = v_5;
+        break __inline_i32_Processable__process_0: ref.null none;
+    };
     if ref.is_null(__match_scrut_0) {
     } else if ref.is_null(__match_scrut_0) == 0 {
         let __cast_1: ref null String;
@@ -769,8 +860,12 @@ fn process_all<Tuple<i32,String,bool>>(items) {
     } else {
         unreachable;
     };
+    v_9 = __tuple_1.2;
     let __match_scrut_2: ref null String;
-    __match_scrut_2 = ref.null none;
+    __match_scrut_2 = __inline_bool_Processable__process_2: block -> ref null String {
+        __local_16 = v_9;
+        break __inline_bool_Processable__process_2: ref.null none;
+    };
     if ref.is_null(__match_scrut_2) {
     } else if ref.is_null(__match_scrut_2) == 0 {
         let __cast_3: ref null String;
@@ -789,13 +884,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l28: loop {
+            l29: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l28;
+                continue l29;
             };
         };
     };
@@ -913,13 +1008,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l35: loop {
+            l36: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l35;
+                continue l36;
             };
         };
     };
@@ -936,14 +1031,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l39: loop {
+                l40: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l39;
+                    continue l40;
                 };
             };
         };
@@ -979,13 +1074,13 @@ fn Array<u64>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l43: loop {
+            l44: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
                 i = i + 1;
-                continue l43;
+                continue l44;
             };
         };
     };
@@ -1077,7 +1172,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l52: loop {
+            l53: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1085,7 +1180,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l52;
+                continue l53;
             };
         };
     };
@@ -1170,13 +1265,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l64: loop {
+            l65: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l64;
+                continue l65;
             };
         };
     };
@@ -1279,8 +1374,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b83: block {
-        l84: loop {
+    b84: block {
+        l85: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -1305,9 +1400,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b83;
+                break b84;
             };
-            continue l84;
+            continue l85;
         };
     };
     String::append_char(f.buf, 34);

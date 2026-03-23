@@ -71,51 +71,6 @@ struct Result<i32,String>::Err {
     payload_0: ref String,
 }
 
-variant Result<String,SerializeError> {
-    Ok(ref String),
-    Err(ref "core:serde/SerializeError"),
-}
-
-struct Result<String,SerializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref String,
-}
-
-struct Result<String,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/SerializeError",
-}
-
-variant Result<i32,DeserializeError> {
-    Ok(i32),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<i32,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: i32,
-}
-
-struct Result<i32,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
-variant Result<char,DeserializeError> {
-    Ok(char),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<char,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: char,
-}
-
-struct Result<char,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
 variant Result<String,DeserializeError> {
     Ok(ref String),
     Err(ref "core:serde/DeserializeError"),
@@ -127,51 +82,6 @@ struct Result<String,DeserializeError>::Ok {
 }
 
 struct Result<String,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
-variant Result<JsonVariantSerializer,SerializeError> {
-    Ok(ref "core:json/JsonVariantSerializer"),
-    Err(ref "core:serde/SerializeError"),
-}
-
-struct Result<JsonVariantSerializer,SerializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref "core:json/JsonVariantSerializer",
-}
-
-struct Result<JsonVariantSerializer,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/SerializeError",
-}
-
-variant Result<JsonVariantAccess,DeserializeError> {
-    Ok(ref "core:json/JsonVariantAccess"),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<JsonVariantAccess,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref "core:json/JsonVariantAccess",
-}
-
-struct Result<JsonVariantAccess,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
-variant Result<Result<i32,String>,DeserializeError> {
-    Ok(ref Result<i32,String>),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<Result<i32,String>,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref Result<i32,String>,
-}
-
-struct Result<Result<i32,String>,DeserializeError>::Err {
     discriminant: i32,
     payload_0: ref "core:serde/DeserializeError",
 }
@@ -209,8 +119,6 @@ type "functype/__cm_export____test_1_result_serialize_err" = fn();
 type "functype/__cm_export____test_2_result_roundtrip_ok" = fn();
 
 type "functype/__cm_export____test_3_result_roundtrip_err" = fn();
-
-type "functype/core/json/from_string<Result<i32,String>>" = fn(ref String) -> ref Result<Result<i32,String>,DeserializeError>;
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
@@ -258,21 +166,11 @@ type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Result<i32,String>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> ref Result<Result<i32,String>,DeserializeError>;
-
 type "functype/JsonVariantSerializer^SerializeVariant::payload<String>" = fn(ref "core:json/JsonVariantSerializer", ref String) -> ref null "core:serde/SerializeError";
 
 type "functype/core:json/JsonDeserializer::skip_whitespace" = fn(ref "core:json/JsonDeserializer");
 
 type "functype/core:json/JsonDeserializer::expect_char" = fn(ref "core:json/JsonDeserializer", i32) -> ref null "core:serde/DeserializeError";
-
-type "functype/core:json/JsonDeserializer::read_json_string" = fn(ref "core:json/JsonDeserializer") -> ref Result<String,DeserializeError>;
-
-type "functype/core:json/JsonDeserializer::read_unicode_escape" = fn(ref "core:json/JsonDeserializer") -> ref Result<char,DeserializeError>;
-
-type "functype/core:json/JsonDeserializer::parse_i32_direct" = fn(ref "core:json/JsonDeserializer") -> ref Result<i32,DeserializeError>;
-
-type "functype/core:json/JsonDeserializer^Deserializer::begin_variant" = fn(ref "core:json/JsonDeserializer", ref String, i32) -> ref Result<JsonVariantAccess,DeserializeError>;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -288,6 +186,8 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
+type "functype/core/json/from_string<Result<i32,String>>" = fn(ref String) -> [i32, ref null Result<i32,String>, ref null "core:serde/DeserializeError"];
+
 type "functype/pow10_coarse" = fn(i32) -> [u64, u64];
 
 type "functype/mul_pow10" = fn(i32) -> [u64, u64];
@@ -296,7 +196,17 @@ type "functype/char::from_u32" = fn(u32) -> [i32, char];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
-type "functype/core/json/to_string<Result<i32,String>>" = fn(ref Result<i32,String>) -> ref Result<String,SerializeError>;
+type "functype/Result<i32,String>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null Result<i32,String>, ref null "core:serde/DeserializeError"];
+
+type "functype/core:json/JsonDeserializer::read_json_string" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null String, ref null "core:serde/DeserializeError"];
+
+type "functype/core:json/JsonDeserializer::read_unicode_escape" = fn(ref "core:json/JsonDeserializer") -> [i32, char, ref null "core:serde/DeserializeError"];
+
+type "functype/core:json/JsonDeserializer::parse_i32_direct" = fn(ref "core:json/JsonDeserializer") -> [i32, i32, ref null "core:serde/DeserializeError"];
+
+type "functype/core:json/JsonDeserializer^Deserializer::begin_variant" = fn(ref "core:json/JsonDeserializer", ref String, i32) -> [i32, ref null "core:json/JsonVariantAccess", ref null "core:serde/DeserializeError"];
+
+type "functype/core/json/to_string<Result<i32,String>>" = fn(ref Result<i32,String>) -> [i32, ref null String, ref null "core:serde/SerializeError"];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -304,7 +214,7 @@ type "functype/char^Display::fmt" = fn(char, ref Formatter);
 
 type "functype/Result<i32,String>^Serialize::serialize<JsonSerializer>" = fn(ref Result<i32,String>, ref String) -> ref null "core:serde/SerializeError";
 
-type "functype/core:json/JsonSerializer^Serializer::begin_variant" = fn(ref String, ref String, ref String, i32) -> ref Result<JsonVariantSerializer,SerializeError>;
+type "functype/core:json/JsonSerializer^Serializer::begin_variant" = fn(ref String, ref String, ref String, i32) -> [i32, ref null "core:json/JsonVariantSerializer", ref null "core:serde/SerializeError"];
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref null "core:serde/SerializeError";
 
@@ -326,16 +236,18 @@ import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
 
 fn __test_0_result_serialize_ok() {
-    let json_r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
     let __local_5: ref String;
     let __local_6: ref Formatter;
     let __local_12: ref Formatter;
-    json_r = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Ok { discriminant: 0, payload_0: 42 });
-    if ref.test Result<String,SerializeError>::Ok(json_r) {
-        s = ref.cast Result<String,SerializeError>::Ok(json_r).payload_0;
+    let __sroa_json_r_discriminant: i32;
+    let __sroa_json_r_case0_payload_0: ref null String;
+    let __sroa_json_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Ok { discriminant: 0, payload_0: 42 });
+    if __sroa_json_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_json_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"Ok\":42}"), used: 9 });
         if __cond == 0 {
@@ -372,16 +284,18 @@ condition: s == `\\{\"Ok\":42\\}`
 }
 
 fn __test_1_result_serialize_err() {
-    let json_r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
     let __local_5: ref String;
     let __local_6: ref Formatter;
     let __local_12: ref Formatter;
-    json_r = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("not found"), used: 9 } });
-    if ref.test Result<String,SerializeError>::Ok(json_r) {
-        s = ref.cast Result<String,SerializeError>::Ok(json_r).payload_0;
+    let __sroa_json_r_discriminant: i32;
+    let __sroa_json_r_case0_payload_0: ref null String;
+    let __sroa_json_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("not found"), used: 9 } });
+    if __sroa_json_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_json_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"Err\":\"not found\"}"), used: 19 });
         if __cond == 0 {
@@ -418,9 +332,7 @@ condition: s == `\\{\"Err\":\"not found\"\\}`
 }
 
 fn __test_2_result_roundtrip_ok() {
-    let json_r: ref Result<String,SerializeError>;
     let json: ref String;
-    let parsed_r: ref Result<Result<i32,String>,DeserializeError>;
     let parsed: ref Result<i32,String>;
     let v: i32;
     let __cond: bool;
@@ -428,12 +340,18 @@ fn __test_2_result_roundtrip_ok() {
     let __local_9: ref Formatter;
     let __local_17: ref Formatter;
     let __local_22: ref Formatter;
-    json_r = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Ok { discriminant: 0, payload_0: 100 });
-    if ref.test Result<String,SerializeError>::Ok(json_r) {
-        json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = "core/json/from_string<Result<i32,String>>"(json);
-        if ref.test Result<Result<i32,String>,DeserializeError>::Ok(parsed_r) {
-            parsed = ref.cast Result<Result<i32,String>,DeserializeError>::Ok(parsed_r).payload_0;
+    let __sroa_json_r_discriminant: i32;
+    let __sroa_json_r_case0_payload_0: ref null String;
+    let __sroa_json_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Ok { discriminant: 0, payload_0: 100 });
+    if __sroa_json_r_discriminant == 0 {
+        json = ref.as_non_null(__sroa_json_r_case0_payload_0);
+        let __sroa_parsed_r_discriminant: i32;
+        let __sroa_parsed_r_case0_payload_0: ref null Result<i32,String>;
+        let __sroa_parsed_r_case1_payload_0: ref null "core:serde/DeserializeError";
+        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core/json/from_string<Result<i32,String>>"(json);
+        if __sroa_parsed_r_discriminant == 0 {
+            parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
             if ref.test Result<i32,String>::Ok(parsed) {
                 v = ref.cast Result<i32,String>::Ok(parsed).payload_0;
                 __cond = v == 100;
@@ -480,9 +398,7 @@ condition: v == 100
 }
 
 fn __test_3_result_roundtrip_err() {
-    let json_r: ref Result<String,SerializeError>;
     let json: ref String;
-    let parsed_r: ref Result<Result<i32,String>,DeserializeError>;
     let parsed: ref Result<i32,String>;
     let e: ref String;
     let __v0: ref String;
@@ -490,14 +406,20 @@ fn __test_3_result_roundtrip_err() {
     let __local_8: ref String;
     let __local_9: ref Formatter;
     let __local_17: ref Formatter;
-    json_r = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("fail"), used: 4 } });
-    if ref.test Result<String,SerializeError>::Ok(json_r) {
-        json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = "core/json/from_string<Result<i32,String>>"(json);
-        if ref.test Result<Result<i32,String>,DeserializeError>::Ok(parsed_r) {
-            parsed = ref.cast Result<Result<i32,String>,DeserializeError>::Ok(parsed_r).payload_0;
+    let __sroa_json_r_discriminant: i32;
+    let __sroa_json_r_case0_payload_0: ref null String;
+    let __sroa_json_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("fail"), used: 4 } });
+    if __sroa_json_r_discriminant == 0 {
+        json = ref.as_non_null(__sroa_json_r_case0_payload_0);
+        let __sroa_parsed_r_discriminant: i32;
+        let __sroa_parsed_r_case0_payload_0: ref null Result<i32,String>;
+        let __sroa_parsed_r_case1_payload_0: ref null "core:serde/DeserializeError";
+        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core/json/from_string<Result<i32,String>>"(json);
+        if __sroa_parsed_r_discriminant == 0 {
+            parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
             if ref.test Result<i32,String>::Err(parsed) {
-                e = ref.cast Result<i32,String>::Err(parsed).payload_0;
+                e = value_copy String(ref.cast Result<i32,String>::Err(parsed).payload_0);
                 __v0 = e;
                 __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("fail"), used: 4 });
                 if __cond == 0 {
@@ -563,34 +485,32 @@ fn __cm_export____test_3_result_roundtrip_err() {
 
 fn "core/json/from_string<Result<i32,String>>"(input) {
     let de: ref "core:json/JsonDeserializer";
-    let r: ref Result<Result<i32,String>,DeserializeError>;
     let v: ref Result<i32,String>;
     let e: ref "core:serde/DeserializeError";
-    let __pattern_temp_0: ref Result<Result<i32,String>,DeserializeError>;
-    let __pattern_temp_1: ref Result<Result<i32,String>,DeserializeError>;
     let __local_7: ref String;
     let __local_8: i64;
     de = "core:json/JsonDeserializer" { input: ref.as_non_null(input), pos: 0 };
-    r = Result<i32,String>^Deserialize::deserialize<JsonDeserializer>(de);
-    __pattern_temp_0 = r;
-    if ref.test Result<Result<i32,String>,DeserializeError>::Ok(__pattern_temp_0) {
-        v = value_copy Result<i32,String>(ref.cast Result<Result<i32,String>,DeserializeError>::Ok(__pattern_temp_0).payload_0);
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null Result<i32,String>;
+    let __sroa_r_case1_payload_0: ref null "core:serde/DeserializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = Result<i32,String>^Deserialize::deserialize<JsonDeserializer>(de);
+    if __sroa_r_discriminant == 0 {
+        v = ref.as_non_null(__sroa_r_case0_payload_0);
         "core:json/JsonDeserializer::skip_whitespace"(de);
         if de.pos < __inline_String__len_0: block -> i32 {
             __local_7 = de.input;
             break __inline_String__len_0: __local_7.used;
         } {
-            return Result<Result<i32,String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__trailing_1: block -> ref "core:serde/DeserializeError" {
+            return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__trailing_1: block -> ref "core:serde/DeserializeError" {
                 __local_8 = builtin::i64_extend_i32_s(de.pos);
                 break __inline_DeserializeError__trailing_1: "core:serde/DeserializeError" { kind: 7, message: String { repr: array.new_data<u8>("trailing data after value"), used: 25 }, offset: __local_8 };
-            }) };
+            });
         };
-        return Result<Result<i32,String>,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(v) };
+        return 0; ref.as_non_null(v); ref.null none;
     };
-    __pattern_temp_1 = r;
-    if ref.test Result<Result<i32,String>,DeserializeError>::Err(__pattern_temp_1) {
-        e = value_copy "core:serde/DeserializeError"(ref.cast Result<Result<i32,String>,DeserializeError>::Err(__pattern_temp_1).payload_0);
-        return Result<Result<i32,String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+    if __sroa_r_discriminant == 1 {
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
+        return 1; ref.null none; ref.as_non_null(e);
     };
     "core:internal/unreachable"();
     unreachable;
@@ -604,9 +524,9 @@ fn "core/json/to_string<Result<i32,String>>"(value) {
     r = Result<i32,String>^Serialize::serialize<JsonSerializer>(value, ser.buf);
     if ref.is_null(r) == 0 {
         e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
-        return Result<String,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+        return 1; ref.null none; ref.as_non_null(e);
     };
-    return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
+    return 0; ref.as_non_null(ser.buf); ref.null none;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
@@ -1387,16 +1307,13 @@ fn String::append_char(self, c) {
 }
 
 fn Result<i32,String>^Deserialize::deserialize<JsonDeserializer>(d) {
-    let va_r: ref Result<JsonVariantAccess,DeserializeError>;
     let va: ref "core:json/JsonVariantAccess";
     let name_r: ref Result<String,DeserializeError>;
     let name: ref String;
-    let val_r_5: ref Result<i32,DeserializeError>;
     let val_6: i32;
     let end_r_7: ref null "core:serde/DeserializeError";
     let e_8: ref "core:serde/DeserializeError";
     let e_9: ref "core:serde/DeserializeError";
-    let val_r_10: ref Result<String,DeserializeError>;
     let val_11: ref String;
     let end_r_12: ref null "core:serde/DeserializeError";
     let e_13: ref "core:serde/DeserializeError";
@@ -1404,32 +1321,25 @@ fn Result<i32,String>^Deserialize::deserialize<JsonDeserializer>(d) {
     let e_15: ref "core:serde/DeserializeError";
     let e_16: ref "core:serde/DeserializeError";
     let __local_17: ref String;
-    let __pattern_temp_0: ref Result<JsonVariantAccess,DeserializeError>;
-    let __pattern_temp_1: ref Result<String,DeserializeError>;
-    let __pattern_temp_2: ref Result<i32,DeserializeError>;
-    let __pattern_temp_4: ref Result<i32,DeserializeError>;
-    let __pattern_temp_5: ref Result<String,DeserializeError>;
-    let __pattern_temp_7: ref Result<String,DeserializeError>;
-    let __pattern_temp_8: ref Result<String,DeserializeError>;
-    let __pattern_temp_9: ref Result<JsonVariantAccess,DeserializeError>;
     let __local_30: ref "core:json/JsonDeserializer";
     let __local_33: ref "core:json/JsonDeserializer";
-    va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Result"), used: 6 }, 2);
-    __pattern_temp_0 = va_r;
-    if ref.test Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0) {
-        va = value_copy "core:json/JsonVariantAccess"(ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0);
+    let __sroa_va_r_discriminant: i32;
+    let __sroa_va_r_case0_payload_0: ref null "core:json/JsonVariantAccess";
+    let __sroa_va_r_case1_payload_0: ref null "core:serde/DeserializeError";
+    multivalue_bind [__sroa_va_r_discriminant, __sroa_va_r_case0_payload_0, __sroa_va_r_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Result"), used: 6 }, 2);
+    if __sroa_va_r_discriminant == 0 {
+        va = ref.as_non_null(__sroa_va_r_case0_payload_0);
         name_r = Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(va.variant) };
-        __pattern_temp_1 = name_r;
-        if ref.test Result<String,DeserializeError>::Ok(__pattern_temp_1) {
-            name = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+        if ref.test Result<String,DeserializeError>::Ok(name_r) {
+            name = value_copy String(ref.cast Result<String,DeserializeError>::Ok(name_r).payload_0);
             if String^Eq::eq(name, String { repr: array.new_data<u8>("Ok"), used: 2 }) {
-                val_r_5 = __inline_i32_Deserialize__deserialize_JsonDeserializer__2: block -> ref Result<i32,DeserializeError> {
-                    __local_30 = va.de;
-                    break __inline_i32_Deserialize__deserialize_JsonDeserializer__2: "core:json/JsonDeserializer::parse_i32_direct"(__local_30);
-                };
-                __pattern_temp_2 = val_r_5;
-                if ref.test Result<i32,DeserializeError>::Ok(__pattern_temp_2) {
-                    val_6 = ref.cast Result<i32,DeserializeError>::Ok(__pattern_temp_2).payload_0;
+                let __sroa_val_r_5_discriminant: i32;
+                let __sroa_val_r_5_case0_payload_0: i32;
+                let __sroa_val_r_5_case1_payload_0: ref null "core:serde/DeserializeError";
+                __local_30 = va.de;
+                multivalue_bind [__sroa_val_r_5_discriminant, __sroa_val_r_5_case0_payload_0, __sroa_val_r_5_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_30);
+                if __sroa_val_r_5_discriminant == 0 {
+                    val_6 = __sroa_val_r_5_case0_payload_0;
                     end_r_7 = __inline_JsonVariantAccess_DeserializeVariant__end_3: block -> ref null "core:serde/DeserializeError" {
                         if va.is_object {
                             break __inline_JsonVariantAccess_DeserializeVariant__end_3: "core:json/JsonDeserializer::expect_char"(va.de, 125);
@@ -1438,24 +1348,23 @@ fn Result<i32,String>^Deserialize::deserialize<JsonDeserializer>(d) {
                     };
                     if ref.is_null(end_r_7) == 0 {
                         e_8 = value_copy "core:serde/DeserializeError"(ref.as_non_null(end_r_7));
-                        return Result<Result<i32,String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_8) };
+                        return 1; ref.null none; ref.as_non_null(e_8);
                     };
-                    return Result<Result<i32,String>,DeserializeError>::Ok { discriminant: 0, payload_0: Result<i32,String>::Ok { discriminant: 0, payload_0: val_6 } };
+                    return 0; Result<i32,String>::Ok { discriminant: 0, payload_0: val_6 }; ref.null none;
                 };
-                __pattern_temp_4 = val_r_5;
-                if ref.test Result<i32,DeserializeError>::Err(__pattern_temp_4) {
-                    e_9 = value_copy "core:serde/DeserializeError"(ref.cast Result<i32,DeserializeError>::Err(__pattern_temp_4).payload_0);
-                    return Result<Result<i32,String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_9) };
+                if __sroa_val_r_5_discriminant == 1 {
+                    e_9 = ref.as_non_null(__sroa_val_r_5_case1_payload_0);
+                    return 1; ref.null none; ref.as_non_null(e_9);
                 };
             };
             if String^Eq::eq(name, String { repr: array.new_data<u8>("Err"), used: 3 }) {
-                val_r_10 = __inline_String_Deserialize__deserialize_JsonDeserializer__5: block -> ref Result<String,DeserializeError> {
-                    __local_33 = va.de;
-                    break __inline_String_Deserialize__deserialize_JsonDeserializer__5: "core:json/JsonDeserializer::read_json_string"(__local_33);
-                };
-                __pattern_temp_5 = val_r_10;
-                if ref.test Result<String,DeserializeError>::Ok(__pattern_temp_5) {
-                    val_11 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__pattern_temp_5).payload_0);
+                let __sroa_val_r_10_discriminant: i32;
+                let __sroa_val_r_10_case0_payload_0: ref null String;
+                let __sroa_val_r_10_case1_payload_0: ref null "core:serde/DeserializeError";
+                __local_33 = va.de;
+                multivalue_bind [__sroa_val_r_10_discriminant, __sroa_val_r_10_case0_payload_0, __sroa_val_r_10_case1_payload_0] = "core:json/JsonDeserializer::read_json_string"(__local_33);
+                if __sroa_val_r_10_discriminant == 0 {
+                    val_11 = ref.as_non_null(__sroa_val_r_10_case0_payload_0);
                     end_r_12 = __inline_JsonVariantAccess_DeserializeVariant__end_6: block -> ref null "core:serde/DeserializeError" {
                         if va.is_object {
                             break __inline_JsonVariantAccess_DeserializeVariant__end_6: "core:json/JsonDeserializer::expect_char"(va.de, 125);
@@ -1464,62 +1373,55 @@ fn Result<i32,String>^Deserialize::deserialize<JsonDeserializer>(d) {
                     };
                     if ref.is_null(end_r_12) == 0 {
                         e_13 = value_copy "core:serde/DeserializeError"(ref.as_non_null(end_r_12));
-                        return Result<Result<i32,String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_13) };
+                        return 1; ref.null none; ref.as_non_null(e_13);
                     };
-                    return Result<Result<i32,String>,DeserializeError>::Ok { discriminant: 0, payload_0: Result<i32,String>::Err { discriminant: 1, payload_0: ref.as_non_null(val_11) } };
+                    return 0; Result<i32,String>::Err { discriminant: 1, payload_0: ref.as_non_null(val_11) }; ref.null none;
                 };
-                __pattern_temp_7 = val_r_10;
-                if ref.test Result<String,DeserializeError>::Err(__pattern_temp_7) {
-                    e_14 = value_copy "core:serde/DeserializeError"(ref.cast Result<String,DeserializeError>::Err(__pattern_temp_7).payload_0);
-                    return Result<Result<i32,String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_14) };
+                if __sroa_val_r_10_discriminant == 1 {
+                    e_14 = ref.as_non_null(__sroa_val_r_10_case1_payload_0);
+                    return 1; ref.null none; ref.as_non_null(e_14);
                 };
             };
-            return Result<Result<i32,String>,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 2, message: ref.as_non_null(__tmpl: block -> ref String {
+            return 1; ref.null none; "core:serde/DeserializeError" { kind: 2, message: ref.as_non_null(__tmpl: block -> ref String {
                 __local_17 = String { repr: builtin::array_new<u8>(40), used: 0 };
                 String::append(__local_17, String { repr: array.new_data<u8>("unknown Result variant: "), used: 24 });
                 String::append(__local_17, name);
                 break __tmpl: __local_17;
-            }), offset: -1_i64 } };
+            }), offset: -1_i64 };
         };
-        __pattern_temp_8 = name_r;
-        if ref.test Result<String,DeserializeError>::Err(__pattern_temp_8) {
-            e_15 = value_copy "core:serde/DeserializeError"(ref.cast Result<String,DeserializeError>::Err(__pattern_temp_8).payload_0);
-            return Result<Result<i32,String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_15) };
+        if ref.test Result<String,DeserializeError>::Err(name_r) {
+            e_15 = value_copy "core:serde/DeserializeError"(ref.cast Result<String,DeserializeError>::Err(name_r).payload_0);
+            return 1; ref.null none; ref.as_non_null(e_15);
         };
     };
-    __pattern_temp_9 = va_r;
-    if ref.test Result<JsonVariantAccess,DeserializeError>::Err(__pattern_temp_9) {
-        e_16 = value_copy "core:serde/DeserializeError"(ref.cast Result<JsonVariantAccess,DeserializeError>::Err(__pattern_temp_9).payload_0);
-        return Result<Result<i32,String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_16) };
+    if __sroa_va_r_discriminant == 1 {
+        e_16 = ref.as_non_null(__sroa_va_r_case1_payload_0);
+        return 1; ref.null none; ref.as_non_null(e_16);
     };
     "core:internal/unreachable"();
     unreachable;
 }
 
 fn Result<i32,String>^Serialize::serialize<JsonSerializer>(self, s) {
-    let var_3: ref Result<JsonVariantSerializer,SerializeError>;
     let vs_4: ref "core:json/JsonVariantSerializer";
     let r_5: ref null "core:serde/SerializeError";
     let e_6: ref "core:serde/SerializeError";
     let e_7: ref "core:serde/SerializeError";
     let v_8: ref String;
-    let var_9: ref Result<JsonVariantSerializer,SerializeError>;
     let vs_10: ref "core:json/JsonVariantSerializer";
     let r_11: ref null "core:serde/SerializeError";
     let e_12: ref "core:serde/SerializeError";
     let e_13: ref "core:serde/SerializeError";
     let __pattern_temp_0: ref Result<i32,String>;
-    let __pattern_temp_1: ref Result<JsonVariantSerializer,SerializeError>;
-    let __pattern_temp_3: ref Result<JsonVariantSerializer,SerializeError>;
     let __pattern_temp_4: ref Result<i32,String>;
-    let __pattern_temp_5: ref Result<JsonVariantSerializer,SerializeError>;
-    let __pattern_temp_7: ref Result<JsonVariantSerializer,SerializeError>;
     __pattern_temp_0 = value_copy Result<i32,String>(self);
     if ref.test Result<i32,String>::Ok(__pattern_temp_0) {
-        var_3 = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Result"), used: 6 }, String { repr: array.new_data<u8>("Ok"), used: 2 }, 0);
-        __pattern_temp_1 = var_3;
-        if ref.test Result<JsonVariantSerializer,SerializeError>::Ok(__pattern_temp_1) {
-            vs_4 = value_copy "core:json/JsonVariantSerializer"(ref.cast Result<JsonVariantSerializer,SerializeError>::Ok(__pattern_temp_1).payload_0);
+        let __sroa_var_3_discriminant: i32;
+        let __sroa_var_3_case0_payload_0: ref null "core:json/JsonVariantSerializer";
+        let __sroa_var_3_case1_payload_0: ref null "core:serde/SerializeError";
+        multivalue_bind [__sroa_var_3_discriminant, __sroa_var_3_case0_payload_0, __sroa_var_3_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Result"), used: 6 }, String { repr: array.new_data<u8>("Ok"), used: 2 }, 0);
+        if __sroa_var_3_discriminant == 0 {
+            vs_4 = ref.as_non_null(__sroa_var_3_case0_payload_0);
             r_5 = JsonVariantSerializer^SerializeVariant::payload<i32>(vs_4, ref.cast Result<i32,String>::Ok(__pattern_temp_0).payload_0);
             if ref.is_null(r_5) == 0 {
                 e_6 = value_copy "core:serde/SerializeError"(ref.as_non_null(r_5));
@@ -1530,19 +1432,20 @@ fn Result<i32,String>^Serialize::serialize<JsonSerializer>(self, s) {
                 break __inline_JsonVariantSerializer_SerializeVariant__end_0: ref.null none;
             };
         };
-        __pattern_temp_3 = var_3;
-        if ref.test Result<JsonVariantSerializer,SerializeError>::Err(__pattern_temp_3) {
-            e_7 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonVariantSerializer,SerializeError>::Err(__pattern_temp_3).payload_0);
+        if __sroa_var_3_discriminant == 1 {
+            e_7 = ref.as_non_null(__sroa_var_3_case1_payload_0);
             return ref.as_non_null(e_7);
         };
     };
     __pattern_temp_4 = self;
     if ref.test Result<i32,String>::Err(__pattern_temp_4) {
         v_8 = ref.cast Result<i32,String>::Err(__pattern_temp_4).payload_0;
-        var_9 = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Result"), used: 6 }, String { repr: array.new_data<u8>("Err"), used: 3 }, 1);
-        __pattern_temp_5 = var_9;
-        if ref.test Result<JsonVariantSerializer,SerializeError>::Ok(__pattern_temp_5) {
-            vs_10 = value_copy "core:json/JsonVariantSerializer"(ref.cast Result<JsonVariantSerializer,SerializeError>::Ok(__pattern_temp_5).payload_0);
+        let __sroa_var_9_discriminant: i32;
+        let __sroa_var_9_case0_payload_0: ref null "core:json/JsonVariantSerializer";
+        let __sroa_var_9_case1_payload_0: ref null "core:serde/SerializeError";
+        multivalue_bind [__sroa_var_9_discriminant, __sroa_var_9_case0_payload_0, __sroa_var_9_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Result"), used: 6 }, String { repr: array.new_data<u8>("Err"), used: 3 }, 1);
+        if __sroa_var_9_discriminant == 0 {
+            vs_10 = ref.as_non_null(__sroa_var_9_case0_payload_0);
             r_11 = JsonVariantSerializer^SerializeVariant::payload<String>(vs_10, v_8);
             if ref.is_null(r_11) == 0 {
                 e_12 = value_copy "core:serde/SerializeError"(ref.as_non_null(r_11));
@@ -1553,9 +1456,8 @@ fn Result<i32,String>^Serialize::serialize<JsonSerializer>(self, s) {
                 break __inline_JsonVariantSerializer_SerializeVariant__end_1: ref.null none;
             };
         };
-        __pattern_temp_7 = var_9;
-        if ref.test Result<JsonVariantSerializer,SerializeError>::Err(__pattern_temp_7) {
-            e_13 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonVariantSerializer,SerializeError>::Err(__pattern_temp_7).payload_0);
+        if __sroa_var_9_discriminant == 1 {
+            e_13 = ref.as_non_null(__sroa_var_9_case1_payload_0);
             return ref.as_non_null(e_13);
         };
     };
@@ -1600,7 +1502,7 @@ fn "core:json/JsonSerializer^Serializer::begin_variant"(self, type_name, variant
     String::append_char(self, 123);
     "core:json/write_escaped_string"(self, variant_name);
     String::append_char(self, 58);
-    return Result<JsonVariantSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonVariantSerializer" { buf: ref.as_non_null(self) } };
+    return 0; "core:json/JsonVariantSerializer" { buf: ref.as_non_null(self) }; ref.null none;
 }
 
 fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
@@ -1707,7 +1609,6 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     let i_10: i32;
     let b: i32;
     let esc: i32;
-    let r: ref Result<char,DeserializeError>;
     let c_14: char;
     let e: ref "core:serde/DeserializeError";
     let seq_len: i32;
@@ -1728,8 +1629,6 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     let c_31: char;
     let __local_32: ref String;
     let __local_33: ref Formatter;
-    let __pattern_temp_0: ref Result<char,DeserializeError>;
-    let __pattern_temp_1: ref Result<char,DeserializeError>;
     let __local_39: ref String;
     let __local_40: i64;
     let __local_41: ref String;
@@ -1786,21 +1685,21 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
         __local_39 = self.input;
         break __inline_String__len_0: __local_39.used;
     } {
-        return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
+        return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
             __local_40 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_40 };
-        }) };
+        });
     };
     if __inline_String__get_byte_2: block -> u8 {
         __local_41 = self.input;
         __local_42 = self.pos;
         break __inline_String__get_byte_2: builtin::array_get_u8(__local_41.repr, __local_42);
     } != 34 {
-        return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_3: block -> ref "core:serde/DeserializeError" {
+        return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__unexpected_type_3: block -> ref "core:serde/DeserializeError" {
             __local_43 = String { repr: array.new_data<u8>("expected string"), used: 15 };
             __local_44 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__unexpected_type_3: "core:serde/DeserializeError" { kind: 0, message: ref.as_non_null(__local_43), offset: __local_44 };
-        }) };
+        });
     };
     self.pos = self.pos + 1;
     prefix_start = self.pos;
@@ -1865,7 +1764,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             };
         };
         self.pos = scan_pos + 1;
-        return Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(result_5) };
+        return 0; ref.as_non_null(result_5); ref.null none;
     };
     result_8 = __inline_String__with_capacity_11: block -> ref String {
         __local_57 = prefix_len + 32;
@@ -1912,7 +1811,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             if b == 34 {
                 _hfs_pos_98 = _hfs_pos_98 + 1;
                 self.pos = _hfs_pos_98;
-                return Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(result_8) };
+                return 0; ref.as_non_null(result_8); ref.null none;
             };
             if b == 92 {
                 _hfs_pos_98 = _hfs_pos_98 + 1;
@@ -1921,10 +1820,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     break __inline_String__len_16: __local_66.used;
                 } {
                     self.pos = _hfs_pos_98;
-                    return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_17: block -> ref "core:serde/DeserializeError" {
+                    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_17: block -> ref "core:serde/DeserializeError" {
                         __local_67 = builtin::i64_extend_i32_s(_hfs_pos_98);
                         break __inline_DeserializeError__eof_17: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_67 };
-                    }) };
+                    });
                 };
                 esc = __inline_String__get_byte_18: block -> u8 {
                     __local_68 = self.input;
@@ -1949,22 +1848,23 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     String::append_char(result_8, 12);
                 } else if esc == 117 {
                     self.pos = _hfs_pos_98;
-                    r = "core:json/JsonDeserializer::read_unicode_escape"(self);
+                    let __sroa_r_discriminant: i32;
+                    let __sroa_r_case0_payload_0: char;
+                    let __sroa_r_case1_payload_0: ref null "core:serde/DeserializeError";
+                    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/JsonDeserializer::read_unicode_escape"(self);
                     _hfs_pos_98 = self.pos;
-                    __pattern_temp_0 = r;
-                    if ref.test Result<char,DeserializeError>::Ok(__pattern_temp_0) {
-                        c_14 = ref.cast Result<char,DeserializeError>::Ok(__pattern_temp_0).payload_0;
+                    if __sroa_r_discriminant == 0 {
+                        c_14 = __sroa_r_case0_payload_0;
                         String::append_char(result_8, c_14);
                     };
-                    __pattern_temp_1 = r;
-                    if ref.test Result<char,DeserializeError>::Err(__pattern_temp_1) {
-                        e = value_copy "core:serde/DeserializeError"(ref.cast Result<char,DeserializeError>::Err(__pattern_temp_1).payload_0);
+                    if __sroa_r_discriminant == 1 {
+                        e = ref.as_non_null(__sroa_r_case1_payload_0);
                         self.pos = _hfs_pos_98;
-                        return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+                        return 1; ref.null none; ref.as_non_null(e);
                     };
                 } else {
                     self.pos = _hfs_pos_98;
-                    return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__malformed_21: block -> ref "core:serde/DeserializeError" {
+                    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__malformed_21: block -> ref "core:serde/DeserializeError" {
                         __local_72 = __tmpl: block -> ref String {
                             __local_32 = String { repr: builtin::array_new<u8>(34), used: 0 };
                             String::append(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
@@ -1975,7 +1875,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                         };
                         __local_73 = builtin::i64_extend_i32_s(_hfs_pos_98);
                         break __inline_DeserializeError__malformed_21: "core:serde/DeserializeError" { kind: 6, message: ref.as_non_null(__local_72), offset: __local_73 };
-                    }) };
+                    });
                 };
                 _hfs_pos_98 = _hfs_pos_98 + 1;
             } else {
@@ -1985,10 +1885,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     break __inline_String__len_22: __local_74.used;
                 } {
                     self.pos = _hfs_pos_98;
-                    return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_23: block -> ref "core:serde/DeserializeError" {
+                    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_23: block -> ref "core:serde/DeserializeError" {
                         __local_75 = builtin::i64_extend_i32_s(_hfs_pos_98);
                         break __inline_DeserializeError__eof_23: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_75 };
-                    }) };
+                    });
                 };
                 if seq_len == 1 {
                     String::append_char(result_8, b & 255);
@@ -2059,10 +1959,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
         };
     };
     self.pos = _hfs_pos_98;
-    return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_30: block -> ref "core:serde/DeserializeError" {
+    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_30: block -> ref "core:serde/DeserializeError" {
         __local_88 = builtin::i64_extend_i32_s(self.pos);
         break __inline_DeserializeError__eof_30: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_88 };
-    }) };
+    });
 }
 
 fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
@@ -2087,10 +1987,10 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
         __local_7 = self.input;
         break __inline_String__len_0: __local_7.used;
     } {
-        return Result<char,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
+        return 1; 0; ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
             __local_8 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_8 };
-        }) };
+        });
     };
     code = 0;
     __for_2: block {
@@ -2127,11 +2027,11 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
                 } {
                     code = ((code + 10) + b) - 65;
                 } else {
-                    return Result<char,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__malformed_3: block -> ref "core:serde/DeserializeError" {
+                    return 1; 0; ref.as_non_null(__inline_DeserializeError__malformed_3: block -> ref "core:serde/DeserializeError" {
                         __local_11 = String { repr: array.new_data<u8>("invalid unicode escape"), used: 22 };
                         __local_12 = builtin::i64_extend_i32_s(start);
                         break __inline_DeserializeError__malformed_3: "core:serde/DeserializeError" { kind: 6, message: ref.as_non_null(__local_11), offset: __local_12 };
-                    }) };
+                    });
                 };
                 i = i + 1;
                 continue l201;
@@ -2144,13 +2044,13 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
     multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = char::from_u32(code);
     if __sroa___pattern_temp_0_discriminant == 0 {
         c = __sroa___pattern_temp_0_payload_0;
-        return Result<char,DeserializeError>::Ok { discriminant: 0, payload_0: c };
+        return 0; c; ref.null none;
     };
-    return Result<char,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__malformed_4: block -> ref "core:serde/DeserializeError" {
+    return 1; 0; ref.as_non_null(__inline_DeserializeError__malformed_4: block -> ref "core:serde/DeserializeError" {
         __local_13 = String { repr: array.new_data<u8>("invalid unicode codepoint"), used: 25 };
         __local_14 = builtin::i64_extend_i32_s(start);
         break __inline_DeserializeError__malformed_4: "core:serde/DeserializeError" { kind: 6, message: ref.as_non_null(__local_13), offset: __local_14 };
-    }) };
+    });
 }
 
 fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
@@ -2197,7 +2097,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
         __local_16 = self.input;
         break __inline_String__len_0: __local_16.used;
     } {
-        return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start } };
+        return 1; 0; "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start };
     };
     neg = 0;
     if __inline_String__get_byte_2: block -> u8 {
@@ -2212,10 +2112,10 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
         __local_20 = self.input;
         break __inline_String__len_3: __local_20.used;
     } {
-        return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_4: block -> ref "core:serde/DeserializeError" {
+        return 1; 0; ref.as_non_null(__inline_DeserializeError__eof_4: block -> ref "core:serde/DeserializeError" {
             __local_21 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_4: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_21 };
-        }) };
+        });
     };
     first = __inline_String__get_byte_5: block -> u8 {
         __local_22 = self.input;
@@ -2227,11 +2127,11 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     } else {
         first > 57;
     } {
-        return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_6: block -> ref "core:serde/DeserializeError" {
+        return 1; 0; ref.as_non_null(__inline_DeserializeError__unexpected_type_6: block -> ref "core:serde/DeserializeError" {
             __local_24 = String { repr: array.new_data<u8>("expected number"), used: 15 };
             __local_25 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__unexpected_type_6: "core:serde/DeserializeError" { kind: 0, message: ref.as_non_null(__local_24), offset: __local_25 };
-        }) };
+        });
     };
     result = first - 48;
     self.pos = self.pos + 1;
@@ -2365,10 +2265,10 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                 };
                 if v_signed != builtin::f64_floor(v_signed) {
                     self.pos = _hfs_pos_51;
-                    return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_18: block -> ref "core:serde/DeserializeError" {
+                    return 1; 0; ref.as_non_null(__inline_DeserializeError__unexpected_type_18: block -> ref "core:serde/DeserializeError" {
                         __local_42 = String { repr: array.new_data<u8>("expected integer, got float"), used: 27 };
                         break __inline_DeserializeError__unexpected_type_18: "core:serde/DeserializeError" { kind: 0, message: ref.as_non_null(__local_42), offset: start };
-                    }) };
+                    });
                 };
                 if if v_signed < -2147483648 -> i32 {
                     1;
@@ -2376,13 +2276,13 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                     v_signed > 2147483647;
                 } {
                     self.pos = _hfs_pos_51;
-                    return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__overflow_19: block -> ref "core:serde/DeserializeError" {
+                    return 1; 0; ref.as_non_null(__inline_DeserializeError__overflow_19: block -> ref "core:serde/DeserializeError" {
                         __local_44 = String { repr: array.new_data<u8>("value out of range for i32"), used: 26 };
                         break __inline_DeserializeError__overflow_19: "core:serde/DeserializeError" { kind: 5, message: ref.as_non_null(__local_44), offset: start };
-                    }) };
+                    });
                 };
                 self.pos = _hfs_pos_51;
-                return Result<i32,DeserializeError>::Ok { discriminant: 0, payload_0: builtin::i32_trunc_f64_s(v_signed) };
+                return 0; builtin::i32_trunc_f64_s(v_signed); ref.null none;
             } else {
                 self.pos = _hfs_pos_51;
                 break b215;
@@ -2394,23 +2294,17 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     if neg {
         result = 0 - result;
     };
-    return Result<i32,DeserializeError>::Ok { discriminant: 0, payload_0: result };
+    return 0; result; ref.null none;
 }
 
 fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self, type_name, num_cases) {  // from core:json
     let b: i32;
-    let r_4: ref Result<String,DeserializeError>;
     let name_5: ref String;
     let e_6: ref "core:serde/DeserializeError";
-    let r_7: ref Result<String,DeserializeError>;
     let name_8: ref String;
     let cr: ref null "core:serde/DeserializeError";
     let e_10: ref "core:serde/DeserializeError";
     let e_11: ref "core:serde/DeserializeError";
-    let __pattern_temp_0: ref Result<String,DeserializeError>;
-    let __pattern_temp_1: ref Result<String,DeserializeError>;
-    let __pattern_temp_2: ref Result<String,DeserializeError>;
-    let __pattern_temp_4: ref Result<String,DeserializeError>;
     let __local_17: ref String;
     let __local_18: i64;
     let __local_19: ref String;
@@ -2422,10 +2316,10 @@ fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self, type_name, num
         __local_17 = self.input;
         break __inline_String__len_0: __local_17.used;
     } {
-        return Result<JsonVariantAccess,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
+        return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
             __local_18 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_18 };
-        }) };
+        });
     };
     b = __inline_String__get_byte_2: block -> u8 {
         __local_19 = self.input;
@@ -2433,42 +2327,44 @@ fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self, type_name, num
         break __inline_String__get_byte_2: builtin::array_get_u8(__local_19.repr, __local_20);
     };
     if b == 34 {
-        r_4 = "core:json/JsonDeserializer::read_json_string"(self);
-        __pattern_temp_0 = r_4;
-        if ref.test Result<String,DeserializeError>::Ok(__pattern_temp_0) {
-            name_5 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__pattern_temp_0).payload_0);
-            return Result<JsonVariantAccess,DeserializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonVariantAccess" { de: ref.as_non_null(self), variant: ref.as_non_null(name_5), is_object: 0 } };
+        let __sroa_r_4_discriminant: i32;
+        let __sroa_r_4_case0_payload_0: ref null String;
+        let __sroa_r_4_case1_payload_0: ref null "core:serde/DeserializeError";
+        multivalue_bind [__sroa_r_4_discriminant, __sroa_r_4_case0_payload_0, __sroa_r_4_case1_payload_0] = "core:json/JsonDeserializer::read_json_string"(self);
+        if __sroa_r_4_discriminant == 0 {
+            name_5 = ref.as_non_null(__sroa_r_4_case0_payload_0);
+            return 0; "core:json/JsonVariantAccess" { de: ref.as_non_null(self), variant: ref.as_non_null(name_5), is_object: 0 }; ref.null none;
         };
-        __pattern_temp_1 = r_4;
-        if ref.test Result<String,DeserializeError>::Err(__pattern_temp_1) {
-            e_6 = value_copy "core:serde/DeserializeError"(ref.cast Result<String,DeserializeError>::Err(__pattern_temp_1).payload_0);
-            return Result<JsonVariantAccess,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_6) };
+        if __sroa_r_4_discriminant == 1 {
+            e_6 = ref.as_non_null(__sroa_r_4_case1_payload_0);
+            return 1; ref.null none; ref.as_non_null(e_6);
         };
     };
     if b == 123 {
         self.pos = self.pos + 1;
-        r_7 = "core:json/JsonDeserializer::read_json_string"(self);
-        __pattern_temp_2 = r_7;
-        if ref.test Result<String,DeserializeError>::Ok(__pattern_temp_2) {
-            name_8 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__pattern_temp_2).payload_0);
+        let __sroa_r_7_discriminant: i32;
+        let __sroa_r_7_case0_payload_0: ref null String;
+        let __sroa_r_7_case1_payload_0: ref null "core:serde/DeserializeError";
+        multivalue_bind [__sroa_r_7_discriminant, __sroa_r_7_case0_payload_0, __sroa_r_7_case1_payload_0] = "core:json/JsonDeserializer::read_json_string"(self);
+        if __sroa_r_7_discriminant == 0 {
+            name_8 = ref.as_non_null(__sroa_r_7_case0_payload_0);
             cr = "core:json/JsonDeserializer::expect_char"(self, 58);
             if ref.is_null(cr) == 0 {
                 e_10 = value_copy "core:serde/DeserializeError"(ref.as_non_null(cr));
-                return Result<JsonVariantAccess,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_10) };
+                return 1; ref.null none; ref.as_non_null(e_10);
             };
-            return Result<JsonVariantAccess,DeserializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonVariantAccess" { de: ref.as_non_null(self), variant: ref.as_non_null(name_8), is_object: 1 } };
+            return 0; "core:json/JsonVariantAccess" { de: ref.as_non_null(self), variant: ref.as_non_null(name_8), is_object: 1 }; ref.null none;
         };
-        __pattern_temp_4 = r_7;
-        if ref.test Result<String,DeserializeError>::Err(__pattern_temp_4) {
-            e_11 = value_copy "core:serde/DeserializeError"(ref.cast Result<String,DeserializeError>::Err(__pattern_temp_4).payload_0);
-            return Result<JsonVariantAccess,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_11) };
+        if __sroa_r_7_discriminant == 1 {
+            e_11 = ref.as_non_null(__sroa_r_7_case1_payload_0);
+            return 1; ref.null none; ref.as_non_null(e_11);
         };
     };
-    return Result<JsonVariantAccess,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_3: block -> ref "core:serde/DeserializeError" {
+    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__unexpected_type_3: block -> ref "core:serde/DeserializeError" {
         __local_21 = String { repr: array.new_data<u8>("expected string or object for variant"), used: 37 };
         __local_22 = builtin::i64_extend_i32_s(self.pos);
         break __inline_DeserializeError__unexpected_type_3: "core:serde/DeserializeError" { kind: 0, message: ref.as_non_null(__local_21), offset: __local_22 };
-    }) };
+    });
 }
 
 fn Formatter::write_char_n(self, c, n) {

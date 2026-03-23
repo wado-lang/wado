@@ -123,6 +123,8 @@ import fn subtask-drop from "wasi/subtask-drop";
 fn sum_bytes(s) {
     let sum: i32;
     let byte: u8;
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref array<u8>;
     let __sroa___iter_2_repr: ref array<u8>;
     let __sroa___iter_2_used: i32;
     let __sroa___iter_2_index: i32;
@@ -130,14 +132,16 @@ fn sum_bytes(s) {
     __sroa___iter_2_repr = s.repr;
     __sroa___iter_2_used = s.used;
     __sroa___iter_2_index = 0;
+    _licm_used_10 = __sroa___iter_2_used;
+    _licm_repr_11 = __sroa___iter_2_repr;
     b0: block {
         l1: loop {
             __fused___inline_StrUtf8ByteIter_Iterator__next_2: block {
-                if __sroa___iter_2_index >= __sroa___iter_2_used {
+                if __sroa___iter_2_index >= _licm_used_10 {
                     break b0;
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
                 };
-                byte = builtin::array_get_u8(__sroa___iter_2_repr, __sroa___iter_2_index);
+                byte = builtin::array_get_u8(_licm_repr_11, __sroa___iter_2_index);
                 __sroa___iter_2_index = __sroa___iter_2_index + 1;
                 sum = sum + byte;
                 break __fused___inline_StrUtf8ByteIter_Iterator__next_2;

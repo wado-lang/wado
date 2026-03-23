@@ -1998,6 +1998,58 @@ condition: asc[7] == 9
 }
 
 fn __test_12_generic_method_delegation() {
+    let result: i32;
+    let __cond: bool;
+    let __local_4: ref String;
+    let __local_5: ref Formatter;
+    let __local_13: ref Formatter;
+    let __local_18: ref Formatter;
+    let __local_26: i32;
+    let __local_27: i32;
+    result = __inline_Pair_i32___pick_by___Closure_19_3: block -> i32 {
+        if __inline___Closure_19____call_0: block -> bool {
+            __local_26 = 10;
+            __local_27 = 3;
+            break __inline___Closure_19____call_0: 0;
+        } {
+            break __inline_Pair_i32___pick_by___Closure_19_3: 10;
+        };
+        break __inline_Pair_i32___pick_by___Closure_19_3: 3;
+    };
+    __cond = result == 3;
+    if __cond == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_4 = String { repr: builtin::array_new<u8>(122), used: 0 };
+            String::append(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append(__local_4, String { repr: array.new_data<u8>("__test_12_generic_method_delegation"), used: 35 });
+            String::append_char(__local_4, 32);
+            String::append_char(__local_4, 97);
+            String::append_char(__local_4, 116);
+            String::append_char(__local_4, 32);
+            String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/closure_3.wado"), used: 43 });
+            String::append_char(__local_4, 58);
+            __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
+            __local_13 = __local_5;
+            i32::fmt_decimal(204, __local_13);
+            String::append(__local_4, String { repr: array.new_data<u8>("
+condition: result == 3
+"), used: 24 });
+            String::append_char(__local_4, 114);
+            String::append_char(__local_4, 101);
+            String::append_char(__local_4, 115);
+            String::append_char(__local_4, 117);
+            String::append_char(__local_4, 108);
+            String::append_char(__local_4, 116);
+            String::append_char(__local_4, 58);
+            String::append_char(__local_4, 32);
+            __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
+            __local_18 = __local_5;
+            i32::fmt_decimal(result, __local_18);
+            String::append_char(__local_4, 10);
+            break __tmpl: __local_4;
+        });
+        unreachable;
+    };
 }
 
 fn __cm_export____test_0_nested_basic() {
@@ -2061,6 +2113,7 @@ fn __cm_export____test_11_sorted_by() {
 }
 
 fn __cm_export____test_12_generic_method_delegation() {
+    __test_12_generic_method_delegation();
     "wasi/task-return"(0);
 }
 
@@ -2069,13 +2122,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l70: loop {
+            l72: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l70;
+                continue l72;
             };
         };
     };
@@ -2190,13 +2243,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l77: loop {
+            l79: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l77;
+                continue l79;
             };
         };
     };
@@ -2213,14 +2266,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l81: loop {
+                l83: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l81;
+                    continue l83;
                 };
             };
         };
@@ -2347,14 +2400,14 @@ fn Array<i32>::sort_by(self, cmp) {
     width = 1;
     __for_5: block {
         block {
-            l94: loop {
+            l96: loop {
                 if (width < n) == 0 {
                     break __for_5;
                 };
                 __for_6: block {
                     start = 0;
                     block {
-                        l97: loop {
+                        l99: loop {
                             if (start < n) == 0 {
                                 break __for_6;
                             };
@@ -2369,7 +2422,7 @@ fn Array<i32>::sort_by(self, cmp) {
                                 __for_7: block {
                                     k = start;
                                     block {
-                                        l101: loop {
+                                        l103: loop {
                                             if (k < end) == 0 {
                                                 break __for_7;
                                             };
@@ -2398,19 +2451,19 @@ fn Array<i32>::sort_by(self, cmp) {
                                                 j = j + 1;
                                             };
                                             k = k + 1;
-                                            continue l101;
+                                            continue l103;
                                         };
                                     };
                                 };
                                 builtin::array_copy<i32>(src, start, buf, start, end - start);
                             };
                             start = start + (width * 2);
-                            continue l97;
+                            continue l99;
                         };
                     };
                 };
                 width = width * 2;
-                continue l94;
+                continue l96;
             };
         };
     };
@@ -2424,8 +2477,8 @@ fn MapIter<i32,i32>^Iterator::collect(self) {
         __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    b107: block {
-        l108: loop {
+    b109: block {
+        l110: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = MapIter<i32,i32>^Iterator::next(self);
@@ -2433,9 +2486,9 @@ fn MapIter<i32,i32>^Iterator::collect(self) {
                 item = __sroa___pattern_temp_0_payload_0;
                 Array<i32>::append(result, item);
             } else {
-                break b107;
+                break b109;
             };
-            continue l108;
+            continue l110;
         };
     };
     return result;
@@ -2470,13 +2523,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l112: loop {
+            l114: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l112;
+                continue l114;
             };
         };
     };
@@ -2515,8 +2568,8 @@ fn FilterIter<i32>^Iterator::collect(self) {
         __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    b117: block {
-        l118: loop {
+    b119: block {
+        l120: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = FilterIter<i32>^Iterator::next(self);
@@ -2524,9 +2577,9 @@ fn FilterIter<i32>^Iterator::collect(self) {
                 item = __sroa___pattern_temp_0_payload_0;
                 Array<i32>::append(result, item);
             } else {
-                break b117;
+                break b119;
             };
-            continue l118;
+            continue l120;
         };
     };
     return result;
@@ -2543,7 +2596,7 @@ fn FilterIter<i32>^Iterator::next(self) {
     _licm_pred_4 = self.pred;
     _hfs_index_5 = self.index;
     block {
-        l121: loop {
+        l123: loop {
             if _hfs_index_5 >= _licm_used_2 {
                 self.index = _hfs_index_5;
                 return 1; 0;
@@ -2558,7 +2611,7 @@ fn FilterIter<i32>^Iterator::next(self) {
                 self.index = _hfs_index_5;
                 return 0; item;
             };
-            continue l121;
+            continue l123;
         };
     };
     self.index = _hfs_index_5;
@@ -2574,8 +2627,8 @@ fn MapIter<i32,i32>::fold<i32>(self, init, f) {
         __local_7 = self;
         break __inline_MapIter_i32_i32__IntoIterator__into_iter_0: __local_7;
     });
-    b125: block {
-        l126: loop {
+    b127: block {
+        l128: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = MapIter<i32,i32>^Iterator::next(__iter_4);
@@ -2587,9 +2640,9 @@ fn MapIter<i32,i32>::fold<i32>(self, init, f) {
                     call_ref "functype/$canonical_closure_fn_3"(__indirect_call_0.func, __indirect_call_0.env, acc, item);
                 };
             } else {
-                break b125;
+                break b127;
             };
-            continue l126;
+            continue l128;
         };
     };
     return acc;
@@ -2603,8 +2656,8 @@ fn FilterMapIter<i32,i32>^Iterator::collect(self) {
         __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    b129: block {
-        l130: loop {
+    b131: block {
+        l132: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = FilterMapIter<i32,i32>^Iterator::next(self);
@@ -2612,9 +2665,9 @@ fn FilterMapIter<i32,i32>^Iterator::collect(self) {
                 item = __sroa___pattern_temp_0_payload_0;
                 Array<i32>::append(result, item);
             } else {
-                break b129;
+                break b131;
             };
-            continue l130;
+            continue l132;
         };
     };
     return result;
@@ -2633,7 +2686,7 @@ fn FilterMapIter<i32,i32>^Iterator::next(self) {
     _licm_f_5 = self.f;
     _hfs_index_6 = self.index;
     block {
-        l133: loop {
+        l135: loop {
             if _hfs_index_6 >= _licm_used_2 {
                 self.index = _hfs_index_6;
                 return 1; 0;
@@ -2652,7 +2705,7 @@ fn FilterMapIter<i32,i32>^Iterator::next(self) {
                     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env, item);
                 };
             };
-            continue l133;
+            continue l135;
         };
     };
     self.index = _hfs_index_6;
@@ -2744,8 +2797,8 @@ fn ArrayIter<i32>::fold<i32>$__Closure_10(self, init, f) {
         __local_7 = self;
         break __inline_ArrayIter_i32__IntoIterator__into_iter_0: __local_7;
     });
-    b144: block {
-        l145: loop {
+    b146: block {
+        l147: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -2756,9 +2809,9 @@ fn ArrayIter<i32>::fold<i32>$__Closure_10(self, init, f) {
                     break __inline___Closure_10____call_1: __local_9 + item;
                 };
             } else {
-                break b144;
+                break b146;
             };
-            continue l145;
+            continue l147;
         };
     };
     return acc;
@@ -2775,8 +2828,8 @@ fn ArrayIter<i32>::fold<i32>$__Closure_11(self, init, f) {
         __local_7 = self;
         break __inline_ArrayIter_i32__IntoIterator__into_iter_0: __local_7;
     });
-    b147: block {
-        l148: loop {
+    b149: block {
+        l150: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -2787,9 +2840,9 @@ fn ArrayIter<i32>::fold<i32>$__Closure_11(self, init, f) {
                     break __inline___Closure_11____call_1: __local_9 * item;
                 };
             } else {
-                break b147;
+                break b149;
             };
-            continue l148;
+            continue l150;
         };
     };
     return acc;
@@ -2806,8 +2859,8 @@ fn ArrayIter<i32>::fold<i32>$__Closure_12(self, init, f) {
         __local_7 = self;
         break __inline_ArrayIter_i32__IntoIterator__into_iter_0: __local_7;
     });
-    b150: block {
-        l151: loop {
+    b152: block {
+        l153: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -2821,9 +2874,9 @@ fn ArrayIter<i32>::fold<i32>$__Closure_12(self, init, f) {
                     break __inline___Closure_12____call_1: __local_9;
                 };
             } else {
-                break b150;
+                break b152;
             };
-            continue l151;
+            continue l153;
         };
     };
     return acc;
@@ -2840,8 +2893,8 @@ fn ArrayIter<i32>::fold<i32>$__Closure_13(self, init, f) {
         __local_7 = self;
         break __inline_ArrayIter_i32__IntoIterator__into_iter_0: __local_7;
     });
-    b154: block {
-        l155: loop {
+    b156: block {
+        l157: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -2855,9 +2908,9 @@ fn ArrayIter<i32>::fold<i32>$__Closure_13(self, init, f) {
                     break __inline___Closure_13____call_1: __local_9;
                 };
             } else {
-                break b154;
+                break b156;
             };
-            continue l155;
+            continue l157;
         };
     };
     return acc;
@@ -2887,14 +2940,14 @@ fn Array<i32>::sort_by$__Closure_16(self, cmp) {
     width = 1;
     __for_5: block {
         block {
-            l160: loop {
+            l162: loop {
                 if (width < n) == 0 {
                     break __for_5;
                 };
                 __for_6: block {
                     start = 0;
                     block {
-                        l163: loop {
+                        l165: loop {
                             if (start < n) == 0 {
                                 break __for_6;
                             };
@@ -2909,7 +2962,7 @@ fn Array<i32>::sort_by$__Closure_16(self, cmp) {
                                 __for_7: block {
                                     k = start;
                                     block {
-                                        l167: loop {
+                                        l169: loop {
                                             if (k < end) == 0 {
                                                 break __for_7;
                                             };
@@ -2934,19 +2987,19 @@ fn Array<i32>::sort_by$__Closure_16(self, cmp) {
                                                 j = j + 1;
                                             };
                                             k = k + 1;
-                                            continue l167;
+                                            continue l169;
                                         };
                                     };
                                 };
                                 builtin::array_copy<i32>(src, start, buf, start, end - start);
                             };
                             start = start + (width * 2);
-                            continue l163;
+                            continue l165;
                         };
                     };
                 };
                 width = width * 2;
-                continue l160;
+                continue l162;
             };
         };
     };
@@ -2976,14 +3029,14 @@ fn Array<i32>::sort_by$__Closure_17(self, cmp) {
     width = 1;
     __for_5: block {
         block {
-            l174: loop {
+            l176: loop {
                 if (width < n) == 0 {
                     break __for_5;
                 };
                 __for_6: block {
                     start = 0;
                     block {
-                        l177: loop {
+                        l179: loop {
                             if (start < n) == 0 {
                                 break __for_6;
                             };
@@ -2998,7 +3051,7 @@ fn Array<i32>::sort_by$__Closure_17(self, cmp) {
                                 __for_7: block {
                                     k = start;
                                     block {
-                                        l181: loop {
+                                        l183: loop {
                                             if (k < end) == 0 {
                                                 break __for_7;
                                             };
@@ -3023,19 +3076,19 @@ fn Array<i32>::sort_by$__Closure_17(self, cmp) {
                                                 j = j + 1;
                                             };
                                             k = k + 1;
-                                            continue l181;
+                                            continue l183;
                                         };
                                     };
                                 };
                                 builtin::array_copy<i32>(src, start, buf, start, end - start);
                             };
                             start = start + (width * 2);
-                            continue l177;
+                            continue l179;
                         };
                     };
                 };
                 width = width * 2;
-                continue l174;
+                continue l176;
             };
         };
     };
@@ -3060,13 +3113,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l187: loop {
+            l189: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l187;
+                continue l189;
             };
         };
     };

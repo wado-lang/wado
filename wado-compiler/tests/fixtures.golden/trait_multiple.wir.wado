@@ -1145,7 +1145,11 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
 fn check_special(f) {
     let bits: i64;
     let is_neg: bool;
-    bits = builtin::i64_reinterpret_f64(f);
+    let __local_6: f64;
+    bits = __inline_f64__to_bits_0: block -> i64 {
+        __local_6 = f;
+        break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(__local_6);
+    };
     if bits == 0_i64 {
         return 1; 0; 1;
     };

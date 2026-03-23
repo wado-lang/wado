@@ -118,9 +118,14 @@ fn sroa_in_function(
         find_soft_escaped_locals(body, &candidates, &escaped, stores_lookup, current_module);
 
     // Filter candidates: non-escaped are "safe", soft-escaped are "reconstruct".
+    // Locals in stores_aliased_locals are treated as hard-escaped (their references
+    // were stored by an inlined stores function or a previously decomposed struct).
     let mut safe_set: IndexSet<u32> = IndexSet::default();
     let mut reconstruct_set: IndexSet<u32> = IndexSet::default();
     for c in &candidates {
+        if func.stores_aliased_locals.contains(&c.local_index) {
+            continue; // Blocked: reference was stored, unsafe to decompose
+        }
         if !escaped.contains(&c.local_index) {
             safe_set.insert(c.local_index);
         } else if soft_escaped.contains(&c.local_index) {
@@ -179,6 +184,12 @@ fn sroa_in_function(
         }
     }
 
+    // Step 3b: Mark locals referenced via &local in decomposed struct fields.
+    // When SROA decomposes `let h = S { field: &p }` into `__sroa_h_field = &p`,
+    // future ref_elim may eliminate the `&p`, hiding the aliasing from future SROA.
+    // Mark `p` as stores-aliased so it won't be decomposed in later iterations.
+    mark_ref_field_locals_as_aliased(body, &all_sroa, &mut func.stores_aliased_locals);
+
     // Step 4: Rewrite — expand Let statements and replace field accesses.
     rewrite_block(
         body,
@@ -190,6 +201,110 @@ fn sroa_in_function(
     );
 
     true
+}
+
+/// When SROA decomposes a struct with `&local` field values, mark those locals
+/// as stores-aliased to prevent future SROA from decomposing them.
+fn mark_ref_field_locals_as_aliased(
+    body: &TirBlock,
+    decomposed: &IndexSet<u32>,
+    stores_aliased: &mut IndexSet<u32>,
+) {
+    for stmt in &body.stmts {
+        mark_ref_fields_in_stmt(stmt, decomposed, stores_aliased);
+    }
+}
+
+fn mark_ref_fields_in_stmt(
+    stmt: &TirStmt,
+    decomposed: &IndexSet<u32>,
+    stores_aliased: &mut IndexSet<u32>,
+) {
+    match &stmt.kind {
+        TirStmtKind::Let {
+            local_index, value, ..
+        } => {
+            if decomposed.contains(local_index) {
+                // This candidate is being decomposed — scan field values for &local
+                collect_ref_locals_in_fields(value, stores_aliased);
+            }
+            mark_ref_fields_in_expr(value, decomposed, stores_aliased);
+        }
+        TirStmtKind::Expr(expr) => {
+            mark_ref_fields_in_expr(expr, decomposed, stores_aliased);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                mark_ref_fields_in_expr(v, decomposed, stores_aliased);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            mark_ref_fields_in_expr(condition, decomposed, stores_aliased);
+            mark_ref_field_locals_as_aliased(then_block, decomposed, stores_aliased);
+            if let Some(eb) = else_block {
+                mark_ref_field_locals_as_aliased(eb, decomposed, stores_aliased);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            mark_ref_field_locals_as_aliased(body, decomposed, stores_aliased);
+        }
+        _ => {}
+    }
+}
+
+fn mark_ref_fields_in_expr(
+    expr: &TirExpr,
+    decomposed: &IndexSet<u32>,
+    stores_aliased: &mut IndexSet<u32>,
+) {
+    match &expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            mark_ref_field_locals_as_aliased(block, decomposed, stores_aliased);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            mark_ref_fields_in_expr(condition, decomposed, stores_aliased);
+            mark_ref_field_locals_as_aliased(then_branch, decomposed, stores_aliased);
+            if let Some(eb) = else_branch {
+                mark_ref_field_locals_as_aliased(eb, decomposed, stores_aliased);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Collect local indices from `&local` expressions in struct/tuple literal fields.
+fn collect_ref_locals_in_fields(expr: &TirExpr, stores_aliased: &mut IndexSet<u32>) {
+    match &expr.kind {
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                extract_ref_local(&field.value, stores_aliased);
+            }
+        }
+        TirExprKind::TupleLiteral { elements, .. } => {
+            for elem in elements {
+                extract_ref_local(elem, stores_aliased);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// If `expr` is `&local` or `&mut local`, add the local index to the set.
+fn extract_ref_local(expr: &TirExpr, stores_aliased: &mut IndexSet<u32>) {
+    if let TirExprKind::Unary { op, expr: inner } = &expr.kind
+        && matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+        && let TirExprKind::Local { index, .. } = &inner.kind
+    {
+        stores_aliased.insert(*index);
+    }
 }
 
 /// Info needed to reconstruct a struct literal from SROA'd fields at escape sites.

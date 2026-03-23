@@ -339,6 +339,9 @@ async fn run_http_request_async(
         },
     };
     let mut store = Store::new(engine, state);
+    // Set epoch deadline for timeout enforcement (HTTP tests use 5s default)
+    let deadline_ticks = (common::DEFAULT_TIMEOUT_MS / 1000).max(1);
+    store.set_epoch_deadline(deadline_ticks);
 
     let service = Service::instantiate_async(&mut store, &component, &linker).await?;
 
@@ -540,6 +543,12 @@ fn run_test_world(
             let mut state = common::WasiState::new_with_pipes(stdout_pipe, stderr_pipe);
             state.http.mocks = outgoing_mocks.clone();
             let mut store = Store::new(engine, state);
+            // Parse per-test timeout from export name (e.g., "test-tm2000-0-slow")
+            // and set epoch deadline for timeout enforcement
+            let timeout_ms =
+                parse_test_timeout_ms(test_name).unwrap_or(common::DEFAULT_TIMEOUT_MS);
+            let deadline_ticks = (timeout_ms / 1000).max(1);
+            store.set_epoch_deadline(deadline_ticks);
 
             let instance = linker.instantiate_async(&mut store, &component).await?;
             let func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, test_name)?;
@@ -586,6 +595,17 @@ fn run_test_world(
             trapped: false,
         })
     })
+}
+
+/// Parse per-test timeout from export name (e.g., "test-tm2000-0-slow" → Some(2000)).
+fn parse_test_timeout_ms(test_name: &str) -> Option<u64> {
+    let rest = test_name
+        .strip_prefix("test-trap-")
+        .or_else(|| test_name.strip_prefix("test-todo-"))
+        .or_else(|| test_name.strip_prefix("test-"))?;
+    let rest = rest.strip_prefix("tm")?;
+    let end = rest.find('-')?;
+    rest[..end].parse::<u64>().ok()
 }
 
 // ---------------------------------------------------------------------------

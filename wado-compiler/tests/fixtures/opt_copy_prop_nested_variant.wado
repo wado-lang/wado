@@ -1,0 +1,155 @@
+// Test: copy propagation + variant SROA with nested variant matching
+//
+// Exercises the pattern that caused the json_value_test crash: when copy
+// propagation inlines `__match_scrut = result`, SROA decomposes the call into
+// multivalue, but `ref.cast` on the temp gets stored to an intermediate local
+// (__cast_N) that StructGet then reads. The rewriting must handle this
+// separated RefCast+StructGet pattern via alias tracking.
+//
+// Tests several nesting patterns:
+// 1. Result<Option<T>, E> with nested match (the json_value bug)
+// 2. if-let chains creating multiple __match_scrut copies
+// 3. Loop with repeated nested variant matching
+// 4. Sequential matches on different variant-returning calls
+// 5. Variant payload that is itself a custom variant
+
+// --- Case 1: Result<Option<T>, E> nested match ---
+
+#[inline("never")]
+fn find_item(key: i32) -> Result<Option<i32>, String> {
+    if key == 0 {
+        return Result::<Option<i32>, String>::Ok(null);
+    }
+    if key < 0 {
+        return Result::<Option<i32>, String>::Err("not found");
+    }
+    return Result::<Option<i32>, String>::Ok(Option::<i32>::Some(key * 10));
+}
+
+fn lookup_match(key: i32) -> i32 {
+    let result = find_item(key);
+    match result {
+        Ok(opt) => match opt {
+            Some(v) => { return v; },
+            None => { return -1; },
+        },
+        Err(_) => { return -2; },
+    }
+}
+
+// --- Case 2: if-let chains ---
+
+fn lookup_if_let(key: i32) -> i32 {
+    let result = find_item(key);
+    if let Ok(opt) = result {
+        if let Some(v) = opt {
+            return v;
+        }
+        return -1;
+    }
+    return -2;
+}
+
+// --- Case 3: Loop with nested variant matching ---
+
+fn sum_until_none(keys: Array<i32>) -> i32 {
+    let mut sum = 0;
+    for let key of keys {
+        let result = find_item(key);
+        match result {
+            Ok(opt) => match opt {
+                Some(v) => { sum += v; },
+                None => { break; },
+            },
+            Err(_) => {},
+        }
+    }
+    return sum;
+}
+
+// --- Case 4: Sequential matches on different calls ---
+
+fn combine(a: i32, b: i32) -> i32 {
+    let r1 = find_item(a);
+    let v1 = match r1 {
+        Ok(opt) => match opt {
+            Some(v) => v,
+            None => -1,
+        },
+        Err(_) => -2,
+    };
+
+    let r2 = find_item(b);
+    let v2 = match r2 {
+        Ok(opt) => match opt {
+            Some(v) => v,
+            None => -1,
+        },
+        Err(_) => -2,
+    };
+
+    return v1 + v2;
+}
+
+// --- Case 5: Variant payload is a custom variant ---
+
+variant Shape {
+    Circle(f64),
+    Rect([f64, f64]),
+}
+
+#[inline("never")]
+fn parse_shape(kind: i32) -> Result<Shape, String> {
+    if kind == 1 {
+        return Result::<Shape, String>::Ok(Shape::Circle(3.14));
+    }
+    if kind == 2 {
+        return Result::<Shape, String>::Ok(Shape::Rect([4.0, 5.0]));
+    }
+    return Result::<Shape, String>::Err("unknown shape");
+}
+
+fn shape_area(kind: i32) -> f64 {
+    let result = parse_shape(kind);
+    match result {
+        Ok(shape) => {
+            match shape {
+                Circle(r) => { return r * r; },
+                Rect(dims) => { return dims.0 * dims.1; },
+            }
+        },
+        Err(_) => { return -1.0; },
+    }
+}
+
+export fn run() {
+    // Case 1: nested match
+    assert lookup_match(5) == 50;
+    assert lookup_match(0) == -1;
+    assert lookup_match(-1) == -2;
+
+    // Case 2: if-let chain
+    assert lookup_if_let(5) == 50;
+    assert lookup_if_let(0) == -1;
+    assert lookup_if_let(-1) == -2;
+
+    // Case 3: loop
+    let keys: Array<i32> = [1, 2, 0, 3];
+    assert sum_until_none(keys) == 30;
+
+    // Case 4: sequential matches
+    assert combine(1, 2) == 30;
+
+    // Case 5: variant in variant
+    assert shape_area(1) == 3.14 * 3.14;
+    assert shape_area(2) == 20.0;
+    assert shape_area(3) == -1.0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O1": [
+        "multivalue_bind [__sroa_result_discriminant"
+    ]
+}

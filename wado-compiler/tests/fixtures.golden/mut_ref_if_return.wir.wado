@@ -71,21 +71,6 @@ struct Result<NodeA,String>::Err {
     payload_0: ref String,
 }
 
-variant Result<i32,String> {
-    Ok(i32),
-    Err(ref String),
-}
-
-struct Result<i32,String>::Ok {
-    discriminant: i32,
-    payload_0: i32,
-}
-
-struct Result<i32,String>::Err {
-    discriminant: i32,
-    payload_0: ref String,
-}
-
 struct Array<Token> {  // Array<T> with T=Token
     mut repr: ref array<Token>,
     mut used: i32,
@@ -110,8 +95,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/parse_item" = fn(ref Parser) -> ref Result<NodeA,String>;
-
-type "functype/parse_root" = fn(ref Parser) -> ref Result<i32,String>;
 
 type "functype/run" = fn();
 
@@ -162,6 +145,8 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
+
+type "functype/parse_root" = fn(ref Parser) -> [i32, i32, ref null String];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -272,7 +257,7 @@ fn parse_root(p) {
                 let __cast_1: ref Result<NodeA,String>::Err;
                 __cast_1 = ref.cast Result<NodeA,String>::Err(__match_scrut_0);
                 __local_2 = __cast_1.payload_0;
-                return Result<i32,String>::Err { discriminant: 1, payload_0: ref.as_non_null(__local_2) };
+                return 1; 0; ref.as_non_null(__local_2);
                 unreachable;
             } else {
                 unreachable;
@@ -323,7 +308,7 @@ condition: p.pos == 1
         });
         unreachable;
     };
-    return Result<i32,String>::Ok { discriminant: 0, payload_0: 0 };
+    return 0; 0; ref.null none;
 }
 
 fn run() {
@@ -332,15 +317,17 @@ fn run() {
     let parser: ref Parser;
     let e: ref String;
     let __local_5: ref String;
-    let __sroa_r_value: ref Result<i32,String>;
     tokens = __seq_lit: block -> ref Array<Token> {
         __local_0 = Array<Token> { repr: array.new_fixed<ref Token>(Token { kind: 1, text: String { repr: array.new_data<u8>("hello"), used: 5 } }, Token { kind: 0, text: String { repr: builtin::array_new<u8>(0), used: 0 } }), used: 2 };
         break __seq_lit: __local_0;
     };
     parser = Parser { tokens: ref.as_non_null(tokens), pos: 0 };
-    __sroa_r_value = parse_root(parser);
-    if ref.test Result<i32,String>::Err(__sroa_r_value) {
-        e = ref.cast Result<i32,String>::Err(__sroa_r_value).payload_0;
+    let __sroa___sroa_r_value_discriminant: i32;
+    let __sroa___sroa_r_value_case0_payload_0: i32;
+    let __sroa___sroa_r_value_case1_payload_0: ref null String;
+    multivalue_bind [__sroa___sroa_r_value_discriminant, __sroa___sroa_r_value_case0_payload_0, __sroa___sroa_r_value_case1_payload_0] = parse_root(parser);
+    if __sroa___sroa_r_value_discriminant == 1 {
+        e = ref.as_non_null(__sroa___sroa_r_value_case1_payload_0);
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_5 = String { repr: builtin::array_new<u8>(23), used: 0 };
             String::append_char(__local_5, 101);

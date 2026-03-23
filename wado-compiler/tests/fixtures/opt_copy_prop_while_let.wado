@@ -1,0 +1,103 @@
+// Test: copy propagation with while-let and repeated variant matching
+//
+// while-let generates __match_scrut and __pattern_temp inside a loop body,
+// creating repeated definitions across iterations. Copy propagation must
+// handle these correctly — the copy is re-evaluated each iteration.
+//
+// Also tests interaction between SROA and while-let: the variant-returning
+// function is called in a loop condition position.
+
+struct Iterator {
+    items: Array<i32>,
+    pos: i32,
+}
+
+#[inline("never")]
+fn iter_next(it: &mut Iterator) -> Option<i32> {
+    if it.pos >= it.items.len() {
+        return null;
+    }
+    let v = it.items[it.pos];
+    it.pos = it.pos + 1;
+    return Option::<i32>::Some(v);
+}
+
+// --- Case 1: Simple while-let ---
+
+fn sum_iter(items: Array<i32>) -> i32 {
+    let mut it = Iterator { items, pos: 0 };
+    let mut sum = 0;
+    while let Some(v) = iter_next(&mut it) {
+        sum += v;
+    }
+    return sum;
+}
+
+// --- Case 2: while-let with nested match ---
+
+#[inline("never")]
+fn classify(n: i32) -> Result<String, String> {
+    if n < 0 {
+        return Result::<String, String>::Err("negative");
+    }
+    if n == 0 {
+        return Result::<String, String>::Ok("zero");
+    }
+    return Result::<String, String>::Ok("positive");
+}
+
+fn count_positive(items: Array<i32>) -> i32 {
+    let mut it = Iterator { items, pos: 0 };
+    let mut count = 0;
+    while let Some(v) = iter_next(&mut it) {
+        let result = classify(v);
+        match result {
+            Ok(label) => {
+                if label == "positive" {
+                    count += 1;
+                }
+            },
+            Err(_) => {},
+        }
+    }
+    return count;
+}
+
+// --- Case 3: Nested while-let (two iterators sharing backing array) ---
+
+fn cross_sum(a: Array<i32>, b: Array<i32>) -> i32 {
+    let mut it_a = Iterator { items: a, pos: 0 };
+    let mut sum = 0;
+    while let Some(va) = iter_next(&mut it_a) {
+        let mut it_b = Iterator { items: b, pos: 0 };
+        while let Some(vb) = iter_next(&mut it_b) {
+            sum += va * vb;
+        }
+    }
+    return sum;
+}
+
+export fn run() {
+    // Case 1
+    let items: Array<i32> = [1, 2, 3, 4, 5];
+    assert sum_iter(items) == 15;
+    let empty: Array<i32> = [];
+    assert sum_iter(empty) == 0;
+
+    // Case 2
+    let mixed: Array<i32> = [1, -1, 2, 0, 3, -5];
+    assert count_positive(mixed) == 3;
+
+    // Case 3
+    let a: Array<i32> = [1, 2, 3];
+    let b: Array<i32> = [10, 20];
+    assert cross_sum(a, b) == 180;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O1": [
+        "multivalue_bind [__sroa_"
+    ]
+}

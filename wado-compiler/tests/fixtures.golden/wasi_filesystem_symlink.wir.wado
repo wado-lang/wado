@@ -258,7 +258,6 @@ fn run() with Stdout, Stderr, Preopens {
     let chunk: ref Array<u8>;
     let unlink_sym: ref Result<unit,ErrorCode>;
     let __local_17: ref String;
-    let __pattern_temp_1: ref Result<unit,ErrorCode>;
     dirs = __cm_binding__Preopens_get_directories();
     if dirs.used == 0 {
         "core:cli/eprintln"(String { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -274,19 +273,16 @@ fn run() with Stdout, Stderr, Preopens {
     sym_result = __cm_binding__Descriptor_symlink_at(dir, String { repr: array.new_data<u8>("hello.txt"), used: 9 }, String { repr: array.new_data<u8>("test_symlink"), used: 12 });
     if sym_result.discriminant == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("symlink_at: created symlink"), used: 27 });
-    } else {
-        __pattern_temp_1 = sym_result;
-        if ref.test Result<unit,ErrorCode>::Err(__pattern_temp_1) {
-            err = ref.cast Result<unit,ErrorCode>::Err(__pattern_temp_1).payload_0;
-            if err == 26 {
-                "core:cli/println"(String { repr: array.new_data<u8>("symlink_at: not supported (skipping symlink tests)"), used: 50 });
-                test_link_at(dir);
-                "core:cli/println"(String { repr: array.new_data<u8>("all symlink tests passed"), used: 24 });
-                return;
-            };
-            "core:cli/eprintln"(String { repr: array.new_data<u8>("symlink_at: failed with unexpected error"), used: 40 });
+    } else if ref.test Result<unit,ErrorCode>::Err(sym_result) {
+        err = ref.cast Result<unit,ErrorCode>::Err(sym_result).payload_0;
+        if err == 26 {
+            "core:cli/println"(String { repr: array.new_data<u8>("symlink_at: not supported (skipping symlink tests)"), used: 50 });
+            test_link_at(dir);
+            "core:cli/println"(String { repr: array.new_data<u8>("all symlink tests passed"), used: 24 });
             return;
         };
+        "core:cli/eprintln"(String { repr: array.new_data<u8>("symlink_at: failed with unexpected error"), used: 40 });
+        return;
     };
     readlink_result = __cm_binding__Descriptor_readlink_at(dir, String { repr: array.new_data<u8>("test_symlink"), used: 12 });
     if ref.test Result<String,ErrorCode>::Ok(readlink_result) {
@@ -360,7 +356,6 @@ fn test_link_at(dir) with Stdout, Stderr {
     let err: "wasi:filesystem/types.wado/enum:ErrorCode";
     let link_stat: ref Result<DescriptorStat,ErrorCode>;
     let stat: ref "wasi:filesystem/types.wado/DescriptorStat";
-    let __pattern_temp_2: ref Result<unit,ErrorCode>;
     link_result = __cm_binding__Descriptor_link_at(dir, 0, String { repr: array.new_data<u8>("hello.txt"), used: 9 }, dir, String { repr: array.new_data<u8>("test_hardlink"), used: 13 });
     if link_result.discriminant == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("link_at: created hard link"), used: 26 });
@@ -372,15 +367,12 @@ fn test_link_at(dir) with Stdout, Stderr {
             };
         };
         drop(__cm_binding__Descriptor_unlink_file_at(dir, String { repr: array.new_data<u8>("test_hardlink"), used: 13 }));
-    } else {
-        __pattern_temp_2 = link_result;
-        if ref.test Result<unit,ErrorCode>::Err(__pattern_temp_2) {
-            err = ref.cast Result<unit,ErrorCode>::Err(__pattern_temp_2).payload_0;
-            if err == 26 {
-                "core:cli/println"(String { repr: array.new_data<u8>("link_at: not supported (skipping)"), used: 33 });
-            } else {
-                "core:cli/eprintln"(String { repr: array.new_data<u8>("link_at: failed with unexpected error"), used: 37 });
-            };
+    } else if ref.test Result<unit,ErrorCode>::Err(link_result) {
+        err = ref.cast Result<unit,ErrorCode>::Err(link_result).payload_0;
+        if err == 26 {
+            "core:cli/println"(String { repr: array.new_data<u8>("link_at: not supported (skipping)"), used: 33 });
+        } else {
+            "core:cli/eprintln"(String { repr: array.new_data<u8>("link_at: failed with unexpected error"), used: 37 });
         };
     };
 }

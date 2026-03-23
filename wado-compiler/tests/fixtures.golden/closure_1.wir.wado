@@ -184,6 +184,8 @@ type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
+type "functype/Formatter::pad" = fn(ref Formatter, ref String);
+
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
 type "functype/String^Inspect::inspect" = fn(ref String, ref Formatter);
@@ -246,6 +248,51 @@ fn __test_3_closure_create_only() {
 }
 
 fn __test_4_closure_fn_param_capture() {
+    let result: i32;
+    let __cond: bool;
+    let __local_5: ref String;
+    let __local_6: ref Formatter;
+    let __local_15: ref Formatter;
+    let __local_20: ref Formatter;
+    let __local_24: i32;
+    result = __inline_ClosureBox_i32___apply___Closure_7_2: block -> i32 {
+        __local_24 = 3;
+        break __inline_ClosureBox_i32___apply___Closure_7_2: 15;
+    };
+    __cond = result == 15;
+    if __cond == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_5 = String { repr: builtin::array_new<u8>(123), used: 0 };
+            String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append(__local_5, String { repr: array.new_data<u8>("__test_4_closure_fn_param_capture"), used: 33 });
+            String::append_char(__local_5, 32);
+            String::append_char(__local_5, 97);
+            String::append_char(__local_5, 116);
+            String::append_char(__local_5, 32);
+            String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/closure_1.wado"), used: 43 });
+            String::append_char(__local_5, 58);
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+            __local_15 = __local_6;
+            i32::fmt_decimal(93, __local_15);
+            String::append(__local_5, String { repr: array.new_data<u8>("
+condition: result == 15
+"), used: 25 });
+            String::append_char(__local_5, 114);
+            String::append_char(__local_5, 101);
+            String::append_char(__local_5, 115);
+            String::append_char(__local_5, 117);
+            String::append_char(__local_5, 108);
+            String::append_char(__local_5, 116);
+            String::append_char(__local_5, 58);
+            String::append_char(__local_5, 32);
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+            __local_20 = __local_6;
+            i32::fmt_decimal(result, __local_20);
+            String::append_char(__local_5, 10);
+            break __tmpl: __local_5;
+        });
+        unreachable;
+    };
 }
 
 fn __test_5_closure_fn_param_effectful() {
@@ -383,6 +430,95 @@ fn __test_6_closure_fn_param_multiple() {
 }
 
 fn __test_7_closure_fn_param_no_args() {
+    let result: i32;
+    let __cond_3: bool;
+    let b: bool;
+    let __cond_7: bool;
+    let __local_8: ref String;
+    let __local_9: ref Formatter;
+    let __local_10: ref String;
+    let __local_11: ref Formatter;
+    let __local_19: ref Formatter;
+    let __local_24: ref Formatter;
+    let __local_32: ref Formatter;
+    let __local_37: ref Formatter;
+    let __local_40: i32;
+    let __local_41: bool;
+    result = __inline_call_twice___Closure_11_2: block -> i32 {
+        __local_40 = 21;
+        break __inline_call_twice___Closure_11_2: 42;
+    };
+    __cond_3 = result == 42;
+    if __cond_3 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_8 = String { repr: builtin::array_new<u8>(123), used: 0 };
+            String::append(__local_8, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append(__local_8, String { repr: array.new_data<u8>("__test_7_closure_fn_param_no_args"), used: 33 });
+            String::append_char(__local_8, 32);
+            String::append_char(__local_8, 97);
+            String::append_char(__local_8, 116);
+            String::append_char(__local_8, 32);
+            String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/closure_1.wado"), used: 43 });
+            String::append_char(__local_8, 58);
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+            __local_19 = __local_9;
+            i32::fmt_decimal(112, __local_19);
+            String::append(__local_8, String { repr: array.new_data<u8>("
+condition: result == 42
+"), used: 25 });
+            String::append_char(__local_8, 114);
+            String::append_char(__local_8, 101);
+            String::append_char(__local_8, 115);
+            String::append_char(__local_8, 117);
+            String::append_char(__local_8, 108);
+            String::append_char(__local_8, 116);
+            String::append_char(__local_8, 58);
+            String::append_char(__local_8, 32);
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+            __local_24 = __local_9;
+            i32::fmt_decimal(result, __local_24);
+            String::append_char(__local_8, 10);
+            break __tmpl: __local_8;
+        });
+        unreachable;
+    };
+    b = __inline_call_and_get_bool___Closure_12_12: block -> bool {
+        __local_41 = 1;
+        break __inline_call_and_get_bool___Closure_12_12: 1;
+    };
+    __cond_7 = b == 1;
+    if __cond_7 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_10 = String { repr: builtin::array_new<u8>(115), used: 0 };
+            String::append(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append(__local_10, String { repr: array.new_data<u8>("__test_7_closure_fn_param_no_args"), used: 33 });
+            String::append_char(__local_10, 32);
+            String::append_char(__local_10, 97);
+            String::append_char(__local_10, 116);
+            String::append_char(__local_10, 32);
+            String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/closure_1.wado"), used: 43 });
+            String::append_char(__local_10, 58);
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+            __local_32 = __local_11;
+            i32::fmt_decimal(116, __local_32);
+            String::append(__local_10, String { repr: array.new_data<u8>("
+condition: b == true
+"), used: 22 });
+            String::append_char(__local_10, 98);
+            String::append_char(__local_10, 58);
+            String::append_char(__local_10, 32);
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+            __local_37 = __local_11;
+            Formatter::pad(__local_37, if b -> ref String {
+                String { repr: array.new_data<u8>("true"), used: 4 };
+            } else {
+                String { repr: array.new_data<u8>("false"), used: 5 };
+            });
+            String::append_char(__local_10, 10);
+            break __tmpl: __local_10;
+        });
+        unreachable;
+    };
 }
 
 fn __test_8_closure_fn_param_static_method() {
@@ -586,6 +722,7 @@ fn __cm_export____test_3_closure_create_only() {
 }
 
 fn __cm_export____test_4_closure_fn_param_capture() {
+    __test_4_closure_fn_param_capture();
     "wasi/task-return"(0);
 }
 
@@ -599,6 +736,7 @@ fn __cm_export____test_6_closure_fn_param_multiple() {
 }
 
 fn __cm_export____test_7_closure_fn_param_no_args() {
+    __test_7_closure_fn_param_no_args();
     "wasi/task-return"(0);
 }
 
@@ -654,8 +792,8 @@ fn for_each_item$__Closure_8(items, f) {
         break __seq_lit: __local_2;
     };
     __iter_4 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(items.repr), used: items.used, index: 0 };
-    b14: block {
-        l15: loop {
+    b18: block {
+        l19: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -663,9 +801,9 @@ fn for_each_item$__Closure_8(items, f) {
                 item = __sroa___pattern_temp_0_payload_0;
                 Array<i32>::append(result, item * 10);
             } else {
-                break b14;
+                break b18;
             };
-            continue l15;
+            continue l19;
         };
     };
     return result;
@@ -676,13 +814,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l18: loop {
+            l22: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l18;
+                continue l22;
             };
         };
     };
@@ -797,13 +935,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l25: loop {
+            l29: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l25;
+                continue l29;
             };
         };
     };
@@ -820,14 +958,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l29: loop {
+                l33: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l29;
+                    continue l33;
                 };
             };
         };
@@ -919,7 +1057,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l38: loop {
+            l42: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -927,7 +1065,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l38;
+                continue l42;
             };
         };
     };
@@ -1034,13 +1172,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l51: loop {
+            l55: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l51;
+                continue l55;
             };
         };
     };
@@ -1072,15 +1210,49 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l55: loop {
+            l59: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l55;
+                continue l59;
             };
         };
+    };
+}
+
+fn Formatter::pad(self, content) {
+    let content_len: i32;
+    let padding: i32;
+    let align: enum:Alignment;
+    let left_pad: i32;
+    let right_pad: i32;
+    content_len = content.used;
+    if if self.width <= 0 -> i32 {
+        1;
+    } else {
+        content_len >= self.width;
+    } {
+        String::append(self.buf, content);
+        return;
+    };
+    padding = self.width - content_len;
+    align = self.align;
+    let __match_scrut_0: enum:Alignment;
+    __match_scrut_0 = align;
+    if __match_scrut_0 == 0 {
+        String::append(self.buf, content);
+        Formatter::write_char_n(self, self.fill, padding);
+    } else if align == 1 {
+        left_pad = padding / 2;
+        right_pad = padding - left_pad;
+        Formatter::write_char_n(self, self.fill, left_pad);
+        String::append(self.buf, content);
+        Formatter::write_char_n(self, self.fill, right_pad);
+    } else {
+        Formatter::write_char_n(self, self.fill, padding);
+        String::append(self.buf, content);
     };
 }
 
@@ -1181,8 +1353,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b74: block {
-        l75: loop {
+    b82: block {
+        l83: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -1207,9 +1379,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b74;
+                break b82;
             };
-            continue l75;
+            continue l83;
         };
     };
     String::append_char(f.buf, 34);

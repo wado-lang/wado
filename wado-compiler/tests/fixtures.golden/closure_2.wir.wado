@@ -124,6 +124,8 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
+type "functype/clamp" = fn(i32, i32, i32) -> i32;
+
 type "functype/scale_and_add" = fn(ref Array<i32>, i32, i32) -> i32;
 
 type "functype/__test_0_capture_fn_param" = fn();
@@ -293,54 +295,120 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
 
+fn clamp(value, min_val, max_val) {
+    let __sroa_is_above_min___capture_0: i32;
+    let __sroa_is_below_max___capture_0: i32;
+    __sroa_is_above_min___capture_0 = min_val;
+    __sroa_is_below_max___capture_0 = max_val;
+    if (value >= __sroa_is_above_min___capture_0) == 0 {
+        return min_val;
+    };
+    if (value <= __sroa_is_below_max___capture_0) == 0 {
+        return max_val;
+    };
+    return value;
+}
+
 fn scale_and_add(items, scale, base) {
     let total: i32;
     let __iter_5: ref "core:allocator/ArrayIter<i32>";
     let item: i32;
+    let _licm___capture_0_11: i32;
+    let _licm___capture_1_12: i32;
+    let __sroa_transform___capture_0: i32;
+    let __sroa_transform___capture_1: i32;
     total = 0;
+    __sroa_transform___capture_0 = scale;
+    __sroa_transform___capture_1 = base;
     __iter_5 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(items.repr), used: items.used, index: 0 };
-    b0: block {
-        l1: loop {
+    _licm___capture_0_11 = __sroa_transform___capture_0;
+    _licm___capture_1_12 = __sroa_transform___capture_1;
+    b2: block {
+        l3: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_5);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 item = __sroa___pattern_temp_0_payload_0;
-                total = total + ((item * scale) + base);
+                total = total + ((item * _licm___capture_0_11) + _licm___capture_1_12);
             } else {
-                break b0;
+                break b2;
             };
-            continue l1;
+            continue l3;
         };
     };
     return total;
 }
 
 fn __test_0_capture_fn_param() {
+    let r1: i32;
+    let __cond_2: bool;
     let __v0_3: i32;
     let __cond_4: bool;
+    let __v0_5: i32;
+    let __cond_6: bool;
     let __v0_7: i32;
     let __cond_8: bool;
     let __local_9: ref Array<i32>;
     let items: ref Array<i32>;
     let r5: i32;
     let __cond_13: bool;
+    let __local_14: ref String;
+    let __local_15: ref Formatter;
     let __local_16: ref String;
     let __local_17: ref Formatter;
+    let __local_18: ref String;
+    let __local_19: ref Formatter;
     let __local_20: ref String;
     let __local_21: ref Formatter;
     let __local_22: ref String;
     let __local_23: ref Formatter;
+    let __local_33: ref Formatter;
+    let __local_38: ref Formatter;
     let __local_44: ref Formatter;
     let __local_49: ref Formatter;
+    let __local_55: ref Formatter;
+    let __local_60: ref Formatter;
     let __local_66: ref Formatter;
     let __local_71: ref Formatter;
     let __local_86: ref Formatter;
     let __local_91: ref Formatter;
-    __v0_3 = __inline_clamp_0: block -> i32 {
-        break __inline_clamp_0: 10;
-        break __inline_clamp_0: 15;
+    let __local_94: i32;
+    r1 = __inline_apply_with_offset_2: block -> i32 {
+        __local_94 = 10;
+        break __inline_apply_with_offset_2: 15;
     };
+    __cond_2 = r1 == 15;
+    if __cond_2 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_14 = String { repr: builtin::array_new<u8>(115), used: 0 };
+            String::append(__local_14, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append(__local_14, String { repr: array.new_data<u8>("__test_0_capture_fn_param"), used: 25 });
+            String::append_char(__local_14, 32);
+            String::append_char(__local_14, 97);
+            String::append_char(__local_14, 116);
+            String::append_char(__local_14, 32);
+            String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/closure_2.wado"), used: 43 });
+            String::append_char(__local_14, 58);
+            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
+            __local_33 = __local_15;
+            i32::fmt_decimal(42, __local_33);
+            String::append(__local_14, String { repr: array.new_data<u8>("
+condition: r1 == 15
+"), used: 21 });
+            String::append_char(__local_14, 114);
+            String::append_char(__local_14, 49);
+            String::append_char(__local_14, 58);
+            String::append_char(__local_14, 32);
+            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
+            __local_38 = __local_15;
+            i32::fmt_decimal(r1, __local_38);
+            String::append_char(__local_14, 10);
+            break __tmpl: __local_14;
+        });
+        unreachable;
+    };
+    __v0_3 = clamp(15, 0, 10);
     __cond_4 = __v0_3 == 10;
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -368,10 +436,35 @@ condition: clamp(15, 0, 10) == 10
         });
         unreachable;
     };
-    __v0_7 = __inline_clamp_2: block -> i32 {
-        break __inline_clamp_2: 0;
-        break __inline_clamp_2: -5;
+    __v0_5 = clamp(5, 0, 10);
+    __cond_6 = __v0_5 == 5;
+    if __cond_6 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_18 = String { repr: builtin::array_new<u8>(140), used: 0 };
+            String::append(__local_18, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append(__local_18, String { repr: array.new_data<u8>("__test_0_capture_fn_param"), used: 25 });
+            String::append_char(__local_18, 32);
+            String::append_char(__local_18, 97);
+            String::append_char(__local_18, 116);
+            String::append_char(__local_18, 32);
+            String::append(__local_18, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/closure_2.wado"), used: 43 });
+            String::append_char(__local_18, 58);
+            __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
+            __local_55 = __local_19;
+            i32::fmt_decimal(45, __local_55);
+            String::append(__local_18, String { repr: array.new_data<u8>("
+condition: clamp(5, 0, 10) == 5
+"), used: 33 });
+            String::append(__local_18, String { repr: array.new_data<u8>("clamp(5, 0, 10): "), used: 17 });
+            __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
+            __local_60 = __local_19;
+            i32::fmt_decimal(__v0_5, __local_60);
+            String::append_char(__local_18, 10);
+            break __tmpl: __local_18;
+        });
+        unreachable;
     };
+    __v0_7 = clamp(-5, 0, 10);
     __cond_8 = __v0_7 == 0;
     if __cond_8 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -494,9 +587,11 @@ fn __test_2_capture_string() {
     let __local_31: ref Formatter;
     let __local_39: ref Formatter;
     let __local_44: ref Formatter;
+    let __sroa_get_greeting___capture_0: ref String;
     let __sroa_is_ok___capture_0: ref String;
     greeting = String { repr: array.new_data<u8>("Hello"), used: 5 };
-    __v0_2 = greeting;
+    __sroa_get_greeting___capture_0 = greeting;
+    __v0_2 = __sroa_get_greeting___capture_0;
     __cond_3 = String^Eq::eq(__v0_2, String { repr: array.new_data<u8>("Hello"), used: 5 });
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -598,6 +693,11 @@ fn __test_3_capture_struct() {
     let __cond_10: bool;
     let __v0_11: i32;
     let __cond_12: bool;
+    let q: ref CapturePoint;
+    let __v0_16: i32;
+    let __cond_17: bool;
+    let __v0_18: i32;
+    let __cond_19: bool;
     let __local_20: ref String;
     let __local_21: ref Formatter;
     let __local_22: ref String;
@@ -606,6 +706,10 @@ fn __test_3_capture_struct() {
     let __local_25: ref Formatter;
     let __local_26: ref String;
     let __local_27: ref Formatter;
+    let __local_28: ref String;
+    let __local_29: ref Formatter;
+    let __local_30: ref String;
+    let __local_31: ref Formatter;
     let __local_37: ref Formatter;
     let __local_42: ref Formatter;
     let __local_49: ref Formatter;
@@ -616,12 +720,22 @@ fn __test_3_capture_struct() {
     let __local_71: i32;
     let __local_75: ref Formatter;
     let __local_80: ref Formatter;
+    let __local_87: ref Formatter;
+    let __local_92: ref Formatter;
+    let __local_99: ref Formatter;
+    let __local_104: ref Formatter;
+    let __sroa_get_x___capture_0: ref CapturePoint;
+    let __sroa_get_y___capture_0: ref CapturePoint;
     let __sroa_sum_coords___capture_0: ref CapturePoint;
     let __sroa_manhattan___capture_0: ref CapturePoint;
+    let __sroa_get_qx___capture_0: ref CapturePoint;
+    let __sroa_get_qy___capture_0: ref CapturePoint;
     p = CapturePoint { x: 3, y: 4 };
+    __sroa_get_x___capture_0 = p;
+    __sroa_get_y___capture_0 = p;
     __sroa_sum_coords___capture_0 = p;
     __sroa_manhattan___capture_0 = p;
-    __v0_5 = p.x;
+    __v0_5 = __sroa_get_x___capture_0.x;
     __cond_6 = __v0_5 == 3;
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -649,7 +763,7 @@ condition: get_x() == 3
         });
         unreachable;
     };
-    __v0_7 = p.y;
+    __v0_7 = __sroa_get_y___capture_0.y;
     __cond_8 = __v0_7 == 4;
     if __cond_8 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -734,6 +848,65 @@ condition: manhattan() == 7
             i32::fmt_decimal(__v0_11, __local_80);
             String::append_char(__local_26, 10);
             break __tmpl: __local_26;
+        });
+        unreachable;
+    };
+    q = CapturePoint { x: 10, y: 20 };
+    __sroa_get_qx___capture_0 = q;
+    __sroa_get_qy___capture_0 = q;
+    __v0_16 = __sroa_get_qx___capture_0.x;
+    __cond_17 = __v0_16 == 10;
+    if __cond_17 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_28 = String { repr: builtin::array_new<u8>(127), used: 0 };
+            String::append(__local_28, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append(__local_28, String { repr: array.new_data<u8>("__test_3_capture_struct"), used: 23 });
+            String::append_char(__local_28, 32);
+            String::append_char(__local_28, 97);
+            String::append_char(__local_28, 116);
+            String::append_char(__local_28, 32);
+            String::append(__local_28, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/closure_2.wado"), used: 43 });
+            String::append_char(__local_28, 58);
+            __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
+            __local_87 = __local_29;
+            i32::fmt_decimal(109, __local_87);
+            String::append(__local_28, String { repr: array.new_data<u8>("
+condition: get_qx() == 10
+"), used: 27 });
+            String::append(__local_28, String { repr: array.new_data<u8>("get_qx(): "), used: 10 });
+            __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
+            __local_92 = __local_29;
+            i32::fmt_decimal(__v0_16, __local_92);
+            String::append_char(__local_28, 10);
+            break __tmpl: __local_28;
+        });
+        unreachable;
+    };
+    __v0_18 = __sroa_get_qy___capture_0.y;
+    __cond_19 = __v0_18 == 20;
+    if __cond_19 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_30 = String { repr: builtin::array_new<u8>(127), used: 0 };
+            String::append(__local_30, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append(__local_30, String { repr: array.new_data<u8>("__test_3_capture_struct"), used: 23 });
+            String::append_char(__local_30, 32);
+            String::append_char(__local_30, 97);
+            String::append_char(__local_30, 116);
+            String::append_char(__local_30, 32);
+            String::append(__local_30, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/closure_2.wado"), used: 43 });
+            String::append_char(__local_30, 58);
+            __local_31 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_30) };
+            __local_99 = __local_31;
+            i32::fmt_decimal(110, __local_99);
+            String::append(__local_30, String { repr: array.new_data<u8>("
+condition: get_qy() == 20
+"), used: 27 });
+            String::append(__local_30, String { repr: array.new_data<u8>("get_qy(): "), used: 10 });
+            __local_31 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_30) };
+            __local_104 = __local_31;
+            i32::fmt_decimal(__v0_18, __local_104);
+            String::append_char(__local_30, 10);
+            break __tmpl: __local_30;
         });
         unreachable;
     };
@@ -1411,7 +1584,7 @@ fn __test_12_closure_in_loop() {
     __for_0: block {
         i = 1;
         block {
-            l33: loop {
+            l39: loop {
                 if (i <= 5) == 0 {
                     break __for_0;
                 };
@@ -1420,7 +1593,7 @@ fn __test_12_closure_in_loop() {
                     break __inline___Closure_27____call_2: __local_9 * 2;
                 };
                 i = i + 1;
-                continue l33;
+                continue l39;
             };
         };
     };
@@ -1505,14 +1678,14 @@ fn __test_13_loop_scope_c_style_for() {
     __for_1: block {
         i = 0;
         block {
-            l37: loop {
+            l43: loop {
                 if (i < 5) == 0 {
                     break __for_1;
                 };
                 get_i = "canonical/CanonicalClosure_0" { env: __Closure_28 { __capture_0: i }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_28") };
                 Array<Fn<1,i32>>::append(closures, get_i);
                 i = i + 1;
-                continue l37;
+                continue l43;
             };
         };
     };
@@ -1780,8 +1953,8 @@ fn __test_14_loop_scope_for_of() {
         break __seq_lit: __local_2;
     };
     __iter_4 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(items.repr), used: 5, index: 0 };
-    b54: block {
-        l55: loop {
+    b60: block {
+        l61: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -1790,9 +1963,9 @@ fn __test_14_loop_scope_for_of() {
                 get_item = "canonical/CanonicalClosure_0" { env: __Closure_29 { __capture_0: item }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_29") };
                 Array<Fn<1,i32>>::append(closures, get_item);
             } else {
-                break b54;
+                break b60;
             };
-            continue l55;
+            continue l61;
         };
     };
     __v0_7 = __inline_call_fn_14: block -> i32 {
@@ -2086,13 +2259,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l73: loop {
+            l79: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l73;
+                continue l79;
             };
         };
     };
@@ -2207,13 +2380,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l80: loop {
+            l86: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l80;
+                continue l86;
             };
         };
     };
@@ -2230,14 +2403,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l84: loop {
+                l90: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l84;
+                    continue l90;
                 };
             };
         };
@@ -2329,7 +2502,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l93: loop {
+            l99: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -2337,7 +2510,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l93;
+                continue l99;
             };
         };
     };
@@ -2444,13 +2617,13 @@ fn Array<Fn<1,i32>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l106: loop {
+            l112: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref struct>(new_repr, i, builtin::array_get<ref struct>(old_repr, i));
                 i = i + 1;
-                continue l106;
+                continue l112;
             };
         };
     };
@@ -2486,13 +2659,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l110: loop {
+            l116: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l110;
+                continue l116;
             };
         };
     };
@@ -2560,13 +2733,13 @@ fn __Closure_22::__call(self, n) {
     __for_0: block {
         i = 1;
         block {
-            l114: loop {
+            l120: loop {
                 if (i <= n) == 0 {
                     break __for_0;
                 };
                 result = result * i;
                 i = i + 1;
-                continue l114;
+                continue l120;
             };
         };
     };
@@ -2610,14 +2783,14 @@ fn __Closure_26::__call(self, n) {
     let i: i32;
     sum = 0;
     i = 1;
-    b117: block {
-        l118: loop {
+    b123: block {
+        l124: loop {
             if (i <= n) == 0 {
-                break b117;
+                break b123;
             };
             sum = sum + i;
             i = i + 1;
-            continue l118;
+            continue l124;
         };
     };
     return sum;
@@ -2638,13 +2811,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l121: loop {
+            l127: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l121;
+                continue l127;
             };
         };
     };
@@ -2781,8 +2954,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b144: block {
-        l145: loop {
+    b150: block {
+        l151: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -2807,9 +2980,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b144;
+                break b150;
             };
-            continue l145;
+            continue l151;
         };
     };
     String::append_char(f.buf, 34);

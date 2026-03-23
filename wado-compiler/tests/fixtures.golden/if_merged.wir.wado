@@ -409,12 +409,6 @@ fn test_if_let_chain() with Stdout {
     let __local_45: ref Formatter;
     let __local_46: ref String;
     let __local_47: ref Formatter;
-    let __pattern_temp_1: ref Option<i32>;
-    let __pattern_temp_2: ref Option<i32>;
-    let __pattern_temp_3: ref Option<i32>;
-    let __pattern_temp_4: ref Option<i32>;
-    let __pattern_temp_10: ref Option<i32>;
-    let __pattern_temp_11: ref Option<i32>;
     let __local_89: ref Formatter;
     let __local_94: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
@@ -465,12 +459,10 @@ fn test_if_let_chain() with Stdout {
     };
     a = Option<i32>::Some { discriminant: 0, payload_0: 10 };
     b = Option<i32>::Some { discriminant: 0, payload_0: 20 };
-    __pattern_temp_1 = a;
-    if ref.test Option<i32>::Some(__pattern_temp_1) {
-        x_8 = ref.cast Option<i32>::Some(__pattern_temp_1).payload_0;
-        __pattern_temp_2 = b;
-        if ref.test Option<i32>::Some(__pattern_temp_2) {
-            y_9 = ref.cast Option<i32>::Some(__pattern_temp_2).payload_0;
+    if ref.test Option<i32>::Some(a) {
+        x_8 = ref.cast Option<i32>::Some(a).payload_0;
+        if ref.test Option<i32>::Some(b) {
+            y_9 = ref.cast Option<i32>::Some(b).payload_0;
             "core:cli/println"(__tmpl: block -> ref String {
                 __local_36 = String { repr: builtin::array_new<u8>(33), used: 0 };
                 __local_37 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_36) };
@@ -484,12 +476,10 @@ fn test_if_let_chain() with Stdout {
             });
         };
     };
-    __pattern_temp_3 = a;
-    if ref.test Option<i32>::Some(__pattern_temp_3) {
-        x_10 = ref.cast Option<i32>::Some(__pattern_temp_3).payload_0;
-        __pattern_temp_4 = b;
-        if ref.test Option<i32>::Some(__pattern_temp_4) {
-            y_11 = ref.cast Option<i32>::Some(__pattern_temp_4).payload_0;
+    if ref.test Option<i32>::Some(a) {
+        x_10 = ref.cast Option<i32>::Some(a).payload_0;
+        if ref.test Option<i32>::Some(b) {
+            y_11 = ref.cast Option<i32>::Some(b).payload_0;
             if (x_10 + y_11) > 25 {
                 "core:cli/println"(__tmpl: block -> ref String {
                     __local_38 = String { repr: builtin::array_new<u8>(24), used: 0 };
@@ -559,9 +549,8 @@ fn test_if_let_chain() with Stdout {
         "core:cli/println"(String { repr: array.new_data<u8>("inner none"), used: 10 });
     };
     opt3 = Option<i32>::Some { discriminant: 0, payload_0: 5 };
-    __pattern_temp_10 = opt3;
-    if ref.test Option<i32>::Some(__pattern_temp_10) {
-        x_24 = ref.cast Option<i32>::Some(__pattern_temp_10).payload_0;
+    if ref.test Option<i32>::Some(opt3) {
+        x_24 = ref.cast Option<i32>::Some(opt3).payload_0;
         "core:cli/println"(__tmpl: block -> ref String {
             __local_46 = String { repr: builtin::array_new<u8>(25), used: 0 };
             String::append(__local_46, String { repr: array.new_data<u8>("paren: x="), used: 9 });
@@ -570,8 +559,7 @@ fn test_if_let_chain() with Stdout {
             break __tmpl: __local_46;
         });
     };
-    __pattern_temp_11 = opt3;
-    if ref.test Option<i32>::Some(__pattern_temp_11) {
+    if ref.test Option<i32>::Some(opt3) {
         "core:cli/println"(String { repr: array.new_data<u8>("paren false"), used: 11 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("paren false"), used: 11 });

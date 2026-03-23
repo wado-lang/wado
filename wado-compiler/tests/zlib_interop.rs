@@ -68,6 +68,10 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
             http: common::TestHttpCtx::new(),
         };
         let mut store = Store::new(engine, state);
+        // Set epoch deadline for timeout enforcement.
+        // zlib tests with large data can take >5s, so use 30s timeout.
+        let deadline_ticks = 30;
+        store.set_epoch_deadline(deadline_ticks);
 
         let instance = linker
             .instantiate_async(&mut store, component)
