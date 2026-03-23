@@ -45,21 +45,6 @@ struct Formatter {
 
 array array<u64> (mut u64);
 
-variant Result<String,SerializeError> {
-    Ok(ref String),
-    Err(ref "core:serde/SerializeError"),
-}
-
-struct Result<String,SerializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref String,
-}
-
-struct Result<String,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/SerializeError",
-}
-
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
     mut used: i32,
@@ -205,9 +190,9 @@ type "functype/check_special" = fn(f64) -> [bool, bool, i32];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
-type "functype/core/json/to_string<f32>" = fn(f32) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f32>" = fn(f32) -> [i32, ref null String, ref null "core:serde/SerializeError"];
 
-type "functype/core/json/to_string<f64>" = fn(f64) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f64>" = fn(f64) -> [i32, ref null String, ref null "core:serde/SerializeError"];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -238,7 +223,6 @@ global mut POW10: ref null Array<u64> = ref.null none;
 global mut __modules_initialized: bool = 0;
 
 fn __test_0_f64_nan() {
-    let r: ref Result<String,SerializeError>;
     let e: ref "core:serde/SerializeError";
     let __v0: bool;
     let __local_5: ref String;
@@ -253,9 +237,12 @@ fn __test_0_f64_nan() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = "core/json/to_string<f64>"(0 / 0);
-    if ref.test Result<String,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<f64>"(0 / 0);
+    if __sroa_r_discriminant == 1 {
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
             __local_8 = e.kind;
             let __match_scrut_0: "core:serde/enum:SerializeErrorKind";
@@ -304,7 +291,6 @@ condition: is_unsupported(e.kind)
 }
 
 fn __test_1_f64_infinity() {
-    let r: ref Result<String,SerializeError>;
     let e: ref "core:serde/SerializeError";
     let __v0: bool;
     let __local_5: ref String;
@@ -319,9 +305,12 @@ fn __test_1_f64_infinity() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = "core/json/to_string<f64>"(inf);
-    if ref.test Result<String,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<f64>"(inf);
+    if __sroa_r_discriminant == 1 {
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
             __local_8 = e.kind;
             let __match_scrut_0: "core:serde/enum:SerializeErrorKind";
@@ -370,7 +359,6 @@ condition: is_unsupported(e.kind)
 }
 
 fn __test_2_f64_negative_infinity() {
-    let r: ref Result<String,SerializeError>;
     let e: ref "core:serde/SerializeError";
     let __v0: bool;
     let __local_5: ref String;
@@ -385,9 +373,12 @@ fn __test_2_f64_negative_infinity() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = "core/json/to_string<f64>"(-inf);
-    if ref.test Result<String,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<f64>"(-inf);
+    if __sroa_r_discriminant == 1 {
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
             __local_8 = e.kind;
             let __match_scrut_0: "core:serde/enum:SerializeErrorKind";
@@ -436,7 +427,6 @@ condition: is_unsupported(e.kind)
 }
 
 fn __test_3_f32_nan() {
-    let r: ref Result<String,SerializeError>;
     let e: ref "core:serde/SerializeError";
     let __v0: bool;
     let __local_5: ref String;
@@ -451,9 +441,12 @@ fn __test_3_f32_nan() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = "core/json/to_string<f32>"(0_f32 / 0_f32);
-    if ref.test Result<String,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<f32>"(0_f32 / 0_f32);
+    if __sroa_r_discriminant == 1 {
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
             __local_8 = e.kind;
             let __match_scrut_0: "core:serde/enum:SerializeErrorKind";
@@ -502,7 +495,6 @@ condition: is_unsupported(e.kind)
 }
 
 fn __test_4_f32_infinity() {
-    let r: ref Result<String,SerializeError>;
     let e: ref "core:serde/SerializeError";
     let __v0: bool;
     let __local_5: ref String;
@@ -517,9 +509,12 @@ fn __test_4_f32_infinity() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = "core/json/to_string<f32>"(inf_f32);
-    if ref.test Result<String,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<f32>"(inf_f32);
+    if __sroa_r_discriminant == 1 {
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
             __local_8 = e.kind;
             let __match_scrut_0: "core:serde/enum:SerializeErrorKind";
@@ -568,7 +563,6 @@ condition: is_unsupported(e.kind)
 }
 
 fn __test_5_f32_negative_infinity() {
-    let r: ref Result<String,SerializeError>;
     let e: ref "core:serde/SerializeError";
     let __v0: bool;
     let __local_5: ref String;
@@ -583,9 +577,12 @@ fn __test_5_f32_negative_infinity() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = "core/json/to_string<f32>"(-inf_f32);
-    if ref.test Result<String,SerializeError>::Err(r) {
-        e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<f32>"(-inf_f32);
+    if __sroa_r_discriminant == 1 {
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
             __local_8 = e.kind;
             let __match_scrut_0: "core:serde/enum:SerializeErrorKind";
@@ -634,7 +631,6 @@ condition: is_unsupported(e.kind)
 }
 
 fn __test_6_normal_f64_succeeds() {
-    let r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
@@ -648,9 +644,12 @@ fn __test_6_normal_f64_succeeds() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = "core/json/to_string<f64>"(3.14);
-    if ref.test Result<String,SerializeError>::Ok(r) {
-        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<f64>"(3.14);
+    if __sroa_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("3.14"), used: 4 });
         if __cond == 0 {
@@ -687,7 +686,6 @@ condition: s == \"3.14\"
 }
 
 fn __test_7_normal_f32_succeeds() {
-    let r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
@@ -701,9 +699,12 @@ fn __test_7_normal_f32_succeeds() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = "core/json/to_string<f32>"(2.5_f32);
-    if ref.test Result<String,SerializeError>::Ok(r) {
-        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<f32>"(2.5_f32);
+    if __sroa_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("2.5"), used: 3 });
         if __cond == 0 {
@@ -787,9 +788,9 @@ fn "core/json/to_string<f32>"(value) {
     r = "core:json/JsonSerializer^Serializer::serialize_f32"(ser.buf, value);
     if ref.is_null(r) == 0 {
         e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
-        return Result<String,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+        return 1; ref.null none; ref.as_non_null(e);
     };
-    return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
+    return 0; ref.as_non_null(ser.buf); ref.null none;
 }
 
 fn "core/json/to_string<f64>"(value) {
@@ -800,9 +801,9 @@ fn "core/json/to_string<f64>"(value) {
     r = "core:json/JsonSerializer^Serializer::serialize_f64"(ser.buf, value);
     if ref.is_null(r) == 0 {
         e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
-        return Result<String,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+        return 1; ref.null none; ref.as_non_null(e);
     };
-    return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
+    return 0; ref.as_non_null(ser.buf); ref.null none;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal

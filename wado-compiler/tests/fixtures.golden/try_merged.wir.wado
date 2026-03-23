@@ -84,51 +84,6 @@ struct Option<i32>::Some {
     payload_0: i32,
 }
 
-variant Result<i32,ConvertError> {
-    Ok(i32),
-    Err(ref ConvertError),
-}
-
-struct Result<i32,ConvertError>::Ok {
-    discriminant: i32,
-    payload_0: i32,
-}
-
-struct Result<i32,ConvertError>::Err {
-    discriminant: i32,
-    payload_0: ref ConvertError,
-}
-
-variant Result<u32,ConvertError> {
-    Ok(u32),
-    Err(ref ConvertError),
-}
-
-struct Result<u32,ConvertError>::Ok {
-    discriminant: i32,
-    payload_0: u32,
-}
-
-struct Result<u32,ConvertError>::Err {
-    discriminant: i32,
-    payload_0: ref ConvertError,
-}
-
-variant Result<u8,ConvertError> {
-    Ok(u8),
-    Err(ref ConvertError),
-}
-
-struct Result<u8,ConvertError>::Ok {
-    discriminant: i32,
-    payload_0: u8,
-}
-
-struct Result<u8,ConvertError>::Err {
-    discriminant: i32,
-    payload_0: ref ConvertError,
-}
-
 variant Result<i32,String> {
     Ok(i32),
     Err(ref String),
@@ -204,21 +159,6 @@ struct Result<i32,ParseError>::Err {
     payload_0: ref ParseError,
 }
 
-variant Result<i32,AppError> {
-    Ok(i32),
-    Err(ref AppError),
-}
-
-struct Result<i32,AppError>::Ok {
-    discriminant: i32,
-    payload_0: i32,
-}
-
-struct Result<i32,AppError>::Err {
-    discriminant: i32,
-    payload_0: ref AppError,
-}
-
 struct Array<i32> {  // Array<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
@@ -260,8 +200,6 @@ type "functype/test_try_op_result_from" = fn();
 
 type "functype/caller_unit" = fn() -> ref null String;
 
-type "functype/process" = fn(bool, bool) -> ref Result<i32,AppError>;
-
 type "functype/test_try_op_variant_from" = fn();
 
 type "functype/run" = fn();
@@ -294,12 +232,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/i32^TryFrom<i64>::try_from" = fn(i64) -> ref Result<i32,ConvertError>;
-
-type "functype/u32^TryFrom<i32>::try_from" = fn(i32) -> ref Result<u32,ConvertError>;
-
-type "functype/u8^TryFrom<u32>::try_from" = fn(u32) -> ref Result<u8,ConvertError>;
-
 type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
@@ -326,6 +258,14 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
+type "functype/process" = fn(bool, bool) -> [i32, i32, ref null AppError];
+
+type "functype/i32^TryFrom<i64>::try_from" = fn(i64) -> [i32, i32, ref null ConvertError];
+
+type "functype/u32^TryFrom<i32>::try_from" = fn(i32) -> [i32, u32, ref null ConvertError];
+
+type "functype/u8^TryFrom<u32>::try_from" = fn(u32) -> [i32, u8, ref null ConvertError];
+
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
@@ -351,21 +291,15 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn test_try_from_narrowing() with Stdout {
-    let r1: ref Result<i32,ConvertError>;
     let n_2: i32;
     let __cond_4: bool;
-    let r2: ref Result<i32,ConvertError>;
     let msg: ref ConvertError;
     let __v0: ref String;
     let __cond_9: bool;
-    let r3: ref Result<u32,ConvertError>;
-    let r4: ref Result<u32,ConvertError>;
     let n_14: u32;
     let __cond_16: bool;
-    let r5: ref Result<u8,ConvertError>;
     let n_19: u8;
     let __cond_21: bool;
-    let r6: ref Result<u8,ConvertError>;
     let __local_24: ref String;
     let __local_25: ref Formatter;
     let __local_26: ref String;
@@ -381,9 +315,12 @@ fn test_try_from_narrowing() with Stdout {
     let __local_64: ref Formatter;
     let __local_70: ref Formatter;
     let __local_75: ref Formatter;
-    r1 = i32^TryFrom<i64>::try_from(42_i64);
-    if ref.test Result<i32,ConvertError>::Ok(r1) {
-        n_2 = ref.cast Result<i32,ConvertError>::Ok(r1).payload_0;
+    let __sroa_r1_discriminant: i32;
+    let __sroa_r1_case0_payload_0: i32;
+    let __sroa_r1_case1_payload_0: ref null ConvertError;
+    multivalue_bind [__sroa_r1_discriminant, __sroa_r1_case0_payload_0, __sroa_r1_case1_payload_0] = i32^TryFrom<i64>::try_from(42_i64);
+    if __sroa_r1_discriminant == 0 {
+        n_2 = __sroa_r1_case0_payload_0;
         __cond_4 = n_2 == 42;
         if __cond_4 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
@@ -417,9 +354,12 @@ condition: n == 42
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Ok"), used: 11 });
         unreachable;
     };
-    r2 = i32^TryFrom<i64>::try_from(3000000000_i64);
-    if ref.test Result<i32,ConvertError>::Err(r2) {
-        msg = ref.cast Result<i32,ConvertError>::Err(r2).payload_0;
+    let __sroa_r2_discriminant: i32;
+    let __sroa_r2_case0_payload_0: i32;
+    let __sroa_r2_case1_payload_0: ref null ConvertError;
+    multivalue_bind [__sroa_r2_discriminant, __sroa_r2_case0_payload_0, __sroa_r2_case1_payload_0] = i32^TryFrom<i64>::try_from(3000000000_i64);
+    if __sroa_r2_discriminant == 1 {
+        msg = ref.as_non_null(__sroa_r2_case1_payload_0);
         __v0 = msg.message;
         __cond_9 = String^Eq::eq(__v0, String { repr: array.new_data<u8>("3000000000 out of range for i32"), used: 31 });
         if __cond_9 == 0 {
@@ -451,16 +391,22 @@ condition: msg.message == \"3000000000 out of range for i32\"
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Err"), used: 12 });
         unreachable;
     };
-    r3 = u32^TryFrom<i32>::try_from(-1);
-    if ref.test Result<u32,ConvertError>::Err(r3) {
-        drop(ref.cast Result<u32,ConvertError>::Err(r3).payload_0);
+    let __sroa_r3_discriminant: i32;
+    let __sroa_r3_case0_payload_0: u32;
+    let __sroa_r3_case1_payload_0: ref null ConvertError;
+    multivalue_bind [__sroa_r3_discriminant, __sroa_r3_case0_payload_0, __sroa_r3_case1_payload_0] = u32^TryFrom<i32>::try_from(-1);
+    if __sroa_r3_discriminant == 1 {
+        drop(ref.as_non_null(__sroa_r3_case1_payload_0));
     } else {
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Err for negative -> u32"), used: 32 });
         unreachable;
     };
-    r4 = u32^TryFrom<i32>::try_from(100);
-    if ref.test Result<u32,ConvertError>::Ok(r4) {
-        n_14 = ref.cast Result<u32,ConvertError>::Ok(r4).payload_0;
+    let __sroa_r4_discriminant: i32;
+    let __sroa_r4_case0_payload_0: u32;
+    let __sroa_r4_case1_payload_0: ref null ConvertError;
+    multivalue_bind [__sroa_r4_discriminant, __sroa_r4_case0_payload_0, __sroa_r4_case1_payload_0] = u32^TryFrom<i32>::try_from(100);
+    if __sroa_r4_discriminant == 0 {
+        n_14 = __sroa_r4_case0_payload_0;
         __cond_16 = n_14 == 100;
         if __cond_16 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
@@ -494,9 +440,12 @@ condition: n == 100 as u32
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Ok"), used: 11 });
         unreachable;
     };
-    r5 = u8^TryFrom<u32>::try_from(200);
-    if ref.test Result<u8,ConvertError>::Ok(r5) {
-        n_19 = ref.cast Result<u8,ConvertError>::Ok(r5).payload_0;
+    let __sroa_r5_discriminant: i32;
+    let __sroa_r5_case0_payload_0: u8;
+    let __sroa_r5_case1_payload_0: ref null ConvertError;
+    multivalue_bind [__sroa_r5_discriminant, __sroa_r5_case0_payload_0, __sroa_r5_case1_payload_0] = u8^TryFrom<u32>::try_from(200);
+    if __sroa_r5_discriminant == 0 {
+        n_19 = __sroa_r5_case0_payload_0;
         __cond_21 = n_19 == 200;
         if __cond_21 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
@@ -530,9 +479,12 @@ condition: n == 200 as u8
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Ok"), used: 11 });
         unreachable;
     };
-    r6 = u8^TryFrom<u32>::try_from(300);
-    if ref.test Result<u8,ConvertError>::Err(r6) {
-        drop(ref.cast Result<u8,ConvertError>::Err(r6).payload_0);
+    let __sroa_r6_discriminant: i32;
+    let __sroa_r6_case0_payload_0: u8;
+    let __sroa_r6_case1_payload_0: ref null ConvertError;
+    multivalue_bind [__sroa_r6_discriminant, __sroa_r6_case0_payload_0, __sroa_r6_case1_payload_0] = u8^TryFrom<u32>::try_from(300);
+    if __sroa_r6_discriminant == 1 {
+        drop(ref.as_non_null(__sroa_r6_case1_payload_0));
     } else {
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Err for 300 -> u8"), used: 26 });
         unreachable;
@@ -1168,7 +1120,7 @@ fn process(io_ok, valid) {
         let __cast_1: ref Result<String,IoError>::Err;
         __cast_1 = ref.cast Result<String,IoError>::Err(__match_scrut_0);
         __local_3 = __cast_1.payload_0;
-        return Result<i32,AppError>::Err { discriminant: 1, payload_0: AppError::Io { discriminant: 0, payload_0: ref.as_non_null(__local_3) } };
+        return 1; 0; AppError::Io { discriminant: 0, payload_0: ref.as_non_null(__local_3) };
         unreachable;
     } else {
         unreachable;
@@ -1194,24 +1146,21 @@ fn process(io_ok, valid) {
         let __cast_3: ref Result<i32,ParseError>::Err;
         __cast_3 = ref.cast Result<i32,ParseError>::Err(__match_scrut_1);
         __local_6 = __cast_3.payload_0;
-        return Result<i32,AppError>::Err { discriminant: 1, payload_0: AppError::Parse { discriminant: 1, payload_0: ref.as_non_null(__local_6) } };
+        return 1; 0; AppError::Parse { discriminant: 1, payload_0: ref.as_non_null(__local_6) };
         unreachable;
     } else {
         unreachable;
     };
-    return Result<i32,AppError>::Ok { discriminant: 0, payload_0: n };
+    return 0; n; ref.null none;
 }
 
 fn test_try_op_variant_from() with Stdout {
-    let r1: ref Result<i32,AppError>;
     let n: i32;
     let __cond_3: bool;
-    let r2: ref Result<i32,AppError>;
     let e_5: ref AppError;
     let inner_6: ref IoError;
     let __v0_7: ref String;
     let __cond_8: bool;
-    let r3: ref Result<i32,AppError>;
     let e_10: ref AppError;
     let inner_11: ref ParseError;
     let __v0_12: ref String;
@@ -1226,9 +1175,12 @@ fn test_try_op_variant_from() with Stdout {
     let __local_33: ref Formatter;
     let __local_39: ref Formatter;
     let __local_46: ref Formatter;
-    r1 = process(1, 1);
-    if ref.test Result<i32,AppError>::Ok(r1) {
-        n = ref.cast Result<i32,AppError>::Ok(r1).payload_0;
+    let __sroa_r1_discriminant: i32;
+    let __sroa_r1_case0_payload_0: i32;
+    let __sroa_r1_case1_payload_0: ref null AppError;
+    multivalue_bind [__sroa_r1_discriminant, __sroa_r1_case0_payload_0, __sroa_r1_case1_payload_0] = process(1, 1);
+    if __sroa_r1_discriminant == 0 {
+        n = __sroa_r1_case0_payload_0;
         __cond_3 = n == 42;
         if __cond_3 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
@@ -1262,9 +1214,12 @@ condition: n == 42
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Ok"), used: 11 });
         unreachable;
     };
-    r2 = process(0, 1);
-    if ref.test Result<i32,AppError>::Err(r2) {
-        e_5 = ref.cast Result<i32,AppError>::Err(r2).payload_0;
+    let __sroa_r2_discriminant: i32;
+    let __sroa_r2_case0_payload_0: i32;
+    let __sroa_r2_case1_payload_0: ref null AppError;
+    multivalue_bind [__sroa_r2_discriminant, __sroa_r2_case0_payload_0, __sroa_r2_case1_payload_0] = process(0, 1);
+    if __sroa_r2_discriminant == 1 {
+        e_5 = ref.as_non_null(__sroa_r2_case1_payload_0);
         if ref.test AppError::Io(e_5) {
             inner_6 = ref.cast AppError::Io(e_5).payload_0;
             __v0_7 = inner_6.message;
@@ -1302,9 +1257,12 @@ condition: inner.message == \"disk error\"
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Err"), used: 12 });
         unreachable;
     };
-    r3 = process(1, 0);
-    if ref.test Result<i32,AppError>::Err(r3) {
-        e_10 = ref.cast Result<i32,AppError>::Err(r3).payload_0;
+    let __sroa_r3_discriminant: i32;
+    let __sroa_r3_case0_payload_0: i32;
+    let __sroa_r3_case1_payload_0: ref null AppError;
+    multivalue_bind [__sroa_r3_discriminant, __sroa_r3_case0_payload_0, __sroa_r3_case1_payload_0] = process(1, 0);
+    if __sroa_r3_discriminant == 1 {
+        e_10 = ref.as_non_null(__sroa_r3_case1_payload_0);
         if ref.test AppError::Parse(e_10) {
             inner_11 = ref.cast AppError::Parse(e_10).payload_0;
             __v0_12 = inner_11.input;
@@ -1661,7 +1619,7 @@ fn i32^TryFrom<i64>::try_from(value) {
     } else {
         value > 2147483647_i64;
     } {
-        return Result<i32,ConvertError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_ConvertError__new_4: block -> ref ConvertError {
+        return 1; 0; ref.as_non_null(__inline_ConvertError__new_4: block -> ref ConvertError {
             __local_9 = __tmpl: block -> ref String {
                 __local_1 = String { repr: builtin::array_new<u8>(37), used: 0 };
                 __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
@@ -1670,9 +1628,9 @@ fn i32^TryFrom<i64>::try_from(value) {
                 break __tmpl: __local_1;
             };
             break __inline_ConvertError__new_4: ConvertError { message: ref.as_non_null(__local_9) };
-        }) };
+        });
     };
-    return Result<i32,ConvertError>::Ok { discriminant: 0, payload_0: builtin::i32_wrap_i64(value) };
+    return 0; builtin::i32_wrap_i64(value); ref.null none;
 }
 
 fn u32^TryFrom<i32>::try_from(value) {
@@ -1680,7 +1638,7 @@ fn u32^TryFrom<i32>::try_from(value) {
     let __local_2: ref Formatter;
     let __local_9: ref String;
     if value < 0 {
-        return Result<u32,ConvertError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_ConvertError__new_4: block -> ref ConvertError {
+        return 1; 0; ref.as_non_null(__inline_ConvertError__new_4: block -> ref ConvertError {
             __local_9 = __tmpl: block -> ref String {
                 __local_1 = String { repr: builtin::array_new<u8>(37), used: 0 };
                 __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
@@ -1689,9 +1647,9 @@ fn u32^TryFrom<i32>::try_from(value) {
                 break __tmpl: __local_1;
             };
             break __inline_ConvertError__new_4: ConvertError { message: ref.as_non_null(__local_9) };
-        }) };
+        });
     };
-    return Result<u32,ConvertError>::Ok { discriminant: 0, payload_0: value };
+    return 0; value; ref.null none;
 }
 
 fn u8^TryFrom<u32>::try_from(value) {
@@ -1699,7 +1657,7 @@ fn u8^TryFrom<u32>::try_from(value) {
     let __local_2: ref Formatter;
     let __local_9: ref String;
     if value >u 255 {
-        return Result<u8,ConvertError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_ConvertError__new_4: block -> ref ConvertError {
+        return 1; 0; ref.as_non_null(__inline_ConvertError__new_4: block -> ref ConvertError {
             __local_9 = __tmpl: block -> ref String {
                 __local_1 = String { repr: builtin::array_new<u8>(36), used: 0 };
                 __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
@@ -1708,9 +1666,9 @@ fn u8^TryFrom<u32>::try_from(value) {
                 break __tmpl: __local_1;
             };
             break __inline_ConvertError__new_4: ConvertError { message: ref.as_non_null(__local_9) };
-        }) };
+        });
     };
-    return Result<u8,ConvertError>::Ok { discriminant: 0, payload_0: value & 255 };
+    return 0; value & 255; ref.null none;
 }
 
 fn String::grow(self, min_capacity) {

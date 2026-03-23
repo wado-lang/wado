@@ -45,11 +45,6 @@ struct Tree::Node {
     payload_0: ref "tuple/[i32, i32]",
 }
 
-struct Point {
-    mut x: i32,
-    mut y: i32,
-}
-
 array array<Option<i32>> (mut ref Option<i32>);
 
 array array<Tree> (mut ref Tree);
@@ -190,7 +185,6 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn match_with_struct() with Stdout {
-    let p: ref Point;
     let x: i32;
     let y: i32;
     let a: i32;
@@ -199,16 +193,12 @@ fn match_with_struct() with Stdout {
     let __local_6: ref Formatter;
     let __local_7: ref String;
     let __local_8: ref Formatter;
-    let __pattern_temp_0: ref Point;
-    let __pattern_temp_1: ref Point;
     let __local_14: ref Formatter;
     let __local_19: ref Formatter;
     let __local_25: ref Formatter;
     let __local_30: ref Formatter;
-    p = Point { x: 5, y: 10 };
-    __pattern_temp_0 = p;
-    x = __pattern_temp_0.x;
-    y = __pattern_temp_0.y;
+    x = 5;
+    y = 10;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(43), used: 0 };
         String::append(__local_5, String { repr: array.new_data<u8>("destruct: "), used: 10 });
@@ -221,9 +211,8 @@ fn match_with_struct() with Stdout {
         i32::fmt_decimal(y, __local_19);
         break __tmpl: __local_5;
     });
-    __pattern_temp_1 = p;
-    a = __pattern_temp_1.x;
-    b = __pattern_temp_1.y;
+    a = 5;
+    b = 10;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(41), used: 0 };
         String::append_char(__local_7, 114);
@@ -488,14 +477,12 @@ fn match_in_loop() with Stdout {
             __pattern_temp_0 = ArrayIter<Option<i32>>^Iterator::next(__iter_3);
             if ref.is_null(__pattern_temp_0) == 0 {
                 item = ref.as_non_null(__pattern_temp_0);
-                let __match_scrut_0: ref Option<i32>;
-                __match_scrut_0 = item;
-                if ref.test Option<i32>::Some(__match_scrut_0) {
+                if ref.test Option<i32>::Some(item) {
                     let __cast_1: ref Option<i32>::Some;
-                    __cast_1 = ref.cast Option<i32>::Some(__match_scrut_0);
+                    __cast_1 = ref.cast Option<i32>::Some(item);
                     __local_5 = __cast_1.payload_0;
                     sum = sum + __local_5;
-                } else if __match_scrut_0.discriminant == 1 {
+                } else if item.discriminant == 1 {
                 } else {
                     unreachable;
                 };

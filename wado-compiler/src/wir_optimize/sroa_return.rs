@@ -1209,7 +1209,6 @@ fn apply_sroa(module: &mut WirModule, confirmed: &[(u32, SroaCandidate)]) {
             rewrite_call_sites(body, &candidate_map, &module.types);
         }
     }
-
 }
 
 /// Rewrite `Return { value: StructNew { fields } }` → `Return { value: Seq(fields) }`.
@@ -1410,12 +1409,8 @@ fn rewrite_variant_returns_to_multi_value(
                     if let WirInstr::StructNew { type_id, fields } =
                         std::mem::replace(v.as_mut(), WirInstr::Nop)
                     {
-                        let mut padded = pad_variant_fields(
-                            fields,
-                            vi,
-                            result_types,
-                            type_id.index(),
-                        );
+                        let mut padded =
+                            pad_variant_fields(fields, vi, result_types, type_id.index());
                         // Recurse into padded fields: they may contain nested Return { StructNew }
                         // from early returns inside struct field expressions.
                         rewrite_variant_returns_to_multi_value(&mut padded, vi, result_types);
@@ -1831,12 +1826,11 @@ fn rewrite_call_sites(
                                 // For per-case layout, slot names are
                                 // "case{disc_val}_payload_{idx}"; for shared layout,
                                 // "payload_{idx}".
-                                let payload_name =
-                                    if vi.case_slot_offsets.is_some() {
-                                        format!("case{disc_val}_payload_{payload_idx}")
-                                    } else {
-                                        format!("payload_{payload_idx}")
-                                    };
+                                let payload_name = if vi.case_slot_offsets.is_some() {
+                                    format!("case{disc_val}_payload_{payload_idx}")
+                                } else {
+                                    format!("payload_{payload_idx}")
+                                };
                                 if let Some(sroa_local) = field_map.get(&payload_name) {
                                     field_to_local.insert(
                                         (*case_type_idx, field.name.clone()),
@@ -1855,27 +1849,30 @@ fn rewrite_call_sites(
             // Option<T> payloads) must NOT be wrapped, since the value may legitimately be null.
             let mut ref_locals = crate::hashmap::IndexSet::default();
             for (disc_val_2, case_type_opt_2) in vi.case_type_indices.iter().enumerate() {
-                if let Some(case_type_idx_2) = case_type_opt_2 {
-                    if let Some(WirTypeDef::Struct(st)) = types.get(*case_type_idx_2 as usize) {
-                        for (field_pos, field) in st.fields.iter().enumerate() {
-                            if field_pos == 0 {
-                                continue; // skip discriminant
+                if let Some(case_type_idx_2) = case_type_opt_2
+                    && let Some(WirTypeDef::Struct(st)) = types.get(*case_type_idx_2 as usize)
+                {
+                    for (field_pos, field) in st.fields.iter().enumerate() {
+                        if field_pos == 0 {
+                            continue; // skip discriminant
+                        }
+                        // Check if the original field type is a non-nullable ref
+                        let is_non_nullable_ref = matches!(
+                            &field.ty,
+                            WirType::Ref {
+                                nullable: false,
+                                ..
                             }
-                            // Check if the original field type is a non-nullable ref
-                            let is_non_nullable_ref = matches!(
-                                &field.ty,
-                                WirType::Ref { nullable: false, .. }
-                            );
-                            if is_non_nullable_ref {
-                                let payload_idx = field_pos - 1;
-                                let payload_name = if vi.case_slot_offsets.is_some() {
-                                    format!("case{disc_val_2}_payload_{payload_idx}")
-                                } else {
-                                    format!("payload_{payload_idx}")
-                                };
-                                if let Some(sroa_local) = field_map.get(&payload_name) {
-                                    ref_locals.insert(sroa_local.clone());
-                                }
+                        );
+                        if is_non_nullable_ref {
+                            let payload_idx = field_pos - 1;
+                            let payload_name = if vi.case_slot_offsets.is_some() {
+                                format!("case{disc_val_2}_payload_{payload_idx}")
+                            } else {
+                                format!("payload_{payload_idx}")
+                            };
+                            if let Some(sroa_local) = field_map.get(&payload_name) {
+                                ref_locals.insert(sroa_local.clone());
                             }
                         }
                     }

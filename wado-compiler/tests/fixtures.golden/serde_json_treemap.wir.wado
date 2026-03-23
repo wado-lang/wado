@@ -258,86 +258,6 @@ struct Option<i32>::Some {
     payload_0: i32,
 }
 
-variant Result<String,SerializeError> {
-    Ok(ref String),
-    Err(ref "core:serde/SerializeError"),
-}
-
-struct Result<String,SerializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref String,
-}
-
-struct Result<String,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/SerializeError",
-}
-
-variant Result<TreeMap<String,i32>,DeserializeError> {
-    Ok(ref "core:allocator/TreeMap<String,i32>"),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<TreeMap<String,i32>,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref "core:allocator/TreeMap<String,i32>",
-}
-
-struct Result<TreeMap<String,i32>,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
-variant Result<i32,DeserializeError> {
-    Ok(i32),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<i32,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: i32,
-}
-
-struct Result<i32,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
-variant Result<char,DeserializeError> {
-    Ok(char),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<char,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: char,
-}
-
-struct Result<char,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
-variant Result<String,DeserializeError> {
-    Ok(ref String),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<String,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref String,
-}
-
-struct Result<String,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
-variant Option<String> {
-    Some(ref String),
-    None,
-}
-
 variant Result<JsonSeqSerializer,SerializeError> {
     Ok(ref "core:json/JsonSeqSerializer"),
     Err(ref "core:serde/SerializeError"),
@@ -368,39 +288,9 @@ struct Result<JsonMapSerializer,SerializeError>::Err {
     payload_0: ref "core:serde/SerializeError",
 }
 
-variant Result<JsonMapAccess,DeserializeError> {
-    Ok(ref "core:json/JsonMapAccess"),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<JsonMapAccess,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref "core:json/JsonMapAccess",
-}
-
-struct Result<JsonMapAccess,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
 variant Option<TreeMapNode<String>> {
     Some(ref "core:allocator/TreeMapNode<String>"),
     None,
-}
-
-variant Result<Option<String>,DeserializeError> {
-    Ok(ref null String),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<Option<String>,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref null String,
-}
-
-struct Result<Option<String>,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
 }
 
 struct Array<i32> {  // Array<T> with T=i32
@@ -529,18 +419,6 @@ type "functype/__cm_export____test_10_treemap_preserves_insertion_order" = fn();
 type "functype/__cm_export____test_11_treemap_many_entries_roundtrip" = fn();
 
 type "functype/__cm_export____test_12_treemap_deserialize_from_any_key_order" = fn();
-
-type "functype/core/json/to_string<TreeMap<String,Option<i32>>>" = fn(ref "core:allocator/TreeMap<String,Option<i32>>") -> ref Result<String,SerializeError>;
-
-type "functype/core/json/to_string<TreeMap<String,Array<i32>>>" = fn(ref "core:allocator/TreeMap<String,Array<i32>>") -> ref Result<String,SerializeError>;
-
-type "functype/core/json/to_string<TreeMap<String,bool>>" = fn(ref "core:allocator/TreeMap<String,bool>") -> ref Result<String,SerializeError>;
-
-type "functype/core/json/to_string<TreeMap<String,String>>" = fn(ref "core:allocator/TreeMap<String,String>") -> ref Result<String,SerializeError>;
-
-type "functype/core/json/from_string<TreeMap<String,i32>>" = fn(ref String) -> ref Result<TreeMap<String,i32>,DeserializeError>;
-
-type "functype/core/json/to_string<TreeMap<String,i32>>" = fn(ref "core:allocator/TreeMap<String,i32>") -> ref Result<String,SerializeError>;
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
@@ -700,8 +578,6 @@ type "functype/TreeMap<String,i32>^IndexValue::index_value" = fn(ref "core:alloc
 
 type "functype/TreeMap<String,i32>::find_index" = fn(ref "core:allocator/TreeMap<String,i32>", ref String) -> i32;
 
-type "functype/TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> ref Result<TreeMap<String,i32>,DeserializeError>;
-
 type "functype/TreeMap<String,i32>::insert" = fn(ref "core:allocator/TreeMap<String,i32>", ref String, i32);
 
 type "functype/TreeMap<String,i32>::insert_node" = fn(ref "core:allocator/TreeMap<String,i32>", ref null "core:allocator/TreeMapNode<String>", ref String, i32) -> ref null "core:allocator/TreeMapNode<String>";
@@ -728,16 +604,6 @@ type "functype/core:json/JsonDeserializer::skip_whitespace" = fn(ref "core:json/
 
 type "functype/core:json/JsonDeserializer::expect_char" = fn(ref "core:json/JsonDeserializer", i32) -> ref null "core:serde/DeserializeError";
 
-type "functype/core:json/JsonDeserializer::read_json_string" = fn(ref "core:json/JsonDeserializer") -> ref Result<String,DeserializeError>;
-
-type "functype/core:json/JsonDeserializer::read_unicode_escape" = fn(ref "core:json/JsonDeserializer") -> ref Result<char,DeserializeError>;
-
-type "functype/core:json/JsonDeserializer::parse_i32_direct" = fn(ref "core:json/JsonDeserializer") -> ref Result<i32,DeserializeError>;
-
-type "functype/core:json/JsonMapAccess^DeserializeMap::next_key_string" = fn(ref "core:json/JsonMapAccess") -> ref Result<Option<String>,DeserializeError>;
-
-type "functype/core:json/JsonDeserializer^Deserializer::begin_map" = fn(ref "core:json/JsonDeserializer") -> ref Result<JsonMapAccess,DeserializeError>;
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::pad" = fn(ref Formatter, ref String);
@@ -752,6 +618,18 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
+type "functype/core/json/to_string<TreeMap<String,Option<i32>>>" = fn(ref "core:allocator/TreeMap<String,Option<i32>>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
+
+type "functype/core/json/to_string<TreeMap<String,Array<i32>>>" = fn(ref "core:allocator/TreeMap<String,Array<i32>>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
+
+type "functype/core/json/to_string<TreeMap<String,bool>>" = fn(ref "core:allocator/TreeMap<String,bool>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
+
+type "functype/core/json/to_string<TreeMap<String,String>>" = fn(ref "core:allocator/TreeMap<String,String>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
+
+type "functype/core/json/from_string<TreeMap<String,i32>>" = fn(ref String) -> [i32, ref null "core:allocator/TreeMap<String,i32>", ref null "core:serde/DeserializeError"];
+
+type "functype/core/json/to_string<TreeMap<String,i32>>" = fn(ref "core:allocator/TreeMap<String,i32>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
+
 type "functype/pow10_coarse" = fn(i32) -> [u64, u64];
 
 type "functype/mul_pow10" = fn(i32) -> [u64, u64];
@@ -761,6 +639,18 @@ type "functype/char::from_u32" = fn(u32) -> [i32, char];
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
 type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:serde/ArrayIter<i32>") -> [i32, i32];
+
+type "functype/TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null "core:allocator/TreeMap<String,i32>", ref null "core:serde/DeserializeError"];
+
+type "functype/core:json/JsonDeserializer::read_json_string" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null String, ref null "core:serde/DeserializeError"];
+
+type "functype/core:json/JsonDeserializer::read_unicode_escape" = fn(ref "core:json/JsonDeserializer") -> [i32, char, ref null "core:serde/DeserializeError"];
+
+type "functype/core:json/JsonDeserializer::parse_i32_direct" = fn(ref "core:json/JsonDeserializer") -> [i32, i32, ref null "core:serde/DeserializeError"];
+
+type "functype/core:json/JsonMapAccess^DeserializeMap::next_key_string" = fn(ref "core:json/JsonMapAccess") -> [i32, ref null String, ref null "core:serde/DeserializeError"];
+
+type "functype/core:json/JsonDeserializer^Deserializer::begin_map" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null "core:json/JsonMapAccess", ref null "core:serde/DeserializeError"];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -807,7 +697,6 @@ import fn stream-new from "wasi/stream-new";
 
 fn __test_0_treemap_serialize_string_keys() {
     let map: ref "core:allocator/TreeMap<String,i32>";
-    let r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
@@ -825,9 +714,12 @@ fn __test_0_treemap_serialize_string_keys() {
     TreeMap<String,i32>::insert(map, key_14, 30);
     key_17 = String { repr: array.new_data<u8>("bob"), used: 3 };
     TreeMap<String,i32>::insert(map, key_17, 25);
-    r = "core/json/to_string<TreeMap<String,i32>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(r) {
-        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<TreeMap<String,i32>>"(map);
+    if __sroa_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"alice\":30,\"bob\":25}"), used: 21 });
         if __cond == 0 {
@@ -865,9 +757,7 @@ condition: s == `\\{\"alice\":30,\"bob\":25\\}`
 
 fn __test_1_treemap_roundtrip() {
     let map: ref "core:allocator/TreeMap<String,i32>";
-    let json_r: ref Result<String,SerializeError>;
     let json: ref String;
-    let parsed_r: ref Result<TreeMap<String,i32>,DeserializeError>;
     let parsed: ref "core:allocator/TreeMap<String,i32>";
     let __v0_5: i32;
     let __cond_6: bool;
@@ -892,12 +782,18 @@ fn __test_1_treemap_roundtrip() {
     TreeMap<String,i32>::insert(map, key_21, 1);
     key_24 = String { repr: array.new_data<u8>("y"), used: 1 };
     TreeMap<String,i32>::insert(map, key_24, 2);
-    json_r = "core/json/to_string<TreeMap<String,i32>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(json_r) {
-        json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = "core/json/from_string<TreeMap<String,i32>>"(json);
-        if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r).payload_0);
+    let __sroa_json_r_discriminant: i32;
+    let __sroa_json_r_case0_payload_0: ref null String;
+    let __sroa_json_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core/json/to_string<TreeMap<String,i32>>"(map);
+    if __sroa_json_r_discriminant == 0 {
+        json = ref.as_non_null(__sroa_json_r_case0_payload_0);
+        let __sroa_parsed_r_discriminant: i32;
+        let __sroa_parsed_r_case0_payload_0: ref null "core:allocator/TreeMap<String,i32>";
+        let __sroa_parsed_r_case1_payload_0: ref null "core:serde/DeserializeError";
+        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core/json/from_string<TreeMap<String,i32>>"(json);
+        if __sroa_parsed_r_discriminant == 0 {
+            parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
             __v0_5 = TreeMap<String,i32>^IndexValue::index_value(parsed, String { repr: array.new_data<u8>("x"), used: 1 });
             __cond_6 = __v0_5 == 1;
             if __cond_6 == 0 {
@@ -966,7 +862,6 @@ condition: parsed[\"y\"] == 2
 
 fn __test_2_treemap_empty() {
     let map: ref "core:allocator/TreeMap<String,i32>";
-    let r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
@@ -978,9 +873,12 @@ fn __test_2_treemap_empty() {
         __local_9 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
         break __seq_lit: __local_9;
     }), size: 0, deleted_count: 0 };
-    r = "core/json/to_string<TreeMap<String,i32>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(r) {
-        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<TreeMap<String,i32>>"(map);
+    if __sroa_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{}"), used: 2 });
         if __cond == 0 {
@@ -1018,11 +916,9 @@ condition: s == `\\{\\}`
 
 fn __test_3_treemap_empty_roundtrip() {
     let map: ref "core:allocator/TreeMap<String,i32>";
-    let json_r: ref Result<String,SerializeError>;
     let json: ref String;
     let __v0_3: ref String;
     let __cond_4: bool;
-    let parsed_r: ref Result<TreeMap<String,i32>,DeserializeError>;
     let parsed: ref "core:allocator/TreeMap<String,i32>";
     let __v0_7: i32;
     let __cond_8: bool;
@@ -1038,9 +934,12 @@ fn __test_3_treemap_empty_roundtrip() {
         __local_16 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
         break __seq_lit: __local_16;
     }), size: 0, deleted_count: 0 };
-    json_r = "core/json/to_string<TreeMap<String,i32>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(json_r) {
-        json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
+    let __sroa_json_r_discriminant: i32;
+    let __sroa_json_r_case0_payload_0: ref null String;
+    let __sroa_json_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core/json/to_string<TreeMap<String,i32>>"(map);
+    if __sroa_json_r_discriminant == 0 {
+        json = ref.as_non_null(__sroa_json_r_case0_payload_0);
         __v0_3 = json;
         __cond_4 = String^Eq::eq(__v0_3, String { repr: array.new_data<u8>("{}"), used: 2 });
         if __cond_4 == 0 {
@@ -1073,9 +972,12 @@ condition: json == `\\{\\}`
             });
             unreachable;
         };
-        parsed_r = "core/json/from_string<TreeMap<String,i32>>"(json);
-        if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r) {
-            parsed = ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r).payload_0;
+        let __sroa_parsed_r_discriminant: i32;
+        let __sroa_parsed_r_case0_payload_0: ref null "core:allocator/TreeMap<String,i32>";
+        let __sroa_parsed_r_case1_payload_0: ref null "core:serde/DeserializeError";
+        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core/json/from_string<TreeMap<String,i32>>"(json);
+        if __sroa_parsed_r_discriminant == 0 {
+            parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
             __v0_7 = parsed.size;
             __cond_8 = __v0_7 == 0;
             if __cond_8 == 0 {
@@ -1116,7 +1018,6 @@ condition: parsed.len() == 0
 
 fn __test_4_treemap_single_entry() {
     let map: ref "core:allocator/TreeMap<String,i32>";
-    let r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
@@ -1131,9 +1032,12 @@ fn __test_4_treemap_single_entry() {
     }), size: 0, deleted_count: 0 };
     key = String { repr: array.new_data<u8>("only"), used: 4 };
     TreeMap<String,i32>::insert(map, key, 42);
-    r = "core/json/to_string<TreeMap<String,i32>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(r) {
-        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<TreeMap<String,i32>>"(map);
+    if __sroa_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"only\":42}"), used: 11 });
         if __cond == 0 {
@@ -1171,7 +1075,6 @@ condition: s == `\\{\"only\":42\\}`
 
 fn __test_5_treemap_with_string_values() {
     let map: ref "core:allocator/TreeMap<String,String>";
-    let r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
@@ -1193,9 +1096,12 @@ fn __test_5_treemap_with_string_values() {
     key_17 = String { repr: array.new_data<u8>("farewell"), used: 8 };
     value_18 = String { repr: array.new_data<u8>("goodbye"), used: 7 };
     TreeMap<String,String>::insert(map, key_17, value_18);
-    r = "core/json/to_string<TreeMap<String,String>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(r) {
-        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<TreeMap<String,String>>"(map);
+    if __sroa_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"greeting\":\"hello\",\"farewell\":\"goodbye\"}"), used: 41 });
         if __cond == 0 {
@@ -1233,7 +1139,6 @@ condition: s == `\\{\"greeting\":\"hello\",\"farewell\":\"goodbye\"\\}`
 
 fn __test_6_treemap_with_bool_values() {
     let map: ref "core:allocator/TreeMap<String,bool>";
-    let r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
@@ -1251,9 +1156,12 @@ fn __test_6_treemap_with_bool_values() {
     TreeMap<String,bool>::insert(map, key_14, 1);
     key_17 = String { repr: array.new_data<u8>("debug"), used: 5 };
     TreeMap<String,bool>::insert(map, key_17, 0);
-    r = "core/json/to_string<TreeMap<String,bool>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(r) {
-        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<TreeMap<String,bool>>"(map);
+    if __sroa_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"enabled\":true,\"debug\":false}"), used: 30 });
         if __cond == 0 {
@@ -1293,7 +1201,6 @@ fn __test_7_treemap_with_nested_array_values() {
     let map: ref "core:allocator/TreeMap<String,Array<i32>>";
     let __local_1: ref Array<i32>;
     let __local_2: ref Array<i32>;
-    let r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
@@ -1321,9 +1228,12 @@ fn __test_7_treemap_with_nested_array_values() {
         break __seq_lit: __local_2;
     };
     TreeMap<String,Array<i32>>::insert(map, key_28, value_29);
-    r = "core/json/to_string<TreeMap<String,Array<i32>>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(r) {
-        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<TreeMap<String,Array<i32>>>"(map);
+    if __sroa_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"scores\":[10,20,30],\"ids\":[1,2]}"), used: 33 });
         if __cond == 0 {
@@ -1361,7 +1271,6 @@ condition: s == `\\{\"scores\":[10,20,30],\"ids\":[1,2]\\}`
 
 fn __test_8_treemap_with_option_values() {
     let map: ref "core:allocator/TreeMap<String,Option<i32>>";
-    let r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
@@ -1383,9 +1292,12 @@ fn __test_8_treemap_with_option_values() {
     key_17 = String { repr: array.new_data<u8>("absent"), used: 6 };
     value_18 = Option<i32> { 1 };
     TreeMap<String,Option<i32>>::insert(map, key_17, value_18);
-    r = "core/json/to_string<TreeMap<String,Option<i32>>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(r) {
-        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<TreeMap<String,Option<i32>>>"(map);
+    if __sroa_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"present\":42,\"absent\":null}"), used: 28 });
         if __cond == 0 {
@@ -1423,9 +1335,7 @@ condition: s == `\\{\"present\":42,\"absent\":null\\}`
 
 fn __test_9_treemap_keys_with_special_chars() {
     let map: ref "core:allocator/TreeMap<String,i32>";
-    let r: ref Result<String,SerializeError>;
     let s: ref String;
-    let parsed_r: ref Result<TreeMap<String,i32>,DeserializeError>;
     let parsed: ref "core:allocator/TreeMap<String,i32>";
     let __v0_5: i32;
     let __cond_6: bool;
@@ -1450,12 +1360,18 @@ fn __test_9_treemap_keys_with_special_chars() {
     TreeMap<String,i32>::insert(map, key_21, 1);
     key_24 = String { repr: array.new_data<u8>("key\"with\"quotes"), used: 15 };
     TreeMap<String,i32>::insert(map, key_24, 2);
-    r = "core/json/to_string<TreeMap<String,i32>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(r) {
-        s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
-        parsed_r = "core/json/from_string<TreeMap<String,i32>>"(s);
-        if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r).payload_0);
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<TreeMap<String,i32>>"(map);
+    if __sroa_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
+        let __sroa_parsed_r_discriminant: i32;
+        let __sroa_parsed_r_case0_payload_0: ref null "core:allocator/TreeMap<String,i32>";
+        let __sroa_parsed_r_case1_payload_0: ref null "core:serde/DeserializeError";
+        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core/json/from_string<TreeMap<String,i32>>"(s);
+        if __sroa_parsed_r_discriminant == 0 {
+            parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
             __v0_5 = TreeMap<String,i32>^IndexValue::index_value(parsed, String { repr: array.new_data<u8>("key with spaces"), used: 15 });
             __cond_6 = __v0_5 == 1;
             if __cond_6 == 0 {
@@ -1524,7 +1440,6 @@ condition: parsed[\"key\\\"with\\\"quotes\"] == 2
 
 fn __test_10_treemap_preserves_insertion_order() {
     let map: ref "core:allocator/TreeMap<String,i32>";
-    let r: ref Result<String,SerializeError>;
     let s: ref String;
     let __v0: ref String;
     let __cond: bool;
@@ -1545,9 +1460,12 @@ fn __test_10_treemap_preserves_insertion_order() {
     TreeMap<String,i32>::insert(map, key_17, 1);
     key_20 = String { repr: array.new_data<u8>("b"), used: 1 };
     TreeMap<String,i32>::insert(map, key_20, 2);
-    r = "core/json/to_string<TreeMap<String,i32>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(r) {
-        s = ref.cast Result<String,SerializeError>::Ok(r).payload_0;
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null String;
+    let __sroa_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/to_string<TreeMap<String,i32>>"(map);
+    if __sroa_r_discriminant == 0 {
+        s = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0 = s;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("{\"c\":3,\"a\":1,\"b\":2}"), used: 19 });
         if __cond == 0 {
@@ -1586,9 +1504,7 @@ condition: s == `\\{\"c\":3,\"a\":1,\"b\":2\\}`
 fn __test_11_treemap_many_entries_roundtrip() {
     let map: ref "core:allocator/TreeMap<String,i32>";
     let i: i32;
-    let json_r: ref Result<String,SerializeError>;
     let json: ref String;
-    let parsed_r: ref Result<TreeMap<String,i32>,DeserializeError>;
     let parsed: ref "core:allocator/TreeMap<String,i32>";
     let __v0_6: i32;
     let __cond_7: bool;
@@ -1640,12 +1556,18 @@ fn __test_11_treemap_many_entries_roundtrip() {
             };
         };
     };
-    json_r = "core/json/to_string<TreeMap<String,i32>>"(map);
-    if ref.test Result<String,SerializeError>::Ok(json_r) {
-        json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = "core/json/from_string<TreeMap<String,i32>>"(json);
-        if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r) {
-            parsed = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r).payload_0);
+    let __sroa_json_r_discriminant: i32;
+    let __sroa_json_r_case0_payload_0: ref null String;
+    let __sroa_json_r_case1_payload_0: ref null "core:serde/SerializeError";
+    multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core/json/to_string<TreeMap<String,i32>>"(map);
+    if __sroa_json_r_discriminant == 0 {
+        json = ref.as_non_null(__sroa_json_r_case0_payload_0);
+        let __sroa_parsed_r_discriminant: i32;
+        let __sroa_parsed_r_case0_payload_0: ref null "core:allocator/TreeMap<String,i32>";
+        let __sroa_parsed_r_case1_payload_0: ref null "core:serde/DeserializeError";
+        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core/json/from_string<TreeMap<String,i32>>"(json);
+        if __sroa_parsed_r_discriminant == 0 {
+            parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
             __v0_6 = parsed.size;
             __cond_7 = __v0_6 == 10;
             if __cond_7 == 0 {
@@ -1741,7 +1663,6 @@ condition: parsed[\"key9\"] == 9
 }
 
 fn __test_12_treemap_deserialize_from_any_key_order() {
-    let r: ref Result<TreeMap<String,i32>,DeserializeError>;
     let map: ref "core:allocator/TreeMap<String,i32>";
     let __v0_2: i32;
     let __cond_3: bool;
@@ -1767,9 +1688,12 @@ fn __test_12_treemap_deserialize_from_any_key_order() {
     let __local_50: ref Formatter;
     let __local_57: ref Formatter;
     let __local_62: ref Formatter;
-    r = "core/json/from_string<TreeMap<String,i32>>"(String { repr: array.new_data<u8>("{\"b\":2,\"a\":1,\"c\":3}"), used: 19 });
-    if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(r) {
-        map = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(r).payload_0);
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null "core:allocator/TreeMap<String,i32>";
+    let __sroa_r_case1_payload_0: ref null "core:serde/DeserializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core/json/from_string<TreeMap<String,i32>>"(String { repr: array.new_data<u8>("{\"b\":2,\"a\":1,\"c\":3}"), used: 19 });
+    if __sroa_r_discriminant == 0 {
+        map = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0_2 = TreeMap<String,i32>^IndexValue::index_value(map, String { repr: array.new_data<u8>("a"), used: 1 });
         __cond_3 = __v0_2 == 1;
         if __cond_3 == 0 {
@@ -1961,9 +1885,9 @@ fn "core/json/to_string<TreeMap<String,Option<i32>>>"(value) {
     r = TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>(value, ser.buf);
     if ref.is_null(r) == 0 {
         e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
-        return Result<String,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+        return 1; ref.null none; ref.as_non_null(e);
     };
-    return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
+    return 0; ref.as_non_null(ser.buf); ref.null none;
 }
 
 fn "core/json/to_string<TreeMap<String,Array<i32>>>"(value) {
@@ -1974,9 +1898,9 @@ fn "core/json/to_string<TreeMap<String,Array<i32>>>"(value) {
     r = TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>(value, ser.buf);
     if ref.is_null(r) == 0 {
         e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
-        return Result<String,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+        return 1; ref.null none; ref.as_non_null(e);
     };
-    return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
+    return 0; ref.as_non_null(ser.buf); ref.null none;
 }
 
 fn "core/json/to_string<TreeMap<String,bool>>"(value) {
@@ -1987,9 +1911,9 @@ fn "core/json/to_string<TreeMap<String,bool>>"(value) {
     r = TreeMap<String,bool>^Serialize::serialize<JsonSerializer>(value, ser.buf);
     if ref.is_null(r) == 0 {
         e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
-        return Result<String,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+        return 1; ref.null none; ref.as_non_null(e);
     };
-    return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
+    return 0; ref.as_non_null(ser.buf); ref.null none;
 }
 
 fn "core/json/to_string<TreeMap<String,String>>"(value) {
@@ -2000,41 +1924,39 @@ fn "core/json/to_string<TreeMap<String,String>>"(value) {
     r = TreeMap<String,String>^Serialize::serialize<JsonSerializer>(value, ser.buf);
     if ref.is_null(r) == 0 {
         e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
-        return Result<String,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+        return 1; ref.null none; ref.as_non_null(e);
     };
-    return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
+    return 0; ref.as_non_null(ser.buf); ref.null none;
 }
 
 fn "core/json/from_string<TreeMap<String,i32>>"(input) {
     let de: ref "core:json/JsonDeserializer";
-    let r: ref Result<TreeMap<String,i32>,DeserializeError>;
     let v: ref "core:allocator/TreeMap<String,i32>";
     let e: ref "core:serde/DeserializeError";
-    let __pattern_temp_0: ref Result<TreeMap<String,i32>,DeserializeError>;
-    let __pattern_temp_1: ref Result<TreeMap<String,i32>,DeserializeError>;
     let __local_7: ref String;
     let __local_8: i64;
     de = "core:json/JsonDeserializer" { input: ref.as_non_null(input), pos: 0 };
-    r = TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(de);
-    __pattern_temp_0 = r;
-    if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(__pattern_temp_0) {
-        v = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(__pattern_temp_0).payload_0);
+    let __sroa_r_discriminant: i32;
+    let __sroa_r_case0_payload_0: ref null "core:allocator/TreeMap<String,i32>";
+    let __sroa_r_case1_payload_0: ref null "core:serde/DeserializeError";
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(de);
+    if __sroa_r_discriminant == 0 {
+        v = ref.as_non_null(__sroa_r_case0_payload_0);
         "core:json/JsonDeserializer::skip_whitespace"(de);
         if de.pos < __inline_String__len_0: block -> i32 {
             __local_7 = de.input;
             break __inline_String__len_0: __local_7.used;
         } {
-            return Result<TreeMap<String,i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__trailing_1: block -> ref "core:serde/DeserializeError" {
+            return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__trailing_1: block -> ref "core:serde/DeserializeError" {
                 __local_8 = builtin::i64_extend_i32_s(de.pos);
                 break __inline_DeserializeError__trailing_1: "core:serde/DeserializeError" { kind: 7, message: String { repr: array.new_data<u8>("trailing data after value"), used: 25 }, offset: __local_8 };
-            }) };
+            });
         };
-        return Result<TreeMap<String,i32>,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(v) };
+        return 0; ref.as_non_null(v); ref.null none;
     };
-    __pattern_temp_1 = r;
-    if ref.test Result<TreeMap<String,i32>,DeserializeError>::Err(__pattern_temp_1) {
-        e = value_copy "core:serde/DeserializeError"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Err(__pattern_temp_1).payload_0);
-        return Result<TreeMap<String,i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+    if __sroa_r_discriminant == 1 {
+        e = ref.as_non_null(__sroa_r_case1_payload_0);
+        return 1; ref.null none; ref.as_non_null(e);
     };
     "core:internal/unreachable"();
     unreachable;
@@ -2048,9 +1970,9 @@ fn "core/json/to_string<TreeMap<String,i32>>"(value) {
     r = TreeMap<String,i32>^Serialize::serialize<JsonSerializer>(value, ser.buf);
     if ref.is_null(r) == 0 {
         e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
-        return Result<String,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+        return 1; ref.null none; ref.as_non_null(e);
     };
-    return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
+    return 0; ref.as_non_null(ser.buf); ref.null none;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
@@ -2885,9 +2807,7 @@ fn TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
     let vr: ref null "core:serde/SerializeError";
     let e_12: ref "core:serde/SerializeError";
     let e_13: ref "core:serde/SerializeError";
-    let __pattern_temp_0: ref Result<JsonMapSerializer,SerializeError>;
     let __pattern_temp_1: ref null "tuple/[String, Option<i32>]";
-    let __pattern_temp_4: ref Result<JsonMapSerializer,SerializeError>;
     let __local_20: i32;
     entries = TreeMap<String,Option<i32>>::entries(self);
     map_r = __inline_JsonSerializer_Serializer__begin_map_0: block -> ref Result<JsonMapSerializer,SerializeError> {
@@ -2895,9 +2815,8 @@ fn TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
         String::append_char(s, 123);
         break __inline_JsonSerializer_Serializer__begin_map_0: Result<JsonMapSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonMapSerializer" { buf: ref.as_non_null(s), count: 0, need_value: 0 } };
     };
-    __pattern_temp_0 = map_r;
-    if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
-        m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
+    if ref.test Result<JsonMapSerializer,SerializeError>::Ok(map_r) {
+        m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(map_r).payload_0);
         __iter_5 = "core:serde/ArrayIter<Tuple<String,Option<i32>>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
         b170: block {
             l171: loop {
@@ -2926,9 +2845,8 @@ fn TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
             break __inline_JsonMapSerializer_SerializeMap__end_3: ref.null none;
         };
     };
-    __pattern_temp_4 = map_r;
-    if ref.test Result<JsonMapSerializer,SerializeError>::Err(__pattern_temp_4) {
-        e_13 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonMapSerializer,SerializeError>::Err(__pattern_temp_4).payload_0);
+    if ref.test Result<JsonMapSerializer,SerializeError>::Err(map_r) {
+        e_13 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonMapSerializer,SerializeError>::Err(map_r).payload_0);
         return ref.as_non_null(e_13);
     };
     "core:internal/unreachable"();
@@ -3273,9 +3191,7 @@ fn TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
     let vr: ref null "core:serde/SerializeError";
     let e_12: ref "core:serde/SerializeError";
     let e_13: ref "core:serde/SerializeError";
-    let __pattern_temp_0: ref Result<JsonMapSerializer,SerializeError>;
     let __pattern_temp_1: ref null "tuple/[String, Array<i32>]";
-    let __pattern_temp_4: ref Result<JsonMapSerializer,SerializeError>;
     let __local_20: i32;
     entries = TreeMap<String,Array<i32>>::entries(self);
     map_r = __inline_JsonSerializer_Serializer__begin_map_0: block -> ref Result<JsonMapSerializer,SerializeError> {
@@ -3283,9 +3199,8 @@ fn TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
         String::append_char(s, 123);
         break __inline_JsonSerializer_Serializer__begin_map_0: Result<JsonMapSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonMapSerializer" { buf: ref.as_non_null(s), count: 0, need_value: 0 } };
     };
-    __pattern_temp_0 = map_r;
-    if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
-        m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
+    if ref.test Result<JsonMapSerializer,SerializeError>::Ok(map_r) {
+        m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(map_r).payload_0);
         __iter_5 = "core:serde/ArrayIter<Tuple<String,Array<i32>>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
         b212: block {
             l213: loop {
@@ -3315,9 +3230,8 @@ fn TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
             break __inline_JsonMapSerializer_SerializeMap__end_3: ref.null none;
         };
     };
-    __pattern_temp_4 = map_r;
-    if ref.test Result<JsonMapSerializer,SerializeError>::Err(__pattern_temp_4) {
-        e_13 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonMapSerializer,SerializeError>::Err(__pattern_temp_4).payload_0);
+    if ref.test Result<JsonMapSerializer,SerializeError>::Err(map_r) {
+        e_13 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonMapSerializer,SerializeError>::Err(map_r).payload_0);
         return ref.as_non_null(e_13);
     };
     "core:internal/unreachable"();
@@ -3342,8 +3256,6 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
     let r: ref null "core:serde/SerializeError";
     let e_7: ref "core:serde/SerializeError";
     let e_8: ref "core:serde/SerializeError";
-    let __pattern_temp_0: ref Result<JsonSeqSerializer,SerializeError>;
-    let __pattern_temp_3: ref Result<JsonSeqSerializer,SerializeError>;
     let __local_14: i32;
     let __local_16: ref Array<i32>;
     seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref Result<JsonSeqSerializer,SerializeError> {
@@ -3351,9 +3263,8 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
         String::append_char(s, 91);
         break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonSeqSerializer" { buf: ref.as_non_null(s), count: 0 } };
     };
-    __pattern_temp_0 = seq_2;
-    if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0) {
-        seq_3 = value_copy "core:json/JsonSeqSerializer"(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
+    if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(seq_2) {
+        seq_3 = value_copy "core:json/JsonSeqSerializer"(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(seq_2).payload_0);
         __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "core:serde/ArrayIter<i32>" {
             __local_16 = self;
             break __inline_Array_i32__IntoIterator__into_iter_2: "core:serde/ArrayIter<i32>" { repr: ref.as_non_null(__local_16.repr), used: __local_16.used, index: 0 };
@@ -3380,9 +3291,8 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
             break __inline_JsonSeqSerializer_SerializeSeq__end_3: ref.null none;
         };
     };
-    __pattern_temp_3 = seq_2;
-    if ref.test Result<JsonSeqSerializer,SerializeError>::Err(__pattern_temp_3) {
-        e_8 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonSeqSerializer,SerializeError>::Err(__pattern_temp_3).payload_0);
+    if ref.test Result<JsonSeqSerializer,SerializeError>::Err(seq_2) {
+        e_8 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonSeqSerializer,SerializeError>::Err(seq_2).payload_0);
         return ref.as_non_null(e_8);
     };
     return "core:serde/SerializeError" { kind: 1, message: String { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };
@@ -3744,9 +3654,7 @@ fn TreeMap<String,bool>^Serialize::serialize<JsonSerializer>(self, s) {
     let vr: ref null "core:serde/SerializeError";
     let e_12: ref "core:serde/SerializeError";
     let e_13: ref "core:serde/SerializeError";
-    let __pattern_temp_0: ref Result<JsonMapSerializer,SerializeError>;
     let __pattern_temp_1: ref null "tuple/[String, bool]";
-    let __pattern_temp_4: ref Result<JsonMapSerializer,SerializeError>;
     let __local_20: i32;
     entries = TreeMap<String,bool>::entries(self);
     map_r = __inline_JsonSerializer_Serializer__begin_map_0: block -> ref Result<JsonMapSerializer,SerializeError> {
@@ -3754,9 +3662,8 @@ fn TreeMap<String,bool>^Serialize::serialize<JsonSerializer>(self, s) {
         String::append_char(s, 123);
         break __inline_JsonSerializer_Serializer__begin_map_0: Result<JsonMapSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonMapSerializer" { buf: ref.as_non_null(s), count: 0, need_value: 0 } };
     };
-    __pattern_temp_0 = map_r;
-    if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
-        m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
+    if ref.test Result<JsonMapSerializer,SerializeError>::Ok(map_r) {
+        m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(map_r).payload_0);
         __iter_5 = "core:serde/ArrayIter<Tuple<String,bool>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
         b264: block {
             l265: loop {
@@ -3785,9 +3692,8 @@ fn TreeMap<String,bool>^Serialize::serialize<JsonSerializer>(self, s) {
             break __inline_JsonMapSerializer_SerializeMap__end_3: ref.null none;
         };
     };
-    __pattern_temp_4 = map_r;
-    if ref.test Result<JsonMapSerializer,SerializeError>::Err(__pattern_temp_4) {
-        e_13 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonMapSerializer,SerializeError>::Err(__pattern_temp_4).payload_0);
+    if ref.test Result<JsonMapSerializer,SerializeError>::Err(map_r) {
+        e_13 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonMapSerializer,SerializeError>::Err(map_r).payload_0);
         return ref.as_non_null(e_13);
     };
     "core:internal/unreachable"();
@@ -4097,9 +4003,7 @@ fn TreeMap<String,String>^Serialize::serialize<JsonSerializer>(self, s) {
     let vr: ref null "core:serde/SerializeError";
     let e_12: ref "core:serde/SerializeError";
     let e_13: ref "core:serde/SerializeError";
-    let __pattern_temp_0: ref Result<JsonMapSerializer,SerializeError>;
     let __pattern_temp_1: ref null "tuple/[String, String]";
-    let __pattern_temp_4: ref Result<JsonMapSerializer,SerializeError>;
     let __local_20: i32;
     entries = TreeMap<String,String>::entries(self);
     map_r = __inline_JsonSerializer_Serializer__begin_map_0: block -> ref Result<JsonMapSerializer,SerializeError> {
@@ -4107,9 +4011,8 @@ fn TreeMap<String,String>^Serialize::serialize<JsonSerializer>(self, s) {
         String::append_char(s, 123);
         break __inline_JsonSerializer_Serializer__begin_map_0: Result<JsonMapSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonMapSerializer" { buf: ref.as_non_null(s), count: 0, need_value: 0 } };
     };
-    __pattern_temp_0 = map_r;
-    if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
-        m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
+    if ref.test Result<JsonMapSerializer,SerializeError>::Ok(map_r) {
+        m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(map_r).payload_0);
         __iter_5 = "core:serde/ArrayIter<Tuple<String,String>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
         b304: block {
             l305: loop {
@@ -4139,9 +4042,8 @@ fn TreeMap<String,String>^Serialize::serialize<JsonSerializer>(self, s) {
             break __inline_JsonMapSerializer_SerializeMap__end_3: ref.null none;
         };
     };
-    __pattern_temp_4 = map_r;
-    if ref.test Result<JsonMapSerializer,SerializeError>::Err(__pattern_temp_4) {
-        e_13 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonMapSerializer,SerializeError>::Err(__pattern_temp_4).payload_0);
+    if ref.test Result<JsonMapSerializer,SerializeError>::Err(map_r) {
+        e_13 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonMapSerializer,SerializeError>::Err(map_r).payload_0);
         return ref.as_non_null(e_13);
     };
     "core:internal/unreachable"();
@@ -4514,79 +4416,71 @@ fn TreeMap<String,i32>::find_index(self, key) {
 }
 
 fn TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(d) {
-    let map_r: ref Result<JsonMapAccess,DeserializeError>;
     let ma: ref "core:json/JsonMapAccess";
     let result: ref "core:allocator/TreeMap<String,i32>";
-    let key_r: ref Result<Option<String>,DeserializeError>;
     let key_opt: ref null String;
     let end_r: ref null "core:serde/DeserializeError";
     let e_7: ref "core:serde/DeserializeError";
     let key: ref String;
-    let val_r: ref Result<i32,DeserializeError>;
     let val: i32;
     let e_11: ref "core:serde/DeserializeError";
     let e_12: ref "core:serde/DeserializeError";
     let e_13: ref "core:serde/DeserializeError";
-    let __pattern_temp_0: ref Result<JsonMapAccess,DeserializeError>;
-    let __pattern_temp_1: ref Result<Option<String>,DeserializeError>;
-    let __pattern_temp_3: ref Result<i32,DeserializeError>;
-    let __pattern_temp_4: ref Result<i32,DeserializeError>;
-    let __pattern_temp_6: ref Result<Option<String>,DeserializeError>;
-    let __pattern_temp_7: ref Result<JsonMapAccess,DeserializeError>;
     let __local_22: ref Array<TreeMapEntry<String,i32>>;
     let __local_27: ref "core:json/JsonDeserializer";
-    map_r = "core:json/JsonDeserializer^Deserializer::begin_map"(d);
-    __pattern_temp_0 = map_r;
-    if ref.test Result<JsonMapAccess,DeserializeError>::Ok(__pattern_temp_0) {
-        ma = value_copy "core:json/JsonMapAccess"(ref.cast Result<JsonMapAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0);
+    let __sroa_map_r_discriminant: i32;
+    let __sroa_map_r_case0_payload_0: ref null "core:json/JsonMapAccess";
+    let __sroa_map_r_case1_payload_0: ref null "core:serde/DeserializeError";
+    multivalue_bind [__sroa_map_r_discriminant, __sroa_map_r_case0_payload_0, __sroa_map_r_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_map"(d);
+    if __sroa_map_r_discriminant == 0 {
+        ma = ref.as_non_null(__sroa_map_r_case0_payload_0);
         result = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
             __local_22 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
             break __seq_lit: __local_22;
         }), size: 0, deleted_count: 0 };
         block {
             l354: loop {
-                key_r = "core:json/JsonMapAccess^DeserializeMap::next_key_string"(ma);
-                __pattern_temp_1 = key_r;
-                if ref.test Result<Option<String>,DeserializeError>::Ok(__pattern_temp_1) {
-                    key_opt = value_copy Option<String>(ref.cast Result<Option<String>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+                let __sroa_key_r_discriminant: i32;
+                let __sroa_key_r_case0_payload_0: ref null String;
+                let __sroa_key_r_case1_payload_0: ref null "core:serde/DeserializeError";
+                multivalue_bind [__sroa_key_r_discriminant, __sroa_key_r_case0_payload_0, __sroa_key_r_case1_payload_0] = "core:json/JsonMapAccess^DeserializeMap::next_key_string"(ma);
+                if __sroa_key_r_discriminant == 0 {
+                    key_opt = __sroa_key_r_case0_payload_0;
                     if ref.is_null(key_opt) == 0 {
                         key = value_copy String(ref.as_non_null(key_opt));
-                        val_r = __inline_i32_Deserialize__deserialize_JsonDeserializer__5: block -> ref Result<i32,DeserializeError> {
-                            __local_27 = ma.de;
-                            break __inline_i32_Deserialize__deserialize_JsonDeserializer__5: "core:json/JsonDeserializer::parse_i32_direct"(__local_27);
-                        };
-                        __pattern_temp_3 = val_r;
-                        if ref.test Result<i32,DeserializeError>::Ok(__pattern_temp_3) {
-                            val = ref.cast Result<i32,DeserializeError>::Ok(__pattern_temp_3).payload_0;
+                        let __sroa_val_r_discriminant: i32;
+                        let __sroa_val_r_case0_payload_0: i32;
+                        let __sroa_val_r_case1_payload_0: ref null "core:serde/DeserializeError";
+                        __local_27 = ma.de;
+                        multivalue_bind [__sroa_val_r_discriminant, __sroa_val_r_case0_payload_0, __sroa_val_r_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(__local_27);
+                        if __sroa_val_r_discriminant == 0 {
+                            val = __sroa_val_r_case0_payload_0;
                             TreeMap<String,i32>::insert(result, key, val);
                         };
-                        __pattern_temp_4 = val_r;
-                        if ref.test Result<i32,DeserializeError>::Err(__pattern_temp_4) {
-                            e_11 = value_copy "core:serde/DeserializeError"(ref.cast Result<i32,DeserializeError>::Err(__pattern_temp_4).payload_0);
-                            return Result<TreeMap<String,i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_11) };
+                        if __sroa_val_r_discriminant == 1 {
+                            e_11 = ref.as_non_null(__sroa_val_r_case1_payload_0);
+                            return 1; ref.null none; ref.as_non_null(e_11);
                         };
                     } else {
                         end_r = "core:json/JsonDeserializer::expect_char"(ma.de, 125);
                         if ref.is_null(end_r) == 0 {
                             e_7 = value_copy "core:serde/DeserializeError"(ref.as_non_null(end_r));
-                            return Result<TreeMap<String,i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_7) };
+                            return 1; ref.null none; ref.as_non_null(e_7);
                         };
-                        return Result<TreeMap<String,i32>,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(result) };
+                        return 0; ref.as_non_null(result); ref.null none;
                     };
                 };
-                __pattern_temp_6 = key_r;
-                if ref.test Result<Option<String>,DeserializeError>::Err(__pattern_temp_6) {
-                    e_12 = value_copy "core:serde/DeserializeError"(ref.cast Result<Option<String>,DeserializeError>::Err(__pattern_temp_6).payload_0);
-                    return Result<TreeMap<String,i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_12) };
+                if __sroa_key_r_discriminant == 1 {
+                    e_12 = ref.as_non_null(__sroa_key_r_case1_payload_0);
+                    return 1; ref.null none; ref.as_non_null(e_12);
                 };
                 continue l354;
             };
         };
     };
-    __pattern_temp_7 = map_r;
-    if ref.test Result<JsonMapAccess,DeserializeError>::Err(__pattern_temp_7) {
-        e_13 = value_copy "core:serde/DeserializeError"(ref.cast Result<JsonMapAccess,DeserializeError>::Err(__pattern_temp_7).payload_0);
-        return Result<TreeMap<String,i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_13) };
+    if __sroa_map_r_discriminant == 1 {
+        e_13 = ref.as_non_null(__sroa_map_r_case1_payload_0);
+        return 1; ref.null none; ref.as_non_null(e_13);
     };
     "core:internal/unreachable"();
     unreachable;
@@ -4743,9 +4637,7 @@ fn TreeMap<String,i32>^Serialize::serialize<JsonSerializer>(self, s) {
     let vr: ref null "core:serde/SerializeError";
     let e_12: ref "core:serde/SerializeError";
     let e_13: ref "core:serde/SerializeError";
-    let __pattern_temp_0: ref Result<JsonMapSerializer,SerializeError>;
     let __pattern_temp_1: ref null "tuple/[String, i32]";
-    let __pattern_temp_4: ref Result<JsonMapSerializer,SerializeError>;
     let __local_20: i32;
     entries = TreeMap<String,i32>::entries(self);
     map_r = __inline_JsonSerializer_Serializer__begin_map_0: block -> ref Result<JsonMapSerializer,SerializeError> {
@@ -4753,9 +4645,8 @@ fn TreeMap<String,i32>^Serialize::serialize<JsonSerializer>(self, s) {
         String::append_char(s, 123);
         break __inline_JsonSerializer_Serializer__begin_map_0: Result<JsonMapSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonMapSerializer" { buf: ref.as_non_null(s), count: 0, need_value: 0 } };
     };
-    __pattern_temp_0 = map_r;
-    if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
-        m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
+    if ref.test Result<JsonMapSerializer,SerializeError>::Ok(map_r) {
+        m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(map_r).payload_0);
         __iter_5 = "core:serde/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
         b379: block {
             l380: loop {
@@ -4784,9 +4675,8 @@ fn TreeMap<String,i32>^Serialize::serialize<JsonSerializer>(self, s) {
             break __inline_JsonMapSerializer_SerializeMap__end_3: ref.null none;
         };
     };
-    __pattern_temp_4 = map_r;
-    if ref.test Result<JsonMapSerializer,SerializeError>::Err(__pattern_temp_4) {
-        e_13 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonMapSerializer,SerializeError>::Err(__pattern_temp_4).payload_0);
+    if ref.test Result<JsonMapSerializer,SerializeError>::Err(map_r) {
+        e_13 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonMapSerializer,SerializeError>::Err(map_r).payload_0);
         return ref.as_non_null(e_13);
     };
     "core:internal/unreachable"();
@@ -5030,7 +4920,6 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     let i_10: i32;
     let b: i32;
     let esc: i32;
-    let r: ref Result<char,DeserializeError>;
     let c_14: char;
     let e: ref "core:serde/DeserializeError";
     let seq_len: i32;
@@ -5051,8 +4940,6 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     let c_31: char;
     let __local_32: ref String;
     let __local_33: ref Formatter;
-    let __pattern_temp_0: ref Result<char,DeserializeError>;
-    let __pattern_temp_1: ref Result<char,DeserializeError>;
     let __local_39: ref String;
     let __local_40: i64;
     let __local_41: ref String;
@@ -5109,21 +4996,21 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
         __local_39 = self.input;
         break __inline_String__len_0: __local_39.used;
     } {
-        return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
+        return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
             __local_40 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_40 };
-        }) };
+        });
     };
     if __inline_String__get_byte_2: block -> u8 {
         __local_41 = self.input;
         __local_42 = self.pos;
         break __inline_String__get_byte_2: builtin::array_get_u8(__local_41.repr, __local_42);
     } != 34 {
-        return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_3: block -> ref "core:serde/DeserializeError" {
+        return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__unexpected_type_3: block -> ref "core:serde/DeserializeError" {
             __local_43 = String { repr: array.new_data<u8>("expected string"), used: 15 };
             __local_44 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__unexpected_type_3: "core:serde/DeserializeError" { kind: 0, message: ref.as_non_null(__local_43), offset: __local_44 };
-        }) };
+        });
     };
     self.pos = self.pos + 1;
     prefix_start = self.pos;
@@ -5188,7 +5075,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             };
         };
         self.pos = scan_pos + 1;
-        return Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(result_5) };
+        return 0; ref.as_non_null(result_5); ref.null none;
     };
     result_8 = __inline_String__with_capacity_11: block -> ref String {
         __local_57 = prefix_len + 32;
@@ -5235,7 +5122,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             if b == 34 {
                 _hfs_pos_98 = _hfs_pos_98 + 1;
                 self.pos = _hfs_pos_98;
-                return Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(result_8) };
+                return 0; ref.as_non_null(result_8); ref.null none;
             };
             if b == 92 {
                 _hfs_pos_98 = _hfs_pos_98 + 1;
@@ -5244,10 +5131,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     break __inline_String__len_16: __local_66.used;
                 } {
                     self.pos = _hfs_pos_98;
-                    return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_17: block -> ref "core:serde/DeserializeError" {
+                    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_17: block -> ref "core:serde/DeserializeError" {
                         __local_67 = builtin::i64_extend_i32_s(_hfs_pos_98);
                         break __inline_DeserializeError__eof_17: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_67 };
-                    }) };
+                    });
                 };
                 esc = __inline_String__get_byte_18: block -> u8 {
                     __local_68 = self.input;
@@ -5272,22 +5159,23 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     String::append_char(result_8, 12);
                 } else if esc == 117 {
                     self.pos = _hfs_pos_98;
-                    r = "core:json/JsonDeserializer::read_unicode_escape"(self);
+                    let __sroa_r_discriminant: i32;
+                    let __sroa_r_case0_payload_0: char;
+                    let __sroa_r_case1_payload_0: ref null "core:serde/DeserializeError";
+                    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/JsonDeserializer::read_unicode_escape"(self);
                     _hfs_pos_98 = self.pos;
-                    __pattern_temp_0 = r;
-                    if ref.test Result<char,DeserializeError>::Ok(__pattern_temp_0) {
-                        c_14 = ref.cast Result<char,DeserializeError>::Ok(__pattern_temp_0).payload_0;
+                    if __sroa_r_discriminant == 0 {
+                        c_14 = __sroa_r_case0_payload_0;
                         String::append_char(result_8, c_14);
                     };
-                    __pattern_temp_1 = r;
-                    if ref.test Result<char,DeserializeError>::Err(__pattern_temp_1) {
-                        e = value_copy "core:serde/DeserializeError"(ref.cast Result<char,DeserializeError>::Err(__pattern_temp_1).payload_0);
+                    if __sroa_r_discriminant == 1 {
+                        e = ref.as_non_null(__sroa_r_case1_payload_0);
                         self.pos = _hfs_pos_98;
-                        return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+                        return 1; ref.null none; ref.as_non_null(e);
                     };
                 } else {
                     self.pos = _hfs_pos_98;
-                    return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__malformed_21: block -> ref "core:serde/DeserializeError" {
+                    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__malformed_21: block -> ref "core:serde/DeserializeError" {
                         __local_72 = __tmpl: block -> ref String {
                             __local_32 = String { repr: builtin::array_new<u8>(34), used: 0 };
                             String::append(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
@@ -5298,7 +5186,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                         };
                         __local_73 = builtin::i64_extend_i32_s(_hfs_pos_98);
                         break __inline_DeserializeError__malformed_21: "core:serde/DeserializeError" { kind: 6, message: ref.as_non_null(__local_72), offset: __local_73 };
-                    }) };
+                    });
                 };
                 _hfs_pos_98 = _hfs_pos_98 + 1;
             } else {
@@ -5308,10 +5196,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     break __inline_String__len_22: __local_74.used;
                 } {
                     self.pos = _hfs_pos_98;
-                    return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_23: block -> ref "core:serde/DeserializeError" {
+                    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_23: block -> ref "core:serde/DeserializeError" {
                         __local_75 = builtin::i64_extend_i32_s(_hfs_pos_98);
                         break __inline_DeserializeError__eof_23: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_75 };
-                    }) };
+                    });
                 };
                 if seq_len == 1 {
                     String::append_char(result_8, b & 255);
@@ -5382,10 +5270,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
         };
     };
     self.pos = _hfs_pos_98;
-    return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_30: block -> ref "core:serde/DeserializeError" {
+    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_30: block -> ref "core:serde/DeserializeError" {
         __local_88 = builtin::i64_extend_i32_s(self.pos);
         break __inline_DeserializeError__eof_30: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_88 };
-    }) };
+    });
 }
 
 fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
@@ -5410,10 +5298,10 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
         __local_7 = self.input;
         break __inline_String__len_0: __local_7.used;
     } {
-        return Result<char,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
+        return 1; 0; ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
             __local_8 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_8 };
-        }) };
+        });
     };
     code = 0;
     __for_2: block {
@@ -5450,11 +5338,11 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
                 } {
                     code = ((code + 10) + b) - 65;
                 } else {
-                    return Result<char,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__malformed_3: block -> ref "core:serde/DeserializeError" {
+                    return 1; 0; ref.as_non_null(__inline_DeserializeError__malformed_3: block -> ref "core:serde/DeserializeError" {
                         __local_11 = String { repr: array.new_data<u8>("invalid unicode escape"), used: 22 };
                         __local_12 = builtin::i64_extend_i32_s(start);
                         break __inline_DeserializeError__malformed_3: "core:serde/DeserializeError" { kind: 6, message: ref.as_non_null(__local_11), offset: __local_12 };
-                    }) };
+                    });
                 };
                 i = i + 1;
                 continue l446;
@@ -5467,13 +5355,13 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
     multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = char::from_u32(code);
     if __sroa___pattern_temp_0_discriminant == 0 {
         c = __sroa___pattern_temp_0_payload_0;
-        return Result<char,DeserializeError>::Ok { discriminant: 0, payload_0: c };
+        return 0; c; ref.null none;
     };
-    return Result<char,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__malformed_4: block -> ref "core:serde/DeserializeError" {
+    return 1; 0; ref.as_non_null(__inline_DeserializeError__malformed_4: block -> ref "core:serde/DeserializeError" {
         __local_13 = String { repr: array.new_data<u8>("invalid unicode codepoint"), used: 25 };
         __local_14 = builtin::i64_extend_i32_s(start);
         break __inline_DeserializeError__malformed_4: "core:serde/DeserializeError" { kind: 6, message: ref.as_non_null(__local_13), offset: __local_14 };
-    }) };
+    });
 }
 
 fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
@@ -5520,7 +5408,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
         __local_16 = self.input;
         break __inline_String__len_0: __local_16.used;
     } {
-        return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start } };
+        return 1; 0; "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start };
     };
     neg = 0;
     if __inline_String__get_byte_2: block -> u8 {
@@ -5535,10 +5423,10 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
         __local_20 = self.input;
         break __inline_String__len_3: __local_20.used;
     } {
-        return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_4: block -> ref "core:serde/DeserializeError" {
+        return 1; 0; ref.as_non_null(__inline_DeserializeError__eof_4: block -> ref "core:serde/DeserializeError" {
             __local_21 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_4: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_21 };
-        }) };
+        });
     };
     first = __inline_String__get_byte_5: block -> u8 {
         __local_22 = self.input;
@@ -5550,11 +5438,11 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     } else {
         first > 57;
     } {
-        return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_6: block -> ref "core:serde/DeserializeError" {
+        return 1; 0; ref.as_non_null(__inline_DeserializeError__unexpected_type_6: block -> ref "core:serde/DeserializeError" {
             __local_24 = String { repr: array.new_data<u8>("expected number"), used: 15 };
             __local_25 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__unexpected_type_6: "core:serde/DeserializeError" { kind: 0, message: ref.as_non_null(__local_24), offset: __local_25 };
-        }) };
+        });
     };
     result = first - 48;
     self.pos = self.pos + 1;
@@ -5688,10 +5576,10 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                 };
                 if v_signed != builtin::f64_floor(v_signed) {
                     self.pos = _hfs_pos_51;
-                    return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_18: block -> ref "core:serde/DeserializeError" {
+                    return 1; 0; ref.as_non_null(__inline_DeserializeError__unexpected_type_18: block -> ref "core:serde/DeserializeError" {
                         __local_42 = String { repr: array.new_data<u8>("expected integer, got float"), used: 27 };
                         break __inline_DeserializeError__unexpected_type_18: "core:serde/DeserializeError" { kind: 0, message: ref.as_non_null(__local_42), offset: start };
-                    }) };
+                    });
                 };
                 if if v_signed < -2147483648 -> i32 {
                     1;
@@ -5699,13 +5587,13 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                     v_signed > 2147483647;
                 } {
                     self.pos = _hfs_pos_51;
-                    return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__overflow_19: block -> ref "core:serde/DeserializeError" {
+                    return 1; 0; ref.as_non_null(__inline_DeserializeError__overflow_19: block -> ref "core:serde/DeserializeError" {
                         __local_44 = String { repr: array.new_data<u8>("value out of range for i32"), used: 26 };
                         break __inline_DeserializeError__overflow_19: "core:serde/DeserializeError" { kind: 5, message: ref.as_non_null(__local_44), offset: start };
-                    }) };
+                    });
                 };
                 self.pos = _hfs_pos_51;
-                return Result<i32,DeserializeError>::Ok { discriminant: 0, payload_0: builtin::i32_trunc_f64_s(v_signed) };
+                return 0; builtin::i32_trunc_f64_s(v_signed); ref.null none;
             } else {
                 self.pos = _hfs_pos_51;
                 break b460;
@@ -5717,19 +5605,16 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     if neg {
         result = 0 - result;
     };
-    return Result<i32,DeserializeError>::Ok { discriminant: 0, payload_0: result };
+    return 0; result; ref.null none;
 }
 
 fn "core:json/JsonMapAccess^DeserializeMap::next_key_string"(self) {  // from core:json
     let r_1: ref null "core:serde/DeserializeError";
     let e_2: ref "core:serde/DeserializeError";
-    let key_r: ref Result<String,DeserializeError>;
     let key: ref String;
     let r_5: ref null "core:serde/DeserializeError";
     let e_6: ref "core:serde/DeserializeError";
     let e_7: ref "core:serde/DeserializeError";
-    let __pattern_temp_1: ref Result<String,DeserializeError>;
-    let __pattern_temp_3: ref Result<String,DeserializeError>;
     let __local_12: ref String;
     let __local_13: i64;
     let __local_14: ref String;
@@ -5739,41 +5624,42 @@ fn "core:json/JsonMapAccess^DeserializeMap::next_key_string"(self) {  // from co
         __local_12 = self.de.input;
         break __inline_String__len_0: __local_12.used;
     } {
-        return Result<Option<String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
+        return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
             __local_13 = builtin::i64_extend_i32_s(self.de.pos);
             break __inline_DeserializeError__eof_1: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_13 };
-        }) };
+        });
     };
     if __inline_String__get_byte_2: block -> u8 {
         __local_14 = self.de.input;
         __local_15 = self.de.pos;
         break __inline_String__get_byte_2: builtin::array_get_u8(__local_14.repr, __local_15);
     } == 125 {
-        return Result<Option<String>,DeserializeError>::Ok { discriminant: 0, payload_0: ref.null none };
+        return 0; ref.null none; ref.null none;
     };
     if self.first == 0 {
         r_1 = "core:json/JsonDeserializer::expect_char"(self.de, 44);
         if ref.is_null(r_1) == 0 {
             e_2 = value_copy "core:serde/DeserializeError"(ref.as_non_null(r_1));
-            return Result<Option<String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_2) };
+            return 1; ref.null none; ref.as_non_null(e_2);
         };
     };
     self.first = 0;
-    key_r = "core:json/JsonDeserializer::read_json_string"(self.de);
-    __pattern_temp_1 = key_r;
-    if ref.test Result<String,DeserializeError>::Ok(__pattern_temp_1) {
-        key = value_copy String(ref.cast Result<String,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+    let __sroa_key_r_discriminant: i32;
+    let __sroa_key_r_case0_payload_0: ref null String;
+    let __sroa_key_r_case1_payload_0: ref null "core:serde/DeserializeError";
+    multivalue_bind [__sroa_key_r_discriminant, __sroa_key_r_case0_payload_0, __sroa_key_r_case1_payload_0] = "core:json/JsonDeserializer::read_json_string"(self.de);
+    if __sroa_key_r_discriminant == 0 {
+        key = ref.as_non_null(__sroa_key_r_case0_payload_0);
         r_5 = "core:json/JsonDeserializer::expect_char"(self.de, 58);
         if ref.is_null(r_5) == 0 {
             e_6 = value_copy "core:serde/DeserializeError"(ref.as_non_null(r_5));
-            return Result<Option<String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_6) };
+            return 1; ref.null none; ref.as_non_null(e_6);
         };
-        return Result<Option<String>,DeserializeError>::Ok { discriminant: 0, payload_0: key };
+        return 0; key; ref.null none;
     };
-    __pattern_temp_3 = key_r;
-    if ref.test Result<String,DeserializeError>::Err(__pattern_temp_3) {
-        e_7 = value_copy "core:serde/DeserializeError"(ref.cast Result<String,DeserializeError>::Err(__pattern_temp_3).payload_0);
-        return Result<Option<String>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_7) };
+    if __sroa_key_r_discriminant == 1 {
+        e_7 = ref.as_non_null(__sroa_key_r_case1_payload_0);
+        return 1; ref.null none; ref.as_non_null(e_7);
     };
     "core:internal/unreachable"();
     unreachable;
@@ -5785,9 +5671,9 @@ fn "core:json/JsonDeserializer^Deserializer::begin_map"(self) {  // from core:js
     r = "core:json/JsonDeserializer::expect_char"(self, 123);
     if ref.is_null(r) == 0 {
         e = value_copy "core:serde/DeserializeError"(ref.as_non_null(r));
-        return Result<JsonMapAccess,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+        return 1; ref.null none; ref.as_non_null(e);
     };
-    return Result<JsonMapAccess,DeserializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonMapAccess" { de: ref.as_non_null(self), first: 1 } };
+    return 0; "core:json/JsonMapAccess" { de: ref.as_non_null(self), first: 1 }; ref.null none;
 }
 
 fn Formatter::write_char_n(self, c, n) {

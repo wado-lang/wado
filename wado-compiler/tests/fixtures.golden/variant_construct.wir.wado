@@ -79,8 +79,6 @@ type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/return_non_empty" = fn() -> ref null Array<u8>;
 
-type "functype/return_result_array" = fn() -> ref Result<Array<i32>,String>;
-
 type "functype/variant_construct_literal_coercion" = fn();
 
 type "functype/run" = fn();
@@ -139,6 +137,8 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
+type "functype/return_result_array" = fn() -> [i32, ref null Array<i32>, ref null String];
+
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
@@ -167,10 +167,10 @@ fn return_non_empty() {
 
 fn return_result_array() {
     let __local_0: ref Array<i32>;
-    return Result<Array<i32>,String>::Ok { discriminant: 0, payload_0: ref.as_non_null(__seq_lit: block -> ref Array<i32> {
+    return 0; ref.as_non_null(__seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
-    }) };
+    }); ref.null none;
 }
 
 fn variant_construct_literal_coercion() with Stdout {
@@ -215,7 +215,6 @@ fn variant_construct_literal_coercion() with Stdout {
     let __local_38: ref Formatter;
     let __pattern_temp_0: ref null Array<u8>;
     let __pattern_temp_1: ref null Array<u8>;
-    let __pattern_temp_2: ref Result<Array<i32>,String>;
     let __pattern_temp_3: ref Result<Array<i32>,String>;
     let __local_43: ref Array<u8>;
     let __local_51: ref Formatter;
@@ -345,9 +344,12 @@ condition: arr[0] == 1 as u8
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Some"), used: 13 });
         unreachable;
     };
-    __pattern_temp_2 = return_result_array();
-    if ref.test Result<Array<i32>,String>::Ok(__pattern_temp_2) {
-        arr_8 = value_copy Array<i32>(ref.cast Result<Array<i32>,String>::Ok(__pattern_temp_2).payload_0);
+    let __sroa___pattern_temp_2_discriminant: i32;
+    let __sroa___pattern_temp_2_case0_payload_0: ref null Array<i32>;
+    let __sroa___pattern_temp_2_case1_payload_0: ref null String;
+    multivalue_bind [__sroa___pattern_temp_2_discriminant, __sroa___pattern_temp_2_case0_payload_0, __sroa___pattern_temp_2_case1_payload_0] = return_result_array();
+    if __sroa___pattern_temp_2_discriminant == 0 {
+        arr_8 = ref.as_non_null(__sroa___pattern_temp_2_case0_payload_0);
         __v0_9 = arr_8.used;
         __cond_10 = __v0_9 == 3;
         if __cond_10 == 0 {
