@@ -2565,6 +2565,7 @@ impl Monomorphizer {
             local_count,
             local_types,
             address_taken_locals: generic.address_taken_locals.clone(),
+            stores_aliased_locals: generic.stores_aliased_locals.clone(),
             // Scratch local fields - computed by lower phase (after monomorphization)
             is_cm_binding: false,
             inline_hint: generic.inline_hint,

@@ -5974,7 +5974,11 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
 fn check_special(f) {
     let bits: i64;
     let is_neg: bool;
-    bits = builtin::i64_reinterpret_f64(f);
+    let __local_6: f64;
+    bits = __inline_f64__to_bits_0: block -> i64 {
+        __local_6 = f;
+        break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(__local_6);
+    };
     if bits == 0_i64 {
         return 1; 0; 1;
     };
@@ -10011,7 +10015,11 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core
     let __local_2: ref String;
     let __local_3: ref Formatter;
     let __local_5: ref "core:internal/Box<f64>";
-    if v != v {
+    let __local_10: f64;
+    if __inline_f64__is_nan_0: block -> bool {
+        __local_10 = v;
+        break __inline_f64__is_nan_0: __local_10 != __local_10;
+    } {
         return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
     };
     if __inline_f64__is_finite_1: block -> bool {
@@ -10151,6 +10159,8 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
     let __local_14: i32;
     let __local_16: ref String;
     let __local_17: i64;
+    let _licm_used_19: i32;
+    let _licm_repr_20: ref array<u8>;
     let _licm_input_21: ref String;
     let _licm_used_22: i32;
     let _licm_repr_23: ref array<u8>;
@@ -10162,6 +10172,8 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
     __sroa___iter_3_repr = lit.repr;
     __sroa___iter_3_used = lit.used;
     __sroa___iter_3_index = 0;
+    _licm_used_19 = __sroa___iter_3_used;
+    _licm_repr_20 = __sroa___iter_3_repr;
     _licm_input_21 = self.input;
     _licm_used_22 = _licm_input_21.used;
     _licm_repr_23 = _licm_input_21.repr;
@@ -10169,13 +10181,13 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
     b860: block {
         l861: loop {
             __fused___inline_StrUtf8ByteIter_Iterator__next_2: block {
-                if __sroa___iter_3_index >= __sroa___iter_3_used {
+                if __sroa___iter_3_index >= _licm_used_19 {
                     self.pos = _hfs_pos_27;
                     break b860;
                     self.pos = _hfs_pos_27;
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
                 };
-                byte = builtin::array_get_u8(__sroa___iter_3_repr, __sroa___iter_3_index);
+                byte = builtin::array_get_u8(_licm_repr_20, __sroa___iter_3_index);
                 __sroa___iter_3_index = __sroa___iter_3_index + 1;
                 if _hfs_pos_27 >= _licm_used_22 {
                     self.pos = _hfs_pos_27;

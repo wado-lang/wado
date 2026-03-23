@@ -680,6 +680,9 @@ fn run() with Stdout {
     let __local_1832: ref Formatter;
     let __local_1842: ref Formatter;
     let __local_1849: ref Formatter;
+    let __local_1853: bool;
+    let __local_1854: bool;
+    let __local_1855: bool;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -1489,7 +1492,8 @@ condition: r4 == \"1.414\"
         __tmpl: block -> ref String {
             __local_203 = String { repr: builtin::array_new<u8>(16), used: 0 };
             __local_204 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_203) };
-            Formatter::pad(__local_204, if __local_60 -> ref String {
+            __local_1853 = __local_60;
+            Formatter::pad(__local_204, if __local_1853 -> ref String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 String { repr: array.new_data<u8>("false"), used: 5 };
@@ -1704,6 +1708,7 @@ condition: s == \"2.71828\"
     s_76 = __tmpl: block -> ref String {
         __local_223 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_224 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_223) };
+        __local_1854 = 1;
         Formatter::pad(__local_224, String { repr: array.new_data<u8>("true"), used: 4 });
         break __tmpl: __local_223;
     };
@@ -1882,6 +1887,7 @@ condition: fmt_f64(3.14159) == \"3.14159\"
     __v0_92 = __tmpl: block -> ref String {
         __local_1831 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_1832 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1831) };
+        __local_1855 = 0;
         Formatter::pad(__local_1832, String { repr: array.new_data<u8>("false"), used: 5 });
         break __tmpl: __local_1831;
     };
@@ -3000,7 +3006,11 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
 fn check_special(f) {
     let bits: i64;
     let is_neg: bool;
-    bits = builtin::i64_reinterpret_f64(f);
+    let __local_6: f64;
+    bits = __inline_f64__to_bits_0: block -> i64 {
+        __local_6 = f;
+        break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(__local_6);
+    };
     if bits == 0_i64 {
         return 1; 0; 1;
     };

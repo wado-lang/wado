@@ -2212,6 +2212,8 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
     let __local_14: i32;
     let __local_16: ref String;
     let __local_17: i64;
+    let _licm_used_19: i32;
+    let _licm_repr_20: ref array<u8>;
     let _licm_input_21: ref String;
     let _licm_used_22: i32;
     let _licm_repr_23: ref array<u8>;
@@ -2223,6 +2225,8 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
     __sroa___iter_3_repr = lit.repr;
     __sroa___iter_3_used = lit.used;
     __sroa___iter_3_index = 0;
+    _licm_used_19 = __sroa___iter_3_used;
+    _licm_repr_20 = __sroa___iter_3_repr;
     _licm_input_21 = self.input;
     _licm_used_22 = _licm_input_21.used;
     _licm_repr_23 = _licm_input_21.repr;
@@ -2230,13 +2234,13 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
     b251: block {
         l252: loop {
             __fused___inline_StrUtf8ByteIter_Iterator__next_2: block {
-                if __sroa___iter_3_index >= __sroa___iter_3_used {
+                if __sroa___iter_3_index >= _licm_used_19 {
                     self.pos = _hfs_pos_27;
                     break b251;
                     self.pos = _hfs_pos_27;
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
                 };
-                byte = builtin::array_get_u8(__sroa___iter_3_repr, __sroa___iter_3_index);
+                byte = builtin::array_get_u8(_licm_repr_20, __sroa___iter_3_index);
                 __sroa___iter_3_index = __sroa___iter_3_index + 1;
                 if _hfs_pos_27 >= _licm_used_22 {
                     self.pos = _hfs_pos_27;

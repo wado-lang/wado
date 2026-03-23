@@ -114,8 +114,12 @@ fn run() with Stdout {
     let s: ref String;
     let __local_3: ref String;
     let __local_4: ref String;
+    let __local_12: i32;
     ser = TextSerializer { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
-    drop(TextSerializer^Serializer::serialize_i32(ser.buf, 42));
+    drop(__inline_i32_Serialize__serialize_TextSerializer__2: block -> ref null SerializeError {
+        __local_12 = 42;
+        break __inline_i32_Serialize__serialize_TextSerializer__2: TextSerializer^Serializer::serialize_i32(ser.buf, 42);
+    });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(21), used: 0 };
         String::append_char(__local_3, 105);

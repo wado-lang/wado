@@ -125,6 +125,8 @@ fn run() with Stdout {
     let byte: u8;
     let __local_82: ref Formatter;
     let __local_87: ref Formatter;
+    let _licm_used_104: i32;
+    let _licm_repr_105: ref array<u8>;
     let __tmpl_buf_106: ref String;
     let __fmt_buf_107: ref Formatter;
     let __tmpl_buf_108: ref String;
@@ -193,14 +195,16 @@ fn run() with Stdout {
                 __sroa___iter_6_repr = s_5.repr;
                 __sroa___iter_6_used = s_5.used;
                 __sroa___iter_6_index = 0;
+                _licm_used_104 = __sroa___iter_6_used;
+                _licm_repr_105 = __sroa___iter_6_repr;
                 b6: block {
                     l7: loop {
                         __fused___inline_StrUtf8ByteIter_Iterator__next_17: block {
-                            if __sroa___iter_6_index >= __sroa___iter_6_used {
+                            if __sroa___iter_6_index >= _licm_used_104 {
                                 break b6;
                                 break __fused___inline_StrUtf8ByteIter_Iterator__next_17;
                             };
-                            byte = builtin::array_get_u8(__sroa___iter_6_repr, __sroa___iter_6_index);
+                            byte = builtin::array_get_u8(_licm_repr_105, __sroa___iter_6_index);
                             __sroa___iter_6_index = __sroa___iter_6_index + 1;
                             byte_sum = byte_sum + builtin::i64_extend_i32_u(byte);
                             break __fused___inline_StrUtf8ByteIter_Iterator__next_17;

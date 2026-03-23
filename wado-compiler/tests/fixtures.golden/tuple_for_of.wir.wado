@@ -424,6 +424,7 @@ fn __test_1_enumerate() {
     let __local_105: ref Formatter;
     let __local_114: ref Formatter;
     let __local_123: ref Formatter;
+    let __sroa___pattern_temp_1_1: ref String;
     let __sroa_t_1: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -448,8 +449,9 @@ fn __test_1_enumerate() {
         i32::fmt_decimal(10, __local_25);
         break __tmpl: __local_24;
     });
+    __sroa___pattern_temp_1_1 = __sroa_t_1;
     Array<i32>::append(indices, 1);
-    Array<String>::append(values, __sroa_t_1);
+    Array<String>::append(values, __sroa___pattern_temp_1_1);
     Array<i32>::append(indices, 2);
     Array<String>::append(values, __tmpl: block -> ref String {
         __local_26 = String { repr: builtin::array_new<u8>(16), used: 0 };
@@ -852,6 +854,7 @@ fn __test_6_enumerate_with_trait_dispatch() {
     let __local_19: ref Formatter;
     let __local_42: ref Formatter;
     let __local_51: ref Formatter;
+    let __sroa___pattern_temp_1_1: ref String;
     let __sroa_t_1: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -874,7 +877,8 @@ fn __test_6_enumerate_with_trait_dispatch() {
         String::append(__local_12, i32^Describe::describe(1));
         break __tmpl: __local_12;
     });
-    v = __sroa_t_1;
+    __sroa___pattern_temp_1_1 = __sroa_t_1;
+    v = __sroa___pattern_temp_1_1;
     Array<String>::append(results, __tmpl: block -> ref String {
         __local_14 = String { repr: builtin::array_new<u8>(34), used: 0 };
         __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
@@ -1307,6 +1311,7 @@ fn __test_9_enumerate_index_as_compile_time_constant() {
     let __local_44: ref String;
     let __local_45: ref String;
     let __local_49: ref Formatter;
+    let __sroa___pattern_temp_1_1: ref String;
     let __sroa_t_1: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -1347,7 +1352,8 @@ fn __test_9_enumerate_index_as_compile_time_constant() {
         };
         break __inline_String_Add__add_14: String::concat(__local_38, __local_39);
     };
-    v = __sroa_t_1;
+    __sroa___pattern_temp_1_1 = __sroa_t_1;
+    v = __sroa___pattern_temp_1_1;
     result = __inline_String_Add__add_17: block -> ref String {
         __local_44 = __inline_String_Add__add_15: block -> ref String {
             __local_40 = result;
@@ -2340,7 +2346,11 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
 fn check_special(f) {
     let bits: i64;
     let is_neg: bool;
-    bits = builtin::i64_reinterpret_f64(f);
+    let __local_6: f64;
+    bits = __inline_f64__to_bits_0: block -> i64 {
+        __local_6 = f;
+        break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(__local_6);
+    };
     if bits == 0_i64 {
         return 1; 0; 1;
     };

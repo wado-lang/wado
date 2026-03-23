@@ -294,6 +294,46 @@ fn __test_9_len() {
 }
 
 fn __test_10_param() {
+    let __v0: i32;
+    let __cond: bool;
+    let __local_2: ref String;
+    let __local_3: ref Formatter;
+    let __local_9: ref Formatter;
+    let __local_14: ref Formatter;
+    let __local_17: i32;
+    let __local_18: i32;
+    __v0 = __inline_sum_pair_2: block -> i32 {
+        __local_17 = 10;
+        __local_18 = 20;
+        break __inline_sum_pair_2: 30;
+    };
+    __cond = __v0 == 30;
+    if __cond == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_2 = String { repr: builtin::array_new<u8>(147), used: 0 };
+            String::append(__local_2, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::append(__local_2, String { repr: array.new_data<u8>("__test_10_param"), used: 15 });
+            String::append_char(__local_2, 32);
+            String::append_char(__local_2, 97);
+            String::append_char(__local_2, 116);
+            String::append_char(__local_2, 32);
+            String::append(__local_2, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/tuple_1.wado"), used: 41 });
+            String::append_char(__local_2, 58);
+            __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+            __local_9 = __local_3;
+            i32::fmt_decimal(86, __local_9);
+            String::append(__local_2, String { repr: array.new_data<u8>("
+condition: sum_pair([10, 20]) == 30
+"), used: 37 });
+            String::append(__local_2, String { repr: array.new_data<u8>("sum_pair([10, 20]): "), used: 20 });
+            __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+            __local_14 = __local_3;
+            i32::fmt_decimal(__v0, __local_14);
+            String::append_char(__local_2, 10);
+            break __tmpl: __local_2;
+        });
+        unreachable;
+    };
 }
 
 fn __test_11_return() {
@@ -960,6 +1000,7 @@ fn __cm_export____test_9_len() {
 }
 
 fn __cm_export____test_10_param() {
+    __test_10_param();
     "wasi/task-return"(0);
 }
 
@@ -982,13 +1023,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l19: loop {
+            l20: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l19;
+                continue l20;
             };
         };
     };
@@ -1103,13 +1144,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l26: loop {
+            l27: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l26;
+                continue l27;
             };
         };
     };
@@ -1126,14 +1167,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l30: loop {
+                l31: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l30;
+                    continue l31;
                 };
             };
         };
@@ -1264,7 +1305,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l41: loop {
+            l42: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1272,7 +1313,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l41;
+                continue l42;
             };
         };
     };
@@ -1357,13 +1398,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l53: loop {
+            l54: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l53;
+                continue l54;
             };
         };
     };
@@ -1466,8 +1507,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b72: block {
-        l73: loop {
+    b73: block {
+        l74: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -1492,9 +1533,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b72;
+                break b73;
             };
-            continue l73;
+            continue l74;
         };
     };
     String::append_char(f.buf, 34);

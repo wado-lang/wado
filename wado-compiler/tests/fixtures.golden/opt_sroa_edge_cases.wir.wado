@@ -295,10 +295,12 @@ fn single_field_wrapper() {
 
 fn dependent_field_construction(base) {
     let x: i32;
+    let __sroa_p_x: i32;
     let __sroa_p_y: i32;
     x = base * 2;
+    __sroa_p_x = x;
     __sroa_p_y = x + 1;
-    return x + __sroa_p_y;
+    return __sroa_p_x + __sroa_p_y;
 }
 
 fn struct_from_conditional(flag) {
@@ -324,7 +326,11 @@ fn same_value_fields() {
 }
 
 fn deep_nesting() {
-    return 25;
+    let inner: ref Point;
+    let __sroa_outer_p: ref Point;
+    inner = Point { x: 3, y: 4 };
+    __sroa_outer_p = inner;
+    return (__sroa_outer_p.x * __sroa_outer_p.x) + (__sroa_outer_p.y * __sroa_outer_p.y);
 }
 
 fn float_wrapper_ops() {
@@ -2146,7 +2152,11 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
 fn check_special(f) {
     let bits: i64;
     let is_neg: bool;
-    bits = builtin::i64_reinterpret_f64(f);
+    let __local_6: f64;
+    bits = __inline_f64__to_bits_0: block -> i64 {
+        __local_6 = f;
+        break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(__local_6);
+    };
     if bits == 0_i64 {
         return 1; 0; 1;
     };

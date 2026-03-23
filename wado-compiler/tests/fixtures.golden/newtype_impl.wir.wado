@@ -163,6 +163,8 @@ fn run() with Stdout {
     let __local_18: ref String;
     let __local_25: ref Formatter;
     let __local_29: ref String;
+    let __local_30: f64;
+    let __local_31: f64;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -170,7 +172,10 @@ fn run() with Stdout {
         __initialize_module();
         __modules_initialized = 1;
     };
-    d = 180;
+    d = __inline_Radians__to_degrees_1: block -> f64 {
+        __local_30 = 3.14159;
+        break __inline_Radians__to_degrees_1: 180;
+    };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(36), used: 0 };
         String::append(__local_4, String { repr: array.new_data<u8>("radians to degrees: "), used: 20 });
@@ -181,7 +186,10 @@ fn run() with Stdout {
         String::append(__local_14.buf, __local_18);
         break __tmpl: __local_4;
     });
-    r2 = 1.570795;
+    r2 = __inline_Degrees__to_radians_8: block -> f64 {
+        __local_31 = 90;
+        break __inline_Degrees__to_radians_8: 1.570795;
+    };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(36), used: 0 };
         String::append(__local_6, String { repr: array.new_data<u8>("degrees to radians: "), used: 20 });
@@ -1197,7 +1205,11 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
 fn check_special(f) {
     let bits: i64;
     let is_neg: bool;
-    bits = builtin::i64_reinterpret_f64(f);
+    let __local_6: f64;
+    bits = __inline_f64__to_bits_0: block -> i64 {
+        __local_6 = f;
+        break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(__local_6);
+    };
     if bits == 0_i64 {
         return 1; 0; 1;
     };

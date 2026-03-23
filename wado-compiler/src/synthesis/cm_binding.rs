@@ -1908,6 +1908,7 @@ fn make_binding_function(
         local_count,
         local_types,
         address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
         is_cm_binding: true,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
