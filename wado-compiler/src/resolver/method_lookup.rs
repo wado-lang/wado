@@ -1170,6 +1170,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        // If not found in inherent impls, search trait declarations for default methods
+        if method_type_params.is_empty() {
+            'outer: for module in self.loaded_modules.values() {
+                for item in &module.items {
+                    if let Item::Trait(trait_decl) = item {
+                        for default_method in &trait_decl.methods {
+                            if default_method.name == method_name
+                                && default_method.body.is_some()
+                                && !default_method.type_params.is_empty()
+                            {
+                                let (tp, pp, rt) = extract_method_info(default_method);
+                                method_type_params = tp;
+                                param_type_strs = pp;
+                                method_return_type = rt;
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if method_type_params.is_empty() {
             return vec![];
         }
@@ -1652,6 +1674,38 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_str) {
                     for default_method in &trait_methods {
                         if default_method.name == method_name && default_method.body.is_some() {
+                            // Set up Self type so that `Self` in the default method's
+                            // return type resolves to the concrete receiver type
+                            let old_self_type = self.trait_ctx.self_type;
+                            if let Some(recv_id) = receiver_type_id {
+                                self.trait_ctx.self_type = Some(recv_id);
+                            }
+
+                            // Set up method-level type params (e.g., U in map<U>)
+                            let impl_offset = self.trait_ctx.type_params.len() as u32;
+                            for (i, type_param) in
+                                default_method.type_params.iter().enumerate()
+                            {
+                                let index = impl_offset + i as u32;
+                                let type_param_id = self
+                                    .type_table
+                                    .borrow_mut()
+                                    .intern(ResolvedType::TypeParam {
+                                        name: type_param.name.clone(),
+                                        index,
+                                    });
+                                self.trait_ctx.type_params.insert(
+                                    type_param.name.clone(),
+                                    (index, type_param_id),
+                                );
+                                if !type_param.bounds.is_empty() {
+                                    self.trait_ctx.type_param_bounds.insert(
+                                        type_param.name.clone(),
+                                        type_param.bounds.clone(),
+                                    );
+                                }
+                            }
+
                             let return_type = default_method
                                 .return_type
                                 .as_ref()
@@ -1669,6 +1723,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .filter(|p| p.name != "self")
                                 .map(|p| p.is_mut)
                                 .collect();
+
+                            // Remove method-level type params from scope
+                            for type_param in &default_method.type_params {
+                                self.trait_ctx
+                                    .type_params
+                                    .shift_remove(&type_param.name);
+                                self.trait_ctx
+                                    .type_param_bounds
+                                    .shift_remove(&type_param.name);
+                            }
+                            self.trait_ctx.self_type = old_self_type;
+
                             found_traits.push(TraitMethodMatch {
                                 trait_name: trait_name_str.clone(),
                                 method_info: MethodInfo {

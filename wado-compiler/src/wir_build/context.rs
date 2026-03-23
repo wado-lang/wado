@@ -86,8 +86,9 @@ pub struct WirContext<'a> {
     /// Key: stringified signature (e.g., "(i32, i32) -> i32")
     /// Value: (`canonical_fn_type_id`, `canonical_closure_struct_type_id`)
     pub canonical_closure_types: IndexMap<String, (WirTypeId, WirTypeId)>,
-    /// Map from closure `functor_id` to canonical wrapper function `WirFuncId`.
-    pub closure_wrapper_funcs: IndexMap<u32, WirFuncId>,
+    /// Map from closure `(module_source, functor_id)` to canonical wrapper function `WirFuncId`.
+    /// Keyed by module source + functor ID because functor IDs are per-module, not globally unique.
+    pub closure_wrapper_funcs: IndexMap<(ModuleSource, u32), WirFuncId>,
     /// Counter for canonical closure type naming.
     pub canonical_closure_counter: u32,
 
@@ -123,6 +124,8 @@ pub struct PendingFunctionBody {
     pub tir_func: Rc<RefCell<TirFunction>>,
     /// The type table for this function's module
     pub type_table: Rc<RefCell<TypeTable>>,
+    /// The module source this function belongs to
+    pub module_source: ModuleSource,
 }
 
 impl<'a> WirContext<'a> {
