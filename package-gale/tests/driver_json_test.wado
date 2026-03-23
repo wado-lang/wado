@@ -19,12 +19,18 @@ test "parse string" {
     }
 }
 
-// Empty object "{}" fails because the JSON grammar has ambiguous
-// alternatives for obj (both start with '{'), and the LL(1) parser
-// always takes the first branch. This is a known limitation.
-test "parse empty object is not supported yet" {
+test "parse empty object" {
     let result = json::parse(&"{}");
-    assert result matches { Err(_) };
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse empty array" {
+    let result = json::parse(&"[]");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
 }
 
 test "parse object" {

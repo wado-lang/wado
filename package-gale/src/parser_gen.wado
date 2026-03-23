@@ -31,6 +31,11 @@ fn gen_parser_struct(out: &mut String) {
     out.append("    fn peek_kind(&self) -> i32 {\n");
     out.append("        return self.tokens[self.pos].kind;\n");
     out.append("    }\n\n");
+    out.append("    fn peek_at(&self, offset: i32) -> i32 {\n");
+    out.append("        let idx = self.pos + offset;\n");
+    out.append("        if idx >= self.tokens.len() { return TK_EOF; }\n");
+    out.append("        return self.tokens[idx].kind;\n");
+    out.append("    }\n\n");
     out.append("    fn advance(&mut self) -> Token {\n");
     out.append("        let tok = self.tokens[self.pos];\n");
     out.append("        self.pos += 1;\n");
@@ -109,6 +114,15 @@ fn gen_multi_alt_body(
     lit_tokens: &Array<LitToken>,
 ) {
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
+
+    // Compute LL(k) lookahead info
+    let max_k = 5;
+    let mut all_pos_sets: Array<Array<Array<String>>> = [];
+    for let alt of rule.alternatives {
+        all_pos_sets.append(alt_position_first_sets(&alt, max_k, all_rules, lit_tokens));
+    }
+    let depth = find_needed_depth(&all_pos_sets);
+
     out.append("    let kind = p.peek_kind();\n");
 
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
@@ -120,13 +134,25 @@ fn gen_multi_alt_body(
         };
         let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
 
-        let mut visiting: Array<String> = [];
-        let first_set = first_of_alt(alt, all_rules, lit_tokens, &mut visiting);
-        if first_set.len() > 0 {
+        let pos_sets = &all_pos_sets[i];
+        let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
+
+        if cond_depth > 0 {
             out.append("    if ");
-            for let mut j = 0; j < first_set.len(); j += 1 {
-                if j > 0 { out.append(" || "); }
-                out.append(`kind == {first_set[j]}`);
+            for let mut d = 0; d < cond_depth; d += 1 {
+                if d > 0 { out.append(" && "); }
+                let tokens = &pos_sets[d];
+                let check_expr = if d == 0 { "kind" } else { `p.peek_at({d})` };
+                if tokens.len() == 1 {
+                    out.append(`{check_expr} == {tokens[0]}`);
+                } else {
+                    out.append("(");
+                    for let mut j = 0; j < tokens.len(); j += 1 {
+                        if j > 0 { out.append(" || "); }
+                        out.append(`{check_expr} == {tokens[j]}`);
+                    }
+                    out.append(")");
+                }
             }
             out.append(" {\n");
         } else {
@@ -539,6 +565,87 @@ fn is_nullable(elem: &Element) -> bool {
         if let Optional = rep.kind { return true; }
     }
     return false;
+}
+
+/// Compute FIRST sets at each non-nullable element position for an alternative.
+/// Position 0 uses the full first_of_alt logic (handles nullable prefixes).
+/// Subsequent positions advance past elements that contributed to earlier positions.
+fn alt_position_first_sets(
+    alt: &Alternative,
+    max_depth: i32,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> Array<Array<String>> {
+    let mut result: Array<Array<String>> = [];
+    let mut start = 0;
+    while result.len() < max_depth && start < alt.elements.len() {
+        let first = first_of_elements_from(&alt.elements, start, all_rules, lit_tokens);
+        if first.len() == 0 { break; }
+        result.append(first);
+        // Advance past nullable elements and the first non-nullable element
+        while start < alt.elements.len() {
+            let was_nullable = is_nullable(&alt.elements[start]);
+            start += 1;
+            if !was_nullable { break; }
+        }
+    }
+    return result;
+}
+
+/// Like first_of_alt but starts from a given element index.
+fn first_of_elements_from(
+    elements: &Array<Element>,
+    start: i32,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let mut i = start; i < elements.len(); i += 1 {
+        let mut visiting: Array<String> = [];
+        let elem_first = first_of_element(&elements[i], all_rules, lit_tokens, &mut visiting);
+        for let tk of elem_first {
+            if !array_contains_str(&result, &tk) {
+                result.append(tk);
+            }
+        }
+        if !is_nullable(&elements[i]) { break; }
+    }
+    return result;
+}
+
+fn sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
+    for let x of a {
+        if array_contains_str(b, x) { return true; }
+    }
+    return false;
+}
+
+/// Find the minimum lookahead depth needed to disambiguate all alternatives.
+fn find_needed_depth(all_position_sets: &Array<Array<Array<String>>>) -> i32 {
+    let max_k = 5;
+    for let mut depth = 1; depth <= max_k; depth += 1 {
+        let mut all_ok = true;
+        for let mut i = 0; i < all_position_sets.len(); i += 1 {
+            for let mut j = i + 1; j < all_position_sets.len(); j += 1 {
+                let mut still_ambiguous = true;
+                for let mut d = 0; d < depth; d += 1 {
+                    if d >= all_position_sets[i].len() || d >= all_position_sets[j].len() {
+                        still_ambiguous = false;
+                        break;
+                    }
+                    if !sets_overlap(&all_position_sets[i][d], &all_position_sets[j][d]) {
+                        still_ambiguous = false;
+                        break;
+                    }
+                }
+                if still_ambiguous {
+                    all_ok = false;
+                }
+            }
+        }
+        if all_ok { return depth; }
+    }
+    return max_k;
 }
 
 fn dedup_name(base: &String, counts: &mut Array<[String, i32]>) -> String {

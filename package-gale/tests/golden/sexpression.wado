@@ -587,6 +587,12 @@ impl Parser {
         return self.tokens[self.pos].kind;
     }
 
+    fn peek_at(&self, offset: i32) -> i32 {
+        let idx = self.pos + offset;
+        if idx >= self.tokens.len() { return TK_EOF; }
+        return self.tokens[idx].kind;
+    }
+
     fn advance(&mut self) -> Token {
         let tok = self.tokens[self.pos];
         self.pos += 1;
@@ -629,7 +635,7 @@ fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
 fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind == TK_STRING || kind == TK_SYMBOL || kind == TK_NUMBER || kind == TK_DOT {
+    if (kind == TK_STRING || kind == TK_SYMBOL || kind == TK_NUMBER || kind == TK_DOT) {
         let atom = parse_atom(p)?;
         return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt0(ItemAlt0 {
             span: Span::new(start, p.last_end()),
@@ -643,7 +649,7 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
             list_,
         }));
     }
-    if kind == TK_LPAREN {
+    if kind == TK_LPAREN && (p.peek_at(1) == TK_STRING || p.peek_at(1) == TK_SYMBOL || p.peek_at(1) == TK_NUMBER || p.peek_at(1) == TK_DOT || p.peek_at(1) == TK_LPAREN) {
         let lparen = p.expect(TK_LPAREN, "LPAREN")?;
         let item = parse_item(p)?;
         let dot = p.expect(TK_DOT, "DOT")?;

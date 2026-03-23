@@ -862,6 +862,12 @@ impl Parser {
         return self.tokens[self.pos].kind;
     }
 
+    fn peek_at(&self, offset: i32) -> i32 {
+        let idx = self.pos + offset;
+        if idx >= self.tokens.len() { return TK_EOF; }
+        return self.tokens[idx].kind;
+    }
+
     fn advance(&mut self) -> Token {
         let tok = self.tokens[self.pos];
         self.pos += 1;
@@ -971,14 +977,14 @@ fn parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
             signed_atom,
         }));
     }
-    if kind == TK_COS || kind == TK_TAN || kind == TK_SIN || kind == TK_ACOS || kind == TK_ATAN || kind == TK_ASIN || kind == TK_LOG || kind == TK_LN || kind == TK_SQRT {
+    if (kind == TK_COS || kind == TK_TAN || kind == TK_SIN || kind == TK_ACOS || kind == TK_ATAN || kind == TK_ASIN || kind == TK_LOG || kind == TK_LN || kind == TK_SQRT) {
         let func_ = parse_func_(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt2(SignedAtomAlt2 {
             span: Span::new(start, p.last_end()),
             func_,
         }));
     }
-    if kind == TK_SCIENTIFIC_NUMBER || kind == TK_VARIABLE || kind == TK_PI || kind == TK_EULER || kind == TK_I || kind == TK_LPAREN {
+    if (kind == TK_SCIENTIFIC_NUMBER || kind == TK_VARIABLE || kind == TK_PI || kind == TK_EULER || kind == TK_I || kind == TK_LPAREN) {
         let atom = parse_atom(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt3(SignedAtomAlt3 {
             span: Span::new(start, p.last_end()),
@@ -1009,7 +1015,7 @@ fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
             variable,
         }));
     }
-    if kind == TK_PI || kind == TK_EULER || kind == TK_I {
+    if (kind == TK_PI || kind == TK_EULER || kind == TK_I) {
         let constant = parse_constant(p)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt2(AtomAlt2 {
             span: Span::new(start, p.last_end()),
