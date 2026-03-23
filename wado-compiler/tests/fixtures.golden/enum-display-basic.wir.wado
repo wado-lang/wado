@@ -64,6 +64,8 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/Color^Inspect::inspect" = fn(enum:Color, ref Formatter);
 
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;
+
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
@@ -291,6 +293,14 @@ fn Color^Inspect::inspect(self, f) {
         __local_7 = String { repr: array.new_data<u8>("Color::Blue"), used: 11 };
         String::append(f.buf, __local_7);
     };
+}
+
+fn "closure/__closure_wrapper_0"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_1"(__env, __p0) {
+    unreachable;
 }
 
 export fn __cm_export__run as "run"

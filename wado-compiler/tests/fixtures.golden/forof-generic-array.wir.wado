@@ -62,6 +62,8 @@ type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;
+
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
@@ -281,6 +283,14 @@ fn Array<i32>::grow(self) {
         };
     };
     self.repr = ref.as_non_null(new_repr);
+}
+
+fn "closure/__closure_wrapper_0"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_1"(__env, __p0) {
+    unreachable;
 }
 
 export fn __cm_export__run as "run"

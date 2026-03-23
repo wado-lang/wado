@@ -64,6 +64,8 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::concat" = fn(ref String, ref String) -> ref String;
 
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;
+
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
@@ -366,6 +368,14 @@ fn String::concat(a, b) {
     builtin::array_copy<u8>(repr, 0, a.repr, 0, len_a);
     builtin::array_copy<u8>(repr, len_a, b.repr, 0, len_b);
     return String { repr: ref.as_non_null(repr), used: total };
+}
+
+fn "closure/__closure_wrapper_0"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_1"(__env, __p0) {
+    unreachable;
 }
 
 export fn __cm_export__run as "run"

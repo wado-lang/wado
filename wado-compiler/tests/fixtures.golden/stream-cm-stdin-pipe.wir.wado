@@ -22,6 +22,8 @@ type "functype/__cm_export__run" = fn();
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;
+
 type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/subtask-drop" = fn(i32);
@@ -110,6 +112,14 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     drop("wasi/waitable-set-wait"(ws, out_ptr));
     drop("mem/realloc"(out_ptr, 8, 4, 0));
     return;
+}
+
+fn "closure/__closure_wrapper_0"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_1"(__env, __p0) {
+    unreachable;
 }
 
 export fn __cm_export__run as "run"

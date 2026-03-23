@@ -1683,26 +1683,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                             // Set up method-level type params (e.g., U in map<U>)
                             let impl_offset = self.trait_ctx.type_params.len() as u32;
-                            for (i, type_param) in
-                                default_method.type_params.iter().enumerate()
-                            {
+                            for (i, type_param) in default_method.type_params.iter().enumerate() {
                                 let index = impl_offset + i as u32;
-                                let type_param_id = self
-                                    .type_table
-                                    .borrow_mut()
-                                    .intern(ResolvedType::TypeParam {
-                                        name: type_param.name.clone(),
-                                        index,
-                                    });
-                                self.trait_ctx.type_params.insert(
-                                    type_param.name.clone(),
-                                    (index, type_param_id),
-                                );
+                                let type_param_id =
+                                    self.type_table
+                                        .borrow_mut()
+                                        .intern(ResolvedType::TypeParam {
+                                            name: type_param.name.clone(),
+                                            index,
+                                        });
+                                self.trait_ctx
+                                    .type_params
+                                    .insert(type_param.name.clone(), (index, type_param_id));
                                 if !type_param.bounds.is_empty() {
-                                    self.trait_ctx.type_param_bounds.insert(
-                                        type_param.name.clone(),
-                                        type_param.bounds.clone(),
-                                    );
+                                    self.trait_ctx
+                                        .type_param_bounds
+                                        .insert(type_param.name.clone(), type_param.bounds.clone());
                                 }
                             }
 
@@ -1726,9 +1722,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                             // Remove method-level type params from scope
                             for type_param in &default_method.type_params {
-                                self.trait_ctx
-                                    .type_params
-                                    .shift_remove(&type_param.name);
+                                self.trait_ctx.type_params.shift_remove(&type_param.name);
                                 self.trait_ctx
                                     .type_param_bounds
                                     .shift_remove(&type_param.name);

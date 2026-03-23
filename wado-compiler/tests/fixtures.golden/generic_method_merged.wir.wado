@@ -142,6 +142,8 @@ type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref Strin
 
 type "functype/String^Inspect::inspect" = fn(ref String, ref Formatter);
 
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, char) -> char;
+
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/subtask-drop" = fn(i32);
@@ -429,7 +431,7 @@ condition: result1 == 10
     result2 = __inline_ClosureContainer_i32___double_transform___Closure_1_11: block -> i32 {
         __local_28 = __Closure_1 {  };
         __local_29 = __inline_ClosureContainer_i32___transform_12: block -> i32 {
-            __local_32 = "canonical/CanonicalClosure_0" { env: __local_28, func: ref.as_non_null(ref.func "closure/__closure_wrapper_1") };
+            __local_32 = "canonical/CanonicalClosure_0" { env: __local_28, func: ref.as_non_null(ref.func "closure/__closure_wrapper_3") };
             block -> i32 {
                 let __indirect_call_0: ref "canonical/CanonicalClosure_0";
                 __indirect_call_0 = ref.cast "canonical/CanonicalClosure_0"(__local_32);
@@ -439,7 +441,7 @@ condition: result1 == 10
         };
         __local_48 = __local_29;
         __inline_ClosureContainer_i32___transform_14: block -> i32 {
-            __local_35 = "canonical/CanonicalClosure_0" { env: __local_28, func: ref.as_non_null(ref.func "closure/__closure_wrapper_1") };
+            __local_35 = "canonical/CanonicalClosure_0" { env: __local_28, func: ref.as_non_null(ref.func "closure/__closure_wrapper_3") };
             block -> i32 {
                 let __indirect_call_1: ref "canonical/CanonicalClosure_0";
                 __indirect_call_1 = ref.cast "canonical/CanonicalClosure_0"(__local_35);
@@ -1086,6 +1088,14 @@ fn "closure/__closure_wrapper_0"(__env, __p0) {
 }
 
 fn "closure/__closure_wrapper_1"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_2"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_3"(__env, __p0) {
     let __typed_env: ref __Closure_1;
     __typed_env = ref.cast __Closure_1(__env);
     return __Closure_1::__call(__typed_env, __p0.value);

@@ -41,6 +41,22 @@ Center-aligned: `{x:^5}` -> " 42 "
 
 Right-aligned (default for numbers): `{x:>5}` -> " 42"
 
+#### `pub enum Ordering`
+
+Result of a comparison between two values.
+
+##### `Less`
+
+The first value is less than the second.
+
+##### `Equal`
+
+The two values are equal.
+
+##### `Greater`
+
+The first value is greater than the second.
+
 ### Resources
 
 #### `pub resource Future<T>`
@@ -475,6 +491,297 @@ Collects remaining elements into an Array.
 
 Counts the number of remaining elements in the iterator.
 
+##### `fn map<U>(&self, f: Fn(Self::Item) -> U) -> IterMap<Self, U>`
+
+Transforms each element using a function.
+
+#### `pub trait IntoIterator`
+
+Conversion into an Iterator.
+Types implementing this trait can be used in `for-of` loops directly.
+
+##### `fn into_iter(&self) -> Self::Iter`
+
+Creates an iterator from a value.
+Note: Uses &self due to parser limitation (self by value not yet supported in traits).
+
+#### `pub trait FromIterator<T>`
+
+Trait for creating a collection from an iterator.
+This is a simplified version - the full Rust-style trait requires `impl Iterator`
+syntax which is not yet supported.
+
+##### `fn from_iter(iter: Self::Iter) -> Self`
+
+#### `pub trait Eq`
+
+Trait for equality comparisons.
+Types implementing this trait can be compared with `==` and `!=` operators.
+
+##### `fn eq(&self, other: &Self) -> bool`
+
+Returns true if self equals other.
+
+#### `pub trait Ord`
+
+Trait for ordering comparisons.
+Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
+
+##### `fn cmp(&self, other: &Self) -> Ordering`
+
+Compares self with other and returns an Ordering.
+
+#### `pub trait Index<IndexType>`
+
+Trait for immutable indexing operations.
+Types implementing this trait can be indexed with the `[]` operator for reading.
+
+##### `fn index(&self, index: IndexType) -> &Self::Output`
+
+Returns a reference to the element at the given index.
+
+#### `pub trait IndexMut<IndexType>`
+
+Trait for mutable indexing operations.
+Types implementing this trait can be indexed with the `[]` operator to get
+a mutable reference: `container[i].mutating_method()`.
+Note: Requires Index to be implemented (supertrait relationship).
+
+##### `fn index_mut(&mut self, index: IndexType) -> &mut Self::Output`
+
+Returns a mutable reference to the element at the given index.
+
+#### `pub trait IndexAssign<IndexType>`
+
+Trait for index assignment operations.
+Types implementing this trait can be assigned via the `[]` operator: `arr[i] = value`.
+This is separate from `IndexMut` because in Wasm GC, you cannot get a mutable reference
+to primitive array elements - reading and writing are fundamentally different operations.
+
+##### `fn index_assign(&mut self, index: IndexType, value: Self::Input)`
+
+Assigns a value to the element at the given index.
+
+#### `pub trait IndexValue<IndexType>`
+
+Trait for value-returning indexing operations.
+Use this for containers of primitives where references cannot be returned.
+Unlike `Index` which returns `&Output`, this returns `Output` by value (copy).
+
+##### `fn index_value(&self, index: IndexType) -> Self::Output`
+
+Returns a copy of the element at the given index.
+
+#### `pub trait Add`
+
+Trait for the `+` operator.
+Types implementing this trait can use the `+` operator for addition.
+
+##### `fn add(&self, rhs: &Self) -> Self::Output`
+
+Adds two values and returns the result.
+
+#### `pub trait Sub`
+
+Trait for the `-` operator (binary subtraction).
+Types implementing this trait can use the `-` operator for subtraction.
+
+##### `fn sub(&self, rhs: &Self) -> Self::Output`
+
+Subtracts rhs from self and returns the result.
+
+#### `pub trait Mul`
+
+Trait for the `*` operator.
+Types implementing this trait can use the `*` operator for multiplication.
+
+##### `fn mul(&self, rhs: &Self) -> Self::Output`
+
+Multiplies two values and returns the result.
+
+#### `pub trait Div`
+
+Trait for the `/` operator.
+Types implementing this trait can use the `/` operator for division.
+
+##### `fn div(&self, rhs: &Self) -> Self::Output`
+
+Divides self by rhs and returns the result.
+
+#### `pub trait Rem`
+
+Trait for the `%` operator.
+Types implementing this trait can use the `%` operator for remainder.
+
+##### `fn rem(&self, rhs: &Self) -> Self::Output`
+
+Returns the remainder of dividing self by rhs.
+
+#### `pub trait Neg`
+
+Trait for the unary `-` operator (negation).
+Types implementing this trait can use the `-` prefix operator.
+
+##### `fn neg(&self) -> Self::Output`
+
+Returns the negation of self.
+
+#### `pub trait BitAnd`
+
+Trait for the `&` operator (bitwise AND).
+
+##### `fn bitand(&self, rhs: &Self) -> Self::Output`
+
+Returns the bitwise AND of self and rhs.
+
+#### `pub trait BitOr`
+
+Trait for the `|` operator (bitwise OR).
+
+##### `fn bitor(&self, rhs: &Self) -> Self::Output`
+
+Returns the bitwise OR of self and rhs.
+
+#### `pub trait BitXor`
+
+Trait for the `^` operator (bitwise XOR).
+
+##### `fn bitxor(&self, rhs: &Self) -> Self::Output`
+
+Returns the bitwise XOR of self and rhs.
+
+#### `pub trait BitNot`
+
+Trait for the `~` operator (bitwise NOT).
+
+##### `fn bitnot(&self) -> Self::Output`
+
+Returns the bitwise NOT of self.
+
+#### `pub trait Shl`
+
+Trait for the `<<` operator (left shift).
+
+##### `fn shl(&self, rhs: u32) -> Self::Output`
+
+Returns self shifted left by rhs bits.
+
+#### `pub trait Shr`
+
+Trait for the `>>` operator (right shift).
+
+##### `fn shr(&self, rhs: u32) -> Self::Output`
+
+Returns self shifted right by rhs bits.
+
+#### `pub trait Display`
+
+Trait for user-facing display formatting.
+Types implementing this trait can be formatted with `{x}` in template strings.
+All format traits write to a `Formatter` that wraps `&mut String`.
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+Formats the value and writes to the given formatter.
+
+#### `pub trait Binary`
+
+Trait for formatting values as binary integers.
+Used with the `{x:b}` format specifier.
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+Formats the value as binary and writes to the given formatter.
+
+#### `pub trait Octal`
+
+Trait for formatting values as octal integers.
+Used with the `{x:o}` format specifier.
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+Formats the value as octal and writes to the given formatter.
+
+#### `pub trait LowerHex`
+
+Trait for formatting values as lowercase hexadecimal.
+Used with the `{x:x}` format specifier.
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+Formats the value as lowercase hex and writes to the given formatter.
+
+#### `pub trait UpperHex`
+
+Trait for formatting values as uppercase hexadecimal.
+Used with the `{x:X}` format specifier.
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+Formats the value as uppercase hex and writes to the given formatter.
+
+#### `pub trait LowerExp`
+
+Trait for formatting values in lowercase exponential notation.
+Used with the `{x:e}` format specifier.
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+Formats the value in lowercase exponential notation and writes to the given formatter.
+
+#### `pub trait UpperExp`
+
+Trait for formatting values in uppercase exponential notation.
+Used with the `{x:E}` format specifier.
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+Formats the value in uppercase exponential notation and writes to the given formatter.
+
+#### `pub trait Fn<Args, Ret, Effects>`
+
+Trait for callable types (closures and function references).
+This trait enables closure monomorphization - functions with `fn(A) -> R` parameters
+are desugared to generic functions with `Fn<[A], R>` bounds.
+
+Type parameters:
+
+- `Args`: Tuple of argument types using `[...]` syntax, e.g., `[i32, String]`
+- `Ret`: Return type
+- `Effects`: Tuple of effect types, defaults to `[]` (pure)
+
+Examples:
+
+- `Fn<[i32], bool>` - takes i32, returns bool, pure
+- `Fn<[i32, String], ()>` - takes i32 and String, returns unit, pure
+- `Fn<[i32], (), [Stdout]>` - takes i32, returns unit, has Stdout effect
+
+##### `fn call(&self, args: Args) -> Ret with Effects`
+
+Call the function with the given arguments.
+
+#### `pub trait Iterator`
+
+The core iterator trait for sequences of values.
+Types implementing this trait can be iterated over using `for-of` loops.
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
+Advances the iterator and returns the next value.
+Returns None when iteration is complete.
+
+##### `fn collect(&mut self) -> Array<Self::Item>`
+
+Collects remaining elements into an Array.
+
+##### `fn count(&mut self) -> i32`
+
+Counts the number of remaining elements in the iterator.
+
+##### `fn map<U>(&self, f: Fn(Self::Item) -> U) -> IterMap<Self, U>`
+
+Transforms each element using a function.
+
 #### `pub trait IntoIterator`
 
 Conversion into an Iterator.
@@ -494,6 +801,22 @@ syntax which is not yet supported.
 ##### `fn from_iter(iter: Self::Iter) -> Self`
 
 ### Structs
+
+#### `pub struct IterMap<I: Iterator, U>`
+
+Generic map iterator adapter that wraps any Iterator.
+
+##### `inner: I`
+
+##### `f: Fn(I::Item) -> U`
+
+##### `impl Iterator for IterMap<I, U>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterMap<I, U>`
+
+###### `fn into_iter(&self) -> IterMap<I, U>`
 
 #### `pub struct Formatter`
 
@@ -1187,11 +1510,25 @@ Decodes UTF-8 and yields each character.
 
 _Fields are private._
 
-##### `pub fn map<U>(&self, f: Fn(char) -> U) -> StrCharMapIter<U>`
-
 ##### `impl Iterator for StrCharIter`
 
 ###### `pub fn next(&mut self) -> Option<Self::Item>`
+
+#### `pub struct IterMap<I: Iterator, U>`
+
+Generic map iterator adapter that wraps any Iterator.
+
+##### `inner: I`
+
+##### `f: Fn(I::Item) -> U`
+
+##### `impl Iterator for IterMap<I, U>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterMap<I, U>`
+
+###### `fn into_iter(&self) -> IterMap<I, U>`
 
 #### `pub struct Array<T>`
 

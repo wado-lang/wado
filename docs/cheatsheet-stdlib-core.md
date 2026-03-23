@@ -25,6 +25,14 @@ pub enum Alignment {
 }
 ```
 
+```wado
+pub enum Ordering {
+    Less,
+    Equal,
+    Greater,
+}
+```
+
 ### Resources
 
 ```wado
@@ -219,6 +227,146 @@ pub trait Iterator {
     fn next(&mut self) -> Option<Self::Item>;
     fn collect(&mut self) -> Array<Self::Item>;
     fn count(&mut self) -> i32;
+    fn map<U>(&self, f: Fn(Self::Item) -> U) -> IterMap<Self, U>;
+}
+
+pub trait IntoIterator {
+    type Item;
+    type Iter;
+    fn into_iter(&self) -> Self::Iter;
+}
+
+pub trait FromIterator<T> {
+    type Iter;
+    fn from_iter(iter: Self::Iter) -> Self;
+}
+
+pub trait Eq {
+    fn eq(&self, other: &Self) -> bool;
+}
+
+pub trait Ord {
+    fn cmp(&self, other: &Self) -> Ordering;
+}
+
+pub trait Index<IndexType> {
+    type Output;
+    fn index(&self, index: IndexType) -> &Self::Output;
+}
+
+pub trait IndexMut<IndexType> {
+    type Output;
+    fn index_mut(&mut self, index: IndexType) -> &mut Self::Output;
+}
+
+pub trait IndexAssign<IndexType> {
+    type Input;
+    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+}
+
+pub trait IndexValue<IndexType> {
+    type Output;
+    fn index_value(&self, index: IndexType) -> Self::Output;
+}
+
+pub trait Add {
+    type Output;
+    fn add(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait Sub {
+    type Output;
+    fn sub(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait Mul {
+    type Output;
+    fn mul(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait Div {
+    type Output;
+    fn div(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait Rem {
+    type Output;
+    fn rem(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait Neg {
+    type Output;
+    fn neg(&self) -> Self::Output;
+}
+
+pub trait BitAnd {
+    type Output;
+    fn bitand(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait BitOr {
+    type Output;
+    fn bitor(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait BitXor {
+    type Output;
+    fn bitxor(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait BitNot {
+    type Output;
+    fn bitnot(&self) -> Self::Output;
+}
+
+pub trait Shl {
+    type Output;
+    fn shl(&self, rhs: u32) -> Self::Output;
+}
+
+pub trait Shr {
+    type Output;
+    fn shr(&self, rhs: u32) -> Self::Output;
+}
+
+pub trait Display {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait Binary {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait Octal {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait LowerHex {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait UpperHex {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait LowerExp {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait UpperExp {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait Fn<Args, Ret, Effects> {
+    fn call(&self, args: Args) -> Ret with Effects;
+}
+
+pub trait Iterator {
+    type Item;
+    fn next(&mut self) -> Option<Self::Item>;
+    fn collect(&mut self) -> Array<Self::Item>;
+    fn count(&mut self) -> i32;
+    fn map<U>(&self, f: Fn(Self::Item) -> U) -> IterMap<Self, U>;
 }
 
 pub trait IntoIterator {
@@ -234,6 +382,21 @@ pub trait FromIterator<T> {
 ```
 
 ### Structs
+
+```wado
+pub struct IterMap<I: Iterator, U> {
+    inner: I,
+    f: Fn(I::Item) -> U,
+}
+
+impl Iterator for IterMap<I, U> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterMap<I, U> {
+    fn into_iter(&self) -> IterMap<I, U>;
+}
+```
 
 ```wado
 pub struct Formatter {
@@ -628,12 +791,23 @@ pub struct StrCharIter {
     ..
 }
 
-impl StrCharIter {
-    pub fn map<U>(&self, f: Fn(char) -> U) -> StrCharMapIter<U>;
-}
-
 impl Iterator for StrCharIter {
     pub fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
+```wado
+pub struct IterMap<I: Iterator, U> {
+    inner: I,
+    f: Fn(I::Item) -> U,
+}
+
+impl Iterator for IterMap<I, U> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterMap<I, U> {
+    fn into_iter(&self) -> IterMap<I, U>;
 }
 ```
 

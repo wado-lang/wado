@@ -64,6 +64,8 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::append" = fn(ref String, ref String);
 
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;
+
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
@@ -311,6 +313,14 @@ fn String::append(self, other) {
     };
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
+}
+
+fn "closure/__closure_wrapper_0"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_1"(__env, __p0) {
+    unreachable;
 }
 
 export fn __cm_export__run as "run"

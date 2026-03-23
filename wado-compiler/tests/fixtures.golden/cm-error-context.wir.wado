@@ -228,6 +228,8 @@ type "functype/core:internal/cm_lower_string" = fn(ref String) -> i64;
 
 type "functype/core:internal/cm_error_context_new" = fn(ref String) -> i32;
 
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;
+
 type "functype/wasi/error-context-drop" = fn(i32);
 
 type "functype/wasi/future-new" = fn() -> i64;
@@ -789,6 +791,14 @@ fn "core:internal/cm_error_context_new"(msg) {  // from core:internal
     handle = "wasi/error-context-new"(ptr, len);
     drop("mem/realloc"(ptr, len, 1, 0));
     return handle;
+}
+
+fn "closure/__closure_wrapper_0"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_1"(__env, __p0) {
+    unreachable;
 }
 
 export fn __cm_export__handle as "handle"

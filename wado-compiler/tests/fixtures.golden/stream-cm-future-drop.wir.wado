@@ -224,6 +224,8 @@ type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
 type "functype/core:internal/cm_lower_string" = fn(ref String) -> i64;
 
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;
+
 type "functype/wasi/future-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-writable" = fn(i32);
@@ -737,6 +739,14 @@ fn "core:internal/cm_lower_string"(s) {  // from core:internal
     ptr = "mem/realloc"(0, 0, 1, len);
     "core:internal/gc_array_to_memory"(bytes, ptr, len);
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
+}
+
+fn "closure/__closure_wrapper_0"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_1"(__env, __p0) {
+    unreachable;
 }
 
 export fn __cm_export__handle as "handle"

@@ -146,10 +146,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             // Look up the __call func_id, scoped to the correct module
             let functor_name = &functor.struct_name;
             let call_method_fq = format!("{module_source}/{functor_name}::__call");
-            let call_func_id = ctx
-                .func_map
-                .get(&call_method_fq)
-                .cloned();
+            let call_func_id = ctx.func_map.get(&call_method_fq).cloned();
 
             // Build wrapper function body
             let env_local = "__env".to_string();
@@ -1756,7 +1753,12 @@ impl FunctionTranslator<'_, '_> {
                 functor_id,
                 target_fn_type,
                 closure_module,
-            } => self.translate_closure_to_canonical(functor, *functor_id, *target_fn_type, closure_module),
+            } => self.translate_closure_to_canonical(
+                functor,
+                *functor_id,
+                *target_fn_type,
+                closure_module,
+            ),
 
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should have been expanded before WIR build")

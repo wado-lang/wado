@@ -78,6 +78,8 @@ type "functype/Formatter::pad" = fn(ref Formatter, ref String);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;
+
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/subtask-drop" = fn(i32);
@@ -407,7 +409,7 @@ fn String::truncate_bytes(self, byte_len) {
             String::append_char(__local_10, 58);
             __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
             __local_17 = __local_11;
-            i32::fmt_decimal(377, __local_17);
+            i32::fmt_decimal(357, __local_17);
             String::append_char(__local_10, 58);
             String::append_char(__local_10, 32);
             String::append(__local_10, String { repr: array.new_data<u8>("negative length"), used: 15 });
@@ -445,7 +447,7 @@ condition: byte_len >= 0
                 String::append_char(__local_12, 58);
                 __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
                 __local_28 = __local_13;
-                i32::fmt_decimal(382, __local_28);
+                i32::fmt_decimal(362, __local_28);
                 String::append_char(__local_12, 58);
                 String::append_char(__local_12, 32);
                 String::append(__local_12, String { repr: array.new_data<u8>("not on a UTF-8 character boundary"), used: 33 });
@@ -625,6 +627,14 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
+}
+
+fn "closure/__closure_wrapper_0"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_1"(__env, __p0) {
+    unreachable;
 }
 
 export fn __cm_export__run as "run"

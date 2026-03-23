@@ -1,6 +1,11 @@
 // --- Module: core:allocator ---
 global mut heap_offset: i32 = 8;
 
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
+}
+
 fn grow_memory(new_offset: i32) {
     let current_bytes: i32 = (core::builtin::memory_size() * 65536);
     let deficit: i32 = (new_offset - current_bytes);
@@ -58,6 +63,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -68,6 +77,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -82,6 +95,10 @@ pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Form
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
@@ -94,7 +111,16 @@ pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &m
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
 // --- Module: core:builtin ---
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
+}
+
 fn task_return(result: i32);
 
 fn i32_as_char(value: i32) -> char;
@@ -859,6 +885,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -869,6 +899,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -883,6 +917,10 @@ pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Form
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
@@ -895,7 +933,16 @@ pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &m
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
 // --- Module: core:internal ---
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
+}
+
 pub struct "Box<f64>" {
     value: f64,
 }
@@ -1189,6 +1236,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -1199,6 +1250,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -1213,6 +1268,10 @@ pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Form
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
@@ -1223,6 +1282,10 @@ pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Array<u8>::internal_from_raw"(repr: builtin::array<u8>, used: i32) -> Array<u8> {
@@ -1246,6 +1309,11 @@ fn "core/builtin/array_copy<u8>"(dst: builtin::array<u8>, dst_offset: i32, src: 
 fn "core/builtin/array_new<u8>"(len: i32) -> builtin::array<u8>;
 
 // --- Module: core:prelude ---
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
+}
+
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str("StreamWritable<u8>");
 }
@@ -1256,6 +1324,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
 }
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -1270,6 +1342,10 @@ pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -1280,6 +1356,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -1294,7 +1374,16 @@ pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &m
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
 // --- Module: core:prelude/array.wado ---
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
+}
+
 fn i32_min(a: i32, b: i32) -> i32 {
     return "core::prelude/array.wado::core/builtin/select<i32>"((a < b), a, b);
 }
@@ -1315,6 +1404,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -1325,6 +1418,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -1339,6 +1436,10 @@ pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Form
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
@@ -1349,6 +1450,10 @@ pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
 }
 
 fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
@@ -1369,6 +1474,11 @@ pub struct PmHiLo {
 pub struct FormatResult {
     pub digits: u64,
     pub exponent: i32,
+}
+
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
 }
 
 pub enum SpecialKind {
@@ -2504,6 +2614,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "SpecialKind^InspectAlt::inspect_alt"(self: &SpecialKind, f: &mut Formatter) {
     self."SpecialKind^Inspect::inspect"(f);
 }
@@ -2559,6 +2673,10 @@ pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "SpecialKind^Display::fmt"(self: &SpecialKind, f: &mut Formatter) {
     self."SpecialKind^Inspect::inspect"(f);
 }
@@ -2587,6 +2705,10 @@ pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Form
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "SpecialKind^DisplayAlt::fmt_alt"(self: &SpecialKind, f: &mut Formatter) {
     self."SpecialKind^InspectAlt::inspect_alt"(f);
 }
@@ -2613,6 +2735,10 @@ pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
 }
 
 fn "Array<u64>^SequenceLiteralBuilder::build"(self: &Array<u64>) -> Array<u64> {
@@ -2706,6 +2832,11 @@ pub struct u128 {
 pub struct i128 {
     low: u64,
     high: i64,
+}
+
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
 }
 
 pub fn u128::from_u64(value: u64) -> u128 {
@@ -3598,6 +3729,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -3610,6 +3745,10 @@ pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -3620,6 +3759,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "u128^DisplayAlt::fmt_alt"(self: &u128, f: &mut Formatter) {
@@ -3642,7 +3785,16 @@ pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &m
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
 // --- Module: core:prelude/primitive.wado ---
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
+}
+
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr: builtin::array<u8> = "core::prelude/primitive.wado::core/builtin/array_new<u8>"(len);
     __for_0: {
@@ -6182,6 +6334,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -6192,6 +6348,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -6206,6 +6366,10 @@ pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Form
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
@@ -6216,6 +6380,10 @@ pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
 }
 
 fn "core/builtin/select<u64>"(cond: bool, if_true: u64, if_false: u64) -> u64;
@@ -6252,6 +6420,17 @@ pub struct StrCharIter {
     repr: builtin::array<u8>,
     used: i32,
     byte_index: i32,
+}
+
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
+}
+
+struct __Closure_0 {
+}
+
+struct __Closure_1 {
 }
 
 fn i32_min(a: i32, b: i32) -> i32 {
@@ -6588,7 +6767,7 @@ pub fn String::truncate_bytes(self: &mut String, byte_len: i32) {
                 __r.String::append("core:prelude/string.wado");
                 __r.String::append(":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 377 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 357 }."i32^Display::fmt"(&mut __f);
                 __r.String::append(": ");
                 __r.String::append("negative length");
                 __r.String::append("\ncondition: byte_len >= 0\n");
@@ -6617,7 +6796,7 @@ pub fn String::truncate_bytes(self: &mut String, byte_len: i32) {
                     __r.String::append("core:prelude/string.wado");
                     __r.String::append(":");
                     let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                    Box<i32> { value: 382 }."i32^Display::fmt"(&mut __f);
+                    Box<i32> { value: 362 }."i32^Display::fmt"(&mut __f);
                     __r.String::append(": ");
                     __r.String::append("not on a UTF-8 character boundary");
                     __r.String::append("\ncondition: b < 0x80 || b >= 0xC0\n");
@@ -6792,37 +6971,11 @@ pub fn String::trim(self: &String) -> String {
 }
 
 pub fn String::to_ascii_lowercase(self: &String) -> String {
-    let mut s: String = "core::prelude/string.wado::String::with_capacity"(self.used);
-    __for_of_2: {
-        let mut __iter_2: StrCharIter = self.String::chars()."StrCharIter^IntoIterator::into_iter"();
-        loop {
-            let __pattern_temp_0: Option<char> = __iter_2."StrCharIter^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let c: char = __variant_payload(__pattern_temp_0, case=0);
-                s.String::append_char(Box<char> { value: c }.char::to_ascii_lowercase());
-            } else {
-                break;
-            }
-        }
-    }
-    return s;
+    return "core::prelude/string.wado::String::from_iter<IterMap<StrCharIter,char>>"(self.String::chars()."StrCharIter^Iterator::map<char>"(&__Closure_0 {  }));
 }
 
 pub fn String::to_ascii_uppercase(self: &String) -> String {
-    let mut s: String = "core::prelude/string.wado::String::with_capacity"(self.used);
-    __for_of_2: {
-        let mut __iter_2: StrCharIter = self.String::chars()."StrCharIter^IntoIterator::into_iter"();
-        loop {
-            let __pattern_temp_0: Option<char> = __iter_2."StrCharIter^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let c: char = __variant_payload(__pattern_temp_0, case=0);
-                s.String::append_char(Box<char> { value: c }.char::to_ascii_uppercase());
-            } else {
-                break;
-            }
-        }
-    }
-    return s;
+    return "core::prelude/string.wado::String::from_iter<IterMap<StrCharIter,char>>"(self.String::chars()."StrCharIter^Iterator::map<char>"(&__Closure_1 {  }));
 }
 
 fn String::internal_substr_bytes(self: &String, start: i32, end: i32) -> String {
@@ -6923,6 +7076,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "StrUtf8ByteIter^InspectAlt::inspect_alt"(self: &StrUtf8ByteIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrUtf8ByteIter {");
     f.Formatter::write_newline_indent();
@@ -6969,6 +7126,10 @@ pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "StrUtf8ByteIter^Display::fmt"(self: &StrUtf8ByteIter, f: &mut Formatter) {
     self."StrUtf8ByteIter^Inspect::inspect"(f);
 }
@@ -6987,6 +7148,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "StrUtf8ByteIter^DisplayAlt::fmt_alt"(self: &StrUtf8ByteIter, f: &mut Formatter) {
@@ -7009,7 +7174,41 @@ pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &m
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
 }
 
-fn "StrCharIter^IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StrCharIter^Iterator::map<char>"(self: &StrCharIter, f: fn(char) -> char) -> IterMap<StrCharIter,char> {
+    return IterMap<StrCharIter,char> { inner: *self, f: f };
+}
+
+pub fn "String::from_iter<IterMap<StrCharIter,char>>"(iter: IterMap<StrCharIter,char>) -> String {
+    let mut s: String = "core::prelude/string.wado::String::with_capacity"(8);
+    __for_of_2: {
+        let mut __iter_2: IterMap<StrCharIter,char> = iter."IterMap<StrCharIter,char>^IntoIterator::into_iter"();
+        loop {
+            let __pattern_temp_0: Option<char> = __iter_2."IterMap<StrCharIter,char>^Iterator::next"();
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let c: char = __variant_payload(__pattern_temp_0, case=0);
+                s.String::append_char(c);
+            } else {
+                break;
+            }
+        }
+    }
+    return s;
+}
+
+fn "IterMap<StrCharIter,char>^Iterator::next"(self: &mut IterMap<StrCharIter,char>) -> Option<char> {
+    let __pattern_temp_0: Option<char> = self.inner."StrCharIter^Iterator::next"();
+    if __variant_test(__pattern_temp_0, case=0, name=Some) {
+        let item: char = __variant_payload(__pattern_temp_0, case=0);
+        return Option<char>::Some(self.f(item));
+    }
+    return null;
+}
+
+fn "IterMap<StrCharIter,char>^IntoIterator::into_iter"(self: &IterMap<StrCharIter,char>) -> IterMap<StrCharIter,char> {
     return *self;
 }
 
@@ -7105,7 +7304,20 @@ fn "core/builtin/array_new<u8>"(len: i32) -> builtin::array<u8>;
 
 fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 
+fn __Closure_0::__call(self: &__Closure_0, c: char) -> char {
+    return Box<char> { value: c }.char::to_ascii_lowercase();
+}
+
+fn __Closure_1::__call(self: &__Closure_1, c: char) -> char {
+    return Box<char> { value: c }.char::to_ascii_uppercase();
+}
+
 // --- Module: core:prelude/tuple.wado ---
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
+}
+
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str("StreamWritable<u8>");
 }
@@ -7116,6 +7328,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
 }
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -7130,6 +7346,10 @@ pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -7140,6 +7360,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -7154,11 +7378,20 @@ pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &m
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
 // --- Module: core:prelude/types.wado ---
 pub struct WaitEvent {
     pub code: i32,
     pub handle: Waitable,
     pub payload: u32,
+}
+
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
 }
 
 pub fn "Waitable^Eq::eq"(self: &Waitable, other: &Waitable) -> bool {
@@ -7210,6 +7443,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "WaitEvent^InspectAlt::inspect_alt"(self: &WaitEvent, f: &mut Formatter) {
     f.Formatter::open_brace("WaitEvent {");
     f.Formatter::write_newline_indent();
@@ -7239,6 +7476,10 @@ pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "WaitEvent^Display::fmt"(self: &WaitEvent, f: &mut Formatter) {
     self."WaitEvent^Inspect::inspect"(f);
 }
@@ -7253,6 +7494,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "WaitEvent^DisplayAlt::fmt_alt"(self: &WaitEvent, f: &mut Formatter) {
@@ -7271,8 +7516,17 @@ pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &m
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
 // --- Module: wado-compiler/tests/format.fixtures/ops.mess.dirty.wado ---
 global mut __modules_initialized: bool = false;
+
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
+}
 
 fn __test_0_arithmetic() {
     __initialize_modules();
@@ -8024,6 +8278,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -8034,6 +8292,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -8048,6 +8310,10 @@ pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Form
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
 }
@@ -8058,6 +8324,10 @@ pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
 }
 
 export fn __cm_export__run() {
@@ -8075,6 +8345,11 @@ fn __initialize_modules() {
 // --- Module: core:prelude/traits.wado ---
 pub struct ConvertError {
     pub message: String,
+}
+
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
 }
 
 pub enum Ordering {
@@ -8148,6 +8423,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "Ordering^InspectAlt::inspect_alt"(self: &Ordering, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
 }
@@ -8173,6 +8452,10 @@ pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "Ordering^Display::fmt"(self: &Ordering, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
 }
@@ -8191,6 +8474,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "Ordering^DisplayAlt::fmt_alt"(self: &Ordering, f: &mut Formatter) {
@@ -8213,6 +8500,10 @@ pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &m
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
 // --- Module: core:prelude/format.wado ---
 pub struct Formatter {
     pub fill: char,
@@ -8223,6 +8514,11 @@ pub struct Formatter {
     pub precision: i32,
     pub indent: i32,
     pub buf: &mut String,
+}
+
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
 }
 
 pub enum Alignment {
@@ -8622,6 +8918,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut 
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
 
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
 pub fn "Alignment^InspectAlt::inspect_alt"(self: &Alignment, f: &mut Formatter) {
     self."Alignment^Inspect::inspect"(f);
 }
@@ -8636,6 +8936,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
 }
 
 pub fn "Alignment^Display::fmt"(self: &Alignment, f: &mut Formatter) {
@@ -8654,6 +8958,10 @@ pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Form
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
 pub fn "Alignment^DisplayAlt::fmt_alt"(self: &Alignment, f: &mut Formatter) {
     self."Alignment^InspectAlt::inspect_alt"(f);
 }
@@ -8668,6 +8976,10 @@ pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
 }
 
 fn "StrCharIter^IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {

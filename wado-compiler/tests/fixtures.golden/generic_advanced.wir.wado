@@ -123,6 +123,8 @@ type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, char) -> char;
+
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/subtask-drop" = fn(i32);
@@ -903,18 +905,18 @@ fn __cm_export____test_2_quicksort_with_closure_param() {
 fn quicksort$__Closure_0(arr, low, high, cmp) {
     let pi: i32;
     if low < high {
-        pi = partition(arr, low, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_0") });
-        quicksort(arr, low, pi - 1, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_0") });
-        quicksort(arr, pi + 1, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_0") });
+        pi = partition(arr, low, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_2") });
+        quicksort(arr, low, pi - 1, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_2") });
+        quicksort(arr, pi + 1, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_2") });
     };
 }
 
 fn quicksort$__Closure_1(arr, low, high, cmp) {
     let pi: i32;
     if low < high {
-        pi = partition(arr, low, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_1") });
-        quicksort(arr, low, pi - 1, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_1") });
-        quicksort(arr, pi + 1, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_1") });
+        pi = partition(arr, low, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_3") });
+        quicksort(arr, low, pi - 1, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_3") });
+        quicksort(arr, pi + 1, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/__closure_wrapper_3") });
     };
 }
 
@@ -1348,13 +1350,21 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     };
 }
 
-fn "closure/__closure_wrapper_0"(__env, __p0, __p1) {
+fn "closure/__closure_wrapper_0"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_1"(__env, __p0) {
+    unreachable;
+}
+
+fn "closure/__closure_wrapper_2"(__env, __p0, __p1) {
     let __typed_env: ref __Closure_0;
     __typed_env = ref.cast __Closure_0(__env);
     return __Closure_0::__call(__typed_env, __p0.value, __p1.value);
 }
 
-fn "closure/__closure_wrapper_1"(__env, __p0, __p1) {
+fn "closure/__closure_wrapper_3"(__env, __p0, __p1) {
     let __typed_env: ref __Closure_1;
     __typed_env = ref.cast __Closure_1(__env);
     return __Closure_1::__call(__typed_env, __p0.value, __p1.value);
