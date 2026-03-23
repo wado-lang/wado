@@ -120,7 +120,8 @@ fn gen_multi_alt_body(
         };
         let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
 
-        let first_set = first_of_alt(alt, all_rules, lit_tokens);
+        let mut visiting: Array<String> = [];
+        let first_set = first_of_alt(alt, all_rules, lit_tokens, &mut visiting);
         if first_set.len() > 0 {
             out.append("    if ");
             for let mut j = 0; j < first_set.len(); j += 1 {
@@ -139,7 +140,8 @@ fn gen_multi_alt_body(
     // Error fallback
     let mut expected: Array<String> = [];
     for let alt of rule.alternatives {
-        let first = first_of_alt(&alt, all_rules, lit_tokens);
+        let mut visiting2: Array<String> = [];
+        let first = first_of_alt(&alt, all_rules, lit_tokens, &mut visiting2);
         for let tk of first {
             if !array_contains_str(&expected, &tk) {
                 expected.append(tk);
@@ -233,7 +235,8 @@ fn gen_repeat(
     indent: &String,
 ) {
     let inner = &rep.element;
-    let first = first_of_element(inner, all_rules, lit_tokens);
+    let mut visiting: Array<String> = [];
+    let first = first_of_element(inner, all_rules, lit_tokens, &mut visiting);
     let inner_indent = `{indent}    `;
 
     if has_field(inner) {
@@ -392,7 +395,8 @@ fn gen_consume_group(
     }
     out.append(`{indent}let grp_kind = p.peek_kind();\n`);
     for let mut i = 0; i < alts.len(); i += 1 {
-        let first = first_of_alt(&alts[i], all_rules, lit_tokens);
+        let mut visiting: Array<String> = [];
+        let first = first_of_alt(&alts[i], all_rules, lit_tokens, &mut visiting);
         if i == 0 {
             out.append(`{indent}if `);
         } else {
@@ -427,10 +431,11 @@ fn first_of_alt(
     alt: &Alternative,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
+    visiting: &mut Array<String>,
 ) -> Array<String> {
     let mut result: Array<String> = [];
     for let elem of alt.elements {
-        let elem_first = first_of_element(&elem, all_rules, lit_tokens);
+        let elem_first = first_of_element(&elem, all_rules, lit_tokens, visiting);
         for let tk of elem_first {
             if !array_contains_str(&result, &tk) {
                 result.append(tk);
@@ -447,17 +452,8 @@ fn first_of_element(
     elem: &Element,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
+    visiting: &mut Array<String>,
 ) -> Array<String> {
-    return first_of_element_impl(elem, all_rules, lit_tokens, 0);
-}
-
-fn first_of_element_impl(
-    elem: &Element,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    depth: i32,
-) -> Array<String> {
-    if depth > 20 { return []; }
     if let TokenRef(name) = *elem {
         return [`TK_{name}`];
     }
@@ -465,12 +461,12 @@ fn first_of_element_impl(
         return [literal_const_name(&text)];
     }
     if let RuleRef(name) = *elem {
-        return first_of_rule(&name, all_rules, lit_tokens, depth);
+        return first_of_rule(&name, all_rules, lit_tokens, visiting);
     }
     if let Group(alts) = *elem {
         let mut result: Array<String> = [];
         for let alt of alts {
-            let af = first_of_alt_impl(&alt, all_rules, lit_tokens, depth);
+            let af = first_of_alt(&alt, all_rules, lit_tokens, visiting);
             for let tk of af {
                 if !array_contains_str(&result, &tk) {
                     result.append(tk);
@@ -480,10 +476,10 @@ fn first_of_element_impl(
         return result;
     }
     if let Repeat(rep) = *elem {
-        return first_of_element_impl(&rep.element, all_rules, lit_tokens, depth);
+        return first_of_element(&rep.element, all_rules, lit_tokens, visiting);
     }
     if let Label(lab) = *elem {
-        return first_of_element_impl(&lab.element, all_rules, lit_tokens, depth);
+        return first_of_element(&lab.element, all_rules, lit_tokens, visiting);
     }
     return [];
 }
@@ -492,46 +488,41 @@ fn first_of_rule(
     name: &String,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
-    depth: i32,
+    visiting: &mut Array<String>,
 ) -> Array<String> {
-    if depth > 20 { return []; }
+    // Cycle detection: if we're already computing this rule's first set, return empty
+    if array_contains_str(visiting, name) {
+        return [];
+    }
+    visiting.append(*name);
+
+    let mut result: Array<String> = [];
     for let rule of all_rules {
         if rule.name == *name {
-            let mut result: Array<String> = [];
             for let alt of rule.alternatives {
-                let af = first_of_alt_impl(&alt, all_rules, lit_tokens, depth + 1);
+                let af = first_of_alt(&alt, all_rules, lit_tokens, visiting);
                 for let tk of af {
                     if !array_contains_str(&result, &tk) {
                         result.append(tk);
                     }
                 }
             }
-            return result;
-        }
-    }
-    return [];
-}
-
-fn first_of_alt_impl(
-    alt: &Alternative,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    depth: i32,
-) -> Array<String> {
-    let mut result: Array<String> = [];
-    for let elem of alt.elements {
-        let ef = first_of_element_impl(&elem, all_rules, lit_tokens, depth);
-        for let tk of ef {
-            if !array_contains_str(&result, &tk) {
-                result.append(tk);
-            }
-        }
-        if !is_nullable(&elem) {
             break;
         }
     }
+
+    // Remove from visiting
+    let mut new_visiting: Array<String> = [];
+    for let v of visiting {
+        if v != *name {
+            new_visiting.append(v);
+        }
+    }
+    *visiting = new_visiting;
+
     return result;
 }
+
 
 fn is_nullable(elem: &Element) -> bool {
     if let Repeat(rep) = *elem {
