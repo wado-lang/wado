@@ -1286,8 +1286,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     )
                 }
                 ast::SelfKind::MutRef => {
-                    let mut_ref_type =
-                        self.type_table.borrow_mut().make_mut_ref(receiver.type_id);
+                    let mut_ref_type = self.type_table.borrow_mut().make_mut_ref(receiver.type_id);
                     TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::MutRef,
@@ -1625,7 +1624,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     Type::Reference(inner) | Type::MutReference(inner) => {
                         if let Type::Named(named) = inner.as_ref() {
                             // Inner is a bare name — check if it's a type parameter
-                            impl_block.type_params.iter().any(|tp| tp.name == named.name)
+                            impl_block
+                                .type_params
+                                .iter()
+                                .any(|tp| tp.name == named.name)
                         } else {
                             false
                         }

@@ -90,7 +90,6 @@ pub fn monomorphize_modules_indexed(
         }
     }
 
-
     // Collect all generic structs from all modules, tracking ALL source modules
     // (a struct name can appear in multiple modules due to shadowing)
     // This includes private structs as they may be needed for instantiating public structs
@@ -1822,17 +1821,15 @@ impl Monomorphizer {
                     // try the ref struct name FIRST so it takes priority
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
+                        && info.base_struct_name != base_struct
                     {
-                        if info.base_struct_name != base_struct {
-                            names_to_try.push(MethodName::format_local(
-                                &info.base_struct_name,
-                                Some(trait_name),
-                                &method_name,
-                            ));
-                        }
+                        names_to_try.push(MethodName::format_local(
+                            &info.base_struct_name,
+                            Some(trait_name),
+                            &method_name,
+                        ));
                     }
-                    names_to_try
-                        .push(MethodName::format_local(&base_struct, None, &method_name));
+                    names_to_try.push(MethodName::format_local(&base_struct, None, &method_name));
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {

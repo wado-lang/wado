@@ -135,16 +135,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Only use ref-type impls that target a concrete container type
                 // (e.g., impl IntoIterator for &Array<T>), NOT blanket ref impls
                 // (e.g., impl Inspect for &T where the inner type is just a type param).
-                if let Some(trait_match) = result {
-                    if !trait_match.is_blanket_ref_impl {
-                        trait_impl_struct_name = Some(trait_match.impl_struct_name);
-                        trait_name = Some(trait_match.trait_name);
-                        let mut info = trait_match.method_info;
-                        info.is_ref_impl = true;
-                        method_info = Some(info);
-                        trait_impl_module_source = Some(trait_match.impl_module_source);
-                        blanket_type_param = trait_match.blanket_type_param;
-                    }
+                if let Some(trait_match) = result
+                    && !trait_match.is_blanket_ref_impl
+                {
+                    trait_impl_struct_name = Some(trait_match.impl_struct_name);
+                    trait_name = Some(trait_match.trait_name);
+                    let mut info = trait_match.method_info;
+                    info.is_ref_impl = true;
+                    method_info = Some(info);
+                    trait_impl_module_source = Some(trait_match.impl_module_source);
+                    blanket_type_param = trait_match.blanket_type_param;
                 }
             }
         }
@@ -347,7 +347,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Adjust receiver based on what the method expects (self_kind)
-        receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, _is_ref_impl, method_call.span);
+        receiver =
+            self.adjust_receiver_for_self_kind(receiver, self_kind, _is_ref_impl, method_call.span);
 
         // Build unified substitution context for double generics
         // Type param indices are assigned as follows:

@@ -316,6 +316,20 @@ impl IntoIterator for &Array<T> {
     }
 }
 
+impl IntoIterator for &mut Array<T> {
+    type Item = &T;
+    type Iter = ArrayRefIter<T>;
+
+    fn into_iter(&self) -> Self::Iter {
+        let arr = *self;
+        return ArrayRefIter {
+            repr: arr.repr,
+            used: arr.used,
+            index: 0,
+        };
+    }
+}
+
 impl Array<T> {
     pub fn iter(&self) -> ArrayIter<T> {
         return self.into_iter();

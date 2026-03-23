@@ -852,7 +852,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 builder_type,
                 span,
             );
-            let receiver = self.adjust_receiver_for_self_kind(builder_local, push_self_kind, false, span);
+            let receiver =
+                self.adjust_receiver_for_self_kind(builder_local, push_self_kind, false, span);
             let push_call = TirExpr::new(
                 TirExprKind::MethodCall {
                     receiver: Box::new(receiver),
