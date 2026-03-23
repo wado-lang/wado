@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774272170540,
+  "lastUpdate": 1774301739574,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6614,6 +6614,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8272d4c0451d06cbbf7ffdb7fbfbb2a373308fa9"
         },
         "date": 1774272170330,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7216367993acca291fd7a0cd616a7ca47e44d826",
+          "message": "Merge pull request #673 from wado-lang/claude/add-ascii-string-utils-dLuVs\n\nAdd char ASCII case conversion methods and generic map iterator support",
+          "timestamp": "2026-03-24T06:33:14+09:00",
+          "tree_id": "18ba71d3a3e82e411bc57db2e15e2cb3404b193d",
+          "url": "https://github.com/wado-lang/wado/commit/7216367993acca291fd7a0cd616a7ca47e44d826"
+        },
+        "date": 1774301739360,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
