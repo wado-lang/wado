@@ -75,6 +75,44 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        // Structs auto-implement Eq/Ord when all fields implement the trait
+        if let ResolvedType::Struct { name, .. } = &resolved
+            && matches!(trait_name, "Eq" | "Ord")
+            && let Some(info) = self.struct_fields.get(name)
+        {
+            let field_types: Vec<TypeId> = info.fields.iter().map(|(_, tid, _)| *tid).collect();
+            let all_impl = field_types
+                .iter()
+                .all(|tid| self.type_implements_trait(*tid, trait_name));
+            if all_impl {
+                return true;
+            }
+        }
+
+        // Generic structs auto-implement Eq/Ord when all fields implement the trait
+        // (with type params substituted by concrete type args)
+        if let ResolvedType::GenericInstance {
+            name, type_args, ..
+        } = &resolved
+            && matches!(trait_name, "Eq" | "Ord")
+            && let Some(info) = self.struct_fields.get(name)
+        {
+            // Build type param -> concrete type arg mapping
+            let param_map: IndexMap<TypeId, TypeId> = info
+                .type_param_type_ids
+                .iter()
+                .zip(type_args.iter())
+                .map(|(param, arg)| (*param, *arg))
+                .collect();
+            let all_impl = info.fields.iter().all(|(_, field_tid, _)| {
+                let concrete_tid = param_map.get(field_tid).copied().unwrap_or(*field_tid);
+                self.type_implements_trait(concrete_tid, trait_name)
+            });
+            if all_impl {
+                return true;
+            }
+        }
+
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {
             ResolvedType::Struct { name, .. }

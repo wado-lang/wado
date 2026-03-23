@@ -3194,6 +3194,54 @@ pub fn "SpecialKind^Ord::cmp"(self: &SpecialKind, other: &SpecialKind) -> Orderi
     return Ordering::Equal;
 }
 
+pub fn "UnpackResult^Eq::eq"(self: &UnpackResult, other: &UnpackResult) -> bool {
+    return (Box<u64> { value: self.mantissa }."u64^Eq::eq"(Box<u64> { value: other.mantissa }) && Box<i32> { value: self.exponent }."i32^Eq::eq"(Box<i32> { value: other.exponent }));
+}
+
+pub fn "UnpackResult^Ord::cmp"(self: &UnpackResult, other: &UnpackResult) -> Ordering {
+    let c: Ordering = Box<u64> { value: self.mantissa }."u64^Ord::cmp"(Box<u64> { value: other.mantissa });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.exponent }."i32^Ord::cmp"(Box<i32> { value: other.exponent });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "PmHiLo^Eq::eq"(self: &PmHiLo, other: &PmHiLo) -> bool {
+    return (Box<u64> { value: self.hi }."u64^Eq::eq"(Box<u64> { value: other.hi }) && Box<u64> { value: self.lo }."u64^Eq::eq"(Box<u64> { value: other.lo }));
+}
+
+pub fn "PmHiLo^Ord::cmp"(self: &PmHiLo, other: &PmHiLo) -> Ordering {
+    let c: Ordering = Box<u64> { value: self.hi }."u64^Ord::cmp"(Box<u64> { value: other.hi });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<u64> { value: self.lo }."u64^Ord::cmp"(Box<u64> { value: other.lo });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "FormatResult^Eq::eq"(self: &FormatResult, other: &FormatResult) -> bool {
+    return (Box<u64> { value: self.digits }."u64^Eq::eq"(Box<u64> { value: other.digits }) && Box<i32> { value: self.exponent }."i32^Eq::eq"(Box<i32> { value: other.exponent }));
+}
+
+pub fn "FormatResult^Ord::cmp"(self: &FormatResult, other: &FormatResult) -> Ordering {
+    let c: Ordering = Box<u64> { value: self.digits }."u64^Ord::cmp"(Box<u64> { value: other.digits });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.exponent }."i32^Ord::cmp"(Box<i32> { value: other.exponent });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
 pub fn "SpecialKind^Inspect::inspect"(self: &SpecialKind, f: &mut Formatter) {
     if (*self == 0) {
         f.Formatter::write_str("SpecialKind::NotSpecial");
@@ -6538,6 +6586,54 @@ pub fn "u64^UpperHexAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
     self.u64::fmt_base(f, 16, true, "0X");
 }
 
+pub fn "i8^Eq::eq"(self: Box<i8>, other: Box<i8>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "u8^Eq::eq"(self: Box<u8>, other: Box<u8>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "i16^Eq::eq"(self: Box<i16>, other: Box<i16>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "u16^Eq::eq"(self: Box<u16>, other: Box<u16>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "i32^Eq::eq"(self: Box<i32>, other: Box<i32>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "u32^Eq::eq"(self: Box<u32>, other: Box<u32>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "i64^Eq::eq"(self: Box<i64>, other: Box<i64>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "u64^Eq::eq"(self: Box<u64>, other: Box<u64>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "f32^Eq::eq"(self: Box<f32>, other: Box<f32>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "f64^Eq::eq"(self: Box<f64>, other: Box<f64>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "char^Eq::eq"(self: Box<char>, other: Box<char>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "bool^Eq::eq"(self: Box<bool>, other: Box<bool>) -> bool {
+    return (self.value == other.value);
+}
+
 pub fn "i8^Ord::cmp"(self: Box<i8>, other: Box<i8>) -> Ordering {
     if (self.value < other.value) {
         return Ordering::Less;
@@ -7774,6 +7870,46 @@ pub fn "String^From<char>::from"(value: char) -> String {
     return s;
 }
 
+pub fn "StrUtf8ByteIter^Eq::eq"(self: &StrUtf8ByteIter, other: &StrUtf8ByteIter) -> bool {
+    return ((self.repr."builtin::array<u8>^Eq::eq"(&other.repr) && Box<i32> { value: self.used }."i32^Eq::eq"(Box<i32> { value: other.used })) && Box<i32> { value: self.index }."i32^Eq::eq"(Box<i32> { value: other.index }));
+}
+
+pub fn "StrUtf8ByteIter^Ord::cmp"(self: &StrUtf8ByteIter, other: &StrUtf8ByteIter) -> Ordering {
+    let c: Ordering = self.repr."builtin::array<u8>^Ord::cmp"(&other.repr);
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.used }."i32^Ord::cmp"(Box<i32> { value: other.used });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.index }."i32^Ord::cmp"(Box<i32> { value: other.index });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "StrCharIter^Eq::eq"(self: &StrCharIter, other: &StrCharIter) -> bool {
+    return ((self.repr."builtin::array<u8>^Eq::eq"(&other.repr) && Box<i32> { value: self.used }."i32^Eq::eq"(Box<i32> { value: other.used })) && Box<i32> { value: self.byte_index }."i32^Eq::eq"(Box<i32> { value: other.byte_index }));
+}
+
+pub fn "StrCharIter^Ord::cmp"(self: &StrCharIter, other: &StrCharIter) -> Ordering {
+    let c: Ordering = self.repr."builtin::array<u8>^Ord::cmp"(&other.repr);
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.used }."i32^Ord::cmp"(Box<i32> { value: other.used });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.byte_index }."i32^Ord::cmp"(Box<i32> { value: other.byte_index });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
 pub fn "StrUtf8ByteIter^Inspect::inspect"(self: &StrUtf8ByteIter, f: &mut Formatter) {
     f.Formatter::write_str("StrUtf8ByteIter { ");
     f.Formatter::write_str("repr: ");
@@ -8252,6 +8388,26 @@ pub struct "ArrayIter<Point>" {
 
 pub fn "Waitable^Eq::eq"(self: &Waitable, other: &Waitable) -> bool {
     return (*self as i32 == *other as i32);
+}
+
+pub fn "WaitEvent^Eq::eq"(self: &WaitEvent, other: &WaitEvent) -> bool {
+    return ((Box<i32> { value: self.code }."i32^Eq::eq"(Box<i32> { value: other.code }) && self.handle."Waitable^Eq::eq"(&other.handle)) && Box<u32> { value: self.payload }."u32^Eq::eq"(Box<u32> { value: other.payload }));
+}
+
+pub fn "WaitEvent^Ord::cmp"(self: &WaitEvent, other: &WaitEvent) -> Ordering {
+    let c: Ordering = Box<i32> { value: self.code }."i32^Ord::cmp"(Box<i32> { value: other.code });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = self.handle."Waitable^Ord::cmp"(&other.handle);
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<u32> { value: self.payload }."u32^Ord::cmp"(Box<u32> { value: other.payload });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
 }
 
 pub fn "WaitEvent^Inspect::inspect"(self: &WaitEvent, f: &mut Formatter) {
@@ -9012,6 +9168,66 @@ pub fn "Color^Ord::cmp"(self: &Color, other: &Color) -> Ordering {
     }
     if (a > b) {
         return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "Point^Eq::eq"(self: &Point, other: &Point) -> bool {
+    return (Box<i32> { value: self.x }."i32^Eq::eq"(Box<i32> { value: other.x }) && Box<i32> { value: self.y }."i32^Eq::eq"(Box<i32> { value: other.y }));
+}
+
+pub fn "Point^Ord::cmp"(self: &Point, other: &Point) -> Ordering {
+    let c: Ordering = Box<i32> { value: self.x }."i32^Ord::cmp"(Box<i32> { value: other.x });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.y }."i32^Ord::cmp"(Box<i32> { value: other.y });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "SerdeExample^Eq::eq"(self: &SerdeExample, other: &SerdeExample) -> bool {
+    return ((Box<i32> { value: self.my_field }."i32^Eq::eq"(Box<i32> { value: other.my_field }) && Box<bool> { value: self.flag }."bool^Eq::eq"(Box<bool> { value: other.flag })) && Box<i32> { value: self.other }."i32^Eq::eq"(Box<i32> { value: other.other }));
+}
+
+pub fn "SerdeExample^Ord::cmp"(self: &SerdeExample, other: &SerdeExample) -> Ordering {
+    let c: Ordering = Box<i32> { value: self.my_field }."i32^Ord::cmp"(Box<i32> { value: other.my_field });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<bool> { value: self.flag }."bool^Ord::cmp"(Box<bool> { value: other.flag });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.other }."i32^Ord::cmp"(Box<i32> { value: other.other });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "Mapper^Eq::eq"(self: &Mapper, other: &Mapper) -> bool {
+    return self.f."Fn<1,i32>^Eq::eq"(&other.f);
+}
+
+pub fn "Mapper^Ord::cmp"(self: &Mapper, other: &Mapper) -> Ordering {
+    let c: Ordering = self.f."Fn<1,i32>^Ord::cmp"(&other.f);
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "Holder^Eq::eq"(self: &Holder, other: &Holder) -> bool {
+    return self.data."&<Point>^Eq::eq"(&other.data);
+}
+
+pub fn "Holder^Ord::cmp"(self: &Holder, other: &Holder) -> Ordering {
+    let c: Ordering = self.data."&<Point>^Ord::cmp"(&other.data);
+    if (c != Ordering::Equal) {
+        return c;
     }
     return Ordering::Equal;
 }
@@ -11838,6 +12054,18 @@ pub fn "Ordering^Ord::cmp"(self: &Ordering, other: &Ordering) -> Ordering {
     return Ordering::Equal;
 }
 
+pub fn "ConvertError^Eq::eq"(self: &ConvertError, other: &ConvertError) -> bool {
+    return self.message."String^Eq::eq"(&other.message);
+}
+
+pub fn "ConvertError^Ord::cmp"(self: &ConvertError, other: &ConvertError) -> Ordering {
+    let c: Ordering = self.message."String^Ord::cmp"(&other.message);
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
 pub fn "Ordering^Inspect::inspect"(self: &Ordering, f: &mut Formatter) {
     if (*self == 0) {
         f.Formatter::write_str("Ordering::Less");
@@ -12377,6 +12605,46 @@ pub fn "Alignment^Ord::cmp"(self: &Alignment, other: &Alignment) -> Ordering {
     }
     if (a > b) {
         return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "Formatter^Eq::eq"(self: &Formatter, other: &Formatter) -> bool {
+    return (((((((Box<char> { value: self.fill }."char^Eq::eq"(Box<char> { value: other.fill }) && self.align."Alignment^Eq::eq"(&other.align)) && Box<bool> { value: self.sign_plus }."bool^Eq::eq"(Box<bool> { value: other.sign_plus })) && Box<bool> { value: self.zero_pad }."bool^Eq::eq"(Box<bool> { value: other.zero_pad })) && Box<i32> { value: self.width }."i32^Eq::eq"(Box<i32> { value: other.width })) && Box<i32> { value: self.precision }."i32^Eq::eq"(Box<i32> { value: other.precision })) && Box<i32> { value: self.indent }."i32^Eq::eq"(Box<i32> { value: other.indent })) && self.buf."&mut<String>^Eq::eq"(&other.buf));
+}
+
+pub fn "Formatter^Ord::cmp"(self: &Formatter, other: &Formatter) -> Ordering {
+    let c: Ordering = Box<char> { value: self.fill }."char^Ord::cmp"(Box<char> { value: other.fill });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = self.align."Alignment^Ord::cmp"(&other.align);
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<bool> { value: self.sign_plus }."bool^Ord::cmp"(Box<bool> { value: other.sign_plus });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<bool> { value: self.zero_pad }."bool^Ord::cmp"(Box<bool> { value: other.zero_pad });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.width }."i32^Ord::cmp"(Box<i32> { value: other.width });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.precision }."i32^Ord::cmp"(Box<i32> { value: other.precision });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = Box<i32> { value: self.indent }."i32^Ord::cmp"(Box<i32> { value: other.indent });
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    let c: Ordering = self.buf."&mut<String>^Ord::cmp"(&other.buf);
+    if (c != Ordering::Equal) {
+        return c;
     }
     return Ordering::Equal;
 }

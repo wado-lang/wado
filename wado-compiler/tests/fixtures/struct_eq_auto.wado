@@ -1,0 +1,39 @@
+// Auto-derived Eq for structs: all fields implement Eq → struct gets Eq automatically
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Color {
+    r: u8,
+    g: u8,
+    b: u8,
+}
+
+struct Empty {}
+
+export fn run() {
+    // Basic equality
+    let a = Point { x: 1, y: 2 };
+    let b = Point { x: 1, y: 2 };
+    let c = Point { x: 3, y: 4 };
+    assert a == b;
+    assert !(a == c);
+    assert a != c;
+
+    // Three fields
+    let red1 = Color { r: 255, g: 0, b: 0 };
+    let red2 = Color { r: 255, g: 0, b: 0 };
+    let blue = Color { r: 0, g: 0, b: 255 };
+    assert red1 == red2;
+    assert red1 != blue;
+
+    // Empty struct
+    let e1 = Empty {};
+    let e2 = Empty {};
+    assert e1 == e2;
+}
+
+__DATA__
+{"stdout": ""}

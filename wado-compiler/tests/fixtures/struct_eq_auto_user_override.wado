@@ -1,0 +1,26 @@
+// User-defined impl Eq takes precedence over auto-derive
+
+struct ApproxFloat {
+    value: f64,
+}
+
+impl Eq for ApproxFloat {
+    fn eq(&self, other: &Self) -> bool {
+        let diff = self.value - other.value;
+        let abs_diff = if diff < 0.0 { -diff } else { diff };
+        return abs_diff < 0.001;
+    }
+}
+
+export fn run() {
+    let a = ApproxFloat { value: 1.0 };
+    let b = ApproxFloat { value: 1.0005 };
+    let c = ApproxFloat { value: 2.0 };
+
+    // Uses custom Eq: values within 0.001 are equal
+    assert a == b;
+    assert a != c;
+}
+
+__DATA__
+{"stdout": ""}

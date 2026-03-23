@@ -1,0 +1,29 @@
+// Auto-derived Eq and Ord for generic structs
+
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+export fn run() {
+    // Eq on generic struct with i32
+    let a = Pair { first: 1, second: 2 };
+    let b = Pair { first: 1, second: 2 };
+    let c = Pair { first: 1, second: 3 };
+    assert a == b;
+    assert a != c;
+
+    // Ord on generic struct with i32
+    assert a < c;
+    assert c > a;
+
+    // Eq on generic struct with String
+    let s1 = Pair { first: "hello", second: "world" };
+    let s2 = Pair { first: "hello", second: "world" };
+    let s3 = Pair { first: "hello", second: "!" };
+    assert s1 == s2;
+    assert s1 != s3;
+}
+
+__DATA__
+{"stdout": ""}

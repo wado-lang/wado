@@ -1349,6 +1349,10 @@ _Fields are private._
 
 ###### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
+##### `impl Eq for bool`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
+
 ##### `impl Ord for bool`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
@@ -1416,6 +1420,10 @@ Panics if the character is not a valid hex digit.
 
 ###### `pub fn inspect_alt(&self, f: &mut Formatter)`
 
+##### `impl Eq for char`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
+
 ##### `impl Ord for char`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
@@ -1479,6 +1487,10 @@ Panics if the character is not a valid hex digit.
 ##### `impl UpperHexAlt for i8`
 
 ###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl Eq for i8`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `impl Ord for i8`
 
@@ -1556,6 +1568,10 @@ Panics if the character is not a valid hex digit.
 
 ###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
+##### `impl Eq for u8`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
+
 ##### `impl Ord for u8`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
@@ -1627,6 +1643,10 @@ Panics if the character is not a valid hex digit.
 ##### `impl UpperHexAlt for i16`
 
 ###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl Eq for i16`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `impl Ord for i16`
 
@@ -1707,6 +1727,10 @@ Panics if the character is not a valid hex digit.
 ##### `impl UpperHexAlt for u16`
 
 ###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl Eq for u16`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `impl Ord for u16`
 
@@ -1791,6 +1815,10 @@ Counts the number of set bits (population count).
 ##### `impl UpperHexAlt for i32`
 
 ###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl Eq for i32`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `impl Ord for i32`
 
@@ -1879,6 +1907,10 @@ Counts the number of set bits (population count).
 ##### `impl UpperHexAlt for u32`
 
 ###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl Eq for u32`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `impl Ord for u32`
 
@@ -1976,6 +2008,10 @@ Counts the number of set bits (population count).
 
 ###### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
+##### `impl Eq for i64`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
+
 ##### `impl Ord for i64`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
@@ -2071,6 +2107,10 @@ Counts the number of set bits (population count).
 ##### `impl UpperHexAlt for u64`
 
 ###### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+##### `impl Eq for u64`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `impl Ord for u64`
 
@@ -2298,6 +2338,10 @@ Creates an f32 from its bit representation.
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
 
+##### `impl Eq for f32`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
+
 ##### `impl Ord for f32`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
@@ -2519,6 +2563,10 @@ Creates an f64 from its bit representation.
 ##### `impl UpperExp for f64`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Eq for f64`
+
+###### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `impl Ord for f64`
 

@@ -1,0 +1,30 @@
+// Auto-derived Ord for structs: lexicographic comparison by field order
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() {
+    let a = Point { x: 1, y: 2 };
+    let b = Point { x: 1, y: 3 };
+    let c = Point { x: 2, y: 0 };
+
+    // Same first field, compare second
+    assert a < b;
+    assert b > a;
+    assert a <= b;
+    assert b >= a;
+
+    // Different first field decides
+    assert a < c;
+    assert c > a;
+
+    // Equal
+    let d = Point { x: 1, y: 2 };
+    assert a <= d;
+    assert a >= d;
+}
+
+__DATA__
+{"stdout": ""}
