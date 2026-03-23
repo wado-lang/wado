@@ -365,6 +365,16 @@ test "char to_ascii_uppercase" {
     assert 'é'.to_ascii_uppercase() == 'é';
 }
 
+test "String from_iter" {
+    let s = String::from_iter("hello".chars());
+    assert s == "hello";
+    let empty = String::from_iter("".chars());
+    assert empty == "";
+    // Multi-byte chars
+    let utf8 = String::from_iter("café".chars());
+    assert utf8 == "café";
+}
+
 test "String to_ascii_lowercase" {
     assert "Hello, World!".to_ascii_lowercase() == "hello, world!";
     assert "ABC".to_ascii_lowercase() == "abc";

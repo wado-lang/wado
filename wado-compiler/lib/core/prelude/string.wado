@@ -492,31 +492,21 @@ impl String {
     /// Returns a new string with all ASCII uppercase letters converted to lowercase.
     /// Non-ASCII bytes are left unchanged.
     pub fn to_ascii_lowercase(&self) -> String {
-        let repr = builtin::array_new::<u8>(self.used);
-        for let mut i = 0; i < self.used; i += 1 {
-            let b = builtin::array_get_u8(self.repr, i);
-            if b >= 'A' as u8 && b <= 'Z' as u8 {
-                builtin::array_set_u8(repr, i, b - 'A' as u8 + 'a' as u8);
-            } else {
-                builtin::array_set_u8(repr, i, b);
-            }
+        let mut s = String::with_capacity(self.used);
+        for let c of self.chars() {
+            s.append_char(c.to_ascii_lowercase());
         }
-        return String { repr, used: self.used };
+        return s;
     }
 
     /// Returns a new string with all ASCII lowercase letters converted to uppercase.
     /// Non-ASCII bytes are left unchanged.
     pub fn to_ascii_uppercase(&self) -> String {
-        let repr = builtin::array_new::<u8>(self.used);
-        for let mut i = 0; i < self.used; i += 1 {
-            let b = builtin::array_get_u8(self.repr, i);
-            if b >= 'a' as u8 && b <= 'z' as u8 {
-                builtin::array_set_u8(repr, i, b - 'a' as u8 + 'A' as u8);
-            } else {
-                builtin::array_set_u8(repr, i, b);
-            }
+        let mut s = String::with_capacity(self.used);
+        for let c of self.chars() {
+            s.append_char(c.to_ascii_uppercase());
         }
-        return String { repr, used: self.used };
+        return s;
     }
 
     /// Internal: extract a substring by byte range [start, end).
@@ -534,6 +524,17 @@ impl String {
 impl Default for String {
     pub fn default() -> String {
         return "";
+    }
+}
+
+impl String {
+    /// Build a String from any iterable of chars.
+    pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String {
+        let mut s = String::with_capacity(8);
+        for let c of iter {
+            s.append_char(c);
+        }
+        return s;
     }
 }
 
