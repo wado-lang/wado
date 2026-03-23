@@ -774,59 +774,60 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
-        let end = try_cos(&lexer.chars, start);
+        let mut end: i32 = -1;
+        end = try_cos(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_COS; }
-        let end = try_sin(&lexer.chars, start);
+        end = try_sin(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_SIN; }
-        let end = try_tan(&lexer.chars, start);
+        end = try_tan(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_TAN; }
-        let end = try_acos(&lexer.chars, start);
+        end = try_acos(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_ACOS; }
-        let end = try_asin(&lexer.chars, start);
+        end = try_asin(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_ASIN; }
-        let end = try_atan(&lexer.chars, start);
+        end = try_atan(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_ATAN; }
-        let end = try_ln(&lexer.chars, start);
+        end = try_ln(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LN; }
-        let end = try_log(&lexer.chars, start);
+        end = try_log(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LOG; }
-        let end = try_sqrt(&lexer.chars, start);
+        end = try_sqrt(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_SQRT; }
-        let end = try_lparen(&lexer.chars, start);
+        end = try_lparen(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LPAREN; }
-        let end = try_rparen(&lexer.chars, start);
+        end = try_rparen(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_RPAREN; }
-        let end = try_plus(&lexer.chars, start);
+        end = try_plus(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_PLUS; }
-        let end = try_minus(&lexer.chars, start);
+        end = try_minus(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_MINUS; }
-        let end = try_times(&lexer.chars, start);
+        end = try_times(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_TIMES; }
-        let end = try_div(&lexer.chars, start);
+        end = try_div(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_DIV; }
-        let end = try_gt(&lexer.chars, start);
+        end = try_gt(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_GT; }
-        let end = try_lt(&lexer.chars, start);
+        end = try_lt(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LT; }
-        let end = try_eq(&lexer.chars, start);
+        end = try_eq(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_EQ; }
-        let end = try_comma(&lexer.chars, start);
+        end = try_comma(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_COMMA; }
-        let end = try_point(&lexer.chars, start);
+        end = try_point(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_POINT; }
-        let end = try_pow(&lexer.chars, start);
+        end = try_pow(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_POW; }
-        let end = try_pi(&lexer.chars, start);
+        end = try_pi(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_PI; }
-        let end = try_euler(&lexer.chars, start);
+        end = try_euler(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_EULER; }
-        let end = try_i(&lexer.chars, start);
+        end = try_i(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_I; }
-        let end = try_variable(&lexer.chars, start);
+        end = try_variable(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-        let end = try_scientific_number(&lexer.chars, start);
+        end = try_scientific_number(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_SCIENTIFIC_NUMBER; }
-        let end = try_ws(&lexer.chars, start);
+        end = try_ws(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_WS; }
         if best_end <= start {
             tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));
@@ -889,7 +890,7 @@ fn parse_equation(p: &mut Parser) -> Result<EquationNode, ParseError> {
     let start = p.peek().span.start;
     let expression = parse_expression(p)?;
     let relop = parse_relop(p)?;
-    let expression = parse_expression(p)?;
+    let expression_2 = parse_expression(p)?;
     let eof = p.expect(TK_EOF, "EOF")?;
     return Result::<EquationNode, ParseError>::Ok(EquationNode {
         span: Span::new(start, p.last_end()),

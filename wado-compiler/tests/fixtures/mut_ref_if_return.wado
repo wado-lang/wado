@@ -1,0 +1,70 @@
+struct Token {
+    kind: i32,
+    text: String,
+}
+
+struct Parser {
+    tokens: Array<Token>,
+    pos: i32,
+}
+
+impl Parser {
+    fn new(tokens: Array<Token>) -> Parser {
+        return Parser { tokens, pos: 0 };
+    }
+    fn peek_kind(&self) -> i32 {
+        return self.tokens[self.pos].kind;
+    }
+    fn advance(&mut self) -> Token {
+        let tok = self.tokens[self.pos];
+        self.pos += 1;
+        return tok;
+    }
+    fn expect(&mut self, kind: i32) -> Result<Token, String> {
+        if self.tokens[self.pos].kind == kind {
+            return Result::<Token, String>::Ok(self.advance());
+        }
+        return Result::<Token, String>::Err(`expected {kind}`);
+    }
+}
+
+variant NodeA {
+    Leaf(Token),
+}
+
+fn parse_leaf(p: &mut Parser) -> Result<NodeA, String> {
+    let tok = p.expect(1)?;
+    return Result::<NodeA, String>::Ok(NodeA::Leaf(tok));
+}
+
+fn parse_item(p: &mut Parser) -> Result<NodeA, String> {
+    let kind = p.peek_kind();
+    if kind == 1 {
+        let node = parse_leaf(p)?;
+        return Result::<NodeA, String>::Ok(node);
+    }
+    return Result::<NodeA, String>::Err("no match");
+}
+
+fn parse_root(p: &mut Parser) -> Result<i32, String> {
+    while p.peek_kind() == 1 {
+        let item = parse_item(p)?;
+    }
+    assert p.pos == 1, `expected pos=1, got pos={p.pos}`;
+    return Result::<i32, String>::Ok(0);
+}
+
+export fn run() {
+    let tokens: Array<Token> = [
+        Token { kind: 1, text: "hello" },
+        Token { kind: 0, text: "" },
+    ];
+    let mut parser = Parser::new(tokens);
+    let r = parse_root(&mut parser);
+    if let Err(e) = &r {
+        panic(`error: {e}`);
+    }
+}
+
+__DATA__
+{"stdout": ""}

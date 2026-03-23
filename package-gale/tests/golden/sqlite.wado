@@ -5622,367 +5622,368 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
-        let end = try_lit_semi(&lexer.chars, start);
+        let mut end: i32 = -1;
+        end = try_lit_semi(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
-        let end = try_lit_dot(&lexer.chars, start);
+        end = try_lit_dot(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
-        let end = try_lit_comma(&lexer.chars, start);
+        end = try_lit_comma(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
-        let end = try_lit_lparen(&lexer.chars, start);
+        end = try_lit_lparen(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
-        let end = try_lit_rparen(&lexer.chars, start);
+        end = try_lit_rparen(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
-        let end = try_lit_eq(&lexer.chars, start);
+        end = try_lit_eq(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
-        let end = try_lit_pipepipe(&lexer.chars, start);
+        end = try_lit_pipepipe(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_PIPEPIPE; }
-        let end = try_lit_star(&lexer.chars, start);
+        end = try_lit_star(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
-        let end = try_lit_slash(&lexer.chars, start);
+        end = try_lit_slash(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
-        let end = try_lit__(&lexer.chars, start);
+        end = try_lit__(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT__; }
-        let end = try_lit_plus(&lexer.chars, start);
+        end = try_lit_plus(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-        let end = try_lit_minus(&lexer.chars, start);
+        end = try_lit_minus(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
-        let end = try_lit_ltlt(&lexer.chars, start);
+        end = try_lit_ltlt(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_LTLT; }
-        let end = try_lit_gtgt(&lexer.chars, start);
+        end = try_lit_gtgt(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_GTGT; }
-        let end = try_lit_amp(&lexer.chars, start);
+        end = try_lit_amp(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_AMP; }
-        let end = try_lit_pipe(&lexer.chars, start);
+        end = try_lit_pipe(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
-        let end = try_lit_lt(&lexer.chars, start);
+        end = try_lit_lt(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
-        let end = try_lit_lteq(&lexer.chars, start);
+        end = try_lit_lteq(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_LTEQ; }
-        let end = try_lit_gt(&lexer.chars, start);
+        end = try_lit_gt(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
-        let end = try_lit_gteq(&lexer.chars, start);
+        end = try_lit_gteq(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_GTEQ; }
-        let end = try_lit_eqeq(&lexer.chars, start);
+        end = try_lit_eqeq(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_EQEQ; }
-        let end = try_lit_bangeq(&lexer.chars, start);
+        end = try_lit_bangeq(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; }
-        let end = try_lit_ltgt(&lexer.chars, start);
+        end = try_lit_ltgt(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_LTGT; }
-        let end = try_lit_tilde(&lexer.chars, start);
+        end = try_lit_tilde(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_TILDE; }
-        let end = try_scol(&lexer.chars, start);
+        end = try_scol(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_SCOL; }
-        let end = try_dot(&lexer.chars, start);
+        end = try_dot(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_DOT; }
-        let end = try_open_par(&lexer.chars, start);
+        end = try_open_par(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_OPEN_PAR; }
-        let end = try_close_par(&lexer.chars, start);
+        end = try_close_par(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_CLOSE_PAR; }
-        let end = try_comma(&lexer.chars, start);
+        end = try_comma(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_COMMA; }
-        let end = try_assign(&lexer.chars, start);
+        end = try_assign(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_ASSIGN; }
-        let end = try_star(&lexer.chars, start);
+        end = try_star(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_STAR; }
-        let end = try_plus(&lexer.chars, start);
+        end = try_plus(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_PLUS; }
-        let end = try_minus(&lexer.chars, start);
+        end = try_minus(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_MINUS; }
-        let end = try_tilde(&lexer.chars, start);
+        end = try_tilde(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_TILDE; }
-        let end = try_pipe2(&lexer.chars, start);
+        end = try_pipe2(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_PIPE2; }
-        let end = try_div(&lexer.chars, start);
+        end = try_div(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_DIV; }
-        let end = try_mod(&lexer.chars, start);
+        end = try_mod(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_MOD; }
-        let end = try_lt2(&lexer.chars, start);
+        end = try_lt2(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LT2; }
-        let end = try_gt2(&lexer.chars, start);
+        end = try_gt2(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_GT2; }
-        let end = try_amp(&lexer.chars, start);
+        end = try_amp(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_AMP; }
-        let end = try_pipe(&lexer.chars, start);
+        end = try_pipe(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_PIPE; }
-        let end = try_lt(&lexer.chars, start);
+        end = try_lt(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LT; }
-        let end = try_lt_eq(&lexer.chars, start);
+        end = try_lt_eq(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LT_EQ; }
-        let end = try_gt(&lexer.chars, start);
+        end = try_gt(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_GT; }
-        let end = try_gt_eq(&lexer.chars, start);
+        end = try_gt_eq(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_GT_EQ; }
-        let end = try_eq(&lexer.chars, start);
+        end = try_eq(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_EQ; }
-        let end = try_not_eq1(&lexer.chars, start);
+        end = try_not_eq1(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_NOT_EQ1; }
-        let end = try_not_eq2(&lexer.chars, start);
+        end = try_not_eq2(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_NOT_EQ2; }
-        let end = try_k_abort(&lexer.chars, start);
+        end = try_k_abort(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ABORT; }
-        let end = try_k_action(&lexer.chars, start);
+        end = try_k_action(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ACTION; }
-        let end = try_k_add(&lexer.chars, start);
+        end = try_k_add(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ADD; }
-        let end = try_k_after(&lexer.chars, start);
+        end = try_k_after(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_AFTER; }
-        let end = try_k_all(&lexer.chars, start);
+        end = try_k_all(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ALL; }
-        let end = try_k_alter(&lexer.chars, start);
+        end = try_k_alter(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ALTER; }
-        let end = try_k_analyze(&lexer.chars, start);
+        end = try_k_analyze(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ANALYZE; }
-        let end = try_k_and(&lexer.chars, start);
+        end = try_k_and(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_AND; }
-        let end = try_k_as(&lexer.chars, start);
+        end = try_k_as(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_AS; }
-        let end = try_k_asc(&lexer.chars, start);
+        end = try_k_asc(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ASC; }
-        let end = try_k_attach(&lexer.chars, start);
+        end = try_k_attach(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ATTACH; }
-        let end = try_k_autoincrement(&lexer.chars, start);
+        end = try_k_autoincrement(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_AUTOINCREMENT; }
-        let end = try_k_before(&lexer.chars, start);
+        end = try_k_before(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_BEFORE; }
-        let end = try_k_begin(&lexer.chars, start);
+        end = try_k_begin(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_BEGIN; }
-        let end = try_k_between(&lexer.chars, start);
+        end = try_k_between(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_BETWEEN; }
-        let end = try_k_by(&lexer.chars, start);
+        end = try_k_by(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_BY; }
-        let end = try_k_cascade(&lexer.chars, start);
+        end = try_k_cascade(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_CASCADE; }
-        let end = try_k_case(&lexer.chars, start);
+        end = try_k_case(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_CASE; }
-        let end = try_k_cast(&lexer.chars, start);
+        end = try_k_cast(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_CAST; }
-        let end = try_k_check(&lexer.chars, start);
+        end = try_k_check(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_CHECK; }
-        let end = try_k_collate(&lexer.chars, start);
+        end = try_k_collate(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_COLLATE; }
-        let end = try_k_column(&lexer.chars, start);
+        end = try_k_column(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_COLUMN; }
-        let end = try_k_commit(&lexer.chars, start);
+        end = try_k_commit(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_COMMIT; }
-        let end = try_k_conflict(&lexer.chars, start);
+        end = try_k_conflict(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_CONFLICT; }
-        let end = try_k_constraint(&lexer.chars, start);
+        end = try_k_constraint(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_CONSTRAINT; }
-        let end = try_k_create(&lexer.chars, start);
+        end = try_k_create(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_CREATE; }
-        let end = try_k_cross(&lexer.chars, start);
+        end = try_k_cross(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_CROSS; }
-        let end = try_k_current_date(&lexer.chars, start);
+        end = try_k_current_date(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_CURRENT_DATE; }
-        let end = try_k_current_time(&lexer.chars, start);
+        end = try_k_current_time(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_CURRENT_TIME; }
-        let end = try_k_current_timestamp(&lexer.chars, start);
+        end = try_k_current_timestamp(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_CURRENT_TIMESTAMP; }
-        let end = try_k_database(&lexer.chars, start);
+        end = try_k_database(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_DATABASE; }
-        let end = try_k_default(&lexer.chars, start);
+        end = try_k_default(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_DEFAULT; }
-        let end = try_k_deferrable(&lexer.chars, start);
+        end = try_k_deferrable(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_DEFERRABLE; }
-        let end = try_k_deferred(&lexer.chars, start);
+        end = try_k_deferred(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_DEFERRED; }
-        let end = try_k_delete(&lexer.chars, start);
+        end = try_k_delete(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_DELETE; }
-        let end = try_k_desc(&lexer.chars, start);
+        end = try_k_desc(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_DESC; }
-        let end = try_k_detach(&lexer.chars, start);
+        end = try_k_detach(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_DETACH; }
-        let end = try_k_distinct(&lexer.chars, start);
+        end = try_k_distinct(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_DISTINCT; }
-        let end = try_k_drop(&lexer.chars, start);
+        end = try_k_drop(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_DROP; }
-        let end = try_k_each(&lexer.chars, start);
+        end = try_k_each(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_EACH; }
-        let end = try_k_else(&lexer.chars, start);
+        end = try_k_else(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ELSE; }
-        let end = try_k_end(&lexer.chars, start);
+        end = try_k_end(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_END; }
-        let end = try_k_escape(&lexer.chars, start);
+        end = try_k_escape(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ESCAPE; }
-        let end = try_k_except(&lexer.chars, start);
+        end = try_k_except(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_EXCEPT; }
-        let end = try_k_exclusive(&lexer.chars, start);
+        end = try_k_exclusive(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_EXCLUSIVE; }
-        let end = try_k_exists(&lexer.chars, start);
+        end = try_k_exists(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_EXISTS; }
-        let end = try_k_explain(&lexer.chars, start);
+        end = try_k_explain(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_EXPLAIN; }
-        let end = try_k_fail(&lexer.chars, start);
+        end = try_k_fail(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_FAIL; }
-        let end = try_k_for(&lexer.chars, start);
+        end = try_k_for(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_FOR; }
-        let end = try_k_foreign(&lexer.chars, start);
+        end = try_k_foreign(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_FOREIGN; }
-        let end = try_k_from(&lexer.chars, start);
+        end = try_k_from(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_FROM; }
-        let end = try_k_full(&lexer.chars, start);
+        end = try_k_full(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_FULL; }
-        let end = try_k_glob(&lexer.chars, start);
+        end = try_k_glob(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_GLOB; }
-        let end = try_k_group(&lexer.chars, start);
+        end = try_k_group(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_GROUP; }
-        let end = try_k_having(&lexer.chars, start);
+        end = try_k_having(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_HAVING; }
-        let end = try_k_if(&lexer.chars, start);
+        end = try_k_if(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_IF; }
-        let end = try_k_ignore(&lexer.chars, start);
+        end = try_k_ignore(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_IGNORE; }
-        let end = try_k_immediate(&lexer.chars, start);
+        end = try_k_immediate(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_IMMEDIATE; }
-        let end = try_k_in(&lexer.chars, start);
+        end = try_k_in(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_IN; }
-        let end = try_k_index(&lexer.chars, start);
+        end = try_k_index(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_INDEX; }
-        let end = try_k_indexed(&lexer.chars, start);
+        end = try_k_indexed(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_INDEXED; }
-        let end = try_k_initially(&lexer.chars, start);
+        end = try_k_initially(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_INITIALLY; }
-        let end = try_k_inner(&lexer.chars, start);
+        end = try_k_inner(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_INNER; }
-        let end = try_k_insert(&lexer.chars, start);
+        end = try_k_insert(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_INSERT; }
-        let end = try_k_instead(&lexer.chars, start);
+        end = try_k_instead(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_INSTEAD; }
-        let end = try_k_intersect(&lexer.chars, start);
+        end = try_k_intersect(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_INTERSECT; }
-        let end = try_k_into(&lexer.chars, start);
+        end = try_k_into(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_INTO; }
-        let end = try_k_is(&lexer.chars, start);
+        end = try_k_is(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_IS; }
-        let end = try_k_isnull(&lexer.chars, start);
+        end = try_k_isnull(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ISNULL; }
-        let end = try_k_join(&lexer.chars, start);
+        end = try_k_join(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_JOIN; }
-        let end = try_k_key(&lexer.chars, start);
+        end = try_k_key(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_KEY; }
-        let end = try_k_left(&lexer.chars, start);
+        end = try_k_left(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_LEFT; }
-        let end = try_k_like(&lexer.chars, start);
+        end = try_k_like(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_LIKE; }
-        let end = try_k_limit(&lexer.chars, start);
+        end = try_k_limit(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_LIMIT; }
-        let end = try_k_match(&lexer.chars, start);
+        end = try_k_match(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_MATCH; }
-        let end = try_k_natural(&lexer.chars, start);
+        end = try_k_natural(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_NATURAL; }
-        let end = try_k_no(&lexer.chars, start);
+        end = try_k_no(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_NO; }
-        let end = try_k_not(&lexer.chars, start);
+        end = try_k_not(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_NOT; }
-        let end = try_k_notnull(&lexer.chars, start);
+        end = try_k_notnull(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_NOTNULL; }
-        let end = try_k_null(&lexer.chars, start);
+        end = try_k_null(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_NULL; }
-        let end = try_k_of(&lexer.chars, start);
+        end = try_k_of(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_OF; }
-        let end = try_k_offset(&lexer.chars, start);
+        end = try_k_offset(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_OFFSET; }
-        let end = try_k_on(&lexer.chars, start);
+        end = try_k_on(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ON; }
-        let end = try_k_or(&lexer.chars, start);
+        end = try_k_or(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_OR; }
-        let end = try_k_order(&lexer.chars, start);
+        end = try_k_order(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ORDER; }
-        let end = try_k_outer(&lexer.chars, start);
+        end = try_k_outer(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_OUTER; }
-        let end = try_k_plan(&lexer.chars, start);
+        end = try_k_plan(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_PLAN; }
-        let end = try_k_pragma(&lexer.chars, start);
+        end = try_k_pragma(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_PRAGMA; }
-        let end = try_k_primary(&lexer.chars, start);
+        end = try_k_primary(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_PRIMARY; }
-        let end = try_k_query(&lexer.chars, start);
+        end = try_k_query(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_QUERY; }
-        let end = try_k_raise(&lexer.chars, start);
+        end = try_k_raise(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_RAISE; }
-        let end = try_k_recursive(&lexer.chars, start);
+        end = try_k_recursive(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_RECURSIVE; }
-        let end = try_k_references(&lexer.chars, start);
+        end = try_k_references(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_REFERENCES; }
-        let end = try_k_regexp(&lexer.chars, start);
+        end = try_k_regexp(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_REGEXP; }
-        let end = try_k_reindex(&lexer.chars, start);
+        end = try_k_reindex(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_REINDEX; }
-        let end = try_k_release(&lexer.chars, start);
+        end = try_k_release(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_RELEASE; }
-        let end = try_k_rename(&lexer.chars, start);
+        end = try_k_rename(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_RENAME; }
-        let end = try_k_replace(&lexer.chars, start);
+        end = try_k_replace(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_REPLACE; }
-        let end = try_k_restrict(&lexer.chars, start);
+        end = try_k_restrict(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_RESTRICT; }
-        let end = try_k_right(&lexer.chars, start);
+        end = try_k_right(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_RIGHT; }
-        let end = try_k_rollback(&lexer.chars, start);
+        end = try_k_rollback(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ROLLBACK; }
-        let end = try_k_row(&lexer.chars, start);
+        end = try_k_row(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_ROW; }
-        let end = try_k_savepoint(&lexer.chars, start);
+        end = try_k_savepoint(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_SAVEPOINT; }
-        let end = try_k_select(&lexer.chars, start);
+        end = try_k_select(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_SELECT; }
-        let end = try_k_set(&lexer.chars, start);
+        end = try_k_set(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_SET; }
-        let end = try_k_table(&lexer.chars, start);
+        end = try_k_table(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_TABLE; }
-        let end = try_k_temp(&lexer.chars, start);
+        end = try_k_temp(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_TEMP; }
-        let end = try_k_temporary(&lexer.chars, start);
+        end = try_k_temporary(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_TEMPORARY; }
-        let end = try_k_then(&lexer.chars, start);
+        end = try_k_then(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_THEN; }
-        let end = try_k_to(&lexer.chars, start);
+        end = try_k_to(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_TO; }
-        let end = try_k_transaction(&lexer.chars, start);
+        end = try_k_transaction(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_TRANSACTION; }
-        let end = try_k_trigger(&lexer.chars, start);
+        end = try_k_trigger(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_TRIGGER; }
-        let end = try_k_union(&lexer.chars, start);
+        end = try_k_union(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_UNION; }
-        let end = try_k_unique(&lexer.chars, start);
+        end = try_k_unique(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_UNIQUE; }
-        let end = try_k_update(&lexer.chars, start);
+        end = try_k_update(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_UPDATE; }
-        let end = try_k_using(&lexer.chars, start);
+        end = try_k_using(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_USING; }
-        let end = try_k_vacuum(&lexer.chars, start);
+        end = try_k_vacuum(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_VACUUM; }
-        let end = try_k_values(&lexer.chars, start);
+        end = try_k_values(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_VALUES; }
-        let end = try_k_view(&lexer.chars, start);
+        end = try_k_view(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_VIEW; }
-        let end = try_k_virtual(&lexer.chars, start);
+        end = try_k_virtual(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_VIRTUAL; }
-        let end = try_k_when(&lexer.chars, start);
+        end = try_k_when(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_WHEN; }
-        let end = try_k_where(&lexer.chars, start);
+        end = try_k_where(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_WHERE; }
-        let end = try_k_with(&lexer.chars, start);
+        end = try_k_with(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_WITH; }
-        let end = try_k_without(&lexer.chars, start);
+        end = try_k_without(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_K_WITHOUT; }
-        let end = try_identifier(&lexer.chars, start);
+        end = try_identifier(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; }
-        let end = try_numeric_literal(&lexer.chars, start);
+        end = try_numeric_literal(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; }
-        let end = try_bind_parameter(&lexer.chars, start);
+        end = try_bind_parameter(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_BIND_PARAMETER; }
-        let end = try_string_literal(&lexer.chars, start);
+        end = try_string_literal(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; }
-        let end = try_blob_literal(&lexer.chars, start);
+        end = try_blob_literal(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_BLOB_LITERAL; }
-        let end = try_single_line_comment(&lexer.chars, start);
+        end = try_single_line_comment(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_SINGLE_LINE_COMMENT; }
-        let end = try_multiline_comment(&lexer.chars, start);
+        end = try_multiline_comment(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_MULTILINE_COMMENT; }
-        let end = try_spaces(&lexer.chars, start);
+        end = try_spaces(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_SPACES; }
-        let end = try_unexpected_char(&lexer.chars, start);
+        end = try_unexpected_char(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; }
         if best_end <= start {
             tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));
@@ -7490,7 +7491,7 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
     if kind == TK_NUMERIC_LITERAL || kind == TK_STRING_LITERAL || kind == TK_BLOB_LITERAL || kind == TK_K_NULL || kind == TK_K_CURRENT_TIME || kind == TK_K_CURRENT_DATE || kind == TK_K_CURRENT_TIMESTAMP || kind == TK_BIND_PARAMETER || kind == TK_IDENTIFIER || kind == TK_K_ABORT || kind == TK_K_ACTION || kind == TK_K_ADD || kind == TK_K_AFTER || kind == TK_K_ALL || kind == TK_K_ALTER || kind == TK_K_ANALYZE || kind == TK_K_AND || kind == TK_K_AS || kind == TK_K_ASC || kind == TK_K_ATTACH || kind == TK_K_AUTOINCREMENT || kind == TK_K_BEFORE || kind == TK_K_BEGIN || kind == TK_K_BETWEEN || kind == TK_K_BY || kind == TK_K_CASCADE || kind == TK_K_CASE || kind == TK_K_CAST || kind == TK_K_CHECK || kind == TK_K_COLLATE || kind == TK_K_COLUMN || kind == TK_K_COMMIT || kind == TK_K_CONFLICT || kind == TK_K_CONSTRAINT || kind == TK_K_CREATE || kind == TK_K_CROSS || kind == TK_K_DATABASE || kind == TK_K_DEFAULT || kind == TK_K_DEFERRABLE || kind == TK_K_DEFERRED || kind == TK_K_DELETE || kind == TK_K_DESC || kind == TK_K_DETACH || kind == TK_K_DISTINCT || kind == TK_K_DROP || kind == TK_K_EACH || kind == TK_K_ELSE || kind == TK_K_END || kind == TK_K_ESCAPE || kind == TK_K_EXCEPT || kind == TK_K_EXCLUSIVE || kind == TK_K_EXISTS || kind == TK_K_EXPLAIN || kind == TK_K_FAIL || kind == TK_K_FOR || kind == TK_K_FOREIGN || kind == TK_K_FROM || kind == TK_K_FULL || kind == TK_K_GLOB || kind == TK_K_GROUP || kind == TK_K_HAVING || kind == TK_K_IF || kind == TK_K_IGNORE || kind == TK_K_IMMEDIATE || kind == TK_K_IN || kind == TK_K_INDEX || kind == TK_K_INDEXED || kind == TK_K_INITIALLY || kind == TK_K_INNER || kind == TK_K_INSERT || kind == TK_K_INSTEAD || kind == TK_K_INTERSECT || kind == TK_K_INTO || kind == TK_K_IS || kind == TK_K_ISNULL || kind == TK_K_JOIN || kind == TK_K_KEY || kind == TK_K_LEFT || kind == TK_K_LIKE || kind == TK_K_LIMIT || kind == TK_K_MATCH || kind == TK_K_NATURAL || kind == TK_K_NO || kind == TK_K_NOT || kind == TK_K_NOTNULL || kind == TK_K_OF || kind == TK_K_OFFSET || kind == TK_K_ON || kind == TK_K_OR || kind == TK_K_ORDER || kind == TK_K_OUTER || kind == TK_K_PLAN || kind == TK_K_PRAGMA || kind == TK_K_PRIMARY || kind == TK_K_QUERY || kind == TK_K_RAISE || kind == TK_K_RECURSIVE || kind == TK_K_REFERENCES || kind == TK_K_REGEXP || kind == TK_K_REINDEX || kind == TK_K_RELEASE || kind == TK_K_RENAME || kind == TK_K_REPLACE || kind == TK_K_RESTRICT || kind == TK_K_RIGHT || kind == TK_K_ROLLBACK || kind == TK_K_ROW || kind == TK_K_SAVEPOINT || kind == TK_K_SELECT || kind == TK_K_SET || kind == TK_K_TABLE || kind == TK_K_TEMP || kind == TK_K_TEMPORARY || kind == TK_K_THEN || kind == TK_K_TO || kind == TK_K_TRANSACTION || kind == TK_K_TRIGGER || kind == TK_K_UNION || kind == TK_K_UNIQUE || kind == TK_K_UPDATE || kind == TK_K_USING || kind == TK_K_VACUUM || kind == TK_K_VALUES || kind == TK_K_VIEW || kind == TK_K_VIRTUAL || kind == TK_K_WHEN || kind == TK_K_WHERE || kind == TK_K_WITH || kind == TK_K_WITHOUT || kind == TK_LIT_LPAREN || kind == TK_LIT_MINUS || kind == TK_LIT_PLUS || kind == TK_LIT_TILDE {
         let expr = parse_expr(p)?;
         let lit___ = p.expect(TK_LIT_PIPEPIPE, "'||'")?;
-        let expr = parse_expr(p)?;
+        let expr_2 = parse_expr(p)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt4(ExprAlt4 {
             span: Span::new(start, p.last_end()),
             expr,
@@ -7508,7 +7509,7 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
         } else if grp_kind == TK_LIT__ {
             p.expect(TK_LIT__, "'%'")?;
         }
-        let expr = parse_expr(p)?;
+        let expr_2 = parse_expr(p)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt5(ExprAlt5 {
             span: Span::new(start, p.last_end()),
             expr,
@@ -7523,7 +7524,7 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
         } else if grp_kind == TK_LIT_MINUS {
             p.expect(TK_LIT_MINUS, "'-'")?;
         }
-        let expr = parse_expr(p)?;
+        let expr_2 = parse_expr(p)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt6(ExprAlt6 {
             span: Span::new(start, p.last_end()),
             expr,
@@ -7542,7 +7543,7 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
         } else if grp_kind == TK_LIT_PIPE {
             p.expect(TK_LIT_PIPE, "'|'")?;
         }
-        let expr = parse_expr(p)?;
+        let expr_2 = parse_expr(p)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt7(ExprAlt7 {
             span: Span::new(start, p.last_end()),
             expr,
@@ -7561,7 +7562,7 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
         } else if grp_kind == TK_LIT_GTEQ {
             p.expect(TK_LIT_GTEQ, "'>='")?;
         }
-        let expr = parse_expr(p)?;
+        let expr_2 = parse_expr(p)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt8(ExprAlt8 {
             span: Span::new(start, p.last_end()),
             expr,
@@ -7580,7 +7581,7 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
         } else if grp_kind == TK_LIT_LTGT {
             p.expect(TK_LIT_LTGT, "'<>'")?;
         }
-        let expr = parse_expr(p)?;
+        let expr_2 = parse_expr(p)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt9(ExprAlt9 {
             span: Span::new(start, p.last_end()),
             expr,
@@ -7627,7 +7628,7 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
     if kind == TK_NUMERIC_LITERAL || kind == TK_STRING_LITERAL || kind == TK_BLOB_LITERAL || kind == TK_K_NULL || kind == TK_K_CURRENT_TIME || kind == TK_K_CURRENT_DATE || kind == TK_K_CURRENT_TIMESTAMP || kind == TK_BIND_PARAMETER || kind == TK_IDENTIFIER || kind == TK_K_ABORT || kind == TK_K_ACTION || kind == TK_K_ADD || kind == TK_K_AFTER || kind == TK_K_ALL || kind == TK_K_ALTER || kind == TK_K_ANALYZE || kind == TK_K_AND || kind == TK_K_AS || kind == TK_K_ASC || kind == TK_K_ATTACH || kind == TK_K_AUTOINCREMENT || kind == TK_K_BEFORE || kind == TK_K_BEGIN || kind == TK_K_BETWEEN || kind == TK_K_BY || kind == TK_K_CASCADE || kind == TK_K_CASE || kind == TK_K_CAST || kind == TK_K_CHECK || kind == TK_K_COLLATE || kind == TK_K_COLUMN || kind == TK_K_COMMIT || kind == TK_K_CONFLICT || kind == TK_K_CONSTRAINT || kind == TK_K_CREATE || kind == TK_K_CROSS || kind == TK_K_DATABASE || kind == TK_K_DEFAULT || kind == TK_K_DEFERRABLE || kind == TK_K_DEFERRED || kind == TK_K_DELETE || kind == TK_K_DESC || kind == TK_K_DETACH || kind == TK_K_DISTINCT || kind == TK_K_DROP || kind == TK_K_EACH || kind == TK_K_ELSE || kind == TK_K_END || kind == TK_K_ESCAPE || kind == TK_K_EXCEPT || kind == TK_K_EXCLUSIVE || kind == TK_K_EXISTS || kind == TK_K_EXPLAIN || kind == TK_K_FAIL || kind == TK_K_FOR || kind == TK_K_FOREIGN || kind == TK_K_FROM || kind == TK_K_FULL || kind == TK_K_GLOB || kind == TK_K_GROUP || kind == TK_K_HAVING || kind == TK_K_IF || kind == TK_K_IGNORE || kind == TK_K_IMMEDIATE || kind == TK_K_IN || kind == TK_K_INDEX || kind == TK_K_INDEXED || kind == TK_K_INITIALLY || kind == TK_K_INNER || kind == TK_K_INSERT || kind == TK_K_INSTEAD || kind == TK_K_INTERSECT || kind == TK_K_INTO || kind == TK_K_IS || kind == TK_K_ISNULL || kind == TK_K_JOIN || kind == TK_K_KEY || kind == TK_K_LEFT || kind == TK_K_LIKE || kind == TK_K_LIMIT || kind == TK_K_MATCH || kind == TK_K_NATURAL || kind == TK_K_NO || kind == TK_K_NOT || kind == TK_K_NOTNULL || kind == TK_K_OF || kind == TK_K_OFFSET || kind == TK_K_ON || kind == TK_K_OR || kind == TK_K_ORDER || kind == TK_K_OUTER || kind == TK_K_PLAN || kind == TK_K_PRAGMA || kind == TK_K_PRIMARY || kind == TK_K_QUERY || kind == TK_K_RAISE || kind == TK_K_RECURSIVE || kind == TK_K_REFERENCES || kind == TK_K_REGEXP || kind == TK_K_REINDEX || kind == TK_K_RELEASE || kind == TK_K_RENAME || kind == TK_K_REPLACE || kind == TK_K_RESTRICT || kind == TK_K_RIGHT || kind == TK_K_ROLLBACK || kind == TK_K_ROW || kind == TK_K_SAVEPOINT || kind == TK_K_SELECT || kind == TK_K_SET || kind == TK_K_TABLE || kind == TK_K_TEMP || kind == TK_K_TEMPORARY || kind == TK_K_THEN || kind == TK_K_TO || kind == TK_K_TRANSACTION || kind == TK_K_TRIGGER || kind == TK_K_UNION || kind == TK_K_UNIQUE || kind == TK_K_UPDATE || kind == TK_K_USING || kind == TK_K_VACUUM || kind == TK_K_VALUES || kind == TK_K_VIEW || kind == TK_K_VIRTUAL || kind == TK_K_WHEN || kind == TK_K_WHERE || kind == TK_K_WITH || kind == TK_K_WITHOUT || kind == TK_LIT_LPAREN || kind == TK_LIT_MINUS || kind == TK_LIT_PLUS || kind == TK_LIT_TILDE {
         let expr = parse_expr(p)?;
         let k_and = p.expect(TK_K_AND, "K_AND")?;
-        let expr = parse_expr(p)?;
+        let expr_2 = parse_expr(p)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt11(ExprAlt11 {
             span: Span::new(start, p.last_end()),
             expr,
@@ -7638,7 +7639,7 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
     if kind == TK_NUMERIC_LITERAL || kind == TK_STRING_LITERAL || kind == TK_BLOB_LITERAL || kind == TK_K_NULL || kind == TK_K_CURRENT_TIME || kind == TK_K_CURRENT_DATE || kind == TK_K_CURRENT_TIMESTAMP || kind == TK_BIND_PARAMETER || kind == TK_IDENTIFIER || kind == TK_K_ABORT || kind == TK_K_ACTION || kind == TK_K_ADD || kind == TK_K_AFTER || kind == TK_K_ALL || kind == TK_K_ALTER || kind == TK_K_ANALYZE || kind == TK_K_AND || kind == TK_K_AS || kind == TK_K_ASC || kind == TK_K_ATTACH || kind == TK_K_AUTOINCREMENT || kind == TK_K_BEFORE || kind == TK_K_BEGIN || kind == TK_K_BETWEEN || kind == TK_K_BY || kind == TK_K_CASCADE || kind == TK_K_CASE || kind == TK_K_CAST || kind == TK_K_CHECK || kind == TK_K_COLLATE || kind == TK_K_COLUMN || kind == TK_K_COMMIT || kind == TK_K_CONFLICT || kind == TK_K_CONSTRAINT || kind == TK_K_CREATE || kind == TK_K_CROSS || kind == TK_K_DATABASE || kind == TK_K_DEFAULT || kind == TK_K_DEFERRABLE || kind == TK_K_DEFERRED || kind == TK_K_DELETE || kind == TK_K_DESC || kind == TK_K_DETACH || kind == TK_K_DISTINCT || kind == TK_K_DROP || kind == TK_K_EACH || kind == TK_K_ELSE || kind == TK_K_END || kind == TK_K_ESCAPE || kind == TK_K_EXCEPT || kind == TK_K_EXCLUSIVE || kind == TK_K_EXISTS || kind == TK_K_EXPLAIN || kind == TK_K_FAIL || kind == TK_K_FOR || kind == TK_K_FOREIGN || kind == TK_K_FROM || kind == TK_K_FULL || kind == TK_K_GLOB || kind == TK_K_GROUP || kind == TK_K_HAVING || kind == TK_K_IF || kind == TK_K_IGNORE || kind == TK_K_IMMEDIATE || kind == TK_K_IN || kind == TK_K_INDEX || kind == TK_K_INDEXED || kind == TK_K_INITIALLY || kind == TK_K_INNER || kind == TK_K_INSERT || kind == TK_K_INSTEAD || kind == TK_K_INTERSECT || kind == TK_K_INTO || kind == TK_K_IS || kind == TK_K_ISNULL || kind == TK_K_JOIN || kind == TK_K_KEY || kind == TK_K_LEFT || kind == TK_K_LIKE || kind == TK_K_LIMIT || kind == TK_K_MATCH || kind == TK_K_NATURAL || kind == TK_K_NO || kind == TK_K_NOT || kind == TK_K_NOTNULL || kind == TK_K_OF || kind == TK_K_OFFSET || kind == TK_K_ON || kind == TK_K_OR || kind == TK_K_ORDER || kind == TK_K_OUTER || kind == TK_K_PLAN || kind == TK_K_PRAGMA || kind == TK_K_PRIMARY || kind == TK_K_QUERY || kind == TK_K_RAISE || kind == TK_K_RECURSIVE || kind == TK_K_REFERENCES || kind == TK_K_REGEXP || kind == TK_K_REINDEX || kind == TK_K_RELEASE || kind == TK_K_RENAME || kind == TK_K_REPLACE || kind == TK_K_RESTRICT || kind == TK_K_RIGHT || kind == TK_K_ROLLBACK || kind == TK_K_ROW || kind == TK_K_SAVEPOINT || kind == TK_K_SELECT || kind == TK_K_SET || kind == TK_K_TABLE || kind == TK_K_TEMP || kind == TK_K_TEMPORARY || kind == TK_K_THEN || kind == TK_K_TO || kind == TK_K_TRANSACTION || kind == TK_K_TRIGGER || kind == TK_K_UNION || kind == TK_K_UNIQUE || kind == TK_K_UPDATE || kind == TK_K_USING || kind == TK_K_VACUUM || kind == TK_K_VALUES || kind == TK_K_VIEW || kind == TK_K_VIRTUAL || kind == TK_K_WHEN || kind == TK_K_WHERE || kind == TK_K_WITH || kind == TK_K_WITHOUT || kind == TK_LIT_LPAREN || kind == TK_LIT_MINUS || kind == TK_LIT_PLUS || kind == TK_LIT_TILDE {
         let expr = parse_expr(p)?;
         let k_or = p.expect(TK_K_OR, "K_OR")?;
-        let expr = parse_expr(p)?;
+        let expr_2 = parse_expr(p)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt12(ExprAlt12 {
             span: Span::new(start, p.last_end()),
             expr,
@@ -7728,7 +7729,7 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
         } else if grp_kind == TK_K_MATCH {
             p.expect(TK_K_MATCH, "K_MATCH")?;
         }
-        let expr = parse_expr(p)?;
+        let expr_2 = parse_expr(p)?;
         if p.peek_kind() == TK_K_ESCAPE {
             p.expect(TK_K_ESCAPE, "K_ESCAPE")?;
             parse_expr(p)?;
@@ -7763,7 +7764,7 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
             let k_not = p.expect(TK_K_NOT, "K_NOT")?;
             Option::<Token>::Some(k_not)
         } else { null };
-        let expr = parse_expr(p)?;
+        let expr_2 = parse_expr(p)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt19(ExprAlt19 {
             span: Span::new(start, p.last_end()),
             expr,
@@ -7779,9 +7780,9 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
             Option::<Token>::Some(k_not)
         } else { null };
         let k_between = p.expect(TK_K_BETWEEN, "K_BETWEEN")?;
-        let expr = parse_expr(p)?;
+        let expr_2 = parse_expr(p)?;
         let k_and = p.expect(TK_K_AND, "K_AND")?;
-        let expr = parse_expr(p)?;
+        let expr_3 = parse_expr(p)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt20(ExprAlt20 {
             span: Span::new(start, p.last_end()),
             expr,

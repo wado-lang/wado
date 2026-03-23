@@ -1,0 +1,49 @@
+use json from "./golden/json.wado";
+
+test "tokenize number" {
+    let tokens = json::tokenize(&"42");
+    assert tokens.len() >= 1, `expected at least 1 token, got {tokens.len()}`;
+}
+
+test "parse number" {
+    let result = json::parse(&"42");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse string" {
+    let result = json::parse(&"\"hello\"");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+// Empty object "{}" fails because the JSON grammar has ambiguous
+// alternatives for obj (both start with '{'), and the LL(1) parser
+// always takes the first branch. This is a known limitation.
+test "parse empty object is not supported yet" {
+    let result = json::parse(&"{}");
+    assert result matches { Err(_) };
+}
+
+test "parse object" {
+    let result = json::parse(&"{\"key\": \"value\"}");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse array" {
+    let result = json::parse(&"[1, 2, 3]");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse nested" {
+    let result = json::parse(&"{\"a\": [1, true, null]}");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}

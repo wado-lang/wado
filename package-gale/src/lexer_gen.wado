@@ -411,16 +411,18 @@ fn gen_tokenize_fn(
     out.append("        let mut best_end: i32 = -1;\n");
     out.append("        let mut best_kind: i32 = TK_ERROR;\n");
 
+    out.append("        let mut end: i32 = -1;\n");
+
     for let lit of lit_tokens {
         let fn_name = lit_try_fn_name(&lit.const_name);
-        out.append(`        let end = {fn_name}(&lexer.chars, start);\n`);
+        out.append(`        end = {fn_name}(&lexer.chars, start);\n`);
         out.append(`        if end > best_end \{ best_end = end; best_kind = {lit.const_name}; \}\n`);
     }
 
     for let rule of lexer_rules {
         if !rule.is_fragment {
             let fn_name = `try_{to_lower(&rule.name)}`;
-            out.append(`        let end = {fn_name}(&lexer.chars, start);\n`);
+            out.append(`        end = {fn_name}(&lexer.chars, start);\n`);
             out.append(`        if end > best_end \{ best_end = end; best_kind = TK_{rule.name}; \}\n`);
         }
     }
