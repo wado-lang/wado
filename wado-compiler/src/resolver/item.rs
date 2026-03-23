@@ -561,8 +561,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // First, collect type params from impl block's generic type (e.g., impl Box<T>)
         // Also build impl_type_params for the TirFunction
+        // For ref-type impls (e.g., impl Trait for &Container<T>), unwrap the reference first.
         let mut impl_type_params = Vec::new();
-        if let ast::Type::Generic(generic) = impl_type {
+        let impl_type_inner = match impl_type {
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
+            other => other,
+        };
+        if let ast::Type::Generic(generic) = impl_type_inner {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg {
                     let name = &named.name;

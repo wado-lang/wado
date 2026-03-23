@@ -925,7 +925,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Generate: *expr.index(index_expr)
                 // First, create the method call to .index(index_expr)
                 let receiver =
-                    self.adjust_receiver_for_self_kind(expr, trait_info.self_kind, index.span);
+                    self.adjust_receiver_for_self_kind(expr, trait_info.self_kind, false, index.span);
 
                 let mangled_method_name =
                     MethodName::format_local(&lookup_name, Some(&trait_info.trait_name), "index");
@@ -977,7 +977,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if let Some(trait_info) = index_value_info {
                 // Generate: expr.index_value(index_expr)
                 let receiver =
-                    self.adjust_receiver_for_self_kind(expr, trait_info.self_kind, index.span);
+                    self.adjust_receiver_for_self_kind(expr, trait_info.self_kind, false, index.span);
 
                 let mangled_method_name = MethodName::format_local(
                     &lookup_name,

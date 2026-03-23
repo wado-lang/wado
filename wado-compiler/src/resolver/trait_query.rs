@@ -437,6 +437,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         param_is_mut,
                         inherited_from_base: None,
                         cm_name: None,
+                        is_ref_impl: false,
                     },
                 ));
             }

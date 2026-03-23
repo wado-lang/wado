@@ -479,7 +479,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         actual_idx += 1;
                     }
 
-                    if let ast::Type::Generic(generic) = &impl_block.ty {
+                    // Unwrap reference for ref-type impls (impl Trait for &Container<T>)
+                    let impl_inner_ty = match &impl_block.ty {
+                        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+                            inner.as_ref()
+                        }
+                        other => other,
+                    };
+                    if let ast::Type::Generic(generic) = impl_inner_ty {
                         for (i, arg) in generic.args.iter().enumerate() {
                             if let ast::Type::Named(named) = arg {
                                 let name = &named.name;

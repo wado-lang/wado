@@ -407,6 +407,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         param_is_mut: vec![],
                         inherited_from_base: None,
                         cm_name: None,
+                        is_ref_impl: false,
                     });
                 }
                 // For non-len methods, use "Tuple" as struct name to search trait impls
@@ -431,6 +432,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     param_is_mut,
                     inherited_from_base: None,
                     cm_name: None,
+                    is_ref_impl: false,
                 });
             }
             // If find_local_method_info returned None, the method either doesn't exist
@@ -563,6 +565,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         param_is_mut,
                                         inherited_from_base: None,
                                         cm_name: None,
+                                        is_ref_impl: false,
                                     });
                                 }
                             }
@@ -652,6 +655,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         param_is_mut,
                                         inherited_from_base: None,
                                         cm_name: None,
+                                        is_ref_impl: false,
                                     });
                                 }
                             }
@@ -780,6 +784,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 param_is_mut,
                 inherited_from_base: None,
                 cm_name,
+                is_ref_impl: false,
             });
         }
         None
@@ -1252,13 +1257,50 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
     }
-    /// Adjust the receiver expression to match what the method's self parameter expects
+    /// Adjust the receiver expression to match what the method's self parameter expects.
+    ///
+    /// When `is_ref_impl` is true, the method was found on a reference type impl
+    /// (e.g., `impl Trait for &T`). In this case, Self is `&T`, so `&self` means `&&T`.
+    /// The receiver (which is `&T`) needs an additional `&` wrapping.
     pub(super) fn adjust_receiver_for_self_kind(
         &mut self,
         receiver: TirExpr,
         self_kind: ast::SelfKind,
+        is_ref_impl: bool,
         span: Span,
     ) -> TirExpr {
+        if is_ref_impl {
+            // For ref-type impls, Self is &T (or &mut T).
+            // &self means &&T, &mut self means &mut &T.
+            // The receiver is already &T, so we need to add an extra reference layer.
+            return match self_kind {
+                ast::SelfKind::Ref => {
+                    let ref_type = self.type_table.borrow_mut().make_ref(receiver.type_id);
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(receiver),
+                        },
+                        ref_type,
+                        span,
+                    )
+                }
+                ast::SelfKind::MutRef => {
+                    let mut_ref_type =
+                        self.type_table.borrow_mut().make_mut_ref(receiver.type_id);
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::MutRef,
+                            expr: Box::new(receiver),
+                        },
+                        mut_ref_type,
+                        span,
+                    )
+                }
+                ast::SelfKind::None => self.deref_to_value(receiver, span),
+            };
+        }
+
         let receiver_type = self.type_table.borrow().get(receiver.type_id).clone();
 
         match self_kind {
@@ -1459,6 +1501,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if let Type::Named(inner) = boxed.as_ref() {
                         // impl<T: Bound> Trait for &T / &mut T: T is at position 0
                         vec![(inner.name.clone(), 0u32)]
+                    } else if let Type::Generic(generic) = boxed.as_ref() {
+                        // impl<T> Trait for &Container<T>: extract type params from generic args
+                        generic
+                            .args
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(i, arg)| {
+                                if let Type::Named(named) = arg {
+                                    Some((named.name.clone(), i as u32))
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect()
                     } else {
                         Vec::new()
                     }
@@ -1561,6 +1617,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 None
             };
 
+            // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type
+            // is a type parameter. These should NOT override base-type methods.
+            let is_blanket_ref_impl = {
+                let impl_block = self.get_impl_block(impl_ref);
+                match &impl_block.ty {
+                    Type::Reference(inner) | Type::MutReference(inner) => {
+                        if let Type::Named(named) = inner.as_ref() {
+                            // Inner is a bare name — check if it's a type parameter
+                            impl_block.type_params.iter().any(|tp| tp.name == named.name)
+                        } else {
+                            false
+                        }
+                    }
+                    _ => false,
+                }
+            };
+
             // Extract method info from impl block before calling &mut self methods
             let impl_block = self.get_impl_block(impl_ref);
             let method_data: Option<(
@@ -1637,10 +1710,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         param_is_mut,
                         inherited_from_base: None,
                         cm_name: None,
+                        is_ref_impl: false,
                     },
                     impl_module_source: impl_module_source.clone(),
                     blanket_type_param: blanket_type_param.clone(),
                     impl_struct_name: impl_struct_name.clone(),
+                    is_blanket_ref_impl,
                 });
                 method_found = true;
             }
@@ -1678,10 +1753,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     param_is_mut,
                                     inherited_from_base: None,
                                     cm_name: None,
+                                    is_ref_impl: false,
                                 },
                                 impl_module_source: impl_module_source.clone(),
                                 blanket_type_param: blanket_type_param.clone(),
                                 impl_struct_name: impl_struct_name.clone(),
+                                is_blanket_ref_impl,
                             });
                         }
                     }
@@ -2607,6 +2684,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             param_is_mut: method_param_is_mut,
             inherited_from_base: _,
             cm_name: _,
+            is_ref_impl: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self
@@ -2619,6 +2697,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let receiver_for_index_mut = self.adjust_receiver_for_self_kind(
             container_expr,
             index_mut_info.self_kind,
+            false,
             index_expr.span,
         );
 
@@ -2673,7 +2752,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Step 4: Create the method call on the result of index_mut
         // The receiver for the method is index_mut_call (which has type &mut Output)
         let receiver_for_method =
-            self.adjust_receiver_for_self_kind(index_mut_call, self_kind, method_call.span);
+            self.adjust_receiver_for_self_kind(index_mut_call, self_kind, false, method_call.span);
 
         let mangled_method_name = MethodName::format_local(
             &output_struct_name,

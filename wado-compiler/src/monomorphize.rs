@@ -1753,6 +1753,19 @@ impl Monomorphizer {
                                         ),
                                         Some(tn.clone()),
                                     ));
+                                    // For ref-type impls, also try "&^Trait::method"
+                                    if let Some(ref info) = method_func.method_info
+                                        && info.struct_name != base_struct
+                                    {
+                                        dg_names.push((
+                                            MethodName::format_local(
+                                                &info.struct_name,
+                                                Some(tn),
+                                                &method_name,
+                                            ),
+                                            Some(tn.clone()),
+                                        ));
+                                    }
                                 }
 
                                 for (generic_method_name, tn) in &dg_names {
@@ -1814,6 +1827,15 @@ impl Monomorphizer {
                             Some(trait_name),
                             &method_name,
                         ));
+                        // For ref-type impls (e.g., impl Trait for &Array<T>),
+                        // the template function is registered under "&^Trait::method"
+                        if info.struct_name != base_struct {
+                            names_to_try.push(MethodName::format_local(
+                                &info.struct_name,
+                                Some(trait_name),
+                                &method_name,
+                            ));
+                        }
                     }
 
                     for generic_method_name in &names_to_try {
@@ -1876,6 +1898,15 @@ impl Monomorphizer {
                             Some(trait_name),
                             &method_name,
                         ));
+                        // For ref-type impls (e.g., impl Trait for &Array<T>),
+                        // the template function is registered under "&^Trait::method"
+                        if info.struct_name != *base_struct {
+                            names_to_try.push(MethodName::format_local(
+                                &info.struct_name,
+                                Some(trait_name),
+                                &method_name,
+                            ));
+                        }
                     }
 
                     for generic_method_name in names_to_try {

@@ -91,11 +91,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ),
         };
 
-        // Look up method info based on receiver type
-        // First try inherent method, then trait methods
-        let mut method_info = self.lookup_method_info(receiver.type_id, &method_call.method);
-        let mut trait_name: Option<String> = None;
-
         // Extract receiver type args for generic types (used for resolving associated types)
         let receiver_type_args_for_trait: Option<Vec<TypeId>> =
             match self.type_table.borrow().get(base_type_id).clone() {
@@ -107,13 +102,62 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 _ => None,
             };
 
-        // If inherent method not found, try trait methods
-        // Track the module source where the trait impl was found
+        let mut method_info: Option<MethodInfo> = None;
+        let mut trait_name: Option<String> = None;
         let mut trait_impl_module_source: Option<ModuleSource> = None;
         let mut blanket_type_param: Option<String> = None;
-        // When a trait method is found through the newtype chain (e.g., "Point" via "Location"),
-        // this holds the actual struct name where the impl was found (e.g., "Point").
         let mut trait_impl_struct_name: Option<String> = None;
+
+        // TODO: When the monomorphizer properly handles ref-type impls (impl Trait for &Container<T>),
+        // enable this block to prioritize ref-type trait impls over base type impls.
+        // Currently disabled because the monomorphizer rewrites function names incorrectly
+        // for ref-type impls, causing Wasm validation errors.
+        // See: impl IntoIterator for &Array<T> in lib/core/prelude/array.wado
+        #[cfg(any())]
+        {
+            let is_ref = matches!(
+                self.type_table.borrow().get(receiver.type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            );
+            if is_ref {
+                let ref_struct_name = if matches!(
+                    self.type_table.borrow().get(receiver.type_id),
+                    ResolvedType::Ref(_)
+                ) {
+                    "&"
+                } else {
+                    "&mut"
+                };
+                let result = self.find_trait_method_for_type(
+                    ref_struct_name,
+                    &method_call.method,
+                    &struct_module,
+                    receiver_type_args_for_trait.as_deref(),
+                    Some(base_type_id),
+                );
+                // Only use ref-type impls that target a concrete container type
+                // (e.g., impl IntoIterator for &Array<T>), NOT blanket ref impls
+                // (e.g., impl Inspect for &T where the inner type is just a type param).
+                if let Some(trait_match) = result {
+                    if !trait_match.is_blanket_ref_impl {
+                        trait_impl_struct_name = Some(trait_match.impl_struct_name);
+                        trait_name = Some(trait_match.trait_name);
+                        let mut info = trait_match.method_info;
+                        info.is_ref_impl = true;
+                        method_info = Some(info);
+                        trait_impl_module_source = Some(trait_match.impl_module_source);
+                        blanket_type_param = trait_match.blanket_type_param;
+                    }
+                }
+            }
+        }
+
+        // Look up method info based on receiver type (inherent + base type trait methods)
+        if method_info.is_none() {
+            method_info = self.lookup_method_info(receiver.type_id, &method_call.method);
+        }
+
+        // Fall back to base type trait methods
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
                 &struct_name,
@@ -123,8 +167,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Some(base_type_id),
             )
         {
-            // Record the actual struct name that has the trait impl if it differs
-            // from the receiver's struct name (indicates inheritance through newtype chain).
             if trait_match.impl_struct_name != struct_name {
                 trait_impl_struct_name = Some(trait_match.impl_struct_name);
             }
@@ -195,6 +237,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             param_is_mut: _,
             inherited_from_base,
             cm_name,
+            is_ref_impl: _is_ref_impl,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -215,6 +258,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 param_is_mut: vec![],
                 inherited_from_base: None,
                 cm_name: None,
+                is_ref_impl: false,
             }
         };
 
@@ -306,7 +350,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Adjust receiver based on what the method expects (self_kind)
-        receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, method_call.span);
+        receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, _is_ref_impl, method_call.span);
 
         // Build unified substitution context for double generics
         // Type param indices are assigned as follows:
