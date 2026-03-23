@@ -1,0 +1,27 @@
+use sexpression from "./golden/sexpression.wado";
+
+test "tokenize simple atom" {
+    let tokens = sexpression::tokenize(&"hello");
+    assert tokens.len() >= 1, `expected at least 1 token, got {tokens.len()}`;
+}
+
+test "parse single atom" {
+    let result = sexpression::parse(&"hello");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse nested list" {
+    let result = sexpression::parse(&"(a b c)");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse nested sexpression" {
+    let result = sexpression::parse(&"(define (square x) (* x x))");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}

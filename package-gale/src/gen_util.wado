@@ -1,0 +1,236 @@
+pub fn to_pascal_case(name: &String) -> String {
+    let mut result = String::with_capacity(name.len());
+    let mut capitalize_next = true;
+    for let c of name.chars() {
+        if c == '_' {
+            capitalize_next = true;
+        } else if capitalize_next {
+            result.append_char(to_upper_char(c));
+            capitalize_next = false;
+        } else {
+            result.append_char(c);
+        }
+    }
+    return result;
+}
+
+pub fn to_snake_case(name: &String) -> String {
+    let mut result = String::with_capacity(name.len() + 4);
+    let mut prev_lower = false;
+    for let c of name.chars() {
+        if c >= 'A' && c <= 'Z' {
+            if prev_lower {
+                result.append_char('_');
+            }
+            result.append_char(to_lower_char(c));
+            prev_lower = false;
+        } else {
+            result.append_char(c);
+            prev_lower = c >= 'a' && c <= 'z';
+        }
+    }
+    return result;
+}
+
+pub fn to_lower(name: &String) -> String {
+    let mut result = String::with_capacity(name.len());
+    for let c of name.chars() {
+        result.append_char(to_lower_char(c));
+    }
+    return result;
+}
+
+pub fn to_upper(name: &String) -> String {
+    let mut result = String::with_capacity(name.len());
+    for let c of name.chars() {
+        result.append_char(to_upper_char(c));
+    }
+    return result;
+}
+
+pub fn to_upper_char(c: char) -> char {
+    if c >= 'a' && c <= 'z' {
+        return char::from_i32(c as i32 - 'a' as i32 + 'A' as i32).unwrap();
+    }
+    return c;
+}
+
+pub fn to_lower_char(c: char) -> char {
+    if c >= 'A' && c <= 'Z' {
+        return char::from_i32(c as i32 - 'A' as i32 + 'a' as i32).unwrap();
+    }
+    return c;
+}
+
+pub fn escape_char(c: char) -> String {
+    if c == '\'' { return "'\\''"; }
+    if c == '\\' { return "'\\\\'"; }
+    if c == '\n' { return "'\\n'"; }
+    if c == '\r' { return "'\\r'"; }
+    if c == '\t' { return "'\\t'"; }
+    let code = c as i32;
+    if code >= 32 && code < 127 {
+        let mut s = String::with_capacity(3);
+        s.append_char('\'');
+        s.append_char(c);
+        s.append_char('\'');
+        return s;
+    }
+    let mut s = String::with_capacity(12);
+    s.append("'\\u{");
+    s.append(hex_string(code));
+    s.append("}'");
+    return s;
+}
+
+pub fn escape_string(s: &String) -> String {
+    let mut result = String::with_capacity(s.len() + 2);
+    result.append_char('"');
+    for let c of s.chars() {
+        if c == '"' { result.append("\\\""); }
+        else if c == '\\' { result.append("\\\\"); }
+        else if c == '\n' { result.append("\\n"); }
+        else if c == '\r' { result.append("\\r"); }
+        else if c == '\t' { result.append("\\t"); }
+        else {
+            let code = c as i32;
+            if code >= 32 && code < 127 {
+                result.append_char(c);
+            } else {
+                result.append("\\u{");
+                result.append(hex_string(code));
+                result.append("}");
+            }
+        }
+    }
+    result.append_char('"');
+    return result;
+}
+
+fn hex_string(n: i32) -> String {
+    if n == 0 { return "0"; }
+    let mut digits: Array<char> = [];
+    let mut value = n;
+    while value > 0 {
+        let digit = value % 16;
+        if digit < 10 {
+            digits.append(char::from_i32('0' as i32 + digit).unwrap());
+        } else {
+            digits.append(char::from_i32('a' as i32 + digit - 10).unwrap());
+        }
+        value = value / 16;
+    }
+    let mut result = String::with_capacity(digits.len());
+    for let mut i = digits.len() - 1; i >= 0; i -= 1 {
+        result.append_char(digits[i]);
+    }
+    return result;
+}
+
+pub fn rule_type_name(name: &String) -> String {
+    let mut result = to_pascal_case(name);
+    result.append("Node");
+    return result;
+}
+
+pub fn literal_field_name(text: &String) -> String {
+    if *text == "+" { return "plus"; }
+    if *text == "-" { return "minus"; }
+    if *text == "*" { return "star"; }
+    if *text == "/" { return "slash"; }
+    if *text == "%" { return "percent"; }
+    if *text == "=" { return "eq"; }
+    if *text == "!" { return "bang"; }
+    if *text == "<" { return "lt"; }
+    if *text == ">" { return "gt"; }
+    if *text == "&" { return "amp"; }
+    if *text == "|" { return "pipe"; }
+    if *text == "^" { return "caret"; }
+    if *text == "~" { return "tilde"; }
+    if *text == "." { return "dot"; }
+    if *text == "," { return "comma"; }
+    if *text == ":" { return "colon"; }
+    if *text == ";" { return "semicolon"; }
+    if *text == "(" { return "lparen"; }
+    if *text == ")" { return "rparen"; }
+    if *text == "{" { return "lbrace"; }
+    if *text == "}" { return "rbrace"; }
+    if *text == "[" { return "lbracket"; }
+    if *text == "]" { return "rbracket"; }
+    let mut result = String::with_capacity(text.len() + 4);
+    result.append("lit_");
+    for let c of text.chars() {
+        if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
+            result.append_char(to_lower_char(c));
+        } else {
+            result.append_char('_');
+        }
+    }
+    return result;
+}
+
+pub fn strip_suffix(s: &String, suffix: &String) -> String {
+    let s_chars: Array<char> = s.chars().collect();
+    let suffix_chars: Array<char> = suffix.chars().collect();
+    let s_len = s_chars.len();
+    let suf_len = suffix_chars.len();
+    if s_len < suf_len {
+        return *s;
+    }
+    for let mut i = 0; i < suf_len; i += 1 {
+        if s_chars[s_len - suf_len + i] != suffix_chars[i] {
+            return *s;
+        }
+    }
+    let mut result = String::with_capacity(s.len());
+    for let mut i = 0; i < s_len - suf_len; i += 1 {
+        result.append_char(s_chars[i]);
+    }
+    return result;
+}
+
+pub fn array_contains_str(arr: &Array<String>, value: &String) -> bool {
+    for let item of arr {
+        if item == *value {
+            return true;
+        }
+    }
+    return false;
+}
+
+pub fn literal_const_name(text: &String) -> String {
+    let mut result = String::with_capacity(text.len() + 8);
+    result.append("TK_LIT_");
+    for let c of text.chars() {
+        if c >= 'a' && c <= 'z' {
+            result.append_char(to_upper_char(c));
+        } else if c >= 'A' && c <= 'Z' {
+            result.append_char(c);
+        } else if c >= '0' && c <= '9' {
+            result.append_char(c);
+        } else if c == '{' { result.append("LBRACE"); }
+        else if c == '}' { result.append("RBRACE"); }
+        else if c == '[' { result.append("LBRACKET"); }
+        else if c == ']' { result.append("RBRACKET"); }
+        else if c == '(' { result.append("LPAREN"); }
+        else if c == ')' { result.append("RPAREN"); }
+        else if c == ':' { result.append("COLON"); }
+        else if c == ',' { result.append("COMMA"); }
+        else if c == '.' { result.append("DOT"); }
+        else if c == ';' { result.append("SEMI"); }
+        else if c == '+' { result.append("PLUS"); }
+        else if c == '-' { result.append("MINUS"); }
+        else if c == '*' { result.append("STAR"); }
+        else if c == '/' { result.append("SLASH"); }
+        else if c == '=' { result.append("EQ"); }
+        else if c == '<' { result.append("LT"); }
+        else if c == '>' { result.append("GT"); }
+        else if c == '!' { result.append("BANG"); }
+        else if c == '&' { result.append("AMP"); }
+        else if c == '|' { result.append("PIPE"); }
+        else if c == '^' { result.append("CARET"); }
+        else if c == '~' { result.append("TILDE"); }
+        else { result.append_char('_'); }
+    }
+    return result;
+}

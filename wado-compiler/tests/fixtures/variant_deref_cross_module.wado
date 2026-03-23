@@ -1,0 +1,54 @@
+use { Elem, Alt, RepeatElem, LabelElem } from "./sub/variant_deref_helper.wado";
+
+fn process(elem: &Elem, out: &mut String) {
+    if let TokenRef(name) = *elem {
+        out.append(name);
+        return;
+    }
+    if let Literal(text) = *elem {
+        out.append(text);
+        return;
+    }
+    if let RuleRef(name) = *elem {
+        out.append(name);
+        return;
+    }
+    if let Repeat(rep) = *elem {
+        process(&rep.element, out);
+        return;
+    }
+    if let Group(alts) = *elem {
+        for let alt of alts {
+            process_all(&alt, out);
+        }
+        return;
+    }
+    if let Label(lab) = *elem {
+        process(&lab.element, out);
+        return;
+    }
+}
+
+fn process_all(alt: &Alt, out: &mut String) {
+    for let elem of alt.elements {
+        process(&elem, out);
+    }
+}
+
+test "recursive variant deref from another module" {
+    let alt = Alt {
+        label: null,
+        elements: [
+            Elem::TokenRef("hello"),
+            Elem::Repeat(RepeatElem {
+                element: Elem::Literal(" world"),
+            }),
+        ],
+    };
+    let mut out = String::with_capacity(20);
+    process_all(&alt, &mut out);
+    assert out == "hello world";
+}
+
+__DATA__
+{"test": {}}

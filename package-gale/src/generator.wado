@@ -2,13 +2,23 @@ use {
     Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement,
     RepeatKind, LexerRule,
 } from "./ir.wado";
+use {
+    to_pascal_case, to_snake_case, to_lower, to_lower_char, to_upper_char,
+    rule_type_name, literal_field_name, strip_suffix,
+} from "./gen_util.wado";
+use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
+use { gen_parser } from "./parser_gen.wado";
 
 pub fn generate(grammar: &Grammar) -> String {
-    let mut out = String::with_capacity(4096);
+    let mut out = String::with_capacity(8192);
     gen_header(&mut out, &grammar.name);
     gen_runtime(&mut out);
     gen_token_kind(&mut out, &grammar.lexer_rules);
     gen_cst_types(&mut out, &grammar.parser_rules);
+    let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
+    gen_token_constants(&mut out, &grammar.lexer_rules, &lit_tokens);
+    gen_lexer(&mut out, grammar, &lit_tokens);
+    gen_parser(&mut out, grammar, &lit_tokens);
     return out;
 }
 
@@ -182,127 +192,4 @@ fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
         }
     }
     return true;
-}
-
-fn rule_type_name(name: &String) -> String {
-    let mut result = to_pascal_case(name);
-    result.append("Node");
-    return result;
-}
-
-fn to_pascal_case(name: &String) -> String {
-    let mut result = String::with_capacity(name.len());
-    let mut capitalize_next = true;
-    for let c of name.chars() {
-        if c == '_' {
-            capitalize_next = true;
-        } else if capitalize_next {
-            result.append_char(to_upper_char(c));
-            capitalize_next = false;
-        } else {
-            result.append_char(c);
-        }
-    }
-    return result;
-}
-
-fn to_snake_case(name: &String) -> String {
-    let mut result = String::with_capacity(name.len() + 4);
-    let mut prev_lower = false;
-    for let c of name.chars() {
-        if c >= 'A' && c <= 'Z' {
-            if prev_lower {
-                result.append_char('_');
-            }
-            result.append_char(to_lower_char(c));
-            prev_lower = false;
-        } else {
-            result.append_char(c);
-            prev_lower = c >= 'a' && c <= 'z';
-        }
-    }
-    return result;
-}
-
-fn to_lower(name: &String) -> String {
-    let mut result = String::with_capacity(name.len());
-    for let c of name.chars() {
-        result.append_char(to_lower_char(c));
-    }
-    return result;
-}
-
-fn to_upper_char(c: char) -> char {
-    if c >= 'a' && c <= 'z' {
-        return char::from_i32(c as i32 - 'a' as i32 + 'A' as i32).unwrap();
-    }
-    return c;
-}
-
-fn to_lower_char(c: char) -> char {
-    if c >= 'A' && c <= 'Z' {
-        return char::from_i32(c as i32 - 'A' as i32 + 'a' as i32).unwrap();
-    }
-    return c;
-}
-
-fn literal_field_name(text: &String) -> String {
-    if *text == "+" { return "plus"; }
-    if *text == "-" { return "minus"; }
-    if *text == "*" { return "star"; }
-    if *text == "/" { return "slash"; }
-    if *text == "%" { return "percent"; }
-    if *text == "=" { return "eq"; }
-    if *text == "!" { return "bang"; }
-    if *text == "<" { return "lt"; }
-    if *text == ">" { return "gt"; }
-    if *text == "&" { return "amp"; }
-    if *text == "|" { return "pipe"; }
-    if *text == "^" { return "caret"; }
-    if *text == "~" { return "tilde"; }
-    if *text == "." { return "dot"; }
-    if *text == "," { return "comma"; }
-    if *text == ":" { return "colon"; }
-    if *text == ";" { return "semicolon"; }
-    if *text == "(" { return "lparen"; }
-    if *text == ")" { return "rparen"; }
-    if *text == "{" { return "lbrace"; }
-    if *text == "}" { return "rbrace"; }
-    if *text == "[" { return "lbracket"; }
-    if *text == "]" { return "rbracket"; }
-    let mut result = String::with_capacity(text.len() + 4);
-    result.append("lit_");
-    for let c of text.chars() {
-        if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
-            result.append_char(to_lower_char(c));
-        } else {
-            result.append_char('_');
-        }
-    }
-    return result;
-}
-
-fn strip_suffix(s: &String, suffix: &String) -> String {
-    let s_len = s.len();
-    let suffix_len = suffix.len();
-    if s_len < suffix_len {
-        return *s;
-    }
-    let mut suffix_chars: Array<char> = suffix.chars().collect();
-    let mut s_chars: Array<char> = s.chars().collect();
-    let s_char_len = s_chars.len();
-    let suffix_char_len = suffix_chars.len();
-    if s_char_len < suffix_char_len {
-        return *s;
-    }
-    for let mut i = 0; i < suffix_char_len; i += 1 {
-        if s_chars[s_char_len - suffix_char_len + i] != suffix_chars[i] {
-            return *s;
-        }
-    }
-    let mut result = String::with_capacity(s_len);
-    for let mut i = 0; i < s_char_len - suffix_char_len; i += 1 {
-        result.append_char(s_chars[i]);
-    }
-    return result;
 }

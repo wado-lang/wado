@@ -1,0 +1,699 @@
+use {
+    Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement,
+    RepeatKind, LexerRule,
+} from "./ir.wado";
+use { LitToken } from "./lexer_gen.wado";
+use {
+    to_lower, to_snake_case, to_pascal_case, rule_type_name, literal_field_name,
+    strip_suffix, escape_string, literal_const_name, array_contains_str,
+} from "./gen_util.wado";
+
+pub fn gen_parser(out: &mut String, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
+    gen_parser_struct(out);
+    for let rule of grammar.parser_rules {
+        gen_parse_fn(out, &rule, &grammar.parser_rules, lit_tokens);
+    }
+    gen_parse_entry(out, &grammar.parser_rules);
+}
+
+fn gen_parser_struct(out: &mut String) {
+    out.append("struct Parser {\n");
+    out.append("    tokens: Array<Token>,\n");
+    out.append("    pos: i32,\n");
+    out.append("}\n\n");
+    out.append("impl Parser {\n");
+    out.append("    fn new(tokens: Array<Token>) -> Parser {\n");
+    out.append("        return Parser { tokens, pos: 0 };\n");
+    out.append("    }\n\n");
+    out.append("    fn peek(&self) -> &Token {\n");
+    out.append("        return &self.tokens[self.pos];\n");
+    out.append("    }\n\n");
+    out.append("    fn peek_kind(&self) -> i32 {\n");
+    out.append("        return self.tokens[self.pos].kind;\n");
+    out.append("    }\n\n");
+    out.append("    fn peek_at(&self, offset: i32) -> i32 {\n");
+    out.append("        let idx = self.pos + offset;\n");
+    out.append("        if idx >= self.tokens.len() { return TK_EOF; }\n");
+    out.append("        return self.tokens[idx].kind;\n");
+    out.append("    }\n\n");
+    out.append("    fn advance(&mut self) -> Token {\n");
+    out.append("        let tok = self.tokens[self.pos];\n");
+    out.append("        self.pos += 1;\n");
+    out.append("        return tok;\n");
+    out.append("    }\n\n");
+    out.append("    fn last_end(&self) -> i32 {\n");
+    out.append("        if self.pos == 0 { return 0; }\n");
+    out.append("        return self.tokens[self.pos - 1].span.end;\n");
+    out.append("    }\n\n");
+    out.append("    fn expect(&mut self, kind: i32, name: String) -> Result<Token, ParseError> {\n");
+    out.append("        if self.tokens[self.pos].kind == kind {\n");
+    out.append("            return Result::<Token, ParseError>::Ok(self.advance());\n");
+    out.append("        }\n");
+    out.append("        let tok = &self.tokens[self.pos];\n");
+    out.append("        return Result::<Token, ParseError>::Err(ParseError::new(\n");
+    out.append("            `expected {name}, got \"{tok.text}\"`,\n");
+    out.append("            tok.span,\n");
+    out.append("            [name],\n");
+    out.append("        ));\n");
+    out.append("    }\n");
+    out.append("}\n\n");
+}
+
+fn gen_parse_fn(
+    out: &mut String,
+    rule: &ParserRule,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+    let type_name = rule_type_name(&rule.name);
+    let fn_name = `parse_{to_snake_case(&rule.name)}`;
+    out.append(`fn {fn_name}(p: &mut Parser) -> Result<{type_name}, ParseError> \{\n`);
+    out.append("    let start = p.peek().span.start;\n");
+
+    if rule.alternatives.len() == 1 {
+        gen_alt_body(out, &type_name, null, null, &rule.alternatives[0], all_rules, lit_tokens, "    ");
+    } else {
+        gen_multi_alt_body(out, rule, &type_name, all_rules, lit_tokens);
+    }
+
+    out.append("}\n\n");
+}
+
+fn gen_alt_body(
+    out: &mut String,
+    type_name: &String,
+    variant_case: Option<String>,
+    struct_name: Option<String>,
+    alt: &Alternative,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    indent: &String,
+) {
+    gen_alt_elements(out, &alt.elements, all_rules, lit_tokens, indent);
+
+    let end_expr = "p.last_end()";
+    if let Some(case) = variant_case {
+        let sname = struct_name.unwrap();
+        out.append(`{indent}return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{\n`);
+        out.append(`{indent}    span: Span::new(start, {end_expr}),\n`);
+        gen_field_assignments(out, &alt.elements, `{indent}    `);
+        out.append(`{indent}\}));\n`);
+    } else {
+        out.append(`{indent}return Result::<{type_name}, ParseError>::Ok({type_name} \{\n`);
+        out.append(`{indent}    span: Span::new(start, {end_expr}),\n`);
+        gen_field_assignments(out, &alt.elements, `{indent}    `);
+        out.append(`{indent}\});\n`);
+    }
+}
+
+fn gen_multi_alt_body(
+    out: &mut String,
+    rule: &ParserRule,
+    type_name: &String,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+    let all_labeled = all_alternatives_labeled(&rule.alternatives);
+
+    // Compute LL(k) lookahead info
+    let max_k = 5;
+    let mut all_pos_sets: Array<Array<Array<String>>> = [];
+    for let alt of rule.alternatives {
+        all_pos_sets.append(alt_position_first_sets(&alt, max_k, all_rules, lit_tokens));
+    }
+    let depth = find_needed_depth(&all_pos_sets);
+
+    out.append("    let kind = p.peek_kind();\n");
+
+    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+        let alt = &rule.alternatives[i];
+        let case_name = if all_labeled {
+            alt.label.unwrap()
+        } else {
+            `Alt{i}`
+        };
+        let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+
+        let pos_sets = &all_pos_sets[i];
+        let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
+
+        if cond_depth > 0 {
+            out.append("    if ");
+            for let mut d = 0; d < cond_depth; d += 1 {
+                if d > 0 { out.append(" && "); }
+                let tokens = &pos_sets[d];
+                let check_expr = if d == 0 { "kind" } else { `p.peek_at({d})` };
+                if tokens.len() == 1 {
+                    out.append(`{check_expr} == {tokens[0]}`);
+                } else {
+                    out.append("(");
+                    for let mut j = 0; j < tokens.len(); j += 1 {
+                        if j > 0 { out.append(" || "); }
+                        out.append(`{check_expr} == {tokens[j]}`);
+                    }
+                    out.append(")");
+                }
+            }
+            out.append(" {\n");
+        } else {
+            out.append("    {\n");
+        }
+
+        gen_alt_body(out, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens, "        ");
+        out.append("    }\n");
+    }
+
+    // Error fallback
+    let mut expected: Array<String> = [];
+    for let alt of rule.alternatives {
+        let mut visiting2: Array<String> = [];
+        let first = first_of_alt(&alt, all_rules, lit_tokens, &mut visiting2);
+        for let tk of first {
+            if !array_contains_str(&expected, &tk) {
+                expected.append(tk);
+            }
+        }
+    }
+    out.append(`    return Result::<{type_name}, ParseError>::Err(ParseError::new(\n`);
+    out.append(`        `);
+    out.append(escape_string(&`expected {rule.name}`));
+    out.append(",\n");
+    out.append("        p.peek().span,\n");
+    out.append("        [");
+    for let mut i = 0; i < expected.len(); i += 1 {
+        if i > 0 { out.append(", "); }
+        out.append(escape_string(&expected[i]));
+    }
+    out.append("],\n");
+    out.append("    ));\n");
+}
+
+fn gen_alt_elements(
+    out: &mut String,
+    elements: &Array<Element>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    indent: &String,
+) {
+    let mut name_counts: Array<[String, i32]> = [];
+    for let elem of elements {
+        gen_element(out, &elem, all_rules, lit_tokens, indent, true, &mut name_counts);
+    }
+}
+
+fn gen_element(
+    out: &mut String,
+    elem: &Element,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    indent: &String,
+    store: bool,
+    name_counts: &mut Array<[String, i32]>,
+) {
+    if let TokenRef(name) = *elem {
+        let const_name = `TK_{name}`;
+        if store {
+            let field_name = dedup_name(&to_lower(&name), name_counts);
+            out.append(`{indent}let {field_name} = p.expect({const_name}, {escape_string(&name)})?;\n`);
+        } else {
+            out.append(`{indent}p.expect({const_name}, {escape_string(&name)})?;\n`);
+        }
+        return;
+    }
+    if let Literal(text) = *elem {
+        let const_name = literal_const_name(&text);
+        let display = `'{text}'`;
+        if store {
+            let field_name = dedup_name(&literal_field_name(&text), name_counts);
+            out.append(`{indent}let {field_name} = p.expect({const_name}, {escape_string(&display)})?;\n`);
+        } else {
+            out.append(`{indent}p.expect({const_name}, {escape_string(&display)})?;\n`);
+        }
+        return;
+    }
+    if let RuleRef(name) = *elem {
+        let fn_name = `parse_{to_snake_case(&name)}`;
+        if store {
+            let field_name = dedup_name(&to_snake_case(&name), name_counts);
+            out.append(`{indent}let {field_name} = {fn_name}(p)?;\n`);
+        } else {
+            out.append(`{indent}{fn_name}(p)?;\n`);
+        }
+        return;
+    }
+    if let Repeat(rep) = *elem {
+        gen_repeat(out, &rep, all_rules, lit_tokens, indent);
+        return;
+    }
+    if let Group(alts) = *elem {
+        gen_consume_group(out, &alts, all_rules, lit_tokens, indent);
+        return;
+    }
+    if let Label(lab) = *elem {
+        gen_element(out, &lab.element, all_rules, lit_tokens, indent, store, name_counts);
+        return;
+    }
+}
+
+fn gen_repeat(
+    out: &mut String,
+    rep: &RepeatElement,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    indent: &String,
+) {
+    let inner = &rep.element;
+    let mut visiting: Array<String> = [];
+    let first = first_of_element(inner, all_rules, lit_tokens, &mut visiting);
+    let inner_indent = `{indent}    `;
+
+    if has_field(inner) {
+        let field_info = element_field_info(inner);
+        if let Star = rep.kind {
+            out.append(`{indent}let mut {field_info.0}_list: Array<{field_info.1}> = [];\n`);
+            out.append(`{indent}while `);
+            gen_first_check(out, &first);
+            out.append(" {\n");
+            let mut nc: Array<[String, i32]> = [];
+            gen_element(out, inner, all_rules, lit_tokens, &inner_indent, true, &mut nc);
+            out.append(`{inner_indent}{field_info.0}_list.append({field_info.0});\n`);
+            out.append(`{indent}\}\n`);
+        }
+        if let Plus = rep.kind {
+            let mut nc: Array<[String, i32]> = [];
+            gen_element(out, inner, all_rules, lit_tokens, indent, true, &mut nc);
+            out.append(`{indent}let mut {field_info.0}_list: Array<{field_info.1}> = [{field_info.0}];\n`);
+            out.append(`{indent}while `);
+            gen_first_check(out, &first);
+            out.append(" {\n");
+            let mut nc2: Array<[String, i32]> = [];
+            gen_element(out, inner, all_rules, lit_tokens, &inner_indent, true, &mut nc2);
+            out.append(`{inner_indent}{field_info.0}_list.append({field_info.0});\n`);
+            out.append(`{indent}\}\n`);
+        }
+        if let Optional = rep.kind {
+            let type_str = field_info.1;
+            out.append(`{indent}let {field_info.0}: Option<{type_str}> = if `);
+            gen_first_check(out, &first);
+            out.append(" {\n");
+            let mut nc: Array<[String, i32]> = [];
+            gen_element(out, inner, all_rules, lit_tokens, &inner_indent, true, &mut nc);
+            out.append(`{inner_indent}Option::<{type_str}>::Some({field_info.0})\n`);
+            out.append(`{indent}\} else \{ null \};\n`);
+        }
+    } else {
+        let mut nc: Array<[String, i32]> = [];
+        if let Star = rep.kind {
+            out.append(`{indent}while `);
+            gen_first_check(out, &first);
+            out.append(" {\n");
+            gen_element(out, inner, all_rules, lit_tokens, &inner_indent, false, &mut nc);
+            out.append(`{indent}\}\n`);
+        }
+        if let Plus = rep.kind {
+            gen_element(out, inner, all_rules, lit_tokens, indent, false, &mut nc);
+            out.append(`{indent}while `);
+            gen_first_check(out, &first);
+            out.append(" {\n");
+            gen_element(out, inner, all_rules, lit_tokens, &inner_indent, false, &mut nc);
+            out.append(`{indent}\}\n`);
+        }
+        if let Optional = rep.kind {
+            out.append(`{indent}if `);
+            gen_first_check(out, &first);
+            out.append(" {\n");
+            gen_element(out, inner, all_rules, lit_tokens, &inner_indent, false, &mut nc);
+            out.append(`{indent}\}\n`);
+        }
+    }
+}
+
+fn has_field(elem: &Element) -> bool {
+    if let TokenRef(_) = *elem { return true; }
+    if let Literal(_) = *elem { return true; }
+    if let RuleRef(_) = *elem { return true; }
+    if let Label(lab) = *elem { return has_field(&lab.element); }
+    return false;
+}
+
+fn element_field_info(elem: &Element) -> [String, String] {
+    if let TokenRef(name) = *elem {
+        return [to_lower(&name), "Token"];
+    }
+    if let Literal(text) = *elem {
+        return [literal_field_name(&text), "Token"];
+    }
+    if let RuleRef(name) = *elem {
+        return [to_snake_case(&name), rule_type_name(&name)];
+    }
+    if let Label(lab) = *elem {
+        return element_field_info(&lab.element);
+    }
+    return ["_", "Token"];
+}
+
+fn gen_field_assignments(
+    out: &mut String,
+    elements: &Array<Element>,
+    indent: String,
+) {
+    let mut name_counts: Array<[String, i32]> = [];
+    for let elem of elements {
+        gen_field_assignment(out, &elem, &mut name_counts, &indent);
+    }
+}
+
+fn gen_field_assignment(
+    out: &mut String,
+    elem: &Element,
+    name_counts: &mut Array<[String, i32]>,
+    indent: &String,
+) {
+    if let TokenRef(name) = *elem {
+        let field_name = dedup_name(&to_lower(&name), name_counts);
+        out.append(`{indent}{field_name},\n`);
+        return;
+    }
+    if let Literal(text) = *elem {
+        let field_name = dedup_name(&literal_field_name(&text), name_counts);
+        out.append(`{indent}{field_name},\n`);
+        return;
+    }
+    if let RuleRef(name) = *elem {
+        let field_name = dedup_name(&to_snake_case(&name), name_counts);
+        out.append(`{indent}{field_name},\n`);
+        return;
+    }
+    if let Repeat(rep) = *elem {
+        if has_field(&rep.element) {
+            let info = element_field_info(&rep.element);
+            if let Star = rep.kind {
+                let field_name = dedup_name(&`{info.0}_list`, name_counts);
+                out.append(`{indent}{field_name},\n`);
+            }
+            if let Plus = rep.kind {
+                let field_name = dedup_name(&`{info.0}_list`, name_counts);
+                out.append(`{indent}{field_name},\n`);
+            }
+            if let Optional = rep.kind {
+                let field_name = dedup_name(&info.0, name_counts);
+                out.append(`{indent}{field_name},\n`);
+            }
+        }
+        return;
+    }
+    if let Label(lab) = *elem {
+        if has_field(&lab.element) {
+            let field_name = to_snake_case(&lab.name);
+            dedup_name(&field_name, name_counts);
+            out.append(`{indent}{field_name},\n`);
+        }
+        return;
+    }
+}
+
+fn gen_consume_group(
+    out: &mut String,
+    alts: &Array<Alternative>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    indent: &String,
+) {
+    if alts.len() == 0 { return; }
+    if alts.len() == 1 {
+        let mut nc: Array<[String, i32]> = [];
+        for let elem of alts[0].elements {
+            gen_element(out, &elem, all_rules, lit_tokens, indent, false, &mut nc);
+        }
+        return;
+    }
+    out.append(`{indent}let grp_kind = p.peek_kind();\n`);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let mut visiting: Array<String> = [];
+        let first = first_of_alt(&alts[i], all_rules, lit_tokens, &mut visiting);
+        if i == 0 {
+            out.append(`{indent}if `);
+        } else {
+            out.append(` else if `);
+        }
+        for let mut j = 0; j < first.len(); j += 1 {
+            if j > 0 { out.append(" || "); }
+            out.append(`grp_kind == {first[j]}`);
+        }
+        out.append(" {\n");
+        let inner = `{indent}    `;
+        let mut nc: Array<[String, i32]> = [];
+        for let elem of alts[i].elements {
+            gen_element(out, &elem, all_rules, lit_tokens, &inner, false, &mut nc);
+        }
+        out.append(`{indent}\}`);
+    }
+    out.append("\n");
+}
+
+fn gen_first_check(out: &mut String, first_set: &Array<String>) {
+    if first_set.len() == 0 {
+        out.append("true");
+        return;
+    }
+    for let mut i = 0; i < first_set.len(); i += 1 {
+        if i > 0 { out.append(" || "); }
+        out.append(`p.peek_kind() == {first_set[i]}`);
+    }
+}
+
+fn first_of_alt(
+    alt: &Alternative,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    visiting: &mut Array<String>,
+) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let elem of alt.elements {
+        let elem_first = first_of_element(&elem, all_rules, lit_tokens, visiting);
+        for let tk of elem_first {
+            if !array_contains_str(&result, &tk) {
+                result.append(tk);
+            }
+        }
+        if !is_nullable(&elem) {
+            break;
+        }
+    }
+    return result;
+}
+
+fn first_of_element(
+    elem: &Element,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    visiting: &mut Array<String>,
+) -> Array<String> {
+    if let TokenRef(name) = *elem {
+        return [`TK_{name}`];
+    }
+    if let Literal(text) = *elem {
+        return [literal_const_name(&text)];
+    }
+    if let RuleRef(name) = *elem {
+        return first_of_rule(&name, all_rules, lit_tokens, visiting);
+    }
+    if let Group(alts) = *elem {
+        let mut result: Array<String> = [];
+        for let alt of alts {
+            let af = first_of_alt(&alt, all_rules, lit_tokens, visiting);
+            for let tk of af {
+                if !array_contains_str(&result, &tk) {
+                    result.append(tk);
+                }
+            }
+        }
+        return result;
+    }
+    if let Repeat(rep) = *elem {
+        return first_of_element(&rep.element, all_rules, lit_tokens, visiting);
+    }
+    if let Label(lab) = *elem {
+        return first_of_element(&lab.element, all_rules, lit_tokens, visiting);
+    }
+    return [];
+}
+
+fn first_of_rule(
+    name: &String,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    visiting: &mut Array<String>,
+) -> Array<String> {
+    // Cycle detection: if we're already computing this rule's first set, return empty
+    if array_contains_str(visiting, name) {
+        return [];
+    }
+    visiting.append(*name);
+
+    let mut result: Array<String> = [];
+    for let rule of all_rules {
+        if rule.name == *name {
+            for let alt of rule.alternatives {
+                let af = first_of_alt(&alt, all_rules, lit_tokens, visiting);
+                for let tk of af {
+                    if !array_contains_str(&result, &tk) {
+                        result.append(tk);
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    // Remove from visiting
+    let mut new_visiting: Array<String> = [];
+    for let v of visiting {
+        if v != *name {
+            new_visiting.append(v);
+        }
+    }
+    *visiting = new_visiting;
+
+    return result;
+}
+
+
+fn is_nullable(elem: &Element) -> bool {
+    if let Repeat(rep) = *elem {
+        if let Star = rep.kind { return true; }
+        if let Optional = rep.kind { return true; }
+    }
+    return false;
+}
+
+/// Compute FIRST sets at each non-nullable element position for an alternative.
+/// Position 0 uses the full first_of_alt logic (handles nullable prefixes).
+/// Subsequent positions advance past elements that contributed to earlier positions.
+fn alt_position_first_sets(
+    alt: &Alternative,
+    max_depth: i32,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> Array<Array<String>> {
+    let mut result: Array<Array<String>> = [];
+    let mut start = 0;
+    while result.len() < max_depth && start < alt.elements.len() {
+        let first = first_of_elements_from(&alt.elements, start, all_rules, lit_tokens);
+        if first.len() == 0 { break; }
+        result.append(first);
+        // Advance past nullable elements and the first non-nullable element
+        while start < alt.elements.len() {
+            let was_nullable = is_nullable(&alt.elements[start]);
+            start += 1;
+            if !was_nullable { break; }
+        }
+    }
+    return result;
+}
+
+/// Like first_of_alt but starts from a given element index.
+fn first_of_elements_from(
+    elements: &Array<Element>,
+    start: i32,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let mut i = start; i < elements.len(); i += 1 {
+        let mut visiting: Array<String> = [];
+        let elem_first = first_of_element(&elements[i], all_rules, lit_tokens, &mut visiting);
+        for let tk of elem_first {
+            if !array_contains_str(&result, &tk) {
+                result.append(tk);
+            }
+        }
+        if !is_nullable(&elements[i]) { break; }
+    }
+    return result;
+}
+
+fn sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
+    for let x of a {
+        if array_contains_str(b, x) { return true; }
+    }
+    return false;
+}
+
+/// Find the minimum lookahead depth needed to disambiguate all alternatives.
+fn find_needed_depth(all_position_sets: &Array<Array<Array<String>>>) -> i32 {
+    let max_k = 5;
+    for let mut depth = 1; depth <= max_k; depth += 1 {
+        let mut all_ok = true;
+        for let mut i = 0; i < all_position_sets.len(); i += 1 {
+            for let mut j = i + 1; j < all_position_sets.len(); j += 1 {
+                let mut still_ambiguous = true;
+                for let mut d = 0; d < depth; d += 1 {
+                    if d >= all_position_sets[i].len() || d >= all_position_sets[j].len() {
+                        still_ambiguous = false;
+                        break;
+                    }
+                    if !sets_overlap(&all_position_sets[i][d], &all_position_sets[j][d]) {
+                        still_ambiguous = false;
+                        break;
+                    }
+                }
+                if still_ambiguous {
+                    all_ok = false;
+                }
+            }
+        }
+        if all_ok { return depth; }
+    }
+    return max_k;
+}
+
+fn dedup_name(base: &String, counts: &mut Array<[String, i32]>) -> String {
+    let count = get_count(counts, base);
+    increment_count(counts, base);
+    if count > 0 {
+        return `{base}_{count + 1}`;
+    }
+    return *base;
+}
+
+fn get_count(counts: &Array<[String, i32]>, name: &String) -> i32 {
+    for let entry of counts {
+        if entry.0 == *name {
+            return entry.1;
+        }
+    }
+    return 0;
+}
+
+fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
+    for let mut i = 0; i < counts.len(); i += 1 {
+        if counts[i].0 == *name {
+            let prev = counts[i].1;
+            counts[i] = [*name, prev + 1];
+            return;
+        }
+    }
+    counts.append([*name, 1]);
+}
+
+fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
+    for let alt of alts {
+        if let None = alt.label {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn gen_parse_entry(out: &mut String, parser_rules: &Array<ParserRule>) {
+    if parser_rules.len() == 0 { return; }
+    let root = &parser_rules[0];
+    let type_name = rule_type_name(&root.name);
+    let fn_name = `parse_{to_snake_case(&root.name)}`;
+    out.append(`pub fn parse(input: &String) -> Result<{type_name}, ParseError> \{\n`);
+    out.append("    let tokens = tokenize(input);\n");
+    out.append("    let mut parser = Parser::new(tokens);\n");
+    out.append(`    return {fn_name}(&mut parser);\n`);
+    out.append("}\n\n");
+}

@@ -1,0 +1,452 @@
+use {
+    Grammar, LexerRule, LexerAlt, LexerElement, LexerRepeatElement,
+    LexerNotElement, CharClass, CharRange, RepeatKind,
+    ParserRule, Alternative, Element, RepeatElement, LabelElement,
+} from "./ir.wado";
+use {
+    to_lower, escape_char, array_contains_str, literal_const_name,
+} from "./gen_util.wado";
+
+pub struct LitToken {
+    pub text: String,
+    pub const_name: String,
+}
+
+pub fn collect_literal_tokens(parser_rules: &Array<ParserRule>) -> Array<LitToken> {
+    let mut seen: Array<String> = [];
+    let mut result: Array<LitToken> = [];
+    for let rule of parser_rules {
+        for let alt of rule.alternatives {
+            collect_lits_from_elements(&alt.elements, &mut seen, &mut result);
+        }
+    }
+    return result;
+}
+
+fn collect_lits_from_elements(
+    elements: &Array<Element>,
+    seen: &mut Array<String>,
+    result: &mut Array<LitToken>,
+) {
+    for let elem of elements {
+        collect_lits_from_element(&elem, seen, result);
+    }
+}
+
+fn collect_lits_from_element(
+    elem: &Element,
+    seen: &mut Array<String>,
+    result: &mut Array<LitToken>,
+) {
+    if let Literal(text) = *elem {
+        if !array_contains_str(seen, &text) {
+            seen.append(text);
+            result.append(LitToken { text, const_name: literal_const_name(&text) });
+        }
+    }
+    if let Repeat(rep) = *elem {
+        collect_lits_from_element(&rep.element, seen, result);
+    }
+    if let Group(alts) = *elem {
+        for let alt of alts {
+            collect_lits_from_elements(&alt.elements, seen, result);
+        }
+    }
+    if let Label(lab) = *elem {
+        collect_lits_from_element(&lab.element, seen, result);
+    }
+}
+
+pub fn gen_token_constants(
+    out: &mut String,
+    lexer_rules: &Array<LexerRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+    let mut idx = 0;
+    for let rule of lexer_rules {
+        if !rule.is_fragment {
+            out.append(`global TK_{rule.name}: i32 = {idx};\n`);
+            idx += 1;
+        }
+    }
+    out.append(`global TK_EOF: i32 = {idx};\n`);
+    idx += 1;
+    out.append(`global TK_ERROR: i32 = {idx};\n`);
+    idx += 1;
+    for let lit of lit_tokens {
+        out.append(`global {lit.const_name}: i32 = {idx};\n`);
+        idx += 1;
+    }
+    out.append("\n");
+}
+
+pub fn gen_lexer(out: &mut String, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
+    gen_lexer_struct(out);
+    gen_lexer_match_fns(out, &grammar.lexer_rules);
+    gen_literal_match_fns(out, lit_tokens);
+    gen_tokenize_fn(out, &grammar.lexer_rules, lit_tokens);
+}
+
+fn gen_lexer_struct(out: &mut String) {
+    out.append("struct Lexer {\n");
+    out.append("    chars: Array<char>,\n");
+    out.append("    pos: i32,\n");
+    out.append("}\n\n");
+    out.append("impl Lexer {\n");
+    out.append("    fn new(input: &String) -> Lexer {\n");
+    out.append("        return Lexer { chars: input.chars().collect(), pos: 0 };\n");
+    out.append("    }\n\n");
+    out.append("    fn at_end(&self) -> bool {\n");
+    out.append("        return self.pos >= self.chars.len();\n");
+    out.append("    }\n\n");
+    out.append("    fn slice(&self, start: i32, end: i32) -> String {\n");
+    out.append("        let mut s = String::with_capacity(end - start);\n");
+    out.append("        for let mut i = start; i < end; i += 1 {\n");
+    out.append("            s.append_char(self.chars[i]);\n");
+    out.append("        }\n");
+    out.append("        return s;\n");
+    out.append("    }\n");
+    out.append("}\n\n");
+}
+
+fn gen_lexer_match_fns(out: &mut String, lexer_rules: &Array<LexerRule>) {
+    for let rule of lexer_rules {
+        if !rule.is_fragment {
+            let mut ctr = 0;
+            gen_lexer_match_fn(out, rule, lexer_rules, &mut ctr);
+        }
+    }
+}
+
+fn gen_lexer_match_fn(
+    out: &mut String,
+    rule: &LexerRule,
+    all_rules: &Array<LexerRule>,
+    ctr: &mut i32,
+) {
+    let fn_name = `try_{to_lower(&rule.name)}`;
+    out.append(`fn {fn_name}(chars: &Array<char>, start: i32) -> i32 \{\n`);
+    out.append("    let mut pos = start;\n");
+    if rule.body.len() == 1 {
+        gen_lexer_alt_seq(out, &rule.body[0], all_rules, "    ", "return -1", ctr);
+        out.append("    return pos;\n");
+    } else {
+        gen_lexer_alts(out, &rule.body, all_rules, "    ", "return -1", ctr);
+        out.append("    return pos;\n");
+    }
+    out.append("}\n\n");
+}
+
+fn gen_lexer_alts(
+    out: &mut String,
+    alts: &Array<LexerAlt>,
+    all_rules: &Array<LexerRule>,
+    indent: &String,
+    fail_action: &String,
+    ctr: &mut i32,
+) {
+    let id = *ctr;
+    *ctr += 1;
+    let inner = `{indent}    `;
+    out.append(`{indent}let alts_saved_{id} = pos;\n`);
+    out.append(`{indent}let mut alts_ok_{id} = false;\n`);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 {
+            out.append(`{indent}if !alts_ok_{id} \{\n`);
+        }
+        let label = `alts_{id}_{i}`;
+        out.append(`{indent}{label}: \{\n`);
+        out.append(`{inner}pos = alts_saved_{id};\n`);
+        gen_lexer_alt_seq(out, &alts[i], all_rules, &inner, `break {label}`, ctr);
+        out.append(`{inner}alts_ok_{id} = true;\n`);
+        out.append(`{indent}\}\n`);
+    }
+    for let mut i = 1; i < alts.len(); i += 1 {
+        out.append(`{indent}\}\n`);
+    }
+    out.append(`{indent}if !alts_ok_{id} \{ {fail_action}; \}\n`);
+}
+
+fn gen_lexer_alt_seq(
+    out: &mut String,
+    alt: &LexerAlt,
+    all_rules: &Array<LexerRule>,
+    indent: &String,
+    fail_action: &String,
+    ctr: &mut i32,
+) {
+    for let elem of alt.elements {
+        gen_lexer_elem(out, &elem, all_rules, indent, fail_action, ctr);
+    }
+}
+
+fn gen_lexer_elem(
+    out: &mut String,
+    elem: &LexerElement,
+    all_rules: &Array<LexerRule>,
+    indent: &String,
+    fail_action: &String,
+    ctr: &mut i32,
+) {
+    if let Literal(text) = *elem {
+        let chars: Array<char> = text.chars().collect();
+        for let mut i = 0; i < chars.len(); i += 1 {
+            out.append(`{indent}if pos >= chars.len() || chars[pos] != {escape_char(chars[i])} \{ {fail_action}; \}\n`);
+            out.append(`{indent}pos += 1;\n`);
+        }
+        return;
+    }
+    if let CharRange(pair) = *elem {
+        out.append(`{indent}if pos >= chars.len() || chars[pos] < {escape_char(pair.0)} || chars[pos] > {escape_char(pair.1)} \{ {fail_action}; \}\n`);
+        out.append(`{indent}pos += 1;\n`);
+        return;
+    }
+    if let CharClass(cc) = *elem {
+        gen_char_class(out, &cc, indent, fail_action);
+        return;
+    }
+    if let AnyChar = *elem {
+        out.append(`{indent}if pos >= chars.len() \{ {fail_action}; \}\n`);
+        out.append(`{indent}pos += 1;\n`);
+        return;
+    }
+    if let RuleRef(name) = *elem {
+        let frag = find_fragment(all_rules, &name);
+        if let Some(f) = frag {
+            if f.body.len() == 1 {
+                gen_lexer_alt_seq(out, &f.body[0], all_rules, indent, fail_action, ctr);
+            } else {
+                gen_lexer_alts(out, &f.body, all_rules, indent, fail_action, ctr);
+            }
+        } else {
+            let fn_name = `try_{to_lower(&name)}`;
+            out.append(`{indent}pos = {fn_name}(chars, pos);\n`);
+            out.append(`{indent}if pos < 0 \{ {fail_action}; \}\n`);
+        }
+        return;
+    }
+    if let Group(alts) = *elem {
+        if alts.len() == 1 {
+            gen_lexer_alt_seq(out, &alts[0], all_rules, indent, fail_action, ctr);
+        } else {
+            gen_lexer_alts(out, &alts, all_rules, indent, fail_action, ctr);
+        }
+        return;
+    }
+    if let Repeat(rep) = *elem {
+        gen_lexer_repeat(out, &rep, all_rules, indent, fail_action, ctr);
+        return;
+    }
+    if let Not(not_elem) = *elem {
+        gen_lexer_not(out, &not_elem, all_rules, indent, fail_action, ctr);
+        return;
+    }
+}
+
+fn gen_char_class(
+    out: &mut String,
+    cc: &CharClass,
+    indent: &String,
+    fail_action: &String,
+) {
+    out.append(`{indent}if pos >= chars.len() \{ {fail_action}; \}\n`);
+    if cc.negated {
+        out.append(`{indent}if false`);
+        for let range of cc.ranges {
+            if range.start == range.end {
+                out.append(` || chars[pos] == {escape_char(range.start)}`);
+            } else {
+                out.append(` || chars[pos] >= {escape_char(range.start)} && chars[pos] <= {escape_char(range.end)}`);
+            }
+        }
+        out.append(` \{ {fail_action}; \}\n`);
+    } else {
+        out.append(`{indent}if !(false`);
+        for let range of cc.ranges {
+            if range.start == range.end {
+                out.append(` || chars[pos] == {escape_char(range.start)}`);
+            } else {
+                out.append(` || chars[pos] >= {escape_char(range.start)} && chars[pos] <= {escape_char(range.end)}`);
+            }
+        }
+        out.append(`) \{ {fail_action}; \}\n`);
+    }
+    out.append(`{indent}pos += 1;\n`);
+}
+
+fn gen_lexer_repeat(
+    out: &mut String,
+    rep: &LexerRepeatElement,
+    all_rules: &Array<LexerRule>,
+    indent: &String,
+    fail_action: &String,
+    ctr: &mut i32,
+) {
+    let id = *ctr;
+    *ctr += 1;
+    let inner = `{indent}    `;
+    let inner2 = `{inner}    `;
+    if let Star = rep.kind {
+        out.append(`{indent}loop \{\n`);
+        out.append(`{inner}let rep_saved_{id} = pos;\n`);
+        let label = `rep_{id}`;
+        out.append(`{inner}{label}: \{\n`);
+        gen_lexer_elem(out, &rep.element, all_rules, &inner2, `break {label}`, ctr);
+        out.append(`{inner2}continue;\n`);
+        out.append(`{inner}\}\n`);
+        out.append(`{inner}pos = rep_saved_{id};\n`);
+        out.append(`{inner}break;\n`);
+        out.append(`{indent}\}\n`);
+    }
+    if let Plus = rep.kind {
+        gen_lexer_elem(out, &rep.element, all_rules, indent, fail_action, ctr);
+        out.append(`{indent}loop \{\n`);
+        out.append(`{inner}let rep_saved_{id} = pos;\n`);
+        let label = `rep_{id}`;
+        out.append(`{inner}{label}: \{\n`);
+        gen_lexer_elem(out, &rep.element, all_rules, &inner2, `break {label}`, ctr);
+        out.append(`{inner2}continue;\n`);
+        out.append(`{inner}\}\n`);
+        out.append(`{inner}pos = rep_saved_{id};\n`);
+        out.append(`{inner}break;\n`);
+        out.append(`{indent}\}\n`);
+    }
+    if let Optional = rep.kind {
+        let label = `opt_{id}`;
+        out.append(`{indent}let opt_saved_{id} = pos;\n`);
+        out.append(`{indent}let mut opt_ok_{id} = false;\n`);
+        out.append(`{indent}{label}: \{\n`);
+        gen_lexer_elem(out, &rep.element, all_rules, &inner, `break {label}`, ctr);
+        out.append(`{inner}opt_ok_{id} = true;\n`);
+        out.append(`{indent}\}\n`);
+        out.append(`{indent}if !opt_ok_{id} \{ pos = opt_saved_{id}; \}\n`);
+    }
+}
+
+fn gen_lexer_not(
+    out: &mut String,
+    not_elem: &LexerNotElement,
+    all_rules: &Array<LexerRule>,
+    indent: &String,
+    fail_action: &String,
+    ctr: &mut i32,
+) {
+    if let CharClass(cc) = not_elem.element {
+        let flipped = CharClass {
+            ranges: cc.ranges,
+            negated: !cc.negated,
+        };
+        gen_char_class(out, &flipped, indent, fail_action);
+        return;
+    }
+    let id = *ctr;
+    *ctr += 1;
+    out.append(`{indent}if pos >= chars.len() \{ {fail_action}; \}\n`);
+    let inner = `{indent}    `;
+    let label = `not_{id}`;
+    out.append(`{indent}let not_saved_{id} = pos;\n`);
+    out.append(`{indent}let mut not_matched_{id} = false;\n`);
+    out.append(`{indent}{label}: \{\n`);
+    gen_lexer_elem(out, &not_elem.element, all_rules, &inner, `break {label}`, ctr);
+    out.append(`{inner}not_matched_{id} = true;\n`);
+    out.append(`{indent}\}\n`);
+    out.append(`{indent}pos = not_saved_{id};\n`);
+    out.append(`{indent}if not_matched_{id} \{ {fail_action}; \}\n`);
+    out.append(`{indent}pos += 1;\n`);
+}
+
+fn find_fragment(
+    all_rules: &Array<LexerRule>,
+    name: &String,
+) -> Option<&LexerRule> {
+    for let rule of all_rules {
+        if rule.name == *name && rule.is_fragment {
+            return Option::<&LexerRule>::Some(rule);
+        }
+    }
+    return null;
+}
+
+fn gen_literal_match_fns(out: &mut String, lit_tokens: &Array<LitToken>) {
+    for let lit of lit_tokens {
+        let chars: Array<char> = lit.text.chars().collect();
+        let fn_name = lit_try_fn_name(&lit.const_name);
+        out.append(`fn {fn_name}(chars: &Array<char>, start: i32) -> i32 \{\n`);
+        out.append("    let pos = start;\n");
+        for let mut i = 0; i < chars.len(); i += 1 {
+            out.append(`    if pos + {i} >= chars.len() || chars[pos + {i}] != {escape_char(chars[i])} \{ return -1; \}\n`);
+        }
+        out.append(`    return pos + {chars.len()};\n`);
+        out.append("}\n\n");
+    }
+}
+
+fn lit_try_fn_name(const_name: &String) -> String {
+    let mut result = String::with_capacity(const_name.len() + 4);
+    result.append("try_lit_");
+    let chars: Array<char> = const_name.chars().collect();
+    for let mut i = 7; i < chars.len(); i += 1 {
+        result.append_char(to_lower_char(chars[i]));
+    }
+    return result;
+}
+
+fn to_lower_char(c: char) -> char {
+    if c >= 'A' && c <= 'Z' {
+        return char::from_i32(c as i32 - 'A' as i32 + 'a' as i32).unwrap();
+    }
+    return c;
+}
+
+fn gen_tokenize_fn(
+    out: &mut String,
+    lexer_rules: &Array<LexerRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+    out.append("pub fn tokenize(input: &String) -> Array<Token> {\n");
+    out.append("    let mut lexer = Lexer::new(input);\n");
+    out.append("    let mut tokens: Array<Token> = [];\n");
+    out.append("    while !lexer.at_end() {\n");
+    out.append("        let start = lexer.pos;\n");
+    out.append("        let mut best_end: i32 = -1;\n");
+    out.append("        let mut best_kind: i32 = TK_ERROR;\n");
+
+    out.append("        let mut end: i32 = -1;\n");
+
+    for let lit of lit_tokens {
+        let fn_name = lit_try_fn_name(&lit.const_name);
+        out.append(`        end = {fn_name}(&lexer.chars, start);\n`);
+        out.append(`        if end > best_end \{ best_end = end; best_kind = {lit.const_name}; \}\n`);
+    }
+
+    for let rule of lexer_rules {
+        if !rule.is_fragment {
+            let fn_name = `try_{to_lower(&rule.name)}`;
+            out.append(`        end = {fn_name}(&lexer.chars, start);\n`);
+            out.append(`        if end > best_end \{ best_end = end; best_kind = TK_{rule.name}; \}\n`);
+        }
+    }
+
+    out.append("        if best_end <= start {\n");
+    out.append("            tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));\n");
+    out.append("            lexer.pos = start + 1;\n");
+    out.append("        } else {\n");
+
+    out.append("            let is_skip = false");
+    for let rule of lexer_rules {
+        if rule.skip {
+            out.append(` || best_kind == TK_{rule.name}`);
+        }
+    }
+    out.append(";\n");
+
+    out.append("            if !is_skip {\n");
+    out.append("                tokens.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));\n");
+    out.append("            }\n");
+    out.append("            lexer.pos = best_end;\n");
+    out.append("        }\n");
+    out.append("    }\n");
+    out.append("    tokens.append(Token::new(TK_EOF, \"\", Span::new(lexer.pos, lexer.pos)));\n");
+    out.append("    return tokens;\n");
+    out.append("}\n\n");
+}

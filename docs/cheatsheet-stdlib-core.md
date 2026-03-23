@@ -1717,6 +1717,8 @@ pub fn cwd() -> Option<String> with Environment;
 pub fn exit_success() -> ! with Exit;
 pub fn exit_error() -> ! with Exit;
 pub fn exit(code: u8) -> ! with Exit;
+pub fn log_stdout(message: String);
+pub fn log_stderr(message: String);
 ```
 
 ## core:collections
