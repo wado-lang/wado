@@ -1,0 +1,134 @@
+// Test: copy propagation + variant SROA with multi-field payload access
+//
+// Exercises patterns where multiple StructGet operations read different fields
+// from the same RefCast alias. After copy propagation inlines __match_scrut,
+// the ref.cast result is stored to __cast_N, and multiple subsequent StructGet
+// instructions read from __cast_N. All must be rewritten through the alias.
+//
+// Also tests ValueCopy wrapping the separated pattern, and Err branch payload
+// access through the same alias mechanism.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Config {
+    name: String,
+    value: i32,
+    enabled: bool,
+}
+
+// --- Case 1: Multiple field access from Ok payload ---
+
+#[inline("never")]
+fn make_point(n: i32) -> Result<Point, String> {
+    if n < 0 {
+        return Result::<Point, String>::Err("negative");
+    }
+    return Result::<Point, String>::Ok(Point { x: n, y: n * 2 });
+}
+
+fn point_sum(n: i32) -> i32 {
+    let result = make_point(n);
+    match result {
+        Ok(p) => {
+            // Multiple fields from same payload (same __cast_N alias)
+            return p.x + p.y;
+        },
+        Err(msg) => {
+            return -(msg.len() as i32);
+        },
+    }
+}
+
+// --- Case 2: Payload with 3+ fields ---
+
+#[inline("never")]
+fn make_config(n: i32) -> Result<Config, String> {
+    if n == 0 {
+        return Result::<Config, String>::Err("zero");
+    }
+    return Result::<Config, String>::Ok(Config {
+        name: "test",
+        value: n,
+        enabled: n > 0,
+    });
+}
+
+fn config_summary(n: i32) -> i32 {
+    let result = make_config(n);
+    match result {
+        Ok(c) => {
+            let base = c.value * 10;
+            if c.enabled {
+                return base + c.name.len() as i32;
+            }
+            return base;
+        },
+        Err(_) => { return -1; },
+    }
+}
+
+// --- Case 3: Payload used in value position (triggers ValueCopy) ---
+
+#[inline("never")]
+fn get_point(n: i32) -> Result<Point, String> {
+    if n < 0 {
+        return Result::<Point, String>::Err("bad");
+    }
+    return Result::<Point, String>::Ok(Point { x: n, y: n + 1 });
+}
+
+fn pass_payload(n: i32) -> i32 {
+    let result = get_point(n);
+    match result {
+        Ok(p) => {
+            // Use payload as a whole value (may trigger ValueCopy)
+            let q = p;
+            return q.x + q.y;
+        },
+        Err(_) => { return -1; },
+    }
+}
+
+// --- Case 4: Both Ok and Err payloads accessed ---
+
+fn both_branches(n: i32) -> String {
+    let result = make_config(n);
+    match result {
+        Ok(c) => {
+            return c.name;
+        },
+        Err(msg) => {
+            return msg;
+        },
+    }
+}
+
+export fn run() {
+    // Case 1: multi-field
+    assert point_sum(5) == 15;
+    assert point_sum(-1) == -8;
+
+    // Case 2: 3+ fields
+    assert config_summary(3) == 34;
+    assert config_summary(-2) == -20;
+    assert config_summary(0) == -1;
+
+    // Case 3: value position
+    assert pass_payload(5) == 11;
+    assert pass_payload(-1) == -1;
+
+    // Case 4: both branches
+    assert both_branches(1) == "test";
+    assert both_branches(0) == "zero";
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O1": [
+        "multivalue_bind [__sroa_result_discriminant"
+    ]
+}
