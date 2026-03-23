@@ -551,9 +551,9 @@ impl Default for String {
 
 impl String {
     /// Build a String from any iterable of chars.
-    pub fn from_iter<I: Iterator<Item = char>>(mut iter: I) -> String {
+    pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String {
         let mut s = String::with_capacity(8);
-        while let Some(c) = iter.next() {
+        for let c of iter {
             s.append_char(c);
         }
         return s;

@@ -1904,6 +1904,8 @@ pub enum TirExprKind {
         functor_id: u32,
         /// Target function type (for canonical closure type lookup)
         target_fn_type: TypeId,
+        /// Module where the closure was defined (needed for cross-module DCE)
+        closure_module: ModuleSource,
     },
 
     /// Custom variant construction: `Shape::Circle(5.0)` or `MyVariant::Unit`

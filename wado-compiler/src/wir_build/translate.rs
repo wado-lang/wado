@@ -1748,6 +1748,7 @@ impl FunctionTranslator<'_, '_> {
                 functor,
                 functor_id,
                 target_fn_type,
+                ..
             } => self.translate_closure_to_canonical(functor, *functor_id, *target_fn_type),
 
             TirExprKind::TemplateString { .. } => {
