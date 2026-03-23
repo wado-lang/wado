@@ -1,0 +1,18 @@
+// Test: generic map iterator from a separate module (cross-module associated type resolution)
+use { GenericMapIter } from "./sub/iterator_generic_map_lib.wado";
+
+export fn run() {
+    let arr: Array<i32> = [1, 2, 3];
+    let mut iter = GenericMapIter { inner: arr.iter(), f: |x: i32| x * 10 };
+    let a = iter.next();
+    assert a matches { Some(10) };
+    let b = iter.next();
+    assert b matches { Some(20) };
+    let c = iter.next();
+    assert c matches { Some(30) };
+    let d = iter.next();
+    assert d matches { None };
+}
+
+__DATA__
+{"stdout": ""}

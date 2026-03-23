@@ -74,6 +74,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Item::Struct(struct_decl) => {
                     // Set up type parameters in scope for resolving field types
                     let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+                    let old_type_param_bounds =
+                        std::mem::take(&mut self.trait_ctx.type_param_bounds);
                     for (index, param) in struct_decl.type_params.iter().enumerate() {
                         let type_id = self
                             .type_table
@@ -82,6 +84,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         self.trait_ctx
                             .type_params
                             .insert(param.name.clone(), (index as u32, type_id));
+                        if !param.bounds.is_empty() {
+                            self.trait_ctx
+                                .type_param_bounds
+                                .insert(param.name.clone(), param.bounds.clone());
+                        }
                     }
 
                     let mut fields = Vec::new();
@@ -124,6 +131,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                     // Restore type params scope
                     self.trait_ctx.type_params = old_type_params;
+                    self.trait_ctx.type_param_bounds = old_type_param_bounds;
                 }
                 Item::Newtype(newtype_decl) => {
                     if newtype_decl.type_params.is_empty() {

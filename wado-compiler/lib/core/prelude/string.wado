@@ -297,6 +297,28 @@ impl Iterator for StrCharIter {
 // StrCharIter uses Iterator::collect() and Iterator::count() default methods
 // IntoIterator is provided by the blanket impl for Iterator
 
+pub struct StrCharMapIter<U> {
+    inner: StrCharIter,
+    f: fn(char) -> U,
+}
+
+impl<U> Iterator for StrCharMapIter<U> {
+    type Item = U;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(c) = self.inner.next() {
+            return Option::Some((self.f)(c));
+        }
+        return null;
+    }
+}
+
+impl StrCharIter {
+    pub fn map<U>(&self, f: fn(char) -> U) -> StrCharMapIter<U> {
+        return StrCharMapIter { inner: *self, f };
+    }
+}
+
 impl String {
     /// Returns an iterator over the UTF-8 bytes of the string.
     pub fn bytes(&self) -> StrUtf8ByteIter {
@@ -529,9 +551,9 @@ impl Default for String {
 
 impl String {
     /// Build a String from any iterable of chars.
-    pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String {
+    pub fn from_iter<I: Iterator<Item = char>>(mut iter: I) -> String {
         let mut s = String::with_capacity(8);
-        for let c of iter {
+        while let Some(c) = iter.next() {
             s.append_char(c);
         }
         return s;

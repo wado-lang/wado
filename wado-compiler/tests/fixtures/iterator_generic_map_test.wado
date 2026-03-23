@@ -1,0 +1,37 @@
+// Test: generic map iterator in test world
+
+pub struct GenericMapIter<I: Iterator, U> {
+    pub inner: I,
+    pub f: fn(I::Item) -> U,
+}
+
+impl<I: Iterator, U> Iterator for GenericMapIter<I, U> {
+    type Item = U;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(item) = self.inner.next() {
+            return Option::Some((self.f)(item));
+        }
+        return null;
+    }
+}
+
+test "generic map iterator doubles values" {
+    let arr: Array<i32> = [1, 2, 3];
+    let mut iter = GenericMapIter { inner: arr.iter(), f: |x: i32| x * 2 };
+    assert iter.next() matches { Some(2) };
+    assert iter.next() matches { Some(4) };
+    assert iter.next() matches { Some(6) };
+    assert iter.next() matches { None };
+}
+
+test "generic map iterator type conversion" {
+    let arr: Array<i32> = [65, 66, 67];
+    let mut iter = GenericMapIter { inner: arr.iter(), f: |x: i32| char::from_u32_unchecked(x as u32) };
+    assert iter.next() matches { Some('A') };
+    assert iter.next() matches { Some('B') };
+    assert iter.next() matches { Some('C') };
+}
+
+__DATA__
+{"test": {}}

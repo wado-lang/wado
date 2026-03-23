@@ -1396,10 +1396,19 @@ impl Monomorphizer {
             } => {
                 // Substitute the underlying type param to get the concrete type
                 let concrete_id = self.substitute_type(param_id, substitution, type_table);
-                if concrete_id != param_id
-                    && let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name)
-                {
-                    return resolved;
+                if concrete_id != param_id {
+                    // Direct lookup for pre-registered concrete types
+                    if let Some(resolved) =
+                        type_table.resolve_assoc_type(concrete_id, &assoc_name)
+                    {
+                        return resolved;
+                    }
+                    // Fallback for GenericInstance types: resolve using generic definitions
+                    if let Some(resolved) =
+                        type_table.resolve_generic_assoc_type(concrete_id, &assoc_name)
+                    {
+                        return resolved;
+                    }
                 }
                 // Fallback: return the original type (projection unresolved)
                 type_id

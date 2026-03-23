@@ -1238,6 +1238,17 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     );
                     return type_table.make_builtin_array(elem);
                 }
+                // Handle T::AssocType where T is a type parameter
+                if let Some(index) = type_params.iter().position(|p| p == &namespaced.namespace) {
+                    let param_id =
+                        type_table.make_type_param(namespaced.namespace.clone(), index as u32);
+                    return type_table.make_assoc_type_projection(
+                        param_id,
+                        namespaced.name.clone(),
+                        vec![],
+                        vec![],
+                    );
+                }
                 TypeTable::UNKNOWN
             }
             Type::Tuple(elements) => {
@@ -1258,6 +1269,42 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     })
                     .collect();
                 type_table.make_tuple(elem_types)
+            }
+            Type::Function(func_type) => {
+                let params: Vec<TypeId> = func_type
+                    .params
+                    .iter()
+                    .map(|p| {
+                        Self::resolve_type_static_with_params(
+                            p,
+                            type_table,
+                            newtypes,
+                            struct_fields,
+                            resource_types,
+                            enum_cases,
+                            variant_cases,
+                            flags_cases,
+                            type_params,
+                        )
+                    })
+                    .collect();
+                let return_type = Self::resolve_type_static_with_params(
+                    &func_type.return_type,
+                    type_table,
+                    newtypes,
+                    struct_fields,
+                    resource_types,
+                    enum_cases,
+                    variant_cases,
+                    flags_cases,
+                    type_params,
+                );
+                type_table.intern(crate::tir::ResolvedType::Function {
+                    params,
+                    return_type,
+                    effects: vec![],
+                    stores: vec![],
+                })
             }
             _ => TypeTable::UNKNOWN,
         }

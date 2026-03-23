@@ -546,6 +546,16 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     binding.name.clone(),
                                     type_id,
                                 );
+                            } else {
+                                // For generic impls, register the definition so the monomorphizer
+                                // can resolve associated types for GenericInstance types.
+                                self.type_table
+                                    .borrow_mut()
+                                    .register_generic_assoc_type_def(
+                                        struct_name.clone(),
+                                        binding.name.clone(),
+                                        type_id,
+                                    );
                             }
                         }
                     }
