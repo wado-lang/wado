@@ -489,6 +489,36 @@ impl String {
         return self.trim_start().trim_end();
     }
 
+    /// Returns a new string with all ASCII uppercase letters converted to lowercase.
+    /// Non-ASCII bytes are left unchanged.
+    pub fn to_ascii_lowercase(&self) -> String {
+        let repr = builtin::array_new::<u8>(self.used);
+        for let mut i = 0; i < self.used; i += 1 {
+            let b = builtin::array_get_u8(self.repr, i);
+            if b >= 'A' as u8 && b <= 'Z' as u8 {
+                builtin::array_set_u8(repr, i, b - 'A' as u8 + 'a' as u8);
+            } else {
+                builtin::array_set_u8(repr, i, b);
+            }
+        }
+        return String { repr, used: self.used };
+    }
+
+    /// Returns a new string with all ASCII lowercase letters converted to uppercase.
+    /// Non-ASCII bytes are left unchanged.
+    pub fn to_ascii_uppercase(&self) -> String {
+        let repr = builtin::array_new::<u8>(self.used);
+        for let mut i = 0; i < self.used; i += 1 {
+            let b = builtin::array_get_u8(self.repr, i);
+            if b >= 'a' as u8 && b <= 'z' as u8 {
+                builtin::array_set_u8(repr, i, b - 'a' as u8 + 'A' as u8);
+            } else {
+                builtin::array_set_u8(repr, i, b);
+            }
+        }
+        return String { repr, used: self.used };
+    }
+
     /// Internal: extract a substring by byte range [start, end).
     fn internal_substr_bytes(&self, start: i32, end: i32) -> String {
         let len = end - start;

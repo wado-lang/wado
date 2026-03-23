@@ -5,7 +5,7 @@ pub fn to_pascal_case(name: &String) -> String {
         if c == '_' {
             capitalize_next = true;
         } else if capitalize_next {
-            result.append_char(to_upper_char(c));
+            result.append_char(c.to_ascii_uppercase());
             capitalize_next = false;
         } else {
             result.append_char(c);
@@ -18,48 +18,22 @@ pub fn to_snake_case(name: &String) -> String {
     let mut result = String::with_capacity(name.len() + 4);
     let mut prev_lower = false;
     for let c of name.chars() {
-        if c >= 'A' && c <= 'Z' {
+        if c.is_ascii_uppercase() {
             if prev_lower {
                 result.append_char('_');
             }
-            result.append_char(to_lower_char(c));
+            result.append_char(c.to_ascii_lowercase());
             prev_lower = false;
         } else {
             result.append_char(c);
-            prev_lower = c >= 'a' && c <= 'z';
+            prev_lower = c.is_ascii_lowercase();
         }
     }
     return result;
 }
 
 pub fn to_lower(name: &String) -> String {
-    let mut result = String::with_capacity(name.len());
-    for let c of name.chars() {
-        result.append_char(to_lower_char(c));
-    }
-    return result;
-}
-
-pub fn to_upper(name: &String) -> String {
-    let mut result = String::with_capacity(name.len());
-    for let c of name.chars() {
-        result.append_char(to_upper_char(c));
-    }
-    return result;
-}
-
-pub fn to_upper_char(c: char) -> char {
-    if c >= 'a' && c <= 'z' {
-        return char::from_i32(c as i32 - 'a' as i32 + 'A' as i32).unwrap();
-    }
-    return c;
-}
-
-pub fn to_lower_char(c: char) -> char {
-    if c >= 'A' && c <= 'Z' {
-        return char::from_i32(c as i32 - 'A' as i32 + 'a' as i32).unwrap();
-    }
-    return c;
+    return name.to_ascii_lowercase();
 }
 
 pub fn escape_char(c: char) -> String {
@@ -76,11 +50,7 @@ pub fn escape_char(c: char) -> String {
         s.append_char('\'');
         return s;
     }
-    let mut s = String::with_capacity(12);
-    s.append("'\\u{");
-    s.append(hex_string(code));
-    s.append("}'");
-    return s;
+    return `'\\u\{{code:x}\}'`;
 }
 
 pub fn escape_string(s: &String) -> String {
@@ -97,33 +67,11 @@ pub fn escape_string(s: &String) -> String {
             if code >= 32 && code < 127 {
                 result.append_char(c);
             } else {
-                result.append("\\u{");
-                result.append(hex_string(code));
-                result.append("}");
+                result.append(`\\u\{{code:x}\}`);
             }
         }
     }
     result.append_char('"');
-    return result;
-}
-
-fn hex_string(n: i32) -> String {
-    if n == 0 { return "0"; }
-    let mut digits: Array<char> = [];
-    let mut value = n;
-    while value > 0 {
-        let digit = value % 16;
-        if digit < 10 {
-            digits.append(char::from_i32('0' as i32 + digit).unwrap());
-        } else {
-            digits.append(char::from_i32('a' as i32 + digit - 10).unwrap());
-        }
-        value = value / 16;
-    }
-    let mut result = String::with_capacity(digits.len());
-    for let mut i = digits.len() - 1; i >= 0; i -= 1 {
-        result.append_char(digits[i]);
-    }
     return result;
 }
 
@@ -161,7 +109,7 @@ pub fn literal_field_name(text: &String) -> String {
     result.append("lit_");
     for let c of text.chars() {
         if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
-            result.append_char(to_lower_char(c));
+            result.append_char(c.to_ascii_lowercase());
         } else {
             result.append_char('_');
         }
@@ -202,9 +150,9 @@ pub fn literal_const_name(text: &String) -> String {
     let mut result = String::with_capacity(text.len() + 8);
     result.append("TK_LIT_");
     for let c of text.chars() {
-        if c >= 'a' && c <= 'z' {
-            result.append_char(to_upper_char(c));
-        } else if c >= 'A' && c <= 'Z' {
+        if c.is_ascii_lowercase() {
+            result.append_char(c.to_ascii_uppercase());
+        } else if c.is_ascii_uppercase() {
             result.append_char(c);
         } else if c >= '0' && c <= '9' {
             result.append_char(c);

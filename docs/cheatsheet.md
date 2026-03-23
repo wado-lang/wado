@@ -474,10 +474,14 @@ f64::parse("3.14")              // Option<f64>
 
 i32::min(a, b)  i32::max(a, b)
 
-// char conversion
+// char classification and conversion
 let code = 'A' as i32;                // 65
 let c = char::from_u32(65);           // Option::<char>::Some('A')
 let d = char::from_u32_unchecked(65); // if you already validates the u32 value
+'A'.is_ascii_uppercase()              // true
+'a'.is_ascii_lowercase()              // true
+'A'.to_ascii_lowercase()              // 'a'
+'a'.to_ascii_uppercase()              // 'A'
 ```
 
 ## Traits
