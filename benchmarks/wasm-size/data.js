@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774263412311,
+  "lastUpdate": 1774272170540,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6575,6 +6575,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fb55d97146457fed42341c1e9afaec0dfa84e906"
         },
         "date": 1774263412206,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8272d4c0451d06cbbf7ffdb7fbfbb2a373308fa9",
+          "message": "Merge pull request #672 from wado-lang/claude/wado-eq-trait-qy14j\n\nAuto-derive Eq and Ord traits for structs",
+          "timestamp": "2026-03-23T22:20:23+09:00",
+          "tree_id": "3056d2906ffd6887414f45c66d43a42365e0870d",
+          "url": "https://github.com/wado-lang/wado/commit/8272d4c0451d06cbbf7ffdb7fbfbb2a373308fa9"
+        },
+        "date": 1774272170330,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
