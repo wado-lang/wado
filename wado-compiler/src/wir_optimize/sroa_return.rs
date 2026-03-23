@@ -1922,8 +1922,16 @@ fn rewrite_call_sites(
         }
     }
     if !variant_replacements.is_empty() {
+        // Collect RefCast aliases: `LocalSet { cast_var, RefCast { type_id, LocalGet(temp) } }`
+        // where `temp` is a variant-SROA'd local. After copy propagation, `ref.cast` may
+        // reference the SROA temp directly but be stored to an intermediate local, with a
+        // separate `StructGet { field, LocalGet(cast_var) }` reading the payload.
+        let mut refcast_aliases: crate::hashmap::IndexMap<String, (String, u32)> =
+            crate::hashmap::IndexMap::default();
+        collect_refcast_aliases(instrs, &variant_replacements, &mut refcast_aliases);
+
         for instr in instrs.iter_mut() {
-            replace_variant_accesses(instr, &variant_replacements);
+            replace_variant_accesses(instr, &variant_replacements, &refcast_aliases);
         }
     }
 
@@ -2023,15 +2031,63 @@ fn sroa_local_get(local_name: &str, ref_locals: &crate::hashmap::IndexSet<String
     }
 }
 
+/// Collect `RefCast` aliases: find `LocalSet { cast_var, RefCast { type_id, LocalGet(temp) } }`
+/// patterns where `temp` is a variant-SROA'd local, and replace them with Nop.
+/// The alias map records `cast_var → (temp, type_id_index)` so that later
+/// `StructGet { field, LocalGet(cast_var) }` can be resolved through the alias.
+fn collect_refcast_aliases(
+    instrs: &mut [WirInstr],
+    variant_replacements: &crate::hashmap::IndexMap<String, VariantReplacement>,
+    aliases: &mut crate::hashmap::IndexMap<String, (String, u32)>,
+) {
+    for instr in instrs.iter_mut() {
+        if let WirInstr::LocalSet { name, value } = instr
+            && let WirInstr::RefCast {
+                type_id,
+                expr: rc_expr,
+                ..
+            } = value.as_ref()
+            && let WirInstr::LocalGet { name: temp_name } = rc_expr.as_ref()
+            && variant_replacements.contains_key(temp_name.as_str())
+        {
+            aliases.insert(name.clone(), (temp_name.clone(), type_id.index()));
+            *instr = WirInstr::Nop;
+            continue;
+        }
+        match instr {
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+                collect_refcast_aliases(body, variant_replacements, aliases);
+            }
+            WirInstr::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                collect_refcast_aliases(then_body, variant_replacements, aliases);
+                if let Some(eb) = else_body {
+                    collect_refcast_aliases(eb, variant_replacements, aliases);
+                }
+            }
+            WirInstr::Seq(body) => {
+                collect_refcast_aliases(body, variant_replacements, aliases);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Replace variant access patterns with scalar local accesses for variant SROA'd temps.
 ///
-/// Handles three patterns:
+/// Handles five patterns:
 /// 1. `RefTest { type_id, expr: LocalGet(temp) }` → `I32Eq(LocalGet(disc), I32Const(case_disc))`
 /// 2. `StructGet { field, expr: RefCast { type_id, expr: LocalGet(temp) } }` → `LocalGet(sroa_local)`
 /// 3. `ValueCopy { StructGet { field, expr: RefCast { type_id, expr: LocalGet(temp) } } }` → same
+/// 4. `StructGet { field, expr: LocalGet(cast_alias) }` where `cast_alias` was a `RefCast` alias → same
+/// 5. `ValueCopy { StructGet { field, expr: LocalGet(cast_alias) } }` → same
 fn replace_variant_accesses(
     instr: &mut WirInstr,
     variant_replacements: &crate::hashmap::IndexMap<String, VariantReplacement>,
+    refcast_aliases: &crate::hashmap::IndexMap<String, (String, u32)>,
 ) {
     // Pattern 3: ValueCopy wrapping StructGet(RefCast(LocalGet(temp)))
     if let WirInstr::ValueCopy { expr, .. } = instr
@@ -2091,9 +2147,44 @@ fn replace_variant_accesses(
         }
     }
 
+    // Pattern 5: ValueCopy { StructGet { field, LocalGet(cast_alias) } } via alias
+    if let WirInstr::ValueCopy { expr, .. } = instr
+        && let WirInstr::StructGet {
+            field_name,
+            expr: sg_expr,
+            ..
+        } = expr.as_ref()
+        && let WirInstr::LocalGet { name: alias_name } = sg_expr.as_ref()
+        && let Some((temp_name, cast_type_idx)) = refcast_aliases.get(alias_name.as_str())
+        && let Some(vr) = variant_replacements.get(temp_name.as_str())
+    {
+        let key = (*cast_type_idx, field_name.clone());
+        if let Some(local_name) = vr.field_to_local.get(&key) {
+            *instr = sroa_local_get(local_name, &vr.ref_locals);
+            return;
+        }
+    }
+
+    // Pattern 4: StructGet { field, LocalGet(cast_alias) } via alias
+    if let WirInstr::StructGet {
+        field_name,
+        expr: sg_expr,
+        ..
+    } = instr
+        && let WirInstr::LocalGet { name: alias_name } = sg_expr.as_ref()
+        && let Some((temp_name, cast_type_idx)) = refcast_aliases.get(alias_name.as_str())
+        && let Some(vr) = variant_replacements.get(temp_name.as_str())
+    {
+        let key = (*cast_type_idx, field_name.clone());
+        if let Some(local_name) = vr.field_to_local.get(&key) {
+            *instr = sroa_local_get(local_name, &vr.ref_locals);
+            return;
+        }
+    }
+
     // Recurse into children
     instr.for_each_boxed_child_mut(&mut |child| {
-        replace_variant_accesses(child, variant_replacements);
+        replace_variant_accesses(child, variant_replacements, refcast_aliases);
     });
 }
 
