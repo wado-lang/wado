@@ -234,8 +234,6 @@ type "functype/core:internal/cm_lower_string" = fn(ref String) -> i64;
 
 type "functype/core:internal/cm_waitable_set_poll" = fn(i32) -> ref null WaitEvent;
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;
-
 type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-drop" = fn(i32);
@@ -1276,14 +1274,6 @@ fn "core:internal/cm_waitable_set_poll"(ws) {  // from core:internal
     payload = builtin::load_i32(out_ptr + 4);
     drop("mem/realloc"(out_ptr, 8, 4, 0));
     return WaitEvent { code: code, handle: evt_handle, payload: payload };
-}
-
-fn "closure/__closure_wrapper_0"(__env, __p0) {
-    unreachable;
-}
-
-fn "closure/__closure_wrapper_1"(__env, __p0) {
-    unreachable;
 }
 
 export fn __cm_export__handle as "handle"

@@ -68,8 +68,6 @@ type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::pad" = fn(ref Formatter, ref String);
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;
-
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
@@ -411,14 +409,6 @@ fn Formatter::pad(self, content) {
         Formatter::write_char_n(self, self.fill, padding);
         String::append(self.buf, content);
     };
-}
-
-fn "closure/__closure_wrapper_0"(__env, __p0) {
-    unreachable;
-}
-
-fn "closure/__closure_wrapper_1"(__env, __p0) {
-    unreachable;
 }
 
 export fn __cm_export__run as "run"

@@ -114,6 +114,17 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 continue;
             }
 
+            // Look up the __call func_id, scoped to the correct module.
+            // If __call was removed by DCE (closure never used), skip this functor entirely.
+            // This check must come before type lookups since DCE may have removed the
+            // functor's types from the TypeTable.
+            let functor_name = &functor.struct_name;
+            let call_method_fq = format!("{module_source}/{functor_name}::__call");
+            let call_func_id = match ctx.func_map.get(&call_method_fq).cloned() {
+                Some(id) => id,
+                None => continue,
+            };
+
             // Get the __call method's param/result types (excluding self)
             let call_func = functor.call_method.borrow();
             let user_param_count = call_func.params.len() - 1; // skip self
@@ -142,11 +153,6 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 WirType::Ref { type_id, .. } => type_id.clone(),
                 _ => continue,
             };
-
-            // Look up the __call func_id, scoped to the correct module
-            let functor_name = &functor.struct_name;
-            let call_method_fq = format!("{module_source}/{functor_name}::__call");
-            let call_func_id = ctx.func_map.get(&call_method_fq).cloned();
 
             // Build wrapper function body
             let env_local = "__env".to_string();
@@ -181,20 +187,16 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 });
             }
 
-            if let Some(call_fid) = call_func_id {
-                let call_instr = WirInstr::Call {
-                    func_id: call_fid,
-                    args: call_args,
-                };
-                if has_result {
-                    body.push(WirInstr::Return {
-                        value: Some(Box::new(call_instr)),
-                    });
-                } else {
-                    body.push(call_instr);
-                }
+            let call_instr = WirInstr::Call {
+                func_id: call_func_id,
+                args: call_args,
+            };
+            if has_result {
+                body.push(WirInstr::Return {
+                    value: Some(Box::new(call_instr)),
+                });
             } else {
-                body.push(WirInstr::Unreachable);
+                body.push(call_instr);
             }
 
             let mut param_names = vec![env_local];
@@ -202,10 +204,10 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 param_names.push(format!("__p{i}"));
             }
 
-            // Use a globally unique counter to avoid name collisions between modules
+            // Include module source in wrapper name for debuggability
             let global_id = ctx.closure_wrapper_funcs.len();
-            let wrapper_name = format!("__closure_wrapper_{global_id}");
-            let wrapper_fq = format!("closure//{wrapper_name}");
+            let wrapper_name = format!("{module_source}/__closure_wrapper_{global_id}");
+            let wrapper_fq = format!("closure/{wrapper_name}");
 
             let func = WirFunction {
                 name: WirName {
