@@ -197,10 +197,36 @@ use crate::compiler_host::LogLevel;
 ///
 /// Loads all modules upfront before analysis and codegen.
 /// Uses a `CompilerHost` for I/O operations.
-/// Cached desugared AST modules for all core stdlib modules.
+/// Parse, bind, and desugar a stdlib module source into an AST.
+fn parse_bind_desugar_stdlib(label: &str, source: &str) -> Module {
+    let mut lexer = Lexer::new(source);
+    let tokens = lexer
+        .tokenize()
+        .unwrap_or_else(|e| panic!("lexer error in {label}: {e:?}"));
+    let (data_section, _comments, shebang) = lexer.into_parts();
+    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+    let ast = parser
+        .parse()
+        .unwrap_or_else(|e| panic!("parser error in {label}: {e:?}"));
+    {
+        let bind_host = crate::compiler_host::InMemoryCompilerHost::new();
+        let bind_logger = Logger::new(&bind_host, LogLevel::Off);
+        bind::bind_module(&ast, &bind_logger).unwrap_or_else(|_| {
+            let msgs: Vec<String> = bind_host
+                .diagnostics()
+                .iter()
+                .map(|d| d.message.clone())
+                .collect();
+            panic!("bind error in {label}: {}", msgs.join("; "));
+        });
+    }
+    desugar_module(&ast)
+}
+
+/// Cached desugared AST modules for all stdlib modules (core + WASI).
 ///
 /// Each module is parsed, bound, and desugared exactly once per process.
-fn cached_core_stdlib() -> &'static IndexMap<ModuleSource, Module> {
+fn cached_stdlib() -> &'static IndexMap<ModuleSource, Module> {
     use std::sync::OnceLock;
 
     static CACHE: OnceLock<IndexMap<ModuleSource, Module>> = OnceLock::new();
@@ -222,36 +248,38 @@ fn cached_core_stdlib() -> &'static IndexMap<ModuleSource, Module> {
             ("prelude/tuple.wado", stdlib::CORE_PRELUDE_TUPLE),
             ("prelude/types.wado", stdlib::CORE_PRELUDE_TYPES),
             ("zlib", stdlib::CORE_ZLIB),
+            ("base64", stdlib::CORE_BASE64),
+            ("serde", stdlib::CORE_SERDE),
+            ("json", stdlib::CORE_JSON),
+            ("json_nsd", stdlib::CORE_JSON_NSD),
+            ("json_value", stdlib::CORE_JSON_VALUE),
+            ("simd", stdlib::CORE_SIMD),
         ];
-        let mut cache = IndexMap::with_capacity_and_hasher(core_modules.len(), FxBuildHasher);
+
+        let total_count = core_modules.len() + stdlib::ALL_WASI_MODULES.len();
+        let mut cache = IndexMap::with_capacity_and_hasher(total_count, FxBuildHasher);
+
         for &(name, source) in core_modules {
             let module_source = ModuleSource::Core {
                 name: name.to_string(),
             };
-            let mut lexer = Lexer::new(source);
-            let tokens = lexer
-                .tokenize()
-                .unwrap_or_else(|e| panic!("lexer error in core:{name}: {e:?}"));
-            let (data_section, _comments, shebang) = lexer.into_parts();
-            let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-            let ast = parser
-                .parse()
-                .unwrap_or_else(|e| panic!("parser error in core:{name}: {e:?}"));
-            {
-                let bind_host = crate::compiler_host::InMemoryCompilerHost::new();
-                let bind_logger = Logger::new(&bind_host, LogLevel::Off);
-                bind::bind_module(&ast, &bind_logger).unwrap_or_else(|_| {
-                    let msgs: Vec<String> = bind_host
-                        .diagnostics()
-                        .iter()
-                        .map(|d| d.message.clone())
-                        .collect();
-                    panic!("bind error in core:{name}: {}", msgs.join("; "));
-                });
-            }
-            let desugared = desugar_module(&ast);
-            cache.insert(module_source, desugared);
+            cache.insert(
+                module_source,
+                parse_bind_desugar_stdlib(&format!("core:{name}"), source),
+            );
         }
+
+        for &(import_path, source) in stdlib::ALL_WASI_MODULES {
+            let interface = import_path.strip_prefix("wasi:").unwrap();
+            let module_source = ModuleSource::Wasi {
+                interface: interface.to_string(),
+            };
+            cache.insert(
+                module_source,
+                parse_bind_desugar_stdlib(import_path, source),
+            );
+        }
+
         cache
     })
 }
@@ -331,7 +359,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.logger.span_end(&format!("load {entry_name}"));
 
         // Load all dependencies iteratively
-        let core_cache = cached_core_stdlib();
+        let core_cache = cached_stdlib();
         while let Some((from_module_source, module_source)) = pending.pop_front() {
             // Skip if already loaded
             if self.loaded.contains_key(&module_source) {
@@ -416,7 +444,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Load implicit modules required by the compiler
     fn load_implicit_modules(&mut self) -> Result<(), LoadError> {
-        let cache = cached_core_stdlib();
+        let cache = cached_stdlib();
 
         let implicit_module_sources = [
             ModuleSource::builtin(),

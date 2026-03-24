@@ -75,13 +75,13 @@ pub struct Resolver<'a, H: CompilerHost> {
     flags_cases: IndexMap<String, FlagsInfo>,
     /// Resource info (resource name -> module source and methods) - flat map for current module
     resource_types: IndexMap<String, ResourceInfo>,
-    /// Per-module nested maps for cross-module type resolution
-    all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>>,
-    all_struct_fields: IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
-    all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>>,
-    all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>>,
-    all_flags_cases: IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>,
-    all_resource_types: IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>,
+    /// Per-module nested maps for cross-module type resolution (shared via Rc)
+    all_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, TypeId>>>,
+    all_struct_fields: Rc<IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>>,
+    all_variant_cases: Rc<IndexMap<ModuleSource, IndexMap<String, VariantInfo>>>,
+    all_enum_cases: Rc<IndexMap<ModuleSource, IndexMap<String, EnumInfo>>>,
+    all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
+    all_resource_types: Rc<IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>>,
     /// Function return types (name -> return type)
     function_return_types: IndexMap<String, TypeId>,
     /// Imported function names for the current module
@@ -171,12 +171,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             enum_cases: IndexMap::default(),
             flags_cases: IndexMap::default(),
             resource_types: IndexMap::default(),
-            all_newtypes: IndexMap::default(),
-            all_struct_fields: IndexMap::default(),
-            all_variant_cases: IndexMap::default(),
-            all_enum_cases: IndexMap::default(),
-            all_flags_cases: IndexMap::default(),
-            all_resource_types: IndexMap::default(),
+            all_newtypes: Rc::new(IndexMap::default()),
+            all_struct_fields: Rc::new(IndexMap::default()),
+            all_variant_cases: Rc::new(IndexMap::default()),
+            all_enum_cases: Rc::new(IndexMap::default()),
+            all_flags_cases: Rc::new(IndexMap::default()),
+            all_resource_types: Rc::new(IndexMap::default()),
             function_return_types: IndexMap::default(),
             imported_functions: IndexSet::default(),
             logger,
@@ -204,57 +204,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
-    /// Build the flat set of all known type names from current and cross-module maps.
-    fn rebuild_known_type_names_cache(&mut self) {
-        let mut cache = IndexSet::default();
-        for name in self.struct_fields.keys() {
-            cache.insert(name.clone());
-        }
-        for m in self.all_struct_fields.values() {
-            for name in m.keys() {
-                cache.insert(name.clone());
-            }
-        }
-        for name in self.variant_cases.keys() {
-            cache.insert(name.clone());
-        }
-        for m in self.all_variant_cases.values() {
-            for name in m.keys() {
-                cache.insert(name.clone());
-            }
-        }
-        for name in self.enum_cases.keys() {
-            cache.insert(name.clone());
-        }
-        for m in self.all_enum_cases.values() {
-            for name in m.keys() {
-                cache.insert(name.clone());
-            }
-        }
-        for name in self.flags_cases.keys() {
-            cache.insert(name.clone());
-        }
-        for m in self.all_flags_cases.values() {
-            for name in m.keys() {
-                cache.insert(name.clone());
-            }
-        }
-        for name in self.newtypes.keys() {
-            cache.insert(name.clone());
-        }
-        for m in self.all_newtypes.values() {
-            for name in m.keys() {
-                cache.insert(name.clone());
-            }
-        }
-        for name in self.generic_newtype_defs.keys() {
-            cache.insert(name.clone());
-        }
-        for name in crate::tir::PrimitiveType::all_primitive_names() {
-            cache.insert(name.to_string());
-        }
-        self.known_type_names_cache = cache;
-    }
+    // known_type_names_cache is pre-computed in orchestration.rs and passed to each Resolver
 
     /// Build effect name → module source map from a module's import declarations.
     ///
