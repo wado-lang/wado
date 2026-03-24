@@ -851,15 +851,9 @@ impl Monomorphizer {
                     .collect();
                 let mangled_name = mangle_generic_name(&name, &type_names);
 
-                // Look for existing Struct with this mangled name (ignore module_source)
-                for tid in type_table.iter_type_ids() {
-                    if let ResolvedType::Struct {
-                        name: struct_name, ..
-                    } = type_table.get(tid)
-                        && struct_name == &mangled_name
-                    {
-                        return tid;
-                    }
+                // Look for existing Struct with this mangled name via O(1) index
+                if let Some(tid) = type_table.find_struct_by_name(&mangled_name) {
+                    return tid;
                 }
                 // If not found, return original type_id
                 type_id
@@ -1141,30 +1135,15 @@ impl Monomorphizer {
                             .collect();
                         let mangled_name = mangle_generic_name(&name, &type_names);
 
-                        // Look for monomorphized struct with this name
-                        for tid in type_table.iter_type_ids() {
-                            if let ResolvedType::Struct {
-                                name: struct_name, ..
-                            } = type_table.get(tid)
-                                && struct_name == &mangled_name
-                            {
-                                return tid;
-                            }
+                        // Look for monomorphized struct with this name via O(1) index
+                        if let Some(tid) = type_table.find_struct_by_name(&mangled_name) {
+                            return tid;
                         }
                     }
 
-                    // Fallback: look for plain struct
-                    for tid in type_table.iter_type_ids() {
-                        if let ResolvedType::Struct {
-                            name: struct_name,
-                            module_source: struct_source,
-                            ..
-                        } = type_table.get(tid)
-                            && struct_name == &name
-                            && struct_source == &module_source
-                        {
-                            return tid;
-                        }
+                    // Fallback: look for plain struct by name
+                    if let Some(tid) = type_table.find_struct_by_name(&name) {
+                        return tid;
                     }
                     // If not found, just return the original type_id
                     return type_id;
@@ -1184,15 +1163,9 @@ impl Monomorphizer {
                     .collect();
                 let mangled_name = mangle_generic_name(&name, &type_names);
 
-                // Look for existing struct with this name
-                for tid in type_table.iter_type_ids() {
-                    if let ResolvedType::Struct {
-                        name: struct_name, ..
-                    } = type_table.get(tid)
-                        && struct_name == &mangled_name
-                    {
-                        return tid;
-                    }
+                // Look for existing struct with this name via O(1) index
+                if let Some(tid) = type_table.find_struct_by_name(&mangled_name) {
+                    return tid;
                 }
 
                 // Fallback to GenericInstance if no monomorphized struct found

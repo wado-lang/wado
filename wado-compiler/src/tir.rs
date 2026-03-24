@@ -508,6 +508,9 @@ pub struct TypeTable {
     /// Maps newtype names to their ultimate base type name.
     /// Populated by `erase_newtypes_and_flags()` and used by `wir_build` for name-based newtype resolution.
     newtype_to_base_name: IndexMap<String, String>,
+    /// Index from struct name to `TypeId` for O(1) lookup by name.
+    /// Populated incrementally when Struct types are interned.
+    struct_name_index: IndexMap<String, TypeId>,
 }
 
 impl Default for TypeTable {
@@ -552,6 +555,7 @@ impl TypeTable {
             generic_assoc_type_defs: IndexMap::default(),
             redirects: IndexMap::default(),
             newtype_to_base_name: IndexMap::default(),
+            struct_name_index: IndexMap::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -585,6 +589,10 @@ impl TypeTable {
         }
         let id = TypeId(self.next_id);
         self.next_id += 1;
+        // Update struct name index for O(1) lookups by name
+        if let ResolvedType::Struct { ref name, .. } = ty {
+            self.struct_name_index.insert(name.clone(), id);
+        }
         self.types.insert(id, ty.clone());
         self.intern_map.insert(ty, id);
         id
@@ -656,17 +664,26 @@ impl TypeTable {
         self.types.keys().copied()
     }
 
+    /// Look up a struct `TypeId` by its name. Returns `None` if no struct with that name exists.
+    pub fn find_struct_by_name(&self, name: &str) -> Option<TypeId> {
+        self.struct_name_index.get(name).copied()
+    }
+
     /// Remove all type entries whose `TypeId` is not in `keep`.
     ///
     /// This physically removes entries from the backing `IndexMap`s so that
     /// subsequent iterations (e.g. WIR type registration) no longer see them.
-    /// The intern map is rebuilt to stay consistent.
+    /// The intern map and struct name index are rebuilt to stay consistent.
     pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
         self.types.retain(|id, _| keep.contains(id));
         // Rebuild intern map from the surviving entries.
         self.intern_map.clear();
+        self.struct_name_index.clear();
         for (&id, ty) in &self.types {
             self.intern_map.insert(ty.clone(), id);
+            if let ResolvedType::Struct { name, .. } = ty {
+                self.struct_name_index.insert(name.clone(), id);
+            }
         }
     }
 

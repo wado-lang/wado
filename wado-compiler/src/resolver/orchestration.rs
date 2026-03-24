@@ -460,6 +460,54 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // second pass (e.g., user module is sorted before prelude modules).
         Self::register_all_generic_assoc_type_defs(modules, &type_table);
 
+        // Wrap all_* maps in Rc for cheap sharing across per-module resolvers
+        let all_newtypes = Rc::new(all_newtypes);
+        let all_struct_fields = Rc::new(all_struct_fields);
+        let all_variant_cases = Rc::new(all_variant_cases);
+        let all_enum_cases = Rc::new(all_enum_cases);
+        let all_flags_cases = Rc::new(all_flags_cases);
+        let all_resource_types = Rc::new(all_resource_types);
+        let all_generic_newtypes = Rc::new(all_generic_newtypes);
+
+        // Pre-compute the global known type names cache once (shared across all modules)
+        let global_known_type_names = {
+            let mut cache = IndexSet::default();
+            for m in all_struct_fields.values() {
+                for name in m.keys() {
+                    cache.insert(name.clone());
+                }
+            }
+            for m in all_variant_cases.values() {
+                for name in m.keys() {
+                    cache.insert(name.clone());
+                }
+            }
+            for m in all_enum_cases.values() {
+                for name in m.keys() {
+                    cache.insert(name.clone());
+                }
+            }
+            for m in all_flags_cases.values() {
+                for name in m.keys() {
+                    cache.insert(name.clone());
+                }
+            }
+            for m in all_newtypes.values() {
+                for name in m.keys() {
+                    cache.insert(name.clone());
+                }
+            }
+            for m in all_generic_newtypes.values() {
+                for name in m.keys() {
+                    cache.insert(name.clone());
+                }
+            }
+            for name in crate::tir::PrimitiveType::all_primitive_names() {
+                cache.insert(name.to_string());
+            }
+            cache
+        };
+
         // Second pass: resolve each module with per-module function_return_types and imports
         for module_source in &sorted_sources {
             let module = modules.get(module_source).expect("module should exist");
@@ -582,12 +630,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 enum_cases,
                 flags_cases,
                 resource_types,
-                all_newtypes: all_newtypes.clone(),
-                all_struct_fields: all_struct_fields.clone(),
-                all_variant_cases: all_variant_cases.clone(),
-                all_enum_cases: all_enum_cases.clone(),
-                all_flags_cases: all_flags_cases.clone(),
-                all_resource_types: all_resource_types.clone(),
+                all_newtypes: Rc::clone(&all_newtypes),
+                all_struct_fields: Rc::clone(&all_struct_fields),
+                all_variant_cases: Rc::clone(&all_variant_cases),
+                all_enum_cases: Rc::clone(&all_enum_cases),
+                all_flags_cases: Rc::clone(&all_flags_cases),
+                all_resource_types: Rc::clone(&all_resource_types),
                 function_return_types,
                 imported_functions,
                 logger,
@@ -609,11 +657,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 module_type_maps_cache: IndexMap::default(),
                 trait_env: Arc::clone(&trait_env),
                 included_files,
-                known_type_names_cache: IndexSet::default(),
+                known_type_names_cache: global_known_type_names.clone(),
                 indexing_trait_cache: IndexMap::default(),
                 trait_check_stack: RefCell::new(Vec::new()),
             };
-            resolver.rebuild_known_type_names_cache();
+            // known_type_names_cache is pre-computed globally; no per-module rebuild needed
 
             // Set file context so diagnostics emitted during resolution
             // carry the correct module filename (not the entry module).
