@@ -26,16 +26,6 @@ struct Formatter {
     mut buf: ref String,
 }
 
-variant Option<u8> {
-    Some(u8),
-    None,
-}
-
-struct Option<u8>::Some {
-    discriminant: i32,
-    payload_0: u8,
-}
-
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -132,11 +122,9 @@ import fn subtask-drop from "wasi/subtask-drop";
 
 fn sum_bytes(s) {
     let sum: i32;
-    let b: u8;
-    let __pattern_temp_0: ref Option<u8>;
-    let __local_8: u8;
-    let _licm_used_9: i32;
-    let _licm_repr_10: ref array<u8>;
+    let byte: u8;
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref array<u8>;
     let __sroa___iter_2_repr: ref array<u8>;
     let __sroa___iter_2_used: i32;
     let __sroa___iter_2_index: i32;
@@ -144,24 +132,19 @@ fn sum_bytes(s) {
     __sroa___iter_2_repr = s.repr;
     __sroa___iter_2_used = s.used;
     __sroa___iter_2_index = 0;
-    _licm_used_9 = __sroa___iter_2_used;
-    _licm_repr_10 = __sroa___iter_2_repr;
+    _licm_used_10 = __sroa___iter_2_used;
+    _licm_repr_11 = __sroa___iter_2_repr;
     b0: block {
         l1: loop {
-            __pattern_temp_0 = __inline_StrUtf8ByteIter_Iterator__next_2: block -> ref Option<u8> {
-                if __sroa___iter_2_index >= _licm_used_9 {
-                    break __inline_StrUtf8ByteIter_Iterator__next_2: Option<u8> { 1 };
+            __fused___inline_StrUtf8ByteIter_Iterator__next_2: block {
+                if __sroa___iter_2_index >= _licm_used_10 {
+                    break b0;
+                    break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
                 };
-                __local_8 = builtin::array_get_u8(_licm_repr_10, __sroa___iter_2_index);
+                byte = builtin::array_get_u8(_licm_repr_11, __sroa___iter_2_index);
                 __sroa___iter_2_index = __sroa___iter_2_index + 1;
-                break __inline_StrUtf8ByteIter_Iterator__next_2: Option<u8>::Some { discriminant: 0, payload_0: __local_8 };
-                unreachable;
-            };
-            if ref.test Option<u8>::Some(__pattern_temp_0) {
-                b = ref.cast Option<u8>::Some(__pattern_temp_0).payload_0;
-                sum = sum + b;
-            } else {
-                break b0;
+                sum = sum + byte;
+                break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
             };
             continue l1;
         };
@@ -174,17 +157,17 @@ fn count_chars(s) {
     let __iter_2: ref StrCharIter;
     count = 0;
     __iter_2 = StrCharIter { repr: ref.as_non_null(s.repr), used: s.used, byte_index: 0 };
-    b4: block {
-        l5: loop {
+    b3: block {
+        l4: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 count = count + 1;
             } else {
-                break b4;
+                break b3;
             };
-            continue l5;
+            continue l4;
         };
     };
     return count;
@@ -442,13 +425,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l15: loop {
+            l14: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l15;
+                continue l14;
             };
         };
     };
@@ -564,13 +547,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l22: loop {
+            l21: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l22;
+                continue l21;
             };
         };
     };
@@ -587,14 +570,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l26: loop {
+                l25: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l26;
+                    continue l25;
                 };
             };
         };
@@ -752,13 +735,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l42: loop {
+            l41: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l42;
+                continue l41;
             };
         };
     };

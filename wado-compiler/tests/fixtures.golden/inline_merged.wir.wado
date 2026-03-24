@@ -25,11 +25,6 @@ struct [i64, i32] {
     mut 1: i32,
 }
 
-struct InlineS {
-    mut a: i64,
-    mut b: i64,
-}
-
 struct InlineItem {
     mut value: i32,
 }
@@ -73,8 +68,6 @@ type "functype/test_array_append_minimal" = fn();
 type "functype/test_early_return" = fn();
 
 type "functype/test_generic_nested_ref" = fn();
-
-type "functype/inline_big_match" = fn(i32) -> ref InlineS;
 
 type "functype/inline_outer" = fn(i32) -> i64;
 
@@ -137,6 +130,8 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
+
+type "functype/inline_big_match" = fn(i32) -> [i64, i64];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -277,7 +272,7 @@ fn test_generic_nested_ref() with Stdout {
 }
 
 fn inline_big_match(idx) {
-    return b6: block -> ref InlineS {
+    block {
         b7: block {
             b8: block {
                 b9: block {
@@ -291,44 +286,33 @@ fn inline_big_match(idx) {
                                                 b17: block {
                                                     br_table idx [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] default=0;
                                                 };
-                                                InlineS { a: 99_i64, b: 99_i64 };
-                                                break b6;
+                                                return 99_i64; 99_i64;
                                             };
-                                            InlineS { a: 0_i64, b: 0_i64 };
-                                            break b6;
+                                            return 0_i64; 0_i64;
                                         };
-                                        InlineS { a: 1_i64, b: 1_i64 };
-                                        break b6;
+                                        return 1_i64; 1_i64;
                                     };
-                                    InlineS { a: 2_i64, b: 2_i64 };
-                                    break b6;
+                                    return 2_i64; 2_i64;
                                 };
-                                InlineS { a: 3_i64, b: 3_i64 };
-                                break b6;
+                                return 3_i64; 3_i64;
                             };
-                            InlineS { a: 4_i64, b: 4_i64 };
-                            break b6;
+                            return 4_i64; 4_i64;
                         };
-                        InlineS { a: 5_i64, b: 5_i64 };
-                        break b6;
+                        return 5_i64; 5_i64;
                     };
-                    InlineS { a: 6_i64, b: 6_i64 };
-                    break b6;
+                    return 6_i64; 6_i64;
                 };
-                InlineS { a: 7_i64, b: 7_i64 };
-                break b6;
+                return 7_i64; 7_i64;
             };
-            InlineS { a: 8_i64, b: 8_i64 };
-            break b6;
+            return 8_i64; 8_i64;
         };
-        InlineS { a: 9_i64, b: 9_i64 };
+        return 9_i64; 9_i64;
     };
 }
 
 fn inline_outer(e) {
     let z: i32;
     let p: i32;
-    let pm: ref InlineS;
     let val: i64;
     let __pattern_temp_0: ref "tuple/[i64, i32]";
     let __local_7: i32;
@@ -344,14 +328,13 @@ fn inline_outer(e) {
         };
         p = 0 - z;
     };
-    pm = __inline_inline_get_val_0: block -> ref InlineS {
-        __local_7 = p;
-        __local_8 = __local_7 - -50;
-        break __inline_inline_get_val_0: inline_big_match(__local_8);
-        unreachable;
-    };
+    let __sroa_pm_a: i64;
+    let __sroa_pm_b: i64;
+    __local_7 = p;
+    __local_8 = __local_7 - -50;
+    multivalue_bind [__sroa_pm_a, __sroa_pm_b] = inline_big_match(__local_8);
     __pattern_temp_0 = __inline_inline_tuple_fn_2: block -> ref "tuple/[i64, i32]" {
-        __local_9 = pm.a;
+        __local_9 = __sroa_pm_a;
         break __inline_inline_tuple_fn_2: "tuple/[i64, i32]" { 0: __local_9 * 2_i64, 1: 42 };
         unreachable;
     };

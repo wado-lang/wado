@@ -26,16 +26,6 @@ struct Formatter {
     mut buf: ref String,
 }
 
-variant Option<u8> {
-    Some(u8),
-    None,
-}
-
-struct Option<u8>::Some {
-    discriminant: i32,
-    payload_0: u8,
-}
-
 struct Array<u8> {  // Array<T> with T=u8
     mut repr: ref array<u8>,
     mut used: i32,
@@ -1509,42 +1499,37 @@ fn String::append(self, other) {
 fn StrUtf8ByteIter^Iterator::collect(self) {
     let __local_1: ref Array<u8>;
     let result: ref Array<u8>;
-    let item: u8;
-    let __pattern_temp_0: ref Option<u8>;
-    let __local_9: u8;
-    let _licm_used_10: i32;
-    let _licm_repr_11: ref array<u8>;
-    let _hfs_index_12: i32;
+    let byte: u8;
+    let _licm_used_11: i32;
+    let _licm_repr_12: ref array<u8>;
+    let _hfs_index_13: i32;
     result = __seq_lit: block -> ref Array<u8> {
         __local_1 = Array<u8> { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
         unreachable;
     };
-    _licm_used_10 = self.used;
-    _licm_repr_11 = self.repr;
-    _hfs_index_12 = self.index;
+    _licm_used_11 = self.used;
+    _licm_repr_12 = self.repr;
+    _hfs_index_13 = self.index;
     b123: block {
         l124: loop {
-            __pattern_temp_0 = __inline_StrUtf8ByteIter_Iterator__next_3: block -> ref Option<u8> {
-                if _hfs_index_12 >= _licm_used_10 {
-                    break __inline_StrUtf8ByteIter_Iterator__next_3: Option<u8> { 1 };
+            __fused___inline_StrUtf8ByteIter_Iterator__next_3: block {
+                if _hfs_index_13 >= _licm_used_11 {
+                    self.index = _hfs_index_13;
+                    break b123;
+                    self.index = _hfs_index_13;
+                    break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
                 };
-                __local_9 = builtin::array_get_u8(_licm_repr_11, _hfs_index_12);
-                _hfs_index_12 = _hfs_index_12 + 1;
-                break __inline_StrUtf8ByteIter_Iterator__next_3: Option<u8>::Some { discriminant: 0, payload_0: __local_9 };
-                unreachable;
-            };
-            if ref.test Option<u8>::Some(__pattern_temp_0) {
-                item = ref.cast Option<u8>::Some(__pattern_temp_0).payload_0;
-                Array<u8>::append(result, item);
-            } else {
-                self.index = _hfs_index_12;
-                break b123;
+                byte = builtin::array_get_u8(_licm_repr_12, _hfs_index_13);
+                _hfs_index_13 = _hfs_index_13 + 1;
+                Array<u8>::append(result, byte);
+                self.index = _hfs_index_13;
+                break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
             };
             continue l124;
         };
     };
-    self.index = _hfs_index_12;
+    self.index = _hfs_index_13;
     return result;
 }
 
@@ -1605,13 +1590,13 @@ fn Array<u8>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l133: loop {
+            l132: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l133;
+                continue l132;
             };
         };
     };
@@ -1648,13 +1633,13 @@ fn Array<u8>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l137: loop {
+            l136: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l137;
+                continue l136;
             };
         };
     };
@@ -1675,7 +1660,7 @@ fn Array<u8>^Eq::eq(self, other) {
         _licm_repr_4 = self.repr;
         _licm_repr_5 = other.repr;
         block {
-            l141: loop {
+            l140: loop {
                 if (i < _licm_used_3) == 0 {
                     break __for_3;
                 };
@@ -1683,7 +1668,7 @@ fn Array<u8>^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l141;
+                continue l140;
             };
         };
     };
@@ -1697,13 +1682,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l145: loop {
+            l144: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l145;
+                continue l144;
             };
         };
     };

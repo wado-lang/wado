@@ -1713,7 +1713,7 @@ fn subst_variant_payload_in_expr(
 
 /// Returns `true` if `block` contains a `Loop` statement at any nesting depth.
 ///
-/// This is used to determine whether labeled_block_fusion would introduce a
+/// This is used to determine whether `labeled_block_fusion` would introduce a
 /// new loop nesting that could confuse free unlabeled `break`/`continue` in
 /// the THEN/ELSE blocks being merged.
 fn block_contains_loop(block: &TirBlock) -> bool {

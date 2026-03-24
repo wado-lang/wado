@@ -46,16 +46,6 @@ struct Formatter {
     mut buf: ref String,
 }
 
-variant Option<f64> {
-    Some(f64),
-    None,
-}
-
-struct Option<f64>::Some {
-    discriminant: i32,
-    payload_0: f64,
-}
-
 variant Result<i64,DeserializeError> {
     Ok(i64),
     Err(ref "core:serde/DeserializeError"),
@@ -166,8 +156,6 @@ type "functype/pack64" = fn(u64, i32) -> f64;
 
 type "functype/parse" = fn(u64, i32) -> f64;
 
-type "functype/parse_text" = fn(ref String) -> ref Option<f64>;
-
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
@@ -221,6 +209,8 @@ type "functype/core/json/from_string<i64>" = fn(ref String) -> [i32, i64, ref nu
 type "functype/pow10_coarse" = fn(i32) -> [u64, u64];
 
 type "functype/mul_pow10" = fn(i32) -> [u64, u64];
+
+type "functype/parse_text" = fn(ref String) -> [i32, f64];
 
 type "functype/char::from_u32" = fn(u32) -> [i32, char];
 
@@ -1520,7 +1510,7 @@ fn parse_text(s) {
     let _licm_repr_81: ref array<u8>;
     len = s.used;
     if len == 0 {
-        return Option<f64> { 1 };
+        return 1; 0;
     };
     sign = 1;
     i = 0;
@@ -1532,7 +1522,7 @@ fn parse_text(s) {
         i = 1;
     };
     if i >= len {
-        return Option<f64> { 1 };
+        return 1; 0;
     };
     remaining = len - i;
     c0 = __inline_String__get_byte_2: block -> u8 {
@@ -1573,7 +1563,7 @@ fn parse_text(s) {
             0;
         } {
             if remaining == 3 {
-                return Option<f64>::Some { discriminant: 0, payload_0: f64.copysign(inf, sign) };
+                return 0; f64.copysign(inf, sign);
             };
             if remaining == 8 {
                 c3 = __inline_String__get_byte_5: block -> u8 {
@@ -1638,11 +1628,11 @@ fn parse_text(s) {
                 } else {
                     0;
                 } {
-                    return Option<f64>::Some { discriminant: 0, payload_0: f64.copysign(inf, sign) };
+                    return 0; f64.copysign(inf, sign);
                 };
             };
         };
-        return Option<f64> { 1 };
+        return 1; 0;
     };
     if if if c0 == 110 -> i32 {
         1;
@@ -1676,9 +1666,9 @@ fn parse_text(s) {
         } else {
             0;
         } {
-            return Option<f64>::Some { discriminant: 0, payload_0: 0 / 0 };
+            return 0; 0 / 0;
         };
-        return Option<f64> { 1 };
+        return 1; 0;
     };
     d = 0_i64;
     frac = 0;
@@ -1727,7 +1717,7 @@ fn parse_text(s) {
         0;
     } {
         if int_digits == 0 {
-            return Option<f64> { 1 };
+            return 1; 0;
         };
         i = i + 1;
         frac_start = i;
@@ -1766,7 +1756,7 @@ fn parse_text(s) {
             };
         };
         if i == frac_start {
-            return Option<f64> { 1 };
+            return 1; 0;
         };
     };
     total_digits = int_digits + frac;
@@ -1775,7 +1765,7 @@ fn parse_text(s) {
     } else {
         total_digits > 19;
     } {
-        return Option<f64> { 1 };
+        return 1; 0;
     };
     p = 0;
     if if i < len -> i32 {
@@ -1819,7 +1809,7 @@ fn parse_text(s) {
         } else {
             (len - i) > 3;
         } {
-            return Option<f64> { 1 };
+            return 1; 0;
         };
         __for_2: block {
             _licm_repr_81 = s.repr;
@@ -1855,25 +1845,25 @@ fn parse_text(s) {
             };
         };
         if i == exp_start {
-            return Option<f64> { 1 };
+            return 1; 0;
         };
         p = p * exp_sign;
     };
     if i != len {
-        return Option<f64> { 1 };
+        return 1; 0;
     };
     if d == 0_i64 {
-        return Option<f64>::Some { discriminant: 0, payload_0: f64.copysign(0, sign) };
+        return 0; f64.copysign(0, sign);
     };
     eff_p = p - frac;
     if eff_p > 350 {
-        return Option<f64>::Some { discriminant: 0, payload_0: f64.copysign(inf, sign) };
+        return 0; f64.copysign(inf, sign);
     };
     if eff_p < -351 {
-        return Option<f64>::Some { discriminant: 0, payload_0: f64.copysign(0, sign) };
+        return 0; f64.copysign(0, sign);
     };
     val = parse(d, eff_p);
-    return Option<f64>::Some { discriminant: 0, payload_0: f64.copysign(val, sign) };
+    return 0; f64.copysign(val, sign);
 }
 
 fn count_digits_i64(val) {
@@ -2950,7 +2940,6 @@ fn "core:json/JsonDeserializer::has_exp_or_dot"(self, raw) {  // from core:json
 
 fn "core:json/JsonDeserializer::parse_i64_from"(self, raw, start) {  // from core:json
     let has_exp: bool;
-    let parsed: ref Option<f64>;
     let v: f64;
     let neg: bool;
     let idx: i32;
@@ -2966,13 +2955,12 @@ fn "core:json/JsonDeserializer::parse_i64_from"(self, raw, start) {  // from cor
     let _licm_repr_26: ref array<u8>;
     has_exp = "core:json/JsonDeserializer::has_exp_or_dot"(self, raw);
     if has_exp {
-        parsed = __inline_f64__parse_0: block -> ref Option<f64> {
-            __local_13 = value_copy String(raw);
-            break __inline_f64__parse_0: parse_text(__local_13);
-            unreachable;
-        };
-        if ref.test Option<f64>::Some(parsed) {
-            v = ref.cast Option<f64>::Some(parsed).payload_0;
+        let __sroa_parsed_discriminant: i32;
+        let __sroa_parsed_payload_0: f64;
+        __local_13 = value_copy String(raw);
+        multivalue_bind [__sroa_parsed_discriminant, __sroa_parsed_payload_0] = parse_text(__local_13);
+        if __sroa_parsed_discriminant == 0 {
+            v = __sroa_parsed_payload_0;
             if v != builtin::f64_floor(v) {
                 return Result<i64,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_2: block -> ref "core:serde/DeserializeError" {
                     __local_15 = String { repr: array.new_data<u8>("expected integer, got float"), used: 27 };
@@ -3036,7 +3024,6 @@ fn "core:json/JsonDeserializer::parse_i64_from"(self, raw, start) {  // from cor
 
 fn "core:json/JsonDeserializer::parse_u64_from"(self, raw, start) {  // from core:json
     let has_exp: bool;
-    let parsed: ref Option<f64>;
     let v: f64;
     let idx: i32;
     let len: i32;
@@ -3064,13 +3051,12 @@ fn "core:json/JsonDeserializer::parse_u64_from"(self, raw, start) {  // from cor
     };
     has_exp = "core:json/JsonDeserializer::has_exp_or_dot"(self, raw);
     if has_exp {
-        parsed = __inline_f64__parse_3: block -> ref Option<f64> {
-            __local_17 = value_copy String(raw);
-            break __inline_f64__parse_3: parse_text(__local_17);
-            unreachable;
-        };
-        if ref.test Option<f64>::Some(parsed) {
-            v = ref.cast Option<f64>::Some(parsed).payload_0;
+        let __sroa_parsed_discriminant: i32;
+        let __sroa_parsed_payload_0: f64;
+        __local_17 = value_copy String(raw);
+        multivalue_bind [__sroa_parsed_discriminant, __sroa_parsed_payload_0] = parse_text(__local_17);
+        if __sroa_parsed_discriminant == 0 {
+            v = __sroa_parsed_payload_0;
             if v < 0 {
                 return Result<u64,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__overflow_4: block -> ref "core:serde/DeserializeError" {
                     __local_18 = String { repr: array.new_data<u8>("negative value for u64"), used: 22 };
