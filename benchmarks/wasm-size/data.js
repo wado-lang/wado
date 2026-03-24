@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774313623922,
+  "lastUpdate": 1774356835277,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6731,6 +6731,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/be6ca9ee2bb0711f0abc5b3393edc4e66c1a41f8"
         },
         "date": 1774313623704,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d25f95c5939221959aad5d0e337f4059a2851abe",
+          "message": "Merge pull request #676 from wado-lang/claude/iterator-utilities-refactor-6qDae\n\nAdd iterator adapter methods and fix generic impl syntax",
+          "timestamp": "2026-03-24T21:51:22+09:00",
+          "tree_id": "864905793dae503a215e4519759dc92161402782",
+          "url": "https://github.com/wado-lang/wado/commit/d25f95c5939221959aad5d0e337f4059a2851abe"
+        },
+        "date": 1774356835061,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
