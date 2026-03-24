@@ -508,7 +508,7 @@ pub struct TypeTable {
     /// Maps newtype names to their ultimate base type name.
     /// Populated by `erase_newtypes_and_flags()` and used by `wir_build` for name-based newtype resolution.
     newtype_to_base_name: IndexMap<String, String>,
-    /// Index from struct name to TypeId for O(1) lookup by name.
+    /// Index from struct name to `TypeId` for O(1) lookup by name.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<String, TypeId>,
 }
@@ -664,7 +664,7 @@ impl TypeTable {
         self.types.keys().copied()
     }
 
-    /// Look up a struct TypeId by its name. Returns `None` if no struct with that name exists.
+    /// Look up a struct `TypeId` by its name. Returns `None` if no struct with that name exists.
     pub fn find_struct_by_name(&self, name: &str) -> Option<TypeId> {
         self.struct_name_index.get(name).copied()
     }
