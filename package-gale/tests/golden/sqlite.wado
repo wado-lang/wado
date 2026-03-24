@@ -5439,8 +5439,7 @@ fn try_multiline_comment(chars: &Array<char>, start: i32) -> i32 {
     if !alts_ok_1 {
     alts_1_1: {
         pos = alts_saved_1;
-        pos = try_eof(chars, pos);
-        if pos < 0 { break alts_1_1; }
+        if pos < chars.len() { break alts_1_1; }
         alts_ok_1 = true;
     }
     }
@@ -6091,10 +6090,10 @@ fn parse_sql_stmt_list(p: &mut Parser) -> Result<SqlStmtListNode, ParseError> {
         }
         parse_sql_stmt(p)?;
     }
-    let mut semicolon_list: Array<Token> = [];
+    let mut semicolon_list_2: Array<Token> = [];
     while p.peek_kind() == TK_LIT_SEMI {
         let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
-        semicolon_list.append(semicolon);
+        semicolon_list_2.append(semicolon);
     }
     return Result::<SqlStmtListNode, ParseError>::Ok(SqlStmtListNode {
         span: Span::new(start, p.last_end()),
@@ -6522,14 +6521,14 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
         parse_expr(p)?;
     }
     let k_begin = p.expect(TK_K_BEGIN, "K_BEGIN")?;
-    let grp_kind = p.peek_kind();
-    if grp_kind == TK_K_WITH || grp_kind == TK_K_UPDATE {
+    let grp_kind_2 = p.peek_kind();
+    if grp_kind_2 == TK_K_WITH || grp_kind_2 == TK_K_UPDATE {
         parse_update_stmt(p)?;
-    } else if grp_kind == TK_K_WITH || grp_kind == TK_K_INSERT || grp_kind == TK_K_REPLACE {
+    } else if grp_kind_2 == TK_K_WITH || grp_kind_2 == TK_K_INSERT || grp_kind_2 == TK_K_REPLACE {
         parse_insert_stmt(p)?;
-    } else if grp_kind == TK_K_WITH || grp_kind == TK_K_DELETE {
+    } else if grp_kind_2 == TK_K_WITH || grp_kind_2 == TK_K_DELETE {
         parse_delete_stmt(p)?;
-    } else if grp_kind == TK_K_WITH || grp_kind == TK_K_SELECT || grp_kind == TK_K_VALUES {
+    } else if grp_kind_2 == TK_K_WITH || grp_kind_2 == TK_K_SELECT || grp_kind_2 == TK_K_VALUES {
         parse_select_stmt(p)?;
     }
     p.expect(TK_LIT_SEMI, "';'")?;
@@ -6883,8 +6882,8 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
         }
         p.expect(TK_LIT_RPAREN, "')'")?;
     }
-    let grp_kind = p.peek_kind();
-    if grp_kind == TK_K_VALUES {
+    let grp_kind_2 = p.peek_kind();
+    if grp_kind_2 == TK_K_VALUES {
         p.expect(TK_K_VALUES, "K_VALUES")?;
         p.expect(TK_LIT_LPAREN, "'('")?;
         parse_expr(p)?;
@@ -6903,9 +6902,9 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
             }
             p.expect(TK_LIT_RPAREN, "')'")?;
         }
-    } else if grp_kind == TK_K_WITH || grp_kind == TK_K_SELECT || grp_kind == TK_K_VALUES {
+    } else if grp_kind_2 == TK_K_WITH || grp_kind_2 == TK_K_SELECT || grp_kind_2 == TK_K_VALUES {
         parse_select_stmt(p)?;
-    } else if grp_kind == TK_K_DEFAULT {
+    } else if grp_kind_2 == TK_K_DEFAULT {
         p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
         p.expect(TK_K_VALUES, "K_VALUES")?;
     }
@@ -7881,18 +7880,18 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
             } else if grp_kind == TK_K_UPDATE {
                 p.expect(TK_K_UPDATE, "K_UPDATE")?;
             }
-            let grp_kind = p.peek_kind();
-            if grp_kind == TK_K_SET {
+            let grp_kind_2 = p.peek_kind();
+            if grp_kind_2 == TK_K_SET {
                 p.expect(TK_K_SET, "K_SET")?;
                 p.expect(TK_K_NULL, "K_NULL")?;
-            } else if grp_kind == TK_K_SET {
+            } else if grp_kind_2 == TK_K_SET {
                 p.expect(TK_K_SET, "K_SET")?;
                 p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
-            } else if grp_kind == TK_K_CASCADE {
+            } else if grp_kind_2 == TK_K_CASCADE {
                 p.expect(TK_K_CASCADE, "K_CASCADE")?;
-            } else if grp_kind == TK_K_RESTRICT {
+            } else if grp_kind_2 == TK_K_RESTRICT {
                 p.expect(TK_K_RESTRICT, "K_RESTRICT")?;
-            } else if grp_kind == TK_K_NO {
+            } else if grp_kind_2 == TK_K_NO {
                 p.expect(TK_K_NO, "K_NO")?;
                 p.expect(TK_K_ACTION, "K_ACTION")?;
             }
