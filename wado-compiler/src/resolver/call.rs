@@ -467,6 +467,163 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
                     }
+                    // Namespace import: `use ns from "..."` then `ns::Type::method()`
+                    // or `ns::VariantType::Case(...)`.
+                    else if let Some(ns_source) = self.namespace_imports.get(prefix).cloned() {
+                        // suffix may be "Type::method" or plain "func"
+                        if let Some(inner_pos) = suffix.find("::") {
+                            let type_name = &suffix[..inner_pos];
+                            let method_name = &suffix[inner_pos + 2..];
+
+                            // Check if this is a variant construction in the namespace
+                            self.ensure_module_maps_cached(&ns_source);
+                            let ns_variant = self
+                                .module_type_maps_cache
+                                .get(&ns_source)
+                                .and_then(|maps| maps.variant_cases.get(type_name))
+                                .cloned();
+                            if let Some(variant_info) = ns_variant {
+                                let case_match = variant_info
+                                    .cases
+                                    .iter()
+                                    .enumerate()
+                                    .find(|(_, c)| c.name == method_name)
+                                    .map(|(i, c)| (i, c.clone()));
+                                if let Some((case_index, case_data)) = case_match {
+                                    let payload_is_unit = matches!(
+                                        self.type_table.borrow().get(case_data.payload),
+                                        ResolvedType::Unit
+                                    );
+                                    let expected_args = usize::from(!payload_is_unit);
+                                    if args.len() != expected_args {
+                                        let _ =
+                                            self.logger.error(TypeError::ArgumentCountMismatch {
+                                                expected: expected_args,
+                                                found: args.len(),
+                                                span: call.span,
+                                            });
+                                        return TirExpr::new(
+                                            TirExprKind::Unit,
+                                            TypeTable::ERROR,
+                                            call.span,
+                                        );
+                                    }
+                                    let payload = args.into_iter().next().map(Box::new);
+                                    let variant_type = if variant_info.type_params.is_empty() {
+                                        self.type_table.borrow_mut().make_variant(
+                                            type_name.to_string(),
+                                            variant_info.module_source.clone(),
+                                        )
+                                    } else {
+                                        self.infer_variant_type_args(
+                                            type_name,
+                                            &variant_info,
+                                            &case_data,
+                                            payload.as_deref(),
+                                            expected_type,
+                                        )
+                                    };
+                                    return TirExpr::new(
+                                        TirExprKind::VariantConstruct {
+                                            variant_type,
+                                            case_index: case_index as u32,
+                                            case_name: case_data.name.clone(),
+                                            payload,
+                                        },
+                                        variant_type,
+                                        call.span,
+                                    );
+                                }
+                            }
+
+                            // Static method call on a type from the namespace module.
+                            // Use the namespace module source so codegen finds the right impl.
+                            let mangled_name =
+                                MethodName::format_local(type_name, None, method_name);
+                            let method_type_args: Vec<TypeId> = call
+                                .type_args
+                                .iter()
+                                .map(|ty| self.resolve_type(ty))
+                                .collect();
+
+                            // Find the impl module via the trait env (global index)
+                            let arg_type_hint = if (method_name == "from"
+                                || method_name == "try_from")
+                                && args.len() == 1
+                            {
+                                Some(self.type_table.borrow().type_name(args[0].type_id))
+                            } else {
+                                None
+                            };
+                            let (trait_name, struct_module) = if let Some((tn, im)) = self
+                                .locate_static_method_impl(
+                                    type_name,
+                                    method_name,
+                                    arg_type_hint.as_deref(),
+                                ) {
+                                (Some(tn), im)
+                            } else {
+                                (None, ns_source.clone())
+                            };
+
+                            let final_mangled = if let Some(ref tn) = trait_name {
+                                MethodName::format_local(type_name, Some(tn), method_name)
+                            } else {
+                                mangled_name
+                            };
+
+                            let mut return_type = self.lookup_static_method_return_type(
+                                type_name,
+                                &struct_module,
+                                method_name,
+                                &final_mangled,
+                            );
+                            if !method_type_args.is_empty() {
+                                return_type =
+                                    self.substitute_type_params(return_type, &method_type_args);
+                            }
+
+                            let monomorph_info = if method_type_args.is_empty() {
+                                None
+                            } else {
+                                Some(MonomorphInfo {
+                                    generic_name: final_mangled.clone(),
+                                    impl_type_args: vec![],
+                                    method_type_args: method_type_args.clone(),
+                                    is_blanket: false,
+                                })
+                            };
+
+                            let param_is_mut =
+                                self.lookup_static_method_param_is_mut(type_name, method_name);
+                            let call_args: Vec<CallArg> = args
+                                .into_iter()
+                                .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                                .collect();
+
+                            return TirExpr::new(
+                                TirExprKind::Call {
+                                    func: FunctionRef {
+                                        module_source: struct_module,
+                                        name: final_mangled,
+                                        monomorph_info,
+                                        method_info: Some(LocalMethodName::new(
+                                            type_name.to_string(),
+                                            trait_name,
+                                            method_name.to_string(),
+                                        )),
+                                        is_cm_binding: false,
+                                    },
+                                    type_args: vec![],
+                                    args: call_args,
+                                },
+                                return_type,
+                                call.span,
+                            );
+                        }
+                        (Some(ns_source), suffix.to_string(), true)
+                    }
                     // Effect operations and module namespace calls - pass through to codegen.
                     // This covers Stdout::write(), etc.
                     else {

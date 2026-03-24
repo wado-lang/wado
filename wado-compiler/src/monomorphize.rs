@@ -836,7 +836,9 @@ impl Monomorphizer {
             // This can happen when function substitution creates new GenericInstance types
             // with different TypeIds for the type arguments
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                module_source,
+                type_args,
             } => {
                 // Skip Array - it has special codegen handling and should remain
                 // as GenericInstance, not be rewritten to Struct
@@ -852,7 +854,7 @@ impl Monomorphizer {
                 let mangled_name = mangle_generic_name(&name, &type_names);
 
                 // Look for existing Struct with this mangled name via O(1) index
-                if let Some(tid) = type_table.find_struct_by_name(&mangled_name) {
+                if let Some(tid) = type_table.find_struct_by_name(&mangled_name, &module_source) {
                     return tid;
                 }
                 // If not found, return original type_id
@@ -1136,13 +1138,15 @@ impl Monomorphizer {
                         let mangled_name = mangle_generic_name(&name, &type_names);
 
                         // Look for monomorphized struct with this name via O(1) index
-                        if let Some(tid) = type_table.find_struct_by_name(&mangled_name) {
+                        if let Some(tid) =
+                            type_table.find_struct_by_name(&mangled_name, &module_source)
+                        {
                             return tid;
                         }
                     }
 
                     // Fallback: look for plain struct by name
-                    if let Some(tid) = type_table.find_struct_by_name(&name) {
+                    if let Some(tid) = type_table.find_struct_by_name(&name, &module_source) {
                         return tid;
                     }
                     // If not found, just return the original type_id
@@ -1164,7 +1168,7 @@ impl Monomorphizer {
                 let mangled_name = mangle_generic_name(&name, &type_names);
 
                 // Look for existing struct with this name via O(1) index
-                if let Some(tid) = type_table.find_struct_by_name(&mangled_name) {
+                if let Some(tid) = type_table.find_struct_by_name(&mangled_name, &module_source) {
                     return tid;
                 }
 

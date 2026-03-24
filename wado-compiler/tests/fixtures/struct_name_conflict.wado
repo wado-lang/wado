@@ -1,0 +1,29 @@
+// Test that same-named structs in different modules don't conflict
+use { println, Stdout } from "core:cli";
+use helper from "./sub/struct_name_conflict_helper.wado";
+
+// Local struct with the same name "Pair" as the one in helper
+struct Pair {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+impl Pair {
+    fn total(&self) -> i32 {
+        return self.a + self.b + self.c;
+    }
+}
+
+export fn run() with Stdout {
+    let local = Pair { a: 1, b: 2, c: 3 };
+    let remote = helper::Pair::new(10, 20);
+
+    println(`local total: {local.total()}`);
+    println(`remote sum: {remote.sum()}`);
+    println(`local fields: {local.a}, {local.b}, {local.c}`);
+    println(`remote fields: {remote.x}, {remote.y}`);
+}
+
+__DATA__
+{"stdout": "local total: 6\nremote sum: 30\nlocal fields: 1, 2, 3\nremote fields: 10, 20\n"}

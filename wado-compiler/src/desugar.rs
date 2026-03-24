@@ -85,6 +85,11 @@ fn strip_namespace_prefix<'a>(name: &'a str, namespace_names: &[String]) -> &'a 
         if let Some(rest) = name.strip_prefix(ns.as_str())
             && let Some(rest) = rest.strip_prefix("::")
         {
+            // Keep the namespace prefix for type-qualified names (e.g., "ns::Type::method")
+            // so the resolver can identify which module the type belongs to.
+            if rest.contains("::") {
+                return name;
+            }
             return rest;
         }
     }

@@ -110,6 +110,8 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Resolved param types for generic methods (`mangled_name` -> `param TypeIds`)
     /// Resolved in the method's own type param scope so `TypeParams` have correct ids.
     generic_method_resolved_param_types: IndexMap<String, Vec<TypeId>>,
+    /// Namespace import aliases (e.g., "helper" -> module source for `use helper from "..."`)
+    namespace_imports: IndexMap<String, ModuleSource>,
     /// Effect name to source module mapping (e.g., "Stdout" -> wasi:cli module source)
     /// Built from import declarations and local effect declarations.
     effect_sources: IndexMap<String, ModuleSource>,
@@ -179,6 +181,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             all_resource_types: Rc::new(IndexMap::default()),
             function_return_types: IndexMap::default(),
             imported_functions: IndexSet::default(),
+            namespace_imports: IndexMap::default(),
             logger,
             current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
             current_module_items: Vec::new(),

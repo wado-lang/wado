@@ -1613,7 +1613,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Look up whether each parameter of a static method is `mut`.
     /// Returns empty vec (conservative) for unknown methods.
-    fn lookup_static_method_param_is_mut(&self, struct_name: &str, method_name: &str) -> Vec<bool> {
+    pub(super) fn lookup_static_method_param_is_mut(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Vec<bool> {
         let find_in_items = |items: &[Item]| -> Option<Vec<bool>> {
             items.iter().find_map(|item| {
                 if let Item::Impl(impl_block) = item {

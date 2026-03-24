@@ -581,8 +581,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
             }
 
-            // Collect imported function names from this module's use declarations
+            // Collect imported function names and namespace aliases from use declarations
             let mut imported_functions = IndexSet::default();
+            let mut namespace_imports: IndexMap<String, ModuleSource> = IndexMap::default();
             for item in &module.items {
                 if let Item::Use(use_decl) = item {
                     for use_item in &use_decl.items {
@@ -603,13 +604,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     }
                                 }
                             }
-                            crate::ast::UseItem::Namespace { .. } => {
+                            crate::ast::UseItem::Namespace { name } => {
                                 // Namespace import: all symbols from source module are available
                                 let source =
                                     crate::name::resolve_import(module_source, &use_decl.source);
                                 for sym in symbols.get_module_symbols(&source) {
                                     imported_functions.insert(sym.name.clone());
                                 }
+                                namespace_imports.insert(name.clone(), source);
                             }
                             crate::ast::UseItem::Wildcard => {
                                 // Wildcard import: no individual function names to collect
@@ -638,6 +640,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 all_resource_types: Rc::clone(&all_resource_types),
                 function_return_types,
                 imported_functions,
+                namespace_imports,
                 logger,
                 current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"), // Set in resolve_module
                 current_module_items: Vec::new(), // Set in resolve_module
