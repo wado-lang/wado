@@ -2177,9 +2177,7 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             TirBinaryOp::RefEq => WirInstr::RefEq(left, right),
-            TirBinaryOp::RefNotEq => {
-                WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right)))
-            }
+            TirBinaryOp::RefNotEq => WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right))),
         }
     }
 

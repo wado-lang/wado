@@ -133,9 +133,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     _ => unreachable!(),
                 };
                 let _ = self.logger.error(TypeError::InvalidPattern {
-                    message: format!(
-                        "operator `{op_str}` cannot be applied to type `{type_name}`"
-                    ),
+                    message: format!("operator `{op_str}` cannot be applied to type `{type_name}`"),
                     span: binary.span,
                 });
                 return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
@@ -155,7 +153,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
 
         if is_comparison {
-
             // Get struct name for trait lookup.
             // Newtypes of primitives (e.g. type Radians = f64) use primitive comparison.
             // Newtypes of structs need trait-based comparison via the base type's impl.
