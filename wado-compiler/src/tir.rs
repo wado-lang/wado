@@ -508,9 +508,9 @@ pub struct TypeTable {
     /// Maps newtype names to their ultimate base type name.
     /// Populated by `erase_newtypes_and_flags()` and used by `wir_build` for name-based newtype resolution.
     newtype_to_base_name: IndexMap<String, String>,
-    /// Index from struct name to `TypeId` for O(1) lookup by name.
+    /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
-    struct_name_index: IndexMap<String, TypeId>,
+    struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
 }
 
 impl Default for TypeTable {
@@ -589,9 +589,15 @@ impl TypeTable {
         }
         let id = TypeId(self.next_id);
         self.next_id += 1;
-        // Update struct name index for O(1) lookups by name
-        if let ResolvedType::Struct { ref name, .. } = ty {
-            self.struct_name_index.insert(name.clone(), id);
+        // Update struct name index for O(1) lookups by (name, module_source)
+        if let ResolvedType::Struct {
+            ref name,
+            ref module_source,
+            ..
+        } = ty
+        {
+            self.struct_name_index
+                .insert((name.clone(), module_source.clone()), id);
         }
         self.types.insert(id, ty.clone());
         self.intern_map.insert(ty, id);
@@ -664,9 +670,12 @@ impl TypeTable {
         self.types.keys().copied()
     }
 
-    /// Look up a struct `TypeId` by its name. Returns `None` if no struct with that name exists.
-    pub fn find_struct_by_name(&self, name: &str) -> Option<TypeId> {
-        self.struct_name_index.get(name).copied()
+    /// Look up a struct `TypeId` by its name and module source.
+    /// Returns `None` if no struct with that name exists in the given module.
+    pub fn find_struct_by_name(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
+        self.struct_name_index
+            .get(&(name.to_string(), module_source.clone()))
+            .copied()
     }
 
     /// Remove all type entries whose `TypeId` is not in `keep`.
@@ -681,8 +690,14 @@ impl TypeTable {
         self.struct_name_index.clear();
         for (&id, ty) in &self.types {
             self.intern_map.insert(ty.clone(), id);
-            if let ResolvedType::Struct { name, .. } = ty {
-                self.struct_name_index.insert(name.clone(), id);
+            if let ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } = ty
+            {
+                self.struct_name_index
+                    .insert((name.clone(), module_source.clone()), id);
             }
         }
     }

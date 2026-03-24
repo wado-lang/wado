@@ -439,6 +439,109 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ident.span,
                 );
             }
+
+            // Check for namespace import: ns::Type::Case or ns::Enum::Case
+            if let Some(ns_source) = self.namespace_imports.get(prefix).cloned()
+                && let Some(inner_pos) = suffix.find("::")
+            {
+                let type_name = &suffix[..inner_pos];
+                let case_name = &suffix[inner_pos + 2..];
+
+                self.ensure_module_maps_cached(&ns_source);
+                // Check variant cases
+                let ns_variant = self
+                    .module_type_maps_cache
+                    .get(&ns_source)
+                    .and_then(|maps| maps.variant_cases.get(type_name))
+                    .cloned();
+                if let Some(variant_info) = ns_variant
+                    && let Some((case_index, case_data)) = variant_info
+                        .cases
+                        .iter()
+                        .enumerate()
+                        .find(|(_, c)| c.name == case_name)
+                        .map(|(i, c)| (i, c.clone()))
+                {
+                    let payload_is_unit = matches!(
+                        self.type_table.borrow().get(case_data.payload),
+                        ResolvedType::Unit
+                    );
+                    if !payload_is_unit {
+                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                            expected: 1,
+                            found: 0,
+                            span: ident.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+                    }
+                    let variant_type = if variant_info.type_params.is_empty() {
+                        self.type_table
+                            .borrow_mut()
+                            .make_variant(type_name.to_string(), variant_info.module_source.clone())
+                    } else {
+                        self.infer_variant_type_args(
+                            type_name,
+                            &variant_info,
+                            &case_data,
+                            None,
+                            expected_type,
+                        )
+                    };
+                    return TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type,
+                            case_index: case_index as u32,
+                            case_name: case_data.name.clone(),
+                            payload: None,
+                        },
+                        variant_type,
+                        ident.span,
+                    );
+                }
+
+                // Check enum cases
+                let ns_enum = self
+                    .module_type_maps_cache
+                    .get(&ns_source)
+                    .and_then(|maps| maps.enum_cases.get(type_name))
+                    .cloned();
+                if let Some(enum_info) = ns_enum
+                    && let Some(case_data) = enum_info.cases.iter().find(|c| c.name == case_name)
+                {
+                    let enum_type = self
+                        .type_table
+                        .borrow_mut()
+                        .make_enum(type_name.to_string(), enum_info.module_source.clone());
+                    return TirExpr::new(
+                        TirExprKind::EnumConstruct {
+                            enum_type,
+                            case_index: case_data.index,
+                            case_name: case_data.name.clone(),
+                        },
+                        enum_type,
+                        ident.span,
+                    );
+                }
+
+                // Check flags members
+                let ns_flags = self
+                    .module_type_maps_cache
+                    .get(&ns_source)
+                    .and_then(|maps| maps.flags_cases.get(type_name))
+                    .cloned();
+                if let Some(flags_info) = ns_flags
+                    && let Some(member) = flags_info.members.iter().find(|m| m.name == case_name)
+                {
+                    return TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: u64::from(member.bitmask),
+                            repr: member.bitmask.to_string(),
+                        },
+                        flags_info.type_id,
+                        ident.span,
+                    );
+                }
+            }
         }
 
         // Check for global variables in current module
