@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774386967717,
+  "lastUpdate": 1774387518720,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7043,6 +7043,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d836bc5ee10fe349f44af4c4a84dee6c672c0ead"
         },
         "date": 1774386967528,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0bd301e14e1c6dfb39258a84713cd44556ae343a",
+          "message": "Merge pull request #684 from wado-lang/claude/optimize-compiler-speed-OAmPA\n\nOptimize type resolution and stdlib caching with Rc sharing",
+          "timestamp": "2026-03-25T06:22:51+09:00",
+          "tree_id": "c813e79f47eed7bfaba0c1dd87bc78f68e4e0731",
+          "url": "https://github.com/wado-lang/wado/commit/0bd301e14e1c6dfb39258a84713cd44556ae343a"
+        },
+        "date": 1774387518508,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
