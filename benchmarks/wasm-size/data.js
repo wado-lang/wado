@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774391802949,
+  "lastUpdate": 1774392603984,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7121,6 +7121,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9707e32abd9d749b390b48f0b54c114cd42a6472"
         },
         "date": 1774391802737,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "caf59eb91cb725e993c1613574dbc7ed04f6216a",
+          "message": "Merge pull request #685 from wado-lang/claude/fix-remap-logic-zu3mw\n\nrefactor: replace fragile monomorph local remap with visitor-based rewriting",
+          "timestamp": "2026-03-25T07:47:32+09:00",
+          "tree_id": "f1bfb2212dcd23dc95bc37fff22c2fd6351ae168",
+          "url": "https://github.com/wado-lang/wado/commit/caf59eb91cb725e993c1613574dbc7ed04f6216a"
+        },
+        "date": 1774392603770,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
