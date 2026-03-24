@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774387518720,
+  "lastUpdate": 1774391802949,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7082,6 +7082,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0bd301e14e1c6dfb39258a84713cd44556ae343a"
         },
         "date": 1774387518508,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9707e32abd9d749b390b48f0b54c114cd42a6472",
+          "message": "Merge pull request #686 from wado-lang/claude/fix-struct-naming-conflict-fkI4o\n\nfix: resolve struct naming conflicts across modules",
+          "timestamp": "2026-03-25T07:34:14+09:00",
+          "tree_id": "00c8ec96210ca61af332426716ecf7410cd88dc4",
+          "url": "https://github.com/wado-lang/wado/commit/9707e32abd9d749b390b48f0b54c114cd42a6472"
+        },
+        "date": 1774391802737,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
