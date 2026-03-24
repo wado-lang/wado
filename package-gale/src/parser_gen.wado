@@ -242,11 +242,11 @@ fn gen_element(
         return;
     }
     if let Repeat(rep) = *elem {
-        gen_repeat(out, &rep, all_rules, lit_tokens, indent);
+        gen_repeat(out, &rep, all_rules, lit_tokens, indent, name_counts);
         return;
     }
     if let Group(alts) = *elem {
-        gen_consume_group(out, &alts, all_rules, lit_tokens, indent);
+        gen_consume_group(out, &alts, all_rules, lit_tokens, indent, name_counts);
         return;
     }
     if let Label(lab) = *elem {
@@ -261,6 +261,7 @@ fn gen_repeat(
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
     indent: &String,
+    name_counts: &mut Array<[String, i32]>,
 ) {
     let inner = &rep.element;
     let mut visiting: Array<String> = [];
@@ -270,30 +271,33 @@ fn gen_repeat(
     if has_field(inner) {
         let field_info = element_field_info(inner);
         if let Star = rep.kind {
-            out.append(`{indent}let mut {field_info.0}_list: Array<{field_info.1}> = [];\n`);
+            let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
+            out.append(`{indent}let mut {list_name}: Array<{field_info.1}> = [];\n`);
             out.append(`{indent}while `);
             gen_first_check(out, &first);
             out.append(" {\n");
             let mut nc: Array<[String, i32]> = [];
             gen_element(out, inner, all_rules, lit_tokens, &inner_indent, true, &mut nc);
-            out.append(`{inner_indent}{field_info.0}_list.append({field_info.0});\n`);
+            out.append(`{inner_indent}{list_name}.append({field_info.0});\n`);
             out.append(`{indent}\}\n`);
         }
         if let Plus = rep.kind {
             let mut nc: Array<[String, i32]> = [];
             gen_element(out, inner, all_rules, lit_tokens, indent, true, &mut nc);
-            out.append(`{indent}let mut {field_info.0}_list: Array<{field_info.1}> = [{field_info.0}];\n`);
+            let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
+            out.append(`{indent}let mut {list_name}: Array<{field_info.1}> = [{field_info.0}];\n`);
             out.append(`{indent}while `);
             gen_first_check(out, &first);
             out.append(" {\n");
             let mut nc2: Array<[String, i32]> = [];
             gen_element(out, inner, all_rules, lit_tokens, &inner_indent, true, &mut nc2);
-            out.append(`{inner_indent}{field_info.0}_list.append({field_info.0});\n`);
+            out.append(`{inner_indent}{list_name}.append({field_info.0});\n`);
             out.append(`{indent}\}\n`);
         }
         if let Optional = rep.kind {
             let type_str = field_info.1;
-            out.append(`{indent}let {field_info.0}: Option<{type_str}> = if `);
+            let opt_name = dedup_name(&field_info.0, name_counts);
+            out.append(`{indent}let {opt_name}: Option<{type_str}> = if `);
             gen_first_check(out, &first);
             out.append(" {\n");
             let mut nc: Array<[String, i32]> = [];
@@ -302,19 +306,20 @@ fn gen_repeat(
             out.append(`{indent}\} else \{ null \};\n`);
         }
     } else {
-        let mut nc: Array<[String, i32]> = [];
         if let Star = rep.kind {
             out.append(`{indent}while `);
             gen_first_check(out, &first);
             out.append(" {\n");
+            let mut nc: Array<[String, i32]> = [];
             gen_element(out, inner, all_rules, lit_tokens, &inner_indent, false, &mut nc);
             out.append(`{indent}\}\n`);
         }
         if let Plus = rep.kind {
-            gen_element(out, inner, all_rules, lit_tokens, indent, false, &mut nc);
+            gen_element(out, inner, all_rules, lit_tokens, indent, false, name_counts);
             out.append(`{indent}while `);
             gen_first_check(out, &first);
             out.append(" {\n");
+            let mut nc: Array<[String, i32]> = [];
             gen_element(out, inner, all_rules, lit_tokens, &inner_indent, false, &mut nc);
             out.append(`{indent}\}\n`);
         }
@@ -322,6 +327,7 @@ fn gen_repeat(
             out.append(`{indent}if `);
             gen_first_check(out, &first);
             out.append(" {\n");
+            let mut nc: Array<[String, i32]> = [];
             gen_element(out, inner, all_rules, lit_tokens, &inner_indent, false, &mut nc);
             out.append(`{indent}\}\n`);
         }
@@ -418,16 +424,17 @@ fn gen_consume_group(
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
     indent: &String,
+    name_counts: &mut Array<[String, i32]>,
 ) {
     if alts.len() == 0 { return; }
     if alts.len() == 1 {
-        let mut nc: Array<[String, i32]> = [];
         for let elem of alts[0].elements {
-            gen_element(out, &elem, all_rules, lit_tokens, indent, false, &mut nc);
+            gen_element(out, &elem, all_rules, lit_tokens, indent, false, name_counts);
         }
         return;
     }
-    out.append(`{indent}let grp_kind = p.peek_kind();\n`);
+    let grp_var = dedup_name(&"grp_kind", name_counts);
+    out.append(`{indent}let {grp_var} = p.peek_kind();\n`);
     for let mut i = 0; i < alts.len(); i += 1 {
         let mut visiting: Array<String> = [];
         let first = first_of_alt(&alts[i], all_rules, lit_tokens, &mut visiting);
@@ -438,7 +445,7 @@ fn gen_consume_group(
         }
         for let mut j = 0; j < first.len(); j += 1 {
             if j > 0 { out.append(" || "); }
-            out.append(`grp_kind == {first[j]}`);
+            out.append(`{grp_var} == {first[j]}`);
         }
         out.append(" {\n");
         let inner = `{indent}    `;
