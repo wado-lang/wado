@@ -80,6 +80,67 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
 
         if is_comparison {
+            // Reference types (&T, &mut T) use ref.eq for == and !=, and reject ordering.
+            // Both operands must be the same reference type.
+            if matches!(&left_type, ResolvedType::Ref(_) | ResolvedType::MutRef(_)) {
+                let right_type = self.type_table.borrow().get(right.type_id).clone();
+                let both_refs = matches!(
+                    (&left_type, &right_type),
+                    (ResolvedType::Ref(_), ResolvedType::Ref(_))
+                        | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
+                );
+                if both_refs && matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
+                    // Type check: reference types must match
+                    if left.type_id != right.type_id
+                        && left.type_id != TypeTable::ERROR
+                        && right.type_id != TypeTable::ERROR
+                    {
+                        let type_table = self.type_table.borrow();
+                        let left_name = type_table.type_name(left.type_id);
+                        let right_name = type_table.type_name(right.type_id);
+                        if left_name != right_name {
+                            let _ = self.logger.error(TypeError::TypeMismatch {
+                                expected: left_name,
+                                found: right_name,
+                                span: binary.span,
+                            });
+                        }
+                    }
+                    let op = if binary.op == BinaryOp::Eq {
+                        TirBinaryOp::RefEq
+                    } else {
+                        TirBinaryOp::RefNotEq
+                    };
+                    return TirExpr::new(
+                        TirExprKind::Binary {
+                            op,
+                            left: Box::new(left),
+                            right: Box::new(right),
+                        },
+                        TypeTable::BOOL,
+                        binary.span,
+                    );
+                } else if both_refs {
+                    let type_name = self.type_table.borrow().type_name(left.type_id);
+                    let op_str = match binary.op {
+                        BinaryOp::Lt => "<",
+                        BinaryOp::LtEq => "<=",
+                        BinaryOp::Gt => ">",
+                        BinaryOp::GtEq => ">=",
+                        _ => unreachable!(),
+                    };
+                    let _ = self.logger.error(TypeError::InvalidPattern {
+                        message: format!(
+                            "operator `{op_str}` cannot be applied to type `{type_name}`"
+                        ),
+                        span: binary.span,
+                    });
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+                }
+                // If left is a reference but right is not (e.g., &i32 == i32),
+                // fall through to the normal type mismatch error below.
+            }
+
             // Get struct name for trait lookup.
             // Newtypes of primitives (e.g. type Radians = f64) use primitive comparison.
             // Newtypes of structs need trait-based comparison via the base type's impl.

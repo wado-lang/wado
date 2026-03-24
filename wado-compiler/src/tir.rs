@@ -2084,6 +2084,8 @@ pub enum TirBinaryOp {
     BitXor,
     Shl,
     Shr,
+    RefEq,
+    RefNotEq,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

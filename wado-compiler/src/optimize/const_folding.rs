@@ -217,7 +217,7 @@ fn try_fold_int_binary(
             prim: get_int_primitive(result_type, type_table).unwrap_or(prim),
         }),
 
-        TirBinaryOp::And | TirBinaryOp::Or => None,
+        TirBinaryOp::And | TirBinaryOp::Or | TirBinaryOp::RefEq | TirBinaryOp::RefNotEq => None,
     }
 }
 

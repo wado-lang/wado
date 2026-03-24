@@ -129,6 +129,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 },
             ),
             ResolvedType::Ref(inner) => {
+                // References always implement Eq via ref.eq (identity comparison)
+                if trait_name == "Eq" {
+                    return true;
+                }
                 // Check for a specific impl Trait for &T first (e.g., impl Inspect for &T)
                 let inner_id = *inner;
                 if self.find_trait_impl_for_type_with_args("&", trait_name, Some(&[inner_id])) {
@@ -137,6 +141,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 return self.type_implements_trait(inner_id, trait_name);
             }
             ResolvedType::MutRef(inner) => {
+                // Mutable references always implement Eq via ref.eq (identity comparison)
+                if trait_name == "Eq" {
+                    return true;
+                }
                 let inner_id = *inner;
                 if self.find_trait_impl_for_type_with_args("&mut", trait_name, Some(&[inner_id])) {
                     return true;

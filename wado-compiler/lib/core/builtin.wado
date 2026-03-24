@@ -54,6 +54,10 @@ fn array_copy<T>(dst: builtin::array<T>, dst_offset: i32, src: builtin::array<T>
 /// Fills a builtin::array<T> with a value.
 /// Fills `len` elements starting at `offset` with `value`.
 fn array_fill<T>(arr: builtin::array<T>, offset: i32, value: T, len: i32);
+/// Compares two references for identity (Wasm ref.eq).
+/// Returns true if both references point to the same GC object.
+fn ref_eq<T>(a: &T, b: &T) -> bool;
+
 /// Loads an i32 from linear memory (Wasm i32.load).
 fn i32_load(addr: i32) -> i32;
 
