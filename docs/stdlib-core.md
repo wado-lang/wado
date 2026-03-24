@@ -502,25 +502,25 @@ Always returns a value (unlike `reduce`, which returns None for empty iterators)
 
 ##### `fn find(&mut self, pred: Fn(Self::Item) -> bool) -> Option<Self::Item>`
 
-Returns the first element for which `pred` returns true, consuming elements up to that point.
+Returns the first element for which `pred` returns true, advancing the iterator up to that point.
 
 ##### `fn any(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
-Short-circuits: stops consuming the iterator as soon as a matching element is found.
+Short-circuits: stops advancing the iterator as soon as a matching element is found.
 
 ##### `fn all(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for every element (∀). True for empty iterators.
-Short-circuits: stops consuming the iterator as soon as a non-matching element is found.
+Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
 
 ##### `fn last(&mut self) -> Option<Self::Item>`
 
-Consumes the entire iterator and returns the last element, or None if empty.
+Advances the entire iterator and returns the last element, or None if empty.
 
 ##### `fn nth(&mut self, n: i32) -> Option<Self::Item>`
 
-Returns the nth element (0-indexed), consuming elements up to and including it.
+Returns the nth element (0-indexed), advancing the iterator up to and including it.
 
 ##### `fn position(&mut self, pred: Fn(Self::Item) -> bool) -> Option<i32>`
 
@@ -849,25 +849,25 @@ Always returns a value (unlike `reduce`, which returns None for empty iterators)
 
 ##### `fn find(&mut self, pred: Fn(Self::Item) -> bool) -> Option<Self::Item>`
 
-Returns the first element for which `pred` returns true, consuming elements up to that point.
+Returns the first element for which `pred` returns true, advancing the iterator up to that point.
 
 ##### `fn any(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
-Short-circuits: stops consuming the iterator as soon as a matching element is found.
+Short-circuits: stops advancing the iterator as soon as a matching element is found.
 
 ##### `fn all(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for every element (∀). True for empty iterators.
-Short-circuits: stops consuming the iterator as soon as a non-matching element is found.
+Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
 
 ##### `fn last(&mut self) -> Option<Self::Item>`
 
-Consumes the entire iterator and returns the last element, or None if empty.
+Advances the entire iterator and returns the last element, or None if empty.
 
 ##### `fn nth(&mut self, n: i32) -> Option<Self::Item>`
 
-Returns the nth element (0-indexed), consuming elements up to and including it.
+Returns the nth element (0-indexed), advancing the iterator up to and including it.
 
 ##### `fn position(&mut self, pred: Fn(Self::Item) -> bool) -> Option<i32>`
 
