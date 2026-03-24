@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774356835277,
+  "lastUpdate": 1774359496113,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6770,6 +6770,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d25f95c5939221959aad5d0e337f4059a2851abe"
         },
         "date": 1774356835061,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ea7ff2c2336492831fbf20d2a92271da433c878a",
+          "message": "Merge pull request #677 from wado-lang/claude/wado-stack-switching-m7tFD\n\nAdd research documentation on Wasm Stack Switching proposal",
+          "timestamp": "2026-03-24T22:35:28+09:00",
+          "tree_id": "eac373afe84313152237f20fae0d23d27aaf099e",
+          "url": "https://github.com/wado-lang/wado/commit/ea7ff2c2336492831fbf20d2a92271da433c878a"
+        },
+        "date": 1774359495909,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
