@@ -474,6 +474,7 @@ fn register_single_function(
         wir_func_index,
         tir_func: tir_func_rc,
         type_table: type_table_rc,
+        module_source: module_source.clone(),
     });
 }
 

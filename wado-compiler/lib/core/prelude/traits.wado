@@ -315,6 +315,36 @@ pub trait Iterator {
         return n;
     }
 
+    /// Transforms each element using a function.
+    fn map<U>(&self, f: fn(Self::Item) -> U) -> IterMap<Self, U> {
+        return IterMap { inner: *self, f };
+    }
+}
+
+/// Generic map iterator adapter that wraps any Iterator.
+pub struct IterMap<I: Iterator, U> {
+    pub inner: I,
+    pub f: fn(I::Item) -> U,
+}
+
+impl<I: Iterator, U> Iterator for IterMap<I, U> {
+    type Item = U;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(item) = self.inner.next() {
+            return Option::Some((self.f)(item));
+        }
+        return null;
+    }
+}
+
+impl<I: Iterator, U> IntoIterator for IterMap<I, U> {
+    type Item = U;
+    type Iter = IterMap<I, U>;
+
+    fn into_iter(&self) -> IterMap<I, U> {
+        return *self;
+    }
 }
 
 /// Conversion into an Iterator.

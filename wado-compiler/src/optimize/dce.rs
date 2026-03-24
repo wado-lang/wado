@@ -1218,16 +1218,9 @@ fn compute_reachable_types(project: &Project) -> IndexSet<TypeId> {
             collect_types_from_expr(&global.initializer, &type_table, &mut reachable_types);
         }
 
-        // Collect types from closure functors' __call methods
-        for functor in &module.closure_functors {
-            reachable_types.insert(functor.struct_type_id);
-            reachable_types.insert(functor.ref_type_id);
-            let call_method = functor.call_method.borrow();
-            collect_types_from_function(&call_method, &type_table, &mut reachable_types);
-            for capture in &functor.captures {
-                collect_type_transitive(capture.type_id, &type_table, &mut reachable_types);
-            }
-        }
+        // Closure functor types are collected transitively from ClosureToCanonical
+        // expressions in reachable functions. No need to unconditionally mark all
+        // functor types as reachable — unused closures should have their types DCE'd.
     }
 
     // Phase 2: Transitive closure - include struct fields, variant payloads, and type dependencies

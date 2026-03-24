@@ -4,6 +4,7 @@
 //! into a sequence of WIR instructions.
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::ModuleSource;
 use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
@@ -106,10 +107,23 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
 
     for tir_mod in ctx.project.tir_modules.values() {
         let type_table = &*tir_mod.type_table.borrow();
+        let module_source = tir_mod.module_source.clone();
         for functor in &tir_mod.closure_functors {
-            if ctx.closure_wrapper_funcs.contains_key(&functor.id) {
+            let functor_key = (module_source.clone(), functor.id);
+            if ctx.closure_wrapper_funcs.contains_key(&functor_key) {
                 continue;
             }
+
+            // Look up the __call func_id, scoped to the correct module.
+            // If __call was removed by DCE (closure never used), skip this functor entirely.
+            // This check must come before type lookups since DCE may have removed the
+            // functor's types from the TypeTable.
+            let functor_name = &functor.struct_name;
+            let call_method_fq = format!("{module_source}/{functor_name}::__call");
+            let call_func_id = match ctx.func_map.get(&call_method_fq).cloned() {
+                Some(id) => id,
+                None => continue,
+            };
 
             // Get the __call method's param/result types (excluding self)
             let call_func = functor.call_method.borrow();
@@ -139,15 +153,6 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 WirType::Ref { type_id, .. } => type_id.clone(),
                 _ => continue,
             };
-
-            // Look up the __call func_id
-            let functor_name = &functor.struct_name;
-            let call_method_suffix = format!("/{functor_name}::__call");
-            let call_func_id = ctx
-                .func_map
-                .iter()
-                .find(|(k, _)| k.ends_with(&call_method_suffix))
-                .map(|(_, v)| v.clone());
 
             // Build wrapper function body
             let env_local = "__env".to_string();
@@ -182,20 +187,16 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 });
             }
 
-            if let Some(call_fid) = call_func_id {
-                let call_instr = WirInstr::Call {
-                    func_id: call_fid,
-                    args: call_args,
-                };
-                if has_result {
-                    body.push(WirInstr::Return {
-                        value: Some(Box::new(call_instr)),
-                    });
-                } else {
-                    body.push(call_instr);
-                }
+            let call_instr = WirInstr::Call {
+                func_id: call_func_id,
+                args: call_args,
+            };
+            if has_result {
+                body.push(WirInstr::Return {
+                    value: Some(Box::new(call_instr)),
+                });
             } else {
-                body.push(WirInstr::Unreachable);
+                body.push(call_instr);
             }
 
             let mut param_names = vec![env_local];
@@ -203,8 +204,10 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 param_names.push(format!("__p{i}"));
             }
 
-            let wrapper_name = format!("__closure_wrapper_{}", functor.id);
-            let wrapper_fq = format!("closure//{wrapper_name}");
+            // Include module source in wrapper name for debuggability
+            let global_id = ctx.closure_wrapper_funcs.len();
+            let wrapper_name = format!("{module_source}/__closure_wrapper_{global_id}");
+            let wrapper_fq = format!("closure/{wrapper_name}");
 
             let func = WirFunction {
                 name: WirName {
@@ -223,7 +226,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             };
 
             let func_id = ctx.register_function(func);
-            ctx.closure_wrapper_funcs.insert(functor.id, func_id);
+            ctx.closure_wrapper_funcs.insert(functor_key, func_id);
         }
     }
 }
@@ -252,6 +255,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     ctx: &mut *ctx,
                     type_table: &type_table,
                     tir_func: &tir_func,
+                    _module_source: pending_body.module_source.clone(),
                     label_stack: Vec::new(),
                     match_counter: 0,
                     local_counter: 0,
@@ -282,6 +286,8 @@ struct FunctionTranslator<'a, 'b> {
     ctx: &'a mut WirContext<'b>,
     type_table: &'a TypeTable,
     tir_func: &'a TirFunction,
+    /// The module source this function belongs to.
+    _module_source: ModuleSource,
     /// Stack of Wasm block scopes for computing br depths.
     label_stack: Vec<LabelEntry>,
     /// Counter for generating unique match scrutinee local names.
@@ -1748,8 +1754,13 @@ impl FunctionTranslator<'_, '_> {
                 functor,
                 functor_id,
                 target_fn_type,
-                ..
-            } => self.translate_closure_to_canonical(functor, *functor_id, *target_fn_type),
+                closure_module,
+            } => self.translate_closure_to_canonical(
+                functor,
+                *functor_id,
+                *target_fn_type,
+                closure_module,
+            ),
 
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should have been expanded before WIR build")
@@ -6537,6 +6548,7 @@ impl FunctionTranslator<'_, '_> {
         functor: &TirExpr,
         functor_id: u32,
         target_fn_type: TypeId,
+        closure_module: &ModuleSource,
     ) -> WirInstr {
         let functor_instr = self.translate_expr(functor);
 
@@ -6570,8 +6582,11 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
 
-        // Look up the pre-registered wrapper function for this functor
-        let wrapper_func_id = if let Some(id) = self.ctx.closure_wrapper_funcs.get(&functor_id) {
+        // Look up the pre-registered wrapper function for this functor.
+        // Use closure_module (the module where the closure was defined) for the lookup,
+        // not self.module_source (which may differ after cross-module inlining).
+        let functor_key = (closure_module.clone(), functor_id);
+        let wrapper_func_id = if let Some(id) = self.ctx.closure_wrapper_funcs.get(&functor_key) {
             id.clone()
         } else {
             return WirInstr::Unreachable;
