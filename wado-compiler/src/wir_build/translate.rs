@@ -882,6 +882,13 @@ impl FunctionTranslator<'_, '_> {
             if let Some(instr) = self.translate_stmt(stmt) {
                 instrs.push(instr);
             }
+            // A Loop that always exits via a labeled `break` to an outer block never
+            // falls through in Wado, but the Wasm `loop` instruction itself can fall
+            // through. Add `unreachable` so the Wasm validator knows the fallthrough
+            // path of the enclosing value-block is dead.
+            if is_last && matches!(stmt.kind, TirStmtKind::Loop { .. }) {
+                instrs.push(WirInstr::Unreachable);
+            }
         }
         instrs
     }

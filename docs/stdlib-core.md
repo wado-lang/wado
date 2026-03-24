@@ -495,6 +495,66 @@ Counts the number of remaining elements in the iterator.
 
 Transforms each element using a function.
 
+##### `fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, Self::Item) -> Acc) -> Acc`
+
+Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
+Always returns a value (unlike `reduce`, which returns None for empty iterators).
+
+##### `fn find(&mut self, pred: Fn(Self::Item) -> bool) -> Option<Self::Item>`
+
+Returns the first element for which `pred` returns true, advancing the iterator up to that point.
+
+##### `fn any(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
+
+Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
+Short-circuits: stops advancing the iterator as soon as a matching element is found.
+
+##### `fn all(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
+
+Returns true if `pred` returns true for every element (∀). True for empty iterators.
+Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
+
+##### `fn last(&mut self) -> Option<Self::Item>`
+
+Advances the entire iterator and returns the last element, or None if empty.
+
+##### `fn nth(&mut self, n: i32) -> Option<Self::Item>`
+
+Returns the nth element (0-indexed), advancing the iterator up to and including it.
+
+##### `fn position(&mut self, pred: Fn(Self::Item) -> bool) -> Option<i32>`
+
+Returns the 0-based index of the first element for which `pred` returns true, or None.
+
+##### `fn reduce(&mut self, f: Fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
+
+Reduces elements to a single value without an initial accumulator.
+Returns None if the iterator is empty.
+
+##### `fn filter(&self, pred: Fn(Self::Item) -> bool) -> IterFilter<Self>`
+
+Returns an adapter that skips elements for which `pred` returns false.
+
+##### `fn enumerate(&self) -> IterEnumerate<Self>`
+
+Returns an adapter that yields `[i, element]` tuples, where `i` starts at 0.
+
+##### `fn take(&self, n: i32) -> IterTake<Self>`
+
+Returns an adapter that stops after yielding at most `n` elements.
+
+##### `fn skip(&self, n: i32) -> IterSkip<Self>`
+
+Returns an adapter that discards the first `n` elements before yielding the rest.
+
+##### `fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J>`
+
+Returns an adapter that yields all elements of `self`, then all elements of `other`.
+
+##### `fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J>`
+
+Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
+
 #### `pub trait IntoIterator`
 
 Conversion into an Iterator.
@@ -782,6 +842,66 @@ Counts the number of remaining elements in the iterator.
 
 Transforms each element using a function.
 
+##### `fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, Self::Item) -> Acc) -> Acc`
+
+Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
+Always returns a value (unlike `reduce`, which returns None for empty iterators).
+
+##### `fn find(&mut self, pred: Fn(Self::Item) -> bool) -> Option<Self::Item>`
+
+Returns the first element for which `pred` returns true, advancing the iterator up to that point.
+
+##### `fn any(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
+
+Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
+Short-circuits: stops advancing the iterator as soon as a matching element is found.
+
+##### `fn all(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
+
+Returns true if `pred` returns true for every element (∀). True for empty iterators.
+Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
+
+##### `fn last(&mut self) -> Option<Self::Item>`
+
+Advances the entire iterator and returns the last element, or None if empty.
+
+##### `fn nth(&mut self, n: i32) -> Option<Self::Item>`
+
+Returns the nth element (0-indexed), advancing the iterator up to and including it.
+
+##### `fn position(&mut self, pred: Fn(Self::Item) -> bool) -> Option<i32>`
+
+Returns the 0-based index of the first element for which `pred` returns true, or None.
+
+##### `fn reduce(&mut self, f: Fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
+
+Reduces elements to a single value without an initial accumulator.
+Returns None if the iterator is empty.
+
+##### `fn filter(&self, pred: Fn(Self::Item) -> bool) -> IterFilter<Self>`
+
+Returns an adapter that skips elements for which `pred` returns false.
+
+##### `fn enumerate(&self) -> IterEnumerate<Self>`
+
+Returns an adapter that yields `[i, element]` tuples, where `i` starts at 0.
+
+##### `fn take(&self, n: i32) -> IterTake<Self>`
+
+Returns an adapter that stops after yielding at most `n` elements.
+
+##### `fn skip(&self, n: i32) -> IterSkip<Self>`
+
+Returns an adapter that discards the first `n` elements before yielding the rest.
+
+##### `fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J>`
+
+Returns an adapter that yields all elements of `self`, then all elements of `other`.
+
+##### `fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J>`
+
+Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
+
 #### `pub trait IntoIterator`
 
 Conversion into an Iterator.
@@ -817,6 +937,104 @@ Generic map iterator adapter that wraps any Iterator.
 ##### `impl IntoIterator for IterMap<I, U>`
 
 ###### `fn into_iter(&self) -> IterMap<I, U>`
+
+#### `pub struct IterFilter<I: Iterator>`
+
+Generic filter iterator adapter that wraps any Iterator.
+
+##### `inner: I`
+
+##### `pred: Fn(I::Item) -> bool`
+
+##### `impl Iterator for IterFilter<I>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterFilter<I>`
+
+###### `fn into_iter(&self) -> IterFilter<I>`
+
+#### `pub struct IterEnumerate<I: Iterator>`
+
+Generic enumerate iterator adapter that yields (index, element) pairs.
+
+##### `inner: I`
+
+##### `count: i32`
+
+##### `impl Iterator for IterEnumerate<I>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterEnumerate<I>`
+
+###### `fn into_iter(&self) -> IterEnumerate<I>`
+
+#### `pub struct IterTake<I: Iterator>`
+
+Generic take iterator adapter that limits elements from any Iterator.
+
+##### `inner: I`
+
+##### `remaining: i32`
+
+##### `impl Iterator for IterTake<I>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterTake<I>`
+
+###### `fn into_iter(&self) -> IterTake<I>`
+
+#### `pub struct IterSkip<I: Iterator>`
+
+Generic skip iterator adapter that skips elements from any Iterator.
+
+##### `inner: I`
+
+##### `remaining: i32`
+
+##### `impl Iterator for IterSkip<I>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterSkip<I>`
+
+###### `fn into_iter(&self) -> IterSkip<I>`
+
+#### `pub struct IterChain<I: Iterator, J: Iterator>`
+
+Generic chain iterator adapter that chains two iterators of the same item type.
+
+##### `first: I`
+
+##### `second: J`
+
+##### `first_done: bool`
+
+##### `impl Iterator for IterChain<I, J>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterChain<I, J>`
+
+###### `fn into_iter(&self) -> IterChain<I, J>`
+
+#### `pub struct IterZip<I: Iterator, J: Iterator>`
+
+Generic zip iterator adapter that pairs elements from two iterators.
+
+##### `first: I`
+
+##### `second: J`
+
+##### `impl Iterator for IterZip<I, J>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterZip<I, J>`
+
+###### `fn into_iter(&self) -> IterZip<I, J>`
 
 #### `pub struct Formatter`
 
@@ -1530,6 +1748,104 @@ Generic map iterator adapter that wraps any Iterator.
 
 ###### `fn into_iter(&self) -> IterMap<I, U>`
 
+#### `pub struct IterFilter<I: Iterator>`
+
+Generic filter iterator adapter that wraps any Iterator.
+
+##### `inner: I`
+
+##### `pred: Fn(I::Item) -> bool`
+
+##### `impl Iterator for IterFilter<I>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterFilter<I>`
+
+###### `fn into_iter(&self) -> IterFilter<I>`
+
+#### `pub struct IterEnumerate<I: Iterator>`
+
+Generic enumerate iterator adapter that yields (index, element) pairs.
+
+##### `inner: I`
+
+##### `count: i32`
+
+##### `impl Iterator for IterEnumerate<I>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterEnumerate<I>`
+
+###### `fn into_iter(&self) -> IterEnumerate<I>`
+
+#### `pub struct IterTake<I: Iterator>`
+
+Generic take iterator adapter that limits elements from any Iterator.
+
+##### `inner: I`
+
+##### `remaining: i32`
+
+##### `impl Iterator for IterTake<I>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterTake<I>`
+
+###### `fn into_iter(&self) -> IterTake<I>`
+
+#### `pub struct IterSkip<I: Iterator>`
+
+Generic skip iterator adapter that skips elements from any Iterator.
+
+##### `inner: I`
+
+##### `remaining: i32`
+
+##### `impl Iterator for IterSkip<I>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterSkip<I>`
+
+###### `fn into_iter(&self) -> IterSkip<I>`
+
+#### `pub struct IterChain<I: Iterator, J: Iterator>`
+
+Generic chain iterator adapter that chains two iterators of the same item type.
+
+##### `first: I`
+
+##### `second: J`
+
+##### `first_done: bool`
+
+##### `impl Iterator for IterChain<I, J>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterChain<I, J>`
+
+###### `fn into_iter(&self) -> IterChain<I, J>`
+
+#### `pub struct IterZip<I: Iterator, J: Iterator>`
+
+Generic zip iterator adapter that pairs elements from two iterators.
+
+##### `first: I`
+
+##### `second: J`
+
+##### `impl Iterator for IterZip<I, J>`
+
+###### `fn next(&mut self) -> Option<Self::Item>`
+
+##### `impl IntoIterator for IterZip<I, J>`
+
+###### `fn into_iter(&self) -> IterZip<I, J>`
+
 #### `pub struct Array<T>`
 
 _Fields are private._
@@ -1614,36 +1930,6 @@ _Fields are private._
 
 ##### `pub fn collect(&mut self) -> Array<T>`
 
-##### `pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, T) -> Acc) -> Acc`
-
-##### `pub fn enumerate(&self) -> EnumerateIter<T>`
-
-##### `pub fn map<U>(&self, f: Fn(T) -> U) -> MapIter<T, U>`
-
-##### `pub fn filter(&self, pred: Fn(T) -> bool) -> FilterIter<T>`
-
-##### `pub fn find(&mut self, pred: Fn(T) -> bool) -> Option<T>`
-
-##### `pub fn any(&mut self, pred: Fn(T) -> bool) -> bool`
-
-##### `pub fn all(&mut self, pred: Fn(T) -> bool) -> bool`
-
-##### `pub fn last(&mut self) -> Option<T>`
-
-##### `pub fn nth(&mut self, n: i32) -> Option<T>`
-
-##### `pub fn position(&mut self, pred: Fn(T) -> bool) -> Option<i32>`
-
-##### `pub fn reduce(&mut self, f: Fn(T, T) -> T) -> Option<T>`
-
-##### `pub fn take(&self, n: i32) -> TakeIter<T>`
-
-##### `pub fn skip(&self, n: i32) -> ArrayIter<T>`
-
-##### `pub fn chain(&self, other: ArrayIter<T>) -> ChainIter<T>`
-
-##### `pub fn zip<U>(&self, other: ArrayIter<U>) -> ZipIter<T, U>`
-
 ##### `pub fn sum(&mut self) -> Option<T>`
 
 ##### `pub fn min(&mut self) -> Option<T>`
@@ -1651,36 +1937,6 @@ _Fields are private._
 ##### `pub fn max(&mut self) -> Option<T>`
 
 ##### `impl Iterator for ArrayIter<T>`
-
-###### `fn next(&mut self) -> Option<Self::Item>`
-
-#### `pub struct EnumerateIter<T>`
-
-_Fields are private._
-
-##### `impl Iterator for EnumerateIter<T>`
-
-###### `fn next(&mut self) -> Option<Self::Item>`
-
-#### `pub struct MapIter<T, U>`
-
-_Fields are private._
-
-##### `pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, U) -> Acc) -> Acc`
-
-##### `impl Iterator for MapIter<T, U>`
-
-###### `fn next(&mut self) -> Option<Self::Item>`
-
-#### `pub struct FilterIter<T>`
-
-_Fields are private._
-
-##### `pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, T) -> Acc) -> Acc`
-
-##### `pub fn map<U>(&self, f: Fn(T) -> U) -> FilterMapIter<T, U>`
-
-##### `impl Iterator for FilterIter<T>`
 
 ###### `fn next(&mut self) -> Option<Self::Item>`
 

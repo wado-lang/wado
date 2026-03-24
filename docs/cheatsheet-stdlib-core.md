@@ -228,6 +228,20 @@ pub trait Iterator {
     fn collect(&mut self) -> Array<Self::Item>;
     fn count(&mut self) -> i32;
     fn map<U>(&self, f: Fn(Self::Item) -> U) -> IterMap<Self, U>;
+    fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, Self::Item) -> Acc) -> Acc;
+    fn find(&mut self, pred: Fn(Self::Item) -> bool) -> Option<Self::Item>;
+    fn any(&mut self, pred: Fn(Self::Item) -> bool) -> bool;
+    fn all(&mut self, pred: Fn(Self::Item) -> bool) -> bool;
+    fn last(&mut self) -> Option<Self::Item>;
+    fn nth(&mut self, n: i32) -> Option<Self::Item>;
+    fn position(&mut self, pred: Fn(Self::Item) -> bool) -> Option<i32>;
+    fn reduce(&mut self, f: Fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>;
+    fn filter(&self, pred: Fn(Self::Item) -> bool) -> IterFilter<Self>;
+    fn enumerate(&self) -> IterEnumerate<Self>;
+    fn take(&self, n: i32) -> IterTake<Self>;
+    fn skip(&self, n: i32) -> IterSkip<Self>;
+    fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J>;
+    fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J>;
 }
 
 pub trait IntoIterator {
@@ -367,6 +381,20 @@ pub trait Iterator {
     fn collect(&mut self) -> Array<Self::Item>;
     fn count(&mut self) -> i32;
     fn map<U>(&self, f: Fn(Self::Item) -> U) -> IterMap<Self, U>;
+    fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, Self::Item) -> Acc) -> Acc;
+    fn find(&mut self, pred: Fn(Self::Item) -> bool) -> Option<Self::Item>;
+    fn any(&mut self, pred: Fn(Self::Item) -> bool) -> bool;
+    fn all(&mut self, pred: Fn(Self::Item) -> bool) -> bool;
+    fn last(&mut self) -> Option<Self::Item>;
+    fn nth(&mut self, n: i32) -> Option<Self::Item>;
+    fn position(&mut self, pred: Fn(Self::Item) -> bool) -> Option<i32>;
+    fn reduce(&mut self, f: Fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>;
+    fn filter(&self, pred: Fn(Self::Item) -> bool) -> IterFilter<Self>;
+    fn enumerate(&self) -> IterEnumerate<Self>;
+    fn take(&self, n: i32) -> IterTake<Self>;
+    fn skip(&self, n: i32) -> IterSkip<Self>;
+    fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J>;
+    fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J>;
 }
 
 pub trait IntoIterator {
@@ -395,6 +423,97 @@ impl Iterator for IterMap<I, U> {
 
 impl IntoIterator for IterMap<I, U> {
     fn into_iter(&self) -> IterMap<I, U>;
+}
+```
+
+```wado
+pub struct IterFilter<I: Iterator> {
+    inner: I,
+    pred: Fn(I::Item) -> bool,
+}
+
+impl Iterator for IterFilter<I> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterFilter<I> {
+    fn into_iter(&self) -> IterFilter<I>;
+}
+```
+
+```wado
+pub struct IterEnumerate<I: Iterator> {
+    inner: I,
+    count: i32,
+}
+
+impl Iterator for IterEnumerate<I> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterEnumerate<I> {
+    fn into_iter(&self) -> IterEnumerate<I>;
+}
+```
+
+```wado
+pub struct IterTake<I: Iterator> {
+    inner: I,
+    remaining: i32,
+}
+
+impl Iterator for IterTake<I> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterTake<I> {
+    fn into_iter(&self) -> IterTake<I>;
+}
+```
+
+```wado
+pub struct IterSkip<I: Iterator> {
+    inner: I,
+    remaining: i32,
+}
+
+impl Iterator for IterSkip<I> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterSkip<I> {
+    fn into_iter(&self) -> IterSkip<I>;
+}
+```
+
+```wado
+pub struct IterChain<I: Iterator, J: Iterator> {
+    first: I,
+    second: J,
+    first_done: bool,
+}
+
+impl Iterator for IterChain<I, J> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterChain<I, J> {
+    fn into_iter(&self) -> IterChain<I, J>;
+}
+```
+
+```wado
+pub struct IterZip<I: Iterator, J: Iterator> {
+    first: I,
+    second: J,
+}
+
+impl Iterator for IterZip<I, J> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterZip<I, J> {
+    fn into_iter(&self) -> IterZip<I, J>;
 }
 ```
 
@@ -812,6 +931,97 @@ impl IntoIterator for IterMap<I, U> {
 ```
 
 ```wado
+pub struct IterFilter<I: Iterator> {
+    inner: I,
+    pred: Fn(I::Item) -> bool,
+}
+
+impl Iterator for IterFilter<I> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterFilter<I> {
+    fn into_iter(&self) -> IterFilter<I>;
+}
+```
+
+```wado
+pub struct IterEnumerate<I: Iterator> {
+    inner: I,
+    count: i32,
+}
+
+impl Iterator for IterEnumerate<I> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterEnumerate<I> {
+    fn into_iter(&self) -> IterEnumerate<I>;
+}
+```
+
+```wado
+pub struct IterTake<I: Iterator> {
+    inner: I,
+    remaining: i32,
+}
+
+impl Iterator for IterTake<I> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterTake<I> {
+    fn into_iter(&self) -> IterTake<I>;
+}
+```
+
+```wado
+pub struct IterSkip<I: Iterator> {
+    inner: I,
+    remaining: i32,
+}
+
+impl Iterator for IterSkip<I> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterSkip<I> {
+    fn into_iter(&self) -> IterSkip<I>;
+}
+```
+
+```wado
+pub struct IterChain<I: Iterator, J: Iterator> {
+    first: I,
+    second: J,
+    first_done: bool,
+}
+
+impl Iterator for IterChain<I, J> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterChain<I, J> {
+    fn into_iter(&self) -> IterChain<I, J>;
+}
+```
+
+```wado
+pub struct IterZip<I: Iterator, J: Iterator> {
+    first: I,
+    second: J,
+}
+
+impl Iterator for IterZip<I, J> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl IntoIterator for IterZip<I, J> {
+    fn into_iter(&self) -> IterZip<I, J>;
+}
+```
+
+```wado
 pub struct Array<T> {
     ..
 }
@@ -877,66 +1087,12 @@ pub struct ArrayIter<T> {
 
 impl ArrayIter {
     pub fn collect(&mut self) -> Array<T>;
-    pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, T) -> Acc) -> Acc;
-    pub fn enumerate(&self) -> EnumerateIter<T>;
-    pub fn map<U>(&self, f: Fn(T) -> U) -> MapIter<T, U>;
-    pub fn filter(&self, pred: Fn(T) -> bool) -> FilterIter<T>;
-    pub fn find(&mut self, pred: Fn(T) -> bool) -> Option<T>;
-    pub fn any(&mut self, pred: Fn(T) -> bool) -> bool;
-    pub fn all(&mut self, pred: Fn(T) -> bool) -> bool;
-    pub fn last(&mut self) -> Option<T>;
-    pub fn nth(&mut self, n: i32) -> Option<T>;
-    pub fn position(&mut self, pred: Fn(T) -> bool) -> Option<i32>;
-    pub fn reduce(&mut self, f: Fn(T, T) -> T) -> Option<T>;
-    pub fn take(&self, n: i32) -> TakeIter<T>;
-    pub fn skip(&self, n: i32) -> ArrayIter<T>;
-    pub fn chain(&self, other: ArrayIter<T>) -> ChainIter<T>;
-    pub fn zip<U>(&self, other: ArrayIter<U>) -> ZipIter<T, U>;
     pub fn sum(&mut self) -> Option<T>;
     pub fn min(&mut self) -> Option<T>;
     pub fn max(&mut self) -> Option<T>;
 }
 
 impl Iterator for ArrayIter<T> {
-    fn next(&mut self) -> Option<Self::Item>;
-}
-```
-
-```wado
-pub struct EnumerateIter<T> {
-    ..
-}
-
-impl Iterator for EnumerateIter<T> {
-    fn next(&mut self) -> Option<Self::Item>;
-}
-```
-
-```wado
-pub struct MapIter<T, U> {
-    ..
-}
-
-impl MapIter {
-    pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, U) -> Acc) -> Acc;
-}
-
-impl Iterator for MapIter<T, U> {
-    fn next(&mut self) -> Option<Self::Item>;
-}
-```
-
-```wado
-pub struct FilterIter<T> {
-    ..
-}
-
-impl FilterIter {
-    pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, T) -> Acc) -> Acc;
-    pub fn map<U>(&self, f: Fn(T) -> U) -> FilterMapIter<T, U>;
-}
-
-impl Iterator for FilterIter<T> {
     fn next(&mut self) -> Option<Self::Item>;
 }
 ```

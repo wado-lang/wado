@@ -818,18 +818,109 @@ impl<H: CompilerHost> Resolver<'_, H> {
             } => {
                 // Substitute the type parameter into a concrete type, then resolve.
                 let concrete = self.substitute_type_params(param_id, type_args);
-                if !self.type_table.borrow().contains_type_param(concrete)
-                    && let Some(resolved) = self
+                if !self.type_table.borrow().contains_type_param(concrete) {
+                    // First try direct lookup for concrete types.
+                    if let Some(resolved) = self
                         .type_table
                         .borrow()
                         .resolve_assoc_type(concrete, &assoc_name)
-                {
-                    return resolved;
+                    {
+                        return resolved;
+                    }
+                    // Fallback: resolve via generic associated type definitions.
+                    // This handles GenericInstance types like ArrayIter<i32> whose Iterator impl
+                    // is generic — resolve_assoc_type won't find a pre-registered entry, but
+                    // resolve_generic_assoc_type can derive i32 from ("ArrayIter", "Item").
+                    if let Some(resolved) = self
+                        .type_table
+                        .borrow()
+                        .resolve_generic_assoc_type(concrete, &assoc_name)
+                    {
+                        return resolved;
+                    }
                 }
                 // Type param still generic or assoc type not yet registered — leave as-is.
                 type_id
             }
             // Other types don't contain type parameters
+            _ => type_id,
+        }
+    }
+
+    /// Substitute type parameters using a TypeId-to-TypeId map.
+    /// Unlike `substitute_type_params` (which substitutes by index), this only
+    /// replaces `TypeIds` that are explicitly in the map, leaving all others unchanged.
+    /// This is used in struct literal field type fixup to avoid incorrectly replacing
+    /// impl-scope `TypeParams` that share the same index as the struct's own `TypeParams`.
+    pub(super) fn substitute_type_params_by_map(
+        &mut self,
+        type_id: TypeId,
+        map: &IndexMap<TypeId, TypeId>,
+    ) -> TypeId {
+        if map.is_empty() {
+            return type_id;
+        }
+        if let Some(&concrete) = map.get(&type_id) {
+            return concrete;
+        }
+        let resolved_type = self.type_table.borrow().get(type_id).clone();
+        match resolved_type {
+            ResolvedType::BuiltinArray(elem) => {
+                let new_elem = self.substitute_type_params_by_map(elem, map);
+                if new_elem == elem {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::BuiltinArray(new_elem))
+                }
+            }
+            ResolvedType::Ref(inner) => {
+                let new_inner = self.substitute_type_params_by_map(inner, map);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.type_table.borrow_mut().make_ref(new_inner)
+                }
+            }
+            ResolvedType::MutRef(inner) => {
+                let new_inner = self.substitute_type_params_by_map(inner, map);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.type_table.borrow_mut().make_mut_ref(new_inner)
+                }
+            }
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args: inner_args,
+            } => {
+                let new_args: Vec<TypeId> = inner_args
+                    .iter()
+                    .map(|&a| self.substitute_type_params_by_map(a, map))
+                    .collect();
+                if new_args == inner_args {
+                    type_id
+                } else {
+                    self.type_table.borrow_mut().make_generic_instance(
+                        name,
+                        module_source,
+                        new_args,
+                    )
+                }
+            }
+            ResolvedType::Tuple(elems) => {
+                let new_elems: Vec<TypeId> = elems
+                    .iter()
+                    .map(|&e| self.substitute_type_params_by_map(e, map))
+                    .collect();
+                if new_elems == elems {
+                    type_id
+                } else {
+                    self.type_table.borrow_mut().make_tuple(new_elems)
+                }
+            }
             _ => type_id,
         }
     }
@@ -2022,14 +2113,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // This is necessary for empty array literals in self-referential fields
             // (e.g., `children: []` in `Node<K> { children: Array<&Node<K>> }`)
             // which get typed with TypeParams before inference.
+            //
+            // Use map-based substitution (TypeId → TypeId) instead of index-based, so
+            // that only the struct's own TypeParam TypeIds are replaced. Index-based
+            // substitution incorrectly replaces TypeParams from outer scopes (e.g., impl
+            // type params) that happen to share the same index as the struct's TypeParams.
             let mut fields: Vec<TirStructField> = if type_args.is_empty() {
                 fields
             } else {
+                let struct_param_map: IndexMap<TypeId, TypeId> = self
+                    .struct_fields
+                    .get(&struct_name)
+                    .map(|info| {
+                        info.type_param_type_ids
+                            .iter()
+                            .zip(type_args.iter())
+                            .map(|(&param_id, &concrete_id)| (param_id, concrete_id))
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 fields
                     .into_iter()
                     .map(|mut field| {
-                        field.value.type_id =
-                            self.substitute_type_params(field.value.type_id, &type_args);
+                        field.value.type_id = self
+                            .substitute_type_params_by_map(field.value.type_id, &struct_param_map);
                         field
                     })
                     .collect()

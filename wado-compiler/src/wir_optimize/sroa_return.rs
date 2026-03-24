@@ -895,6 +895,15 @@ fn unwrap_to_candidate_call(instr: &WirInstr, candidate_ids: &IndexSet<u32>) -> 
 /// contain `Br` instructions that target the block itself.  Removing the block
 /// wrapper in that case would corrupt those branch depths.
 fn extract_block_result_call(body: &[WirInstr], candidate_ids: &IndexSet<u32>) -> Option<u32> {
+    // Skip trailing Unreachable — translate_stmts_as_value appends Unreachable after
+    // break-with-value statements so the Wasm validator sees no fallthrough value.
+    // That trailing Unreachable is dead code and must not prevent SROA.
+    let effective_body = if matches!(body.last(), Some(WirInstr::Unreachable)) {
+        &body[..body.len() - 1]
+    } else {
+        body
+    };
+    let body = effective_body;
     let last = body.last()?;
 
     // Check prefix instructions for branches targeting this block.
@@ -1020,8 +1029,15 @@ fn find_candidate_calls_in_block_prefix(
             find_candidate_calls_in_block_prefix(expr, candidate_ids, invalid);
         }
         WirInstr::Block { body, .. } => {
-            // All instructions except the last (which is the result value) are prefix
-            if let Some((_, prefix)) = body.split_last() {
+            // All instructions except the last (which is the result value) are prefix.
+            // Skip trailing Unreachable — translate_stmts_as_value may append one after
+            // a break-with-value; it is dead code and must not be treated as the result.
+            let effective_body = if matches!(body.last(), Some(WirInstr::Unreachable)) {
+                &body[..body.len() - 1]
+            } else {
+                body.as_slice()
+            };
+            if let Some((_, prefix)) = effective_body.split_last() {
                 for prefix_instr in prefix {
                     find_nested_candidate_calls(prefix_instr, candidate_ids, invalid);
                 }
@@ -2266,7 +2282,17 @@ fn take_block_result_call(
         return None;
     }
 
-    let last_idx = body.len() - 1;
+    // Skip trailing Unreachable — translate_stmts_as_value may append one after a
+    // break-with-value; it is dead code and must not be treated as the result value.
+    let effective_len = if matches!(body.last(), Some(WirInstr::Unreachable)) {
+        body.len() - 1
+    } else {
+        body.len()
+    };
+    if effective_len == 0 {
+        return None;
+    }
+    let last_idx = effective_len - 1;
 
     // Move all statements before the last (result-producing) instruction to prefix
     for item in &mut body[..last_idx] {
