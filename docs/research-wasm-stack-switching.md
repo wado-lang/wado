@@ -24,13 +24,13 @@ existing async model, and concrete use cases for the Wado language.
 The Wasm Stack Switching proposal (part of Wasm 3.0) introduces typed continuations
 as first-class values. Core instructions:
 
-| Instruction | Signature | Description |
-|-------------|-----------|-------------|
-| `cont.new` | `(ref $ft) -> (ref $ct)` | Create a continuation from a function reference |
-| `resume` | `(ref $ct, args...) -> results...` | Resume a continuation with arguments |
-| `suspend` | `(tag, args...) -> results...` | Suspend the current continuation, yielding to the resumer |
-| `switch` | `(ref $ct, tag, args...) -> results...` | Direct switch to another continuation (symmetric) |
-| `cont.bind` | `(ref $ct, args...) -> (ref $ct')` | Partially apply arguments to a continuation |
+| Instruction | Signature                               | Description                                               |
+| ----------- | --------------------------------------- | --------------------------------------------------------- |
+| `cont.new`  | `(ref $ft) -> (ref $ct)`                | Create a continuation from a function reference           |
+| `resume`    | `(ref $ct, args...) -> results...`      | Resume a continuation with arguments                      |
+| `suspend`   | `(tag, args...) -> results...`          | Suspend the current continuation, yielding to the resumer |
+| `switch`    | `(ref $ct, tag, args...) -> results...` | Direct switch to another continuation (symmetric)         |
+| `cont.bind` | `(ref $ct, args...) -> (ref $ct')`      | Partially apply arguments to a continuation               |
 
 **Key properties:**
 
@@ -421,12 +421,12 @@ suspension truly invisible at the language level.
 
 As of wasmtime v42 (2026-03):
 
-| Feature | Config Flag | Status |
-|---------|-------------|--------|
-| CM Async | `wasm_component_model_async(true)` | Enabled |
-| CM Async Built-ins | `wasm_component_model_async_builtins(true)` | Enabled |
-| CM Async Stackful | `wasm_component_model_async_stackful(true)` | Enabled (host fibers) |
-| Wasm Stack Switching | `wasm_stack_switching(true)` | Commented out (platform issues) |
+| Feature              | Config Flag                                 | Status                          |
+| -------------------- | ------------------------------------------- | ------------------------------- |
+| CM Async             | `wasm_component_model_async(true)`          | Enabled                         |
+| CM Async Built-ins   | `wasm_component_model_async_builtins(true)` | Enabled                         |
+| CM Async Stackful    | `wasm_component_model_async_stackful(true)` | Enabled (host fibers)           |
+| Wasm Stack Switching | `wasm_stack_switching(true)`                | Commented out (platform issues) |
 
 The `wasm_stack_switching` flag is disabled in `wado-cli/src/runtime.rs:71` with
 the comment "Not supported on macOS". When enabled, it would activate the
