@@ -67,7 +67,6 @@ fn gen_parser_rule_type(out: &mut String, rule: &ParserRule) {
             out.append(`    {case_name}({struct_name}),\n`);
         }
         out.append("}\n\n");
-        gen_variant_eq(out, &type_name, &rule.alternatives, all_labeled);
 
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
             let alt = &rule.alternatives[i];
@@ -89,20 +88,6 @@ fn gen_struct_for_alt(out: &mut String, type_name: &String, alt: &Alternative) {
     for let field of &fields {
         out.append(`    pub {field.name}: {field.type_str},\n`);
     }
-    out.append("}\n\n");
-    gen_struct_eq(out, type_name, &fields);
-}
-
-// TODO: Remove explicit Eq generation once the compiler supports auto-derive Eq for recursive types.
-fn gen_struct_eq(out: &mut String, type_name: &String, fields: &Array<Field>) {
-    out.append(`impl Eq for {type_name} \{\n`);
-    out.append("    fn eq(&self, other: &Self) -> bool {\n");
-    out.append("        return self.span == other.span");
-    for let field of fields {
-        out.append(` && self.{field.name} == other.{field.name}`);
-    }
-    out.append(";\n");
-    out.append("    }\n");
     out.append("}\n\n");
 }
 
@@ -198,25 +183,6 @@ fn element_to_field(elem: &Element) -> Option<Field> {
         return null;
     }
     return null;
-}
-
-// TODO: Remove explicit Eq generation once the compiler supports auto-derive Eq for recursive types.
-fn gen_variant_eq(out: &mut String, type_name: &String, alts: &Array<Alternative>, all_labeled: bool) {
-    out.append(`impl Eq for {type_name} \{\n`);
-    out.append("    fn eq(&self, other: &Self) -> bool {\n");
-    out.append("        return match [*self, *other] {\n");
-    for let mut i = 0; i < alts.len(); i += 1 {
-        let case_name = if all_labeled {
-            alts[i].label.unwrap()
-        } else {
-            `Alt{i}`
-        };
-        out.append(`            [{case_name}(a), {case_name}(b)] => a == b,\n`);
-    }
-    out.append("            _ => false,\n");
-    out.append("        };\n");
-    out.append("    }\n");
-    out.append("}\n\n");
 }
 
 fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {

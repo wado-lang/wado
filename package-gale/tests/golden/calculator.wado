@@ -100,21 +100,9 @@ pub struct EquationNode {
     pub eof: Token,
 }
 
-impl Eq for EquationNode {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.expression == other.expression && self.relop == other.relop && self.expression_2 == other.expression_2 && self.eof == other.eof;
-    }
-}
-
 pub struct ExpressionNode {
     pub span: Span,
     pub multiplying_expression: MultiplyingExpressionNode,
-}
-
-impl Eq for ExpressionNode {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.multiplying_expression == other.multiplying_expression;
-    }
 }
 
 pub struct MultiplyingExpressionNode {
@@ -122,21 +110,9 @@ pub struct MultiplyingExpressionNode {
     pub pow_expression: PowExpressionNode,
 }
 
-impl Eq for MultiplyingExpressionNode {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.pow_expression == other.pow_expression;
-    }
-}
-
 pub struct PowExpressionNode {
     pub span: Span,
     pub signed_atom: SignedAtomNode,
-}
-
-impl Eq for PowExpressionNode {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.signed_atom == other.signed_atom;
-    }
 }
 
 pub variant SignedAtomNode {
@@ -146,28 +122,10 @@ pub variant SignedAtomNode {
     Alt3(SignedAtomAlt3),
 }
 
-impl Eq for SignedAtomNode {
-    fn eq(&self, other: &Self) -> bool {
-        return match [*self, *other] {
-            [Alt0(a), Alt0(b)] => a == b,
-            [Alt1(a), Alt1(b)] => a == b,
-            [Alt2(a), Alt2(b)] => a == b,
-            [Alt3(a), Alt3(b)] => a == b,
-            _ => false,
-        };
-    }
-}
-
 pub struct SignedAtomAlt0 {
     pub span: Span,
     pub plus: Token,
     pub signed_atom: SignedAtomNode,
-}
-
-impl Eq for SignedAtomAlt0 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.plus == other.plus && self.signed_atom == other.signed_atom;
-    }
 }
 
 pub struct SignedAtomAlt1 {
@@ -176,32 +134,14 @@ pub struct SignedAtomAlt1 {
     pub signed_atom: SignedAtomNode,
 }
 
-impl Eq for SignedAtomAlt1 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.minus == other.minus && self.signed_atom == other.signed_atom;
-    }
-}
-
 pub struct SignedAtomAlt2 {
     pub span: Span,
     pub func_: FuncNode,
 }
 
-impl Eq for SignedAtomAlt2 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.func_ == other.func_;
-    }
-}
-
 pub struct SignedAtomAlt3 {
     pub span: Span,
     pub atom: AtomNode,
-}
-
-impl Eq for SignedAtomAlt3 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.atom == other.atom;
-    }
 }
 
 pub variant AtomNode {
@@ -211,27 +151,9 @@ pub variant AtomNode {
     Alt3(AtomAlt3),
 }
 
-impl Eq for AtomNode {
-    fn eq(&self, other: &Self) -> bool {
-        return match [*self, *other] {
-            [Alt0(a), Alt0(b)] => a == b,
-            [Alt1(a), Alt1(b)] => a == b,
-            [Alt2(a), Alt2(b)] => a == b,
-            [Alt3(a), Alt3(b)] => a == b,
-            _ => false,
-        };
-    }
-}
-
 pub struct AtomAlt0 {
     pub span: Span,
     pub scientific: ScientificNode,
-}
-
-impl Eq for AtomAlt0 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.scientific == other.scientific;
-    }
 }
 
 pub struct AtomAlt1 {
@@ -239,21 +161,9 @@ pub struct AtomAlt1 {
     pub variable: VariableNode,
 }
 
-impl Eq for AtomAlt1 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.variable == other.variable;
-    }
-}
-
 pub struct AtomAlt2 {
     pub span: Span,
     pub constant: ConstantNode,
-}
-
-impl Eq for AtomAlt2 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.constant == other.constant;
-    }
 }
 
 pub struct AtomAlt3 {
@@ -263,21 +173,9 @@ pub struct AtomAlt3 {
     pub rparen: Token,
 }
 
-impl Eq for AtomAlt3 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.lparen == other.lparen && self.expression == other.expression && self.rparen == other.rparen;
-    }
-}
-
 pub struct ScientificNode {
     pub span: Span,
     pub scientific_number: Token,
-}
-
-impl Eq for ScientificNode {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.scientific_number == other.scientific_number;
-    }
 }
 
 pub variant ConstantNode {
@@ -286,26 +184,9 @@ pub variant ConstantNode {
     Alt2(ConstantAlt2),
 }
 
-impl Eq for ConstantNode {
-    fn eq(&self, other: &Self) -> bool {
-        return match [*self, *other] {
-            [Alt0(a), Alt0(b)] => a == b,
-            [Alt1(a), Alt1(b)] => a == b,
-            [Alt2(a), Alt2(b)] => a == b,
-            _ => false,
-        };
-    }
-}
-
 pub struct ConstantAlt0 {
     pub span: Span,
     pub pi: Token,
-}
-
-impl Eq for ConstantAlt0 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.pi == other.pi;
-    }
 }
 
 pub struct ConstantAlt1 {
@@ -313,32 +194,14 @@ pub struct ConstantAlt1 {
     pub euler: Token,
 }
 
-impl Eq for ConstantAlt1 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.euler == other.euler;
-    }
-}
-
 pub struct ConstantAlt2 {
     pub span: Span,
     pub i: Token,
 }
 
-impl Eq for ConstantAlt2 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.i == other.i;
-    }
-}
-
 pub struct VariableNode {
     pub span: Span,
     pub variable: Token,
-}
-
-impl Eq for VariableNode {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.variable == other.variable;
-    }
 }
 
 pub struct FuncNode {
@@ -347,12 +210,6 @@ pub struct FuncNode {
     pub lparen: Token,
     pub expression: ExpressionNode,
     pub rparen: Token,
-}
-
-impl Eq for FuncNode {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.funcname == other.funcname && self.lparen == other.lparen && self.expression == other.expression && self.rparen == other.rparen;
-    }
 }
 
 pub variant FuncnameNode {
@@ -367,32 +224,9 @@ pub variant FuncnameNode {
     Alt8(FuncnameAlt8),
 }
 
-impl Eq for FuncnameNode {
-    fn eq(&self, other: &Self) -> bool {
-        return match [*self, *other] {
-            [Alt0(a), Alt0(b)] => a == b,
-            [Alt1(a), Alt1(b)] => a == b,
-            [Alt2(a), Alt2(b)] => a == b,
-            [Alt3(a), Alt3(b)] => a == b,
-            [Alt4(a), Alt4(b)] => a == b,
-            [Alt5(a), Alt5(b)] => a == b,
-            [Alt6(a), Alt6(b)] => a == b,
-            [Alt7(a), Alt7(b)] => a == b,
-            [Alt8(a), Alt8(b)] => a == b,
-            _ => false,
-        };
-    }
-}
-
 pub struct FuncnameAlt0 {
     pub span: Span,
     pub cos: Token,
-}
-
-impl Eq for FuncnameAlt0 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.cos == other.cos;
-    }
 }
 
 pub struct FuncnameAlt1 {
@@ -400,21 +234,9 @@ pub struct FuncnameAlt1 {
     pub tan: Token,
 }
 
-impl Eq for FuncnameAlt1 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.tan == other.tan;
-    }
-}
-
 pub struct FuncnameAlt2 {
     pub span: Span,
     pub sin: Token,
-}
-
-impl Eq for FuncnameAlt2 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.sin == other.sin;
-    }
 }
 
 pub struct FuncnameAlt3 {
@@ -422,21 +244,9 @@ pub struct FuncnameAlt3 {
     pub acos: Token,
 }
 
-impl Eq for FuncnameAlt3 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.acos == other.acos;
-    }
-}
-
 pub struct FuncnameAlt4 {
     pub span: Span,
     pub atan: Token,
-}
-
-impl Eq for FuncnameAlt4 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.atan == other.atan;
-    }
 }
 
 pub struct FuncnameAlt5 {
@@ -444,21 +254,9 @@ pub struct FuncnameAlt5 {
     pub asin: Token,
 }
 
-impl Eq for FuncnameAlt5 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.asin == other.asin;
-    }
-}
-
 pub struct FuncnameAlt6 {
     pub span: Span,
     pub log: Token,
-}
-
-impl Eq for FuncnameAlt6 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.log == other.log;
-    }
 }
 
 pub struct FuncnameAlt7 {
@@ -466,21 +264,9 @@ pub struct FuncnameAlt7 {
     pub ln: Token,
 }
 
-impl Eq for FuncnameAlt7 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.ln == other.ln;
-    }
-}
-
 pub struct FuncnameAlt8 {
     pub span: Span,
     pub sqrt: Token,
-}
-
-impl Eq for FuncnameAlt8 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.sqrt == other.sqrt;
-    }
 }
 
 pub variant RelopNode {
@@ -489,26 +275,9 @@ pub variant RelopNode {
     Alt2(RelopAlt2),
 }
 
-impl Eq for RelopNode {
-    fn eq(&self, other: &Self) -> bool {
-        return match [*self, *other] {
-            [Alt0(a), Alt0(b)] => a == b,
-            [Alt1(a), Alt1(b)] => a == b,
-            [Alt2(a), Alt2(b)] => a == b,
-            _ => false,
-        };
-    }
-}
-
 pub struct RelopAlt0 {
     pub span: Span,
     pub eq: Token,
-}
-
-impl Eq for RelopAlt0 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.eq == other.eq;
-    }
 }
 
 pub struct RelopAlt1 {
@@ -516,21 +285,9 @@ pub struct RelopAlt1 {
     pub gt: Token,
 }
 
-impl Eq for RelopAlt1 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.gt == other.gt;
-    }
-}
-
 pub struct RelopAlt2 {
     pub span: Span,
     pub lt: Token,
-}
-
-impl Eq for RelopAlt2 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.lt == other.lt;
-    }
 }
 
 global TK_COS: i32 = 0;

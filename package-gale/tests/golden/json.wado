@@ -74,25 +74,9 @@ pub struct JsonNode {
     pub eof: Token,
 }
 
-impl Eq for JsonNode {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.value == other.value && self.eof == other.eof;
-    }
-}
-
 pub variant ObjNode {
     Alt0(ObjAlt0),
     Alt1(ObjAlt1),
-}
-
-impl Eq for ObjNode {
-    fn eq(&self, other: &Self) -> bool {
-        return match [*self, *other] {
-            [Alt0(a), Alt0(b)] => a == b,
-            [Alt1(a), Alt1(b)] => a == b,
-            _ => false,
-        };
-    }
 }
 
 pub struct ObjAlt0 {
@@ -102,22 +86,10 @@ pub struct ObjAlt0 {
     pub rbrace: Token,
 }
 
-impl Eq for ObjAlt0 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.lbrace == other.lbrace && self.pair == other.pair && self.rbrace == other.rbrace;
-    }
-}
-
 pub struct ObjAlt1 {
     pub span: Span,
     pub lbrace: Token,
     pub rbrace: Token,
-}
-
-impl Eq for ObjAlt1 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.lbrace == other.lbrace && self.rbrace == other.rbrace;
-    }
 }
 
 pub struct PairNode {
@@ -127,25 +99,9 @@ pub struct PairNode {
     pub value: ValueNode,
 }
 
-impl Eq for PairNode {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.string == other.string && self.colon == other.colon && self.value == other.value;
-    }
-}
-
 pub variant ArrNode {
     Alt0(ArrAlt0),
     Alt1(ArrAlt1),
-}
-
-impl Eq for ArrNode {
-    fn eq(&self, other: &Self) -> bool {
-        return match [*self, *other] {
-            [Alt0(a), Alt0(b)] => a == b,
-            [Alt1(a), Alt1(b)] => a == b,
-            _ => false,
-        };
-    }
 }
 
 pub struct ArrAlt0 {
@@ -155,22 +111,10 @@ pub struct ArrAlt0 {
     pub rbracket: Token,
 }
 
-impl Eq for ArrAlt0 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.lbracket == other.lbracket && self.value == other.value && self.rbracket == other.rbracket;
-    }
-}
-
 pub struct ArrAlt1 {
     pub span: Span,
     pub lbracket: Token,
     pub rbracket: Token,
-}
-
-impl Eq for ArrAlt1 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.lbracket == other.lbracket && self.rbracket == other.rbracket;
-    }
 }
 
 pub variant ValueNode {
@@ -183,30 +127,9 @@ pub variant ValueNode {
     Alt6(ValueAlt6),
 }
 
-impl Eq for ValueNode {
-    fn eq(&self, other: &Self) -> bool {
-        return match [*self, *other] {
-            [Alt0(a), Alt0(b)] => a == b,
-            [Alt1(a), Alt1(b)] => a == b,
-            [Alt2(a), Alt2(b)] => a == b,
-            [Alt3(a), Alt3(b)] => a == b,
-            [Alt4(a), Alt4(b)] => a == b,
-            [Alt5(a), Alt5(b)] => a == b,
-            [Alt6(a), Alt6(b)] => a == b,
-            _ => false,
-        };
-    }
-}
-
 pub struct ValueAlt0 {
     pub span: Span,
     pub string: Token,
-}
-
-impl Eq for ValueAlt0 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.string == other.string;
-    }
 }
 
 pub struct ValueAlt1 {
@@ -214,21 +137,9 @@ pub struct ValueAlt1 {
     pub number: Token,
 }
 
-impl Eq for ValueAlt1 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.number == other.number;
-    }
-}
-
 pub struct ValueAlt2 {
     pub span: Span,
     pub obj: ObjNode,
-}
-
-impl Eq for ValueAlt2 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.obj == other.obj;
-    }
 }
 
 pub struct ValueAlt3 {
@@ -236,21 +147,9 @@ pub struct ValueAlt3 {
     pub arr: ArrNode,
 }
 
-impl Eq for ValueAlt3 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.arr == other.arr;
-    }
-}
-
 pub struct ValueAlt4 {
     pub span: Span,
     pub lit_true: Token,
-}
-
-impl Eq for ValueAlt4 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.lit_true == other.lit_true;
-    }
 }
 
 pub struct ValueAlt5 {
@@ -258,21 +157,9 @@ pub struct ValueAlt5 {
     pub lit_false: Token,
 }
 
-impl Eq for ValueAlt5 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.lit_false == other.lit_false;
-    }
-}
-
 pub struct ValueAlt6 {
     pub span: Span,
     pub lit_null: Token,
-}
-
-impl Eq for ValueAlt6 {
-    fn eq(&self, other: &Self) -> bool {
-        return self.span == other.span && self.lit_null == other.lit_null;
-    }
 }
 
 global TK_STRING: i32 = 0;
