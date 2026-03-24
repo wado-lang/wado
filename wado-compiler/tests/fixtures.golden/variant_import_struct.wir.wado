@@ -102,7 +102,6 @@ fn run() with Stdout {
         String::append(__local_4, s1);
         String::append(__local_4, String { repr: array.new_data<u8>("]"), used: 1 });
         break __tmpl: __local_4;
-        unreachable;
     });
     opts.align = "./variant_import_struct_module.wado/Align" { 0 };
     s2 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, opts);
@@ -112,7 +111,6 @@ fn run() with Stdout {
         String::append(__local_5, s2);
         String::append(__local_5, String { repr: array.new_data<u8>("]"), used: 1 });
         break __tmpl: __local_5;
-        unreachable;
     });
     opts.align = "./variant_import_struct_module.wado/Align" { 2 };
     s3 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, opts);
@@ -122,7 +120,6 @@ fn run() with Stdout {
         String::append(__local_6, s3);
         String::append(__local_6, String { repr: array.new_data<u8>("]"), used: 1 });
         break __tmpl: __local_6;
-        unreachable;
     });
 }
 
@@ -269,7 +266,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -335,10 +331,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

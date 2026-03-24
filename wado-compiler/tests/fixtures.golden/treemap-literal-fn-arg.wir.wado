@@ -205,7 +205,6 @@ fn sum_values(m) {
     __iter_2 = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<Tuple<String,i32>>" {
         __local_5 = TreeMap<String,i32>::entries(m);
         break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(__local_5.repr), used: __local_5.used, index: 0 };
-        unreachable;
     };
     b0: block {
         l1: loop {
@@ -238,7 +237,6 @@ fn run() with Stdout {
         __local_0 = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
             __local_8 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
             break __seq_lit: __local_8;
-            unreachable;
         }), size: 0, deleted_count: 0 };
         __local_10 = String { repr: array.new_data<u8>("x"), used: 1 };
         TreeMap<String,i32>::insert(__local_0, __local_10, 10);
@@ -247,7 +245,6 @@ fn run() with Stdout {
         __local_16 = String { repr: array.new_data<u8>("z"), used: 1 };
         TreeMap<String,i32>::insert(__local_0, __local_16, 30);
         break __kv_lit: __local_0;
-        unreachable;
     });
     __cond = total == 60;
     if __cond == 0 {
@@ -281,7 +278,6 @@ condition: total == 60
             i32::fmt_decimal(total, __local_27);
             String::append_char(__local_4, 10);
             break __tmpl: __local_4;
-            unreachable;
         });
         unreachable;
     };
@@ -376,7 +372,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -510,7 +505,6 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
-        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -528,10 +522,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -681,14 +673,12 @@ fn TreeMap<String,i32>::insert(self, key, value) {
                 unreachable;
             };
             break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(__local_6.repr, existing_index);
-            unreachable;
         }.value = value;
         return;
     };
     new_index = __inline_Array_TreeMapEntry_String_i32____len_1: block -> i32 {
         __local_8 = self.entries;
         break __inline_Array_TreeMapEntry_String_i32____len_1: __local_8.used;
-        unreachable;
     };
     entry = "core:allocator/TreeMapEntry<String,i32>" { key: ref.as_non_null(key), value: value, deleted: 0 };
     Array<TreeMapEntry<String,i32>>::append(self.entries, entry);
@@ -787,7 +777,6 @@ fn Array<TreeMapEntry<String,i32>>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(new_capacity);
     old_repr = self.repr;
@@ -834,7 +823,6 @@ fn TreeMap<String,i32>::find_index(self, key) {
                             unreachable;
                         };
                         break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(_licm_repr_10, __local_7);
-                        unreachable;
                     };
                     if entry.deleted {
                         return -1;
@@ -875,12 +863,10 @@ fn TreeMap<String,i32>::entries(self) {
     result = __seq_lit: block -> ref Array<Tuple<String,i32>> {
         __local_1 = Array<Tuple<String,i32>> { repr: builtin::array_new<ref "tuple/[String, i32]">(0), used: 0 };
         break __seq_lit: __local_1;
-        unreachable;
     };
     __iter_3 = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: block -> ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>" {
         __local_9 = self.entries;
         break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
-        unreachable;
     };
     b64: block {
         l65: loop {
@@ -921,7 +907,6 @@ fn Array<Tuple<String,i32>>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<ref "tuple/[String, i32]">(new_capacity);
     old_repr = self.repr;

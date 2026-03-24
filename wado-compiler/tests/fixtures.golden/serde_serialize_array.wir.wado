@@ -175,7 +175,6 @@ fn run() with Stdout {
     nums = __seq_lit: block -> ref Array<i32> {
         __local_1 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_1;
-        unreachable;
     };
     drop(Array<i32>^Serialize::serialize<JsonSerializer>(nums, ser));
     "core:cli/println"(__tmpl: block -> ref String {
@@ -183,13 +182,11 @@ fn run() with Stdout {
         String::append(__local_7, String { repr: array.new_data<u8>("Array<i32>: "), used: 12 });
         String::append(__local_7, ser.buf);
         break __tmpl: __local_7;
-        unreachable;
     });
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
     strs = __seq_lit: block -> ref Array<String> {
         __local_3 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("hello"), used: 5 }, String { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
         break __seq_lit: __local_3;
-        unreachable;
     };
     drop(Array<String>^Serialize::serialize<JsonSerializer>(strs, ser));
     "core:cli/println"(__tmpl: block -> ref String {
@@ -197,13 +194,11 @@ fn run() with Stdout {
         String::append(__local_8, String { repr: array.new_data<u8>("Array<String>: "), used: 15 });
         String::append(__local_8, ser.buf);
         break __tmpl: __local_8;
-        unreachable;
     });
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
     empty = __seq_lit: block -> ref Array<i32> {
         __local_5 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_5;
-        unreachable;
     };
     drop(Array<i32>^Serialize::serialize<JsonSerializer>(empty, ser));
     "core:cli/println"(__tmpl: block -> ref String {
@@ -217,7 +212,6 @@ fn run() with Stdout {
         String::append_char(__local_9, 32);
         String::append(__local_9, ser.buf);
         break __tmpl: __local_9;
-        unreachable;
     });
 }
 
@@ -292,7 +286,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -408,7 +401,6 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
-        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -426,10 +418,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -498,7 +488,6 @@ fn JsonSerializer^Serializer::serialize_i32(self, v) {
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         i32::fmt_decimal(v, __local_3);
         break __tmpl: __local_2;
-        unreachable;
     });
     return ref.null none;
 }
@@ -511,7 +500,6 @@ fn JsonSerializer^Serializer::serialize_string(self, v) {
         String::append(__local_2, v);
         String::append_char(__local_2, 34);
         break __tmpl: __local_2;
-        unreachable;
     });
     return ref.null none;
 }
@@ -538,7 +526,6 @@ fn Array<String>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<ref String>(new_capacity);
     old_repr = self.repr;
@@ -573,7 +560,6 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
         __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref "core:allocator/ArrayIter<String>" {
             __local_11 = self;
             break __inline_Array_String__IntoIterator__into_iter_2: "core:allocator/ArrayIter<String>" { repr: ref.as_non_null(__local_11.repr), used: __local_11.used, index: 0 };
-            unreachable;
         };
         b27: block {
             l28: loop {
@@ -590,7 +576,6 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
         return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref null SerializeError {
             String::append_char(seq.ser.buf, 93);
             break __inline_JsonSeqSerializer_SerializeSeq__end_3: ref.null none;
-            unreachable;
         };
         break __fused___inline_JsonSerializer_Serializer__begin_seq_0;
     };
@@ -605,7 +590,6 @@ fn JsonSeqSerializer^SerializeSeq::element<String>(self, value) {
     drop(__inline_String_Serialize__serialize_JsonSerializer__0: block -> ref null SerializeError {
         __local_3 = self.ser;
         break __inline_String_Serialize__serialize_JsonSerializer__0: JsonSerializer^Serializer::serialize_string(__local_3.buf, value);
-        unreachable;
     });
     self.count = self.count + 1;
     return ref.null none;
@@ -633,7 +617,6 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
         __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "core:allocator/ArrayIter<i32>" {
             __local_11 = self;
             break __inline_Array_i32__IntoIterator__into_iter_2: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(__local_11.repr), used: __local_11.used, index: 0 };
-            unreachable;
         };
         b32: block {
             l33: loop {
@@ -651,7 +634,6 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
         return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref null SerializeError {
             String::append_char(seq.ser.buf, 93);
             break __inline_JsonSeqSerializer_SerializeSeq__end_3: ref.null none;
-            unreachable;
         };
         break __fused___inline_JsonSerializer_Serializer__begin_seq_0;
     };
@@ -666,7 +648,6 @@ fn JsonSeqSerializer^SerializeSeq::element<i32>(self, value) {
     drop(__inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref null SerializeError {
         __local_3 = self.ser;
         break __inline_i32_Serialize__serialize_JsonSerializer__0: JsonSerializer^Serializer::serialize_i32(__local_3.buf, value);
-        unreachable;
     });
     self.count = self.count + 1;
     return ref.null none;
@@ -704,7 +685,6 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

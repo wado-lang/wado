@@ -92,9 +92,8 @@ fn run() with Stdout {
     __sroa_c_items = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
-        unreachable;
     };
-    __iter_1 = "wasi:cli/ArrayIter<i32>" { repr: ref.as_non_null(__sroa_c_items.repr), used: __sroa_c_items.used, index: 0 };
+    __iter_1 = "wasi:cli/ArrayIter<i32>" { repr: ref.as_non_null(__sroa_c_items.repr), used: 3, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -181,7 +180,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -265,7 +263,6 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

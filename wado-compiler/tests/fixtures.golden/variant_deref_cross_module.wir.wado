@@ -273,7 +273,6 @@ fn process_all(alt, out) {
     __iter_2 = __inline_Array_Elem__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<Elem>" {
         __local_5 = alt.elements;
         break __inline_Array_Elem__IntoIterator__into_iter_0: "core:allocator/ArrayIter<Elem>" { repr: ref.as_non_null(__local_5.repr), used: __local_5.used, index: 0 };
-        unreachable;
     };
     b9: block {
         l10: loop {
@@ -300,7 +299,6 @@ fn __test_0_recursive_variant_deref_from_another_module() {
     alt = "./sub/variant_deref_helper.wado/Alt" { label: ref.null none, elements: ref.as_non_null(__seq_lit: block -> ref Array<Elem> {
         __local_0 = Array<Elem> { repr: array.new_fixed<ref "./sub/variant_deref_helper.wado/Elem">("./sub/variant_deref_helper.wado/Elem::TokenRef" { discriminant: 0, payload_0: String { repr: array.new_data<u8>("hello"), used: 5 } }, "./sub/variant_deref_helper.wado/Elem::Repeat" { discriminant: 3, payload_0: "./sub/variant_deref_helper.wado/RepeatElem" { element: "./sub/variant_deref_helper.wado/Elem::Literal" { discriminant: 1, payload_0: String { repr: array.new_data<u8>(" world"), used: 6 } } } }), used: 2 };
         break __seq_lit: __local_0;
-        unreachable;
     }) };
     out = String { repr: builtin::array_new<u8>(20), used: 0 };
     process_all(alt, out);
@@ -332,7 +330,6 @@ condition: out == \"hello world\"
             String^Inspect::inspect(__v0, __local_6);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
-            unreachable;
         });
         unreachable;
     };
@@ -390,7 +387,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -524,7 +520,6 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
-        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -542,10 +537,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -631,7 +624,6 @@ fn StrCharIter^Iterator::next(self) {
         return 0; __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
-            unreachable;
         };
     };
     if b0 <u 224 {
@@ -704,7 +696,6 @@ fn Array<Elem>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<ref "./sub/variant_deref_helper.wado/Elem">(new_capacity);
     old_repr = self.repr;
@@ -857,10 +848,8 @@ fn String^Inspect::inspect(self, f) {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
             break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
-            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
-        unreachable;
     };
     _licm_buf_33 = f.buf;
     b71: block {

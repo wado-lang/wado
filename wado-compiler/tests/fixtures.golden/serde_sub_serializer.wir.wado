@@ -148,7 +148,6 @@ fn run() with Stdout {
         drop(__inline_TextSeqSerializer_SerializeSeq__end_3: block -> ref null SerializeError {
             String::append_char(s_2.parent.buf, 93);
             break __inline_TextSeqSerializer_SerializeSeq__end_3: ref.null none;
-            unreachable;
         });
         break __fused___inline_TextSerializer_Serializer__begin_seq_2;
     };
@@ -161,7 +160,6 @@ fn run() with Stdout {
         String::append_char(__local_10, 32);
         String::append(__local_10, ser.buf);
         break __tmpl: __local_10;
-        unreachable;
     });
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
     __fused___inline_TextSerializer_Serializer__begin_struct_5: block {
@@ -175,7 +173,6 @@ fn run() with Stdout {
         drop(__inline_TextStructSerializer_SerializeStruct__end_6: block -> ref null SerializeError {
             String::append_char(s_7.parent.buf, 125);
             break __inline_TextStructSerializer_SerializeStruct__end_6: ref.null none;
-            unreachable;
         });
         break __fused___inline_TextSerializer_Serializer__begin_struct_5;
     };
@@ -191,7 +188,6 @@ fn run() with Stdout {
         String::append_char(__local_11, 32);
         String::append(__local_11, ser.buf);
         break __tmpl: __local_11;
-        unreachable;
     });
 }
 
@@ -266,7 +262,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -382,7 +377,6 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
-        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -400,10 +394,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -472,7 +464,6 @@ fn TextSerializer^Serializer::serialize_i32(self, v) {
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         i32::fmt_decimal(v, __local_3);
         break __tmpl: __local_2;
-        unreachable;
     });
     return ref.null none;
 }
@@ -485,7 +476,6 @@ fn TextSerializer^Serializer::serialize_string(self, v) {
         String::append(__local_2, v);
         String::append_char(__local_2, 34);
         break __tmpl: __local_2;
-        unreachable;
     });
     return ref.null none;
 }
@@ -503,12 +493,10 @@ fn TextStructSerializer^SerializeStruct::field<i32>(self, name, value) {
         String::append_char(__local_3, 34);
         String::append_char(__local_3, 58);
         break __tmpl: __local_3;
-        unreachable;
     });
     drop(__inline_i32_Serialize__serialize_TextSerializer__1: block -> ref null SerializeError {
         __local_6 = self.parent;
         break __inline_i32_Serialize__serialize_TextSerializer__1: TextSerializer^Serializer::serialize_i32(__local_6.buf, value);
-        unreachable;
     });
     self.count = self.count + 1;
     return ref.null none;
@@ -527,12 +515,10 @@ fn TextStructSerializer^SerializeStruct::field<String>(self, name, value) {
         String::append_char(__local_3, 34);
         String::append_char(__local_3, 58);
         break __tmpl: __local_3;
-        unreachable;
     });
     drop(__inline_String_Serialize__serialize_TextSerializer__1: block -> ref null SerializeError {
         __local_6 = self.parent;
         break __inline_String_Serialize__serialize_TextSerializer__1: TextSerializer^Serializer::serialize_string(__local_6.buf, value);
-        unreachable;
     });
     self.count = self.count + 1;
     return ref.null none;
@@ -546,7 +532,6 @@ fn TextSeqSerializer^SerializeSeq::element<i32>(self, value) {
     drop(__inline_i32_Serialize__serialize_TextSerializer__0: block -> ref null SerializeError {
         __local_3 = self.parent;
         break __inline_i32_Serialize__serialize_TextSerializer__0: TextSerializer^Serializer::serialize_i32(__local_3.buf, value);
-        unreachable;
     });
     self.count = self.count + 1;
     return ref.null none;

@@ -152,10 +152,8 @@ fn run() with Stdout {
                 String::append(__local_12, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
                 String::append(__local_12, __local_10);
                 break __tmpl: __local_12;
-                unreachable;
             });
             break __inline_side_effect_2: 1;
-            unreachable;
         };
     } else {
         0;
@@ -172,10 +170,8 @@ fn run() with Stdout {
                 String::append(__local_15, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
                 String::append(__local_15, __local_13);
                 break __tmpl: __local_15;
-                unreachable;
             });
             break __inline_side_effect_3: 1;
-            unreachable;
         };
     } else {
         0;
@@ -194,10 +190,8 @@ fn run() with Stdout {
                 String::append(__local_18, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
                 String::append(__local_18, __local_16);
                 break __tmpl: __local_18;
-                unreachable;
             });
             break __inline_side_effect_4: 0;
-            unreachable;
         };
     } {
         "core:cli/println"(String { repr: array.new_data<u8>("branch taken (correct)"), used: 22 });
@@ -212,10 +206,8 @@ fn run() with Stdout {
                 String::append(__local_21, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
                 String::append(__local_21, __local_19);
                 break __tmpl: __local_21;
-                unreachable;
             });
             break __inline_side_effect_5: 1;
-            unreachable;
         };
     } {
         "core:cli/println"(String { repr: array.new_data<u8>("branch taken (correct)"), used: 22 });
@@ -225,10 +217,9 @@ fn run() with Stdout {
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
-        unreachable;
     };
     i = 0;
-    _licm_used_59 = arr.used;
+    _licm_used_59 = 3;
     _licm_repr_60 = arr.repr;
     b8: block {
         l9: loop {
@@ -240,7 +231,6 @@ fn run() with Stdout {
                         unreachable;
                     };
                     break __inline_Array_i32__IndexValue__index_value_13: builtin::array_get<i32>(_licm_repr_60, __local_33);
-                    unreachable;
                 } < 100;
             } else {
                 0;
@@ -269,10 +259,8 @@ fn run() with Stdout {
                         unreachable;
                     };
                     break __inline_Array_i32__IndexValue__index_value_20: builtin::array_get<i32>(_licm_repr_60, __local_44);
-                    unreachable;
                 }, __local_42);
                 break __tmpl: __local_5;
-                unreachable;
             });
             i = i + 1;
             continue l9;
@@ -284,7 +272,6 @@ fn run() with Stdout {
         __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         i32::fmt_decimal(i, __local_8);
         break __tmpl: __local_7;
-        unreachable;
     });
     "core:cli/println"(String { repr: array.new_data<u8>("
 === Testing nested ==="), used: 23 });
@@ -298,10 +285,8 @@ fn run() with Stdout {
                 String::append(__local_55, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
                 String::append(__local_55, __local_53);
                 break __tmpl: __local_55;
-                unreachable;
             });
             break __inline_side_effect_26: 1;
-            unreachable;
         };
     } {
         "core:cli/println"(String { repr: array.new_data<u8>("nested branch taken (correct)"), used: 29 });
@@ -317,10 +302,8 @@ fn run() with Stdout {
                     String::append(__local_58, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
                     String::append(__local_58, __local_56);
                     break __tmpl: __local_58;
-                    unreachable;
                 });
                 break __inline_side_effect_27: 1;
-                unreachable;
             };
         };
     } else {
@@ -420,7 +403,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -554,7 +536,6 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
-        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -572,10 +553,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -658,7 +637,6 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

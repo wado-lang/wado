@@ -277,7 +277,6 @@ fn describe(a, b) {
                             String { repr: array.new_data<u8>("false"), used: 5 };
                         });
                         break __tmpl: __local_8;
-                        unreachable;
                     };
                 } else {
                     block -> ref String {
@@ -310,7 +309,6 @@ fn describe(a, b) {
                                 __local_40 = __local_11;
                                 i32::fmt_decimal(__local_39.value, __local_40);
                                 break __tmpl: __local_10;
-                                unreachable;
                             };
                         } else {
                             block -> ref String {
@@ -338,7 +336,6 @@ fn describe(a, b) {
                                         String::append_char(__local_12, 32);
                                         String::append(__local_12, __local_7);
                                         break __tmpl: __local_12;
-                                        unreachable;
                                     };
                                 } else {
                                     String { repr: array.new_data<u8>("mismatch"), used: 8 };
@@ -365,7 +362,6 @@ fn destruct_basic() with Stdout {
         String::append_char(__local_2, 32);
         String::append(__local_2, __sroa___pattern_temp_0_1);
         break __tmpl: __local_2;
-        unreachable;
     });
 }
 
@@ -386,9 +382,8 @@ fn destruct_for_of() with Stdout {
     pairs = __seq_lit: block -> ref Array<Tuple<i32,String>> {
         __local_0 = Array<Tuple<i32,String>> { repr: array.new_fixed<ref "tuple/[i32, String]">("tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("one"), used: 3 } }, "tuple/[i32, String]" { 0: 2, 1: String { repr: array.new_data<u8>("two"), used: 3 } }, "tuple/[i32, String]" { 0: 3, 1: String { repr: array.new_data<u8>("three"), used: 5 } }), used: 3 };
         break __seq_lit: __local_0;
-        unreachable;
     };
-    __iter_2 = "core:allocator/ArrayIter<Tuple<i32,String>>" { repr: ref.as_non_null(pairs.repr), used: pairs.used, index: 0 };
+    __iter_2 = "core:allocator/ArrayIter<Tuple<i32,String>>" { repr: ref.as_non_null(pairs.repr), used: 3, index: 0 };
     b14: block {
         l15: loop {
             __pattern_temp_0 = ArrayIter<Tuple<i32,String>>^Iterator::next(__iter_2);
@@ -404,7 +399,6 @@ fn destruct_for_of() with Stdout {
                     String::append_char(__local_7, 32);
                     String::append(__local_7, name_4);
                     break __tmpl: __local_7;
-                    unreachable;
                 });
             } else {
                 break b14;
@@ -412,7 +406,7 @@ fn destruct_for_of() with Stdout {
             continue l15;
         };
     };
-    __iter_5 = "core:allocator/ArrayIter<Tuple<i32,String>>" { repr: ref.as_non_null(pairs.repr), used: pairs.used, index: 0 };
+    __iter_5 = "core:allocator/ArrayIter<Tuple<i32,String>>" { repr: ref.as_non_null(pairs.repr), used: 3, index: 0 };
     b17: block {
         l18: loop {
             __pattern_temp_2 = ArrayIter<Tuple<i32,String>>^Iterator::next(__iter_5);
@@ -466,7 +460,6 @@ fn destruct_if_let() with Stdout {
             __local_27 = __local_8;
             i32::fmt_decimal(y_2, __local_27);
             break __tmpl: __local_7;
-            unreachable;
         });
     };
     none = ref.null none;
@@ -485,7 +478,6 @@ fn destruct_if_let() with Stdout {
             __local_38 = __local_10;
             i32::fmt_decimal(y_5, __local_38);
             break __tmpl: __local_9;
-            unreachable;
         });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("none"), used: 4 });
@@ -499,7 +491,6 @@ fn destruct_if_let() with Stdout {
             __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
             i32::fmt_decimal(y_6, __local_12);
             break __tmpl: __local_11;
-            unreachable;
         });
     };
 }
@@ -585,7 +576,6 @@ fn destruct_mut() with Stdout {
         __local_15 = __local_3;
         i32::fmt_decimal(20, __local_15);
         break __tmpl: __local_2;
-        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(41), used: 0 };
@@ -605,7 +595,6 @@ fn destruct_mut() with Stdout {
         __local_26 = __local_5;
         i32::fmt_decimal(200, __local_26);
         break __tmpl: __local_4;
-        unreachable;
     });
 }
 
@@ -630,7 +619,6 @@ fn destruct_nested() with Stdout {
         String::append_char(__local_3, 32);
         String::append(__local_3, __sroa___pattern_temp_0_1);
         break __tmpl: __local_3;
-        unreachable;
     });
 }
 
@@ -651,7 +639,6 @@ fn destruct_wildcard() with Stdout {
         __local_13 = __local_3;
         i32::fmt_decimal(3, __local_13);
         break __tmpl: __local_2;
-        unreachable;
     });
 }
 
@@ -701,7 +688,6 @@ fn destruct_literal() with Stdout {
                 __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
                 i32::fmt_decimal(__local_1, __local_17);
                 break __tmpl: __local_16;
-                unreachable;
             };
         } else {
             String { repr: array.new_data<u8>("no match"), used: 8 };
@@ -722,7 +708,6 @@ fn destruct_literal() with Stdout {
                 String::append(__local_18, String { repr: array.new_data<u8>("matched bool: "), used: 14 });
                 String::append(__local_18, __local_4);
                 break __tmpl: __local_18;
-                unreachable;
             };
         } else {
             block -> ref String {
@@ -736,7 +721,6 @@ fn destruct_literal() with Stdout {
                         String::append(__local_19, String { repr: array.new_data<u8>("not matched: "), used: 13 });
                         String::append(__local_19, __local_5);
                         break __tmpl: __local_19;
-                        unreachable;
                     };
                 } else {
                     unreachable;
@@ -760,7 +744,6 @@ fn destruct_literal() with Stdout {
                 __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
                 i32::fmt_decimal(__local_8, __local_21);
                 break __tmpl: __local_20;
-                unreachable;
             };
         } else {
             String { repr: array.new_data<u8>("no match"), used: 8 };
@@ -782,7 +765,6 @@ fn destruct_literal() with Stdout {
                 __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_22) };
                 i32::fmt_decimal(__local_11, __local_23);
                 break __tmpl: __local_22;
-                unreachable;
             };
         } else {
             String { repr: array.new_data<u8>("no match"), used: 8 };
@@ -795,7 +777,6 @@ fn destruct_literal() with Stdout {
         __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_24) };
         i32::fmt_decimal(100, __local_25);
         break __tmpl: __local_24;
-        unreachable;
     });
     bpair2 = "tuple/[i32, bool]" { 0: 42, 1: 0 };
     let __match_scrut_4: ref "tuple/[i32, bool]";
@@ -874,7 +855,6 @@ fn destruct_match() with Stdout {
                         __local_29 = __local_15;
                         i32::fmt_decimal(__local_28.value, __local_29);
                         break __tmpl: __local_14;
-                        unreachable;
                     };
                 };
             };
@@ -890,7 +870,6 @@ fn destruct_match() with Stdout {
         __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
         i32::fmt_decimal(first, __local_17);
         break __tmpl: __local_16;
-        unreachable;
     });
     opt = "tuple/[i32, i32]" { 0: 3, 1: 4 };
     let __match_scrut_2: ref null "tuple/[i32, i32]";
@@ -913,7 +892,6 @@ fn destruct_match() with Stdout {
         __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
         i32::fmt_decimal(sum, __local_19);
         break __tmpl: __local_18;
-        unreachable;
     });
 }
 
@@ -1018,7 +996,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -1134,7 +1111,6 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
-        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1152,10 +1128,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -1279,7 +1253,6 @@ fn Array<Tuple<i32,String>>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<ref "tuple/[i32, String]">(new_capacity);
     old_repr = self.repr;

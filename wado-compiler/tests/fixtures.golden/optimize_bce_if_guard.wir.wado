@@ -132,15 +132,12 @@ fn sliding_sum(input) {
                     sum = sum + ((__inline_Array_i32__IndexValue__index_value_1: block -> i32 {
                         __local_6 = i;
                         break __inline_Array_i32__IndexValue__index_value_1: builtin::array_get<i32>(_licm_repr_12, __local_6);
-                        unreachable;
                     } + __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
                         __local_8 = i + 1;
                         break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_12, __local_8);
-                        unreachable;
                     }) + __inline_Array_i32__IndexValue__index_value_3: block -> i32 {
                         __local_10 = i + 2;
                         break __inline_Array_i32__IndexValue__index_value_3: builtin::array_get<i32>(_licm_repr_12, __local_10);
-                        unreachable;
                     });
                 };
                 i = i + 1;
@@ -163,7 +160,6 @@ fn run() {
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30, 40, 50), used: 5 };
         break __seq_lit: __local_0;
-        unreachable;
     };
     s = sliding_sum(arr);
     __cond = s == 270;
@@ -194,7 +190,6 @@ condition: s == 270
             i32::fmt_decimal(s, __local_29);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
-            unreachable;
         });
         unreachable;
     };
@@ -252,7 +247,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -386,7 +380,6 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
-        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -404,10 +397,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -490,7 +481,6 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

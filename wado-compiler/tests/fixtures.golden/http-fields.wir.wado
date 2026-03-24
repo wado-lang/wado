@@ -557,14 +557,12 @@ condition: !has_before
             });
             String::append_char(__local_30, 10);
             break __tmpl: __local_30;
-            unreachable;
         });
         unreachable;
     };
     bytes = __seq_lit: block -> ref Array<u8> {
         __local_5 = Array<u8> { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
         break __seq_lit: __local_5;
-        unreachable;
     };
     value = value_copy Array<u8>(bytes);
     append_result = __cm_binding__Fields_append(fields, String { repr: array.new_data<u8>("x-test"), used: 6 }, value);
@@ -605,7 +603,6 @@ condition: has_after
             });
             String::append_char(__local_32, 10);
             break __tmpl: __local_32;
-            unreachable;
         });
         unreachable;
     };
@@ -643,7 +640,6 @@ condition: cloned_has
             });
             String::append_char(__local_34, 10);
             break __tmpl: __local_34;
-            unreachable;
         });
         unreachable;
     };
@@ -686,7 +682,6 @@ condition: !has_deleted
             });
             String::append_char(__local_36, 10);
             break __tmpl: __local_36;
-            unreachable;
         });
         unreachable;
     };
@@ -723,7 +718,6 @@ condition: cloned_still_has
             });
             String::append_char(__local_38, 10);
             break __tmpl: __local_38;
-            unreachable;
         });
         unreachable;
     };
@@ -1085,7 +1079,6 @@ fn __cm_binding__Fields_append(self, name, value) {
         __local_11 = value.repr;
         __local_12 = value.used;
         break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_11, __local_12);
-        unreachable;
     };
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Fields::append"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64), builtin::i32_wrap_i64(__value_packed), builtin::i32_wrap_i64(__value_packed >> 32_i64), __outptr);
@@ -1206,7 +1199,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -1351,7 +1343,6 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
-        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1369,10 +1360,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -1455,7 +1444,6 @@ fn Array<u8>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     old_repr = self.repr;

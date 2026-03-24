@@ -172,7 +172,6 @@ fn double_all(arr) {
                 value = __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
                     __local_7 = i;
                     break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_9, __local_7);
-                    unreachable;
                 } * 2;
                 builtin::array_set<i32>(_licm_repr_9, index, value);
                 i = i + 1;
@@ -231,7 +230,6 @@ fn process(arr, input, count) {
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_0: builtin::array_get<u8>(_licm_repr_15, __local_8);
-                unreachable;
             };
             if val <u 128 {
                 Array<u8>::append(arr, val);
@@ -244,7 +242,6 @@ fn process(arr, input, count) {
                         unreachable;
                     };
                     break __inline_Array_u8__IndexValue__index_value_2: builtin::array_get<u8>(arr.repr, src);
-                    unreachable;
                 });
                 Array<u8>::append(arr, __inline_Array_u8__IndexValue__index_value_3: block -> u8 {
                     __local_13 = src + 1;
@@ -253,7 +250,6 @@ fn process(arr, input, count) {
                         unreachable;
                     };
                     break __inline_Array_u8__IndexValue__index_value_3: builtin::array_get<u8>(arr.repr, __local_13);
-                    unreachable;
                 });
             };
             i = i + 1;
@@ -279,7 +275,6 @@ fn ref_mut_array_ops() with Stdout {
     nums = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
-        unreachable;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -291,7 +286,6 @@ fn ref_mut_array_ops() with Stdout {
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(nums.used, __local_4);
         break __tmpl: __local_3;
-        unreachable;
     });
     arr = nums;
     Array<i32>::append(arr, 4);
@@ -306,7 +300,6 @@ fn ref_mut_array_ops() with Stdout {
         __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i32::fmt_decimal(nums.used, __local_6);
         break __tmpl: __local_5;
-        unreachable;
     });
     double_all(nums);
     __for_2: block {
@@ -324,10 +317,8 @@ fn ref_mut_array_ops() with Stdout {
                     i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_21: block -> i32 {
                         __local_39 = i;
                         break __inline_Array_i32__IndexValue__index_value_21: builtin::array_get<i32>(_licm_repr_43, __local_39);
-                        unreachable;
                     }, __local_8);
                     break __tmpl: __local_7;
-                    unreachable;
                 });
                 i = i + 1;
                 continue l16;
@@ -375,7 +366,6 @@ fn ref_loop_mut_test() with Stdout {
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(sum.value, __local_4);
         break __tmpl: __local_3;
-        unreachable;
     });
     count = "core:internal/Box<i32>" { value: 0 };
     r = count;
@@ -400,7 +390,6 @@ fn ref_loop_mut_test() with Stdout {
         __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i32::fmt_decimal(count.value, __local_6);
         break __tmpl: __local_5;
-        unreachable;
     });
 }
 
@@ -422,7 +411,6 @@ fn ref_conditional_mut_test() with Stdout {
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(a.value, __local_4);
         break __tmpl: __local_3;
-        unreachable;
     });
     b = "core:internal/Box<i32>" { value: -10 };
     clamp(b, 0, 100);
@@ -432,7 +420,6 @@ fn ref_conditional_mut_test() with Stdout {
         __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i32::fmt_decimal(b.value, __local_6);
         break __tmpl: __local_5;
-        unreachable;
     });
     c = "core:internal/Box<i32>" { value: 200 };
     clamp(c, 0, 100);
@@ -442,7 +429,6 @@ fn ref_conditional_mut_test() with Stdout {
         __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         i32::fmt_decimal(c.value, __local_8);
         break __tmpl: __local_7;
-        unreachable;
     });
 }
 
@@ -472,7 +458,6 @@ fn ref_mut_while_condition_test() with Stdout {
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(pos_0.value, __local_2);
         break __tmpl: __local_1;
-        unreachable;
     });
 }
 
@@ -500,7 +485,6 @@ fn ref_nested_mut_write_test() with Stdout {
         String::append_char(__local_1, 32);
         String::append(__local_1, __sroa___sroa_data_middle_label);
         break __tmpl: __local_1;
-        unreachable;
     });
     s = String { repr: array.new_data<u8>("updated"), used: 7 };
     __sroa___sroa_data_middle_label = s;
@@ -519,7 +503,6 @@ fn ref_nested_mut_write_test() with Stdout {
         String::append_char(__local_3, 32);
         String::append(__local_3, __sroa___sroa_data_middle_label);
         break __tmpl: __local_3;
-        unreachable;
     });
 }
 
@@ -539,12 +522,10 @@ fn ref_mut_array_append_complex_test() with Stdout {
     out = __seq_lit: block -> ref Array<u8> {
         __local_0 = Array<u8> { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_0;
-        unreachable;
     };
     input = __seq_lit: block -> ref Array<u8> {
         __local_2 = Array<u8> { repr: array.new_fixed<u8>(65, 66, 67, 130), used: 4 };
         break __seq_lit: __local_2;
-        unreachable;
     };
     process(out, input, 4);
     "core:cli/println"(__tmpl: block -> ref String {
@@ -557,7 +538,6 @@ fn ref_mut_array_append_complex_test() with Stdout {
         __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i32::fmt_decimal(out.used, __local_6);
         break __tmpl: __local_5;
-        unreachable;
     });
     __for_3: block {
         i = 0;
@@ -574,10 +554,8 @@ fn ref_mut_array_append_complex_test() with Stdout {
                     i32::fmt_decimal(__inline_Array_u8__IndexValue__index_value_19: block -> u8 {
                         __local_36 = i;
                         break __inline_Array_u8__IndexValue__index_value_19: builtin::array_get<u8>(_licm_repr_40, __local_36);
-                        unreachable;
                     }, __local_8);
                     break __tmpl: __local_7;
-                    unreachable;
                 });
                 i = i + 1;
                 continue l25;
@@ -690,7 +668,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -824,7 +801,6 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
-        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -842,10 +818,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -928,7 +902,6 @@ fn Array<u8>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     old_repr = self.repr;
@@ -971,7 +944,6 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

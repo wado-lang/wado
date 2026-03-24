@@ -210,7 +210,6 @@ fn match_with_struct() with Stdout {
         __local_19 = __local_6;
         i32::fmt_decimal(y, __local_19);
         break __tmpl: __local_5;
-        unreachable;
     });
     a = 5;
     b = 10;
@@ -232,7 +231,6 @@ fn match_with_struct() with Stdout {
         __local_30 = __local_8;
         i32::fmt_decimal(b, __local_30);
         break __tmpl: __local_7;
-        unreachable;
     });
 }
 
@@ -259,7 +257,6 @@ fn match_option_chained() with Stdout {
             __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
             i32::fmt_decimal(n, __local_8);
             break __tmpl: __local_7;
-            unreachable;
         });
     };
     none_val = Option<i32> { 1 };
@@ -308,7 +305,6 @@ fn match_option_chained() with Stdout {
         String::append_char(__local_9, 32);
         String::append(__local_9, desc);
         break __tmpl: __local_9;
-        unreachable;
     });
 }
 
@@ -336,9 +332,8 @@ fn match_variant_comprehensive() with Stdout {
     trees = __seq_lit: block -> ref Array<Tree> {
         __local_0 = Array<Tree> { repr: array.new_fixed<ref Tree>(Tree::Leaf { discriminant: 0, payload_0: 1 }, Tree::Node { discriminant: 1, payload_0: "tuple/[i32, i32]" { 0: 10, 1: 20 } }, Tree { 2 }, Tree::Leaf { discriminant: 0, payload_0: 99 }), used: 4 };
         break __seq_lit: __local_0;
-        unreachable;
     };
-    __iter_2 = "core:allocator/ArrayIter<Tree>" { repr: ref.as_non_null(trees.repr), used: trees.used, index: 0 };
+    __iter_2 = "core:allocator/ArrayIter<Tree>" { repr: ref.as_non_null(trees.repr), used: 4, index: 0 };
     b8: block {
         l9: loop {
             __pattern_temp_0 = ArrayIter<Tree>^Iterator::next(__iter_2);
@@ -361,7 +356,6 @@ fn match_variant_comprehensive() with Stdout {
                             i32::fmt_decimal(__local_4, __local_9);
                             String::append_char(__local_8, 41);
                             break __tmpl: __local_8;
-                            unreachable;
                         };
                     } else if ref.test Tree::Leaf(__match_scrut_0) -> ref String {
                         let __cast_2: ref Tree::Leaf;
@@ -379,7 +373,6 @@ fn match_variant_comprehensive() with Stdout {
                             i32::fmt_decimal(__local_35.value, __local_11);
                             String::append_char(__local_10, 41);
                             break __tmpl: __local_10;
-                            unreachable;
                         };
                     } else if ref.test Tree::Node(__match_scrut_0) -> ref String {
                         let __cast_1: ref Tree::Node;
@@ -403,7 +396,6 @@ fn match_variant_comprehensive() with Stdout {
                             i32::fmt_decimal(__local_46.value, __local_47);
                             String::append_char(__local_12, 41);
                             break __tmpl: __local_12;
-                            unreachable;
                         };
                     } else if __match_scrut_0.discriminant == 2 -> ref String {
                         String { repr: array.new_data<u8>("empty"), used: 5 };
@@ -426,7 +418,6 @@ fn match_variant_comprehensive() with Stdout {
                         i32::fmt_decimal(__local_35.value, __local_11);
                         String::append_char(__local_10, 41);
                         break __tmpl: __local_10;
-                        unreachable;
                     };
                 } else if ref.test Tree::Node(__match_scrut_0) -> ref String {
                     let __cast_1: ref Tree::Node;
@@ -450,7 +441,6 @@ fn match_variant_comprehensive() with Stdout {
                         i32::fmt_decimal(__local_46.value, __local_47);
                         String::append_char(__local_12, 41);
                         break __tmpl: __local_12;
-                        unreachable;
                     };
                 } else if __match_scrut_0.discriminant == 2 -> ref String {
                     String { repr: array.new_data<u8>("empty"), used: 5 };
@@ -479,10 +469,9 @@ fn match_in_loop() with Stdout {
     items = __seq_lit: block -> ref Array<Option<i32>> {
         __local_0 = Array<Option<i32>> { repr: array.new_fixed<ref Option<i32>>(Option<i32>::Some { discriminant: 0, payload_0: 1 }, Option<i32> { 1 }, Option<i32>::Some { discriminant: 0, payload_0: 3 }, Option<i32> { 1 }, Option<i32>::Some { discriminant: 0, payload_0: 5 }), used: 5 };
         break __seq_lit: __local_0;
-        unreachable;
     };
     sum = 0;
-    __iter_3 = "core:allocator/ArrayIter<Option<i32>>" { repr: ref.as_non_null(items.repr), used: items.used, index: 0 };
+    __iter_3 = "core:allocator/ArrayIter<Option<i32>>" { repr: ref.as_non_null(items.repr), used: 5, index: 0 };
     b19: block {
         l20: loop {
             __pattern_temp_0 = ArrayIter<Option<i32>>^Iterator::next(__iter_3);
@@ -512,7 +501,6 @@ fn match_in_loop() with Stdout {
         __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         i32::fmt_decimal(sum, __local_7);
         break __tmpl: __local_6;
-        unreachable;
     });
 }
 
@@ -551,7 +539,6 @@ fn matches_operator() with Stdout {
             String { repr: array.new_data<u8>("false"), used: 5 };
         });
         break __tmpl: __local_5;
-        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(25), used: 0 };
@@ -567,7 +554,6 @@ fn matches_operator() with Stdout {
             String { repr: array.new_data<u8>("false"), used: 5 };
         });
         break __tmpl: __local_7;
-        unreachable;
     });
     big = Option<i32>::Some { discriminant: 0, payload_0: 100 };
     "core:cli/println"(__tmpl: block -> ref String {
@@ -594,7 +580,6 @@ fn matches_operator() with Stdout {
             String { repr: array.new_data<u8>("false"), used: 5 };
         });
         break __tmpl: __local_9;
-        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(26), used: 0 };
@@ -613,7 +598,6 @@ fn matches_operator() with Stdout {
             String { repr: array.new_data<u8>("false"), used: 5 };
         });
         break __tmpl: __local_11;
-        unreachable;
     });
     tree = Tree::Leaf { discriminant: 0, payload_0: 5 };
     "core:cli/println"(__tmpl: block -> ref String {
@@ -632,7 +616,6 @@ fn matches_operator() with Stdout {
             String { repr: array.new_data<u8>("false"), used: 5 };
         });
         break __tmpl: __local_13;
-        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_15 = String { repr: builtin::array_new<u8>(26), used: 0 };
@@ -648,7 +631,6 @@ fn matches_operator() with Stdout {
             String { repr: array.new_data<u8>("false"), used: 5 };
         });
         break __tmpl: __local_15;
-        unreachable;
     });
 }
 
@@ -664,9 +646,8 @@ fn if_let_with_else() with Stdout {
     values = __seq_lit: block -> ref Array<Option<i32>> {
         __local_0 = Array<Option<i32>> { repr: array.new_fixed<ref Option<i32>>(Option<i32>::Some { discriminant: 0, payload_0: 10 }, Option<i32> { 1 }, Option<i32>::Some { discriminant: 0, payload_0: 30 }), used: 3 };
         break __seq_lit: __local_0;
-        unreachable;
     };
-    __iter_2 = "core:allocator/ArrayIter<Option<i32>>" { repr: ref.as_non_null(values.repr), used: values.used, index: 0 };
+    __iter_2 = "core:allocator/ArrayIter<Option<i32>>" { repr: ref.as_non_null(values.repr), used: 3, index: 0 };
     b36: block {
         l37: loop {
             __pattern_temp_0 = ArrayIter<Option<i32>>^Iterator::next(__iter_2);
@@ -683,7 +664,6 @@ fn if_let_with_else() with Stdout {
                         __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
                         i32::fmt_decimal(n, __local_6);
                         break __tmpl: __local_5;
-                        unreachable;
                     });
                 } else {
                     "core:cli/println"(String { repr: array.new_data<u8>("nothing"), used: 7 });
@@ -781,7 +761,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -897,7 +876,6 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
-        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -915,10 +893,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -1011,7 +987,6 @@ fn Array<Option<i32>>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<ref Option<i32>>(new_capacity);
     old_repr = self.repr;
@@ -1064,7 +1039,6 @@ fn Array<Tree>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<ref Tree>(new_capacity);
     old_repr = self.repr;

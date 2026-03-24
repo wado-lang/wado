@@ -194,11 +194,9 @@ fn run() with Stdout {
         __local_0 = FrozenMapBuilder<i32> { keys: ref.as_non_null(__seq_lit: block -> ref Array<String> {
             __local_32 = Array<String> { repr: builtin::array_new<ref String>(0), used: 0 };
             break __seq_lit: __local_32;
-            unreachable;
         }), values: ref.as_non_null(__seq_lit: block -> ref Array<i32> {
             __local_33 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
             break __seq_lit: __local_33;
-            unreachable;
         }) };
         __local_41 = String { repr: array.new_data<u8>("x"), used: 1 };
         Array<String>::append(__local_0.keys, __local_41);
@@ -212,15 +210,12 @@ fn run() with Stdout {
         __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_12: block -> ref FrozenMap<i32> {
             __local_49 = value_copy FrozenMapBuilder<i32>(__local_0);
             break __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_12: FrozenMap<i32> { keys: ref.as_non_null(__local_49.keys), values: ref.as_non_null(__local_49.values) };
-            unreachable;
         };
         break __kv_lit;
-        unreachable;
     };
     __v0_2 = __inline_Array_String___len_14: block -> i32 {
         __local_51 = m.keys;
         break __inline_Array_String___len_14: __local_51.used;
-        unreachable;
     };
     __cond_3 = __v0_2 == 3;
     if __cond_3 == 0 {
@@ -248,7 +243,6 @@ condition: m.len() == 3
             i32::fmt_decimal(__v0_2, __local_60);
             String::append_char(__local_17, 10);
             break __tmpl: __local_17;
-            unreachable;
         });
         unreachable;
     };
@@ -285,7 +279,6 @@ condition: v == 10
                 i32::fmt_decimal(v_4, __local_71);
                 String::append_char(__local_19, 10);
                 break __tmpl: __local_19;
-                unreachable;
             });
             unreachable;
         };
@@ -323,7 +316,6 @@ condition: v == 20
                 i32::fmt_decimal(v_7, __local_82);
                 String::append_char(__local_21, 10);
                 break __tmpl: __local_21;
-                unreachable;
             });
             unreachable;
         };
@@ -361,7 +353,6 @@ condition: v == 30
                 i32::fmt_decimal(v_10, __local_93);
                 String::append_char(__local_23, 10);
                 break __tmpl: __local_23;
-                unreachable;
             });
             unreachable;
         };
@@ -370,11 +361,9 @@ condition: v == 30
         __local_13 = FrozenMapBuilder<i32> { keys: ref.as_non_null(__seq_lit: block -> ref Array<String> {
             __local_97 = Array<String> { repr: builtin::array_new<ref String>(0), used: 0 };
             break __seq_lit: __local_97;
-            unreachable;
         }), values: ref.as_non_null(__seq_lit: block -> ref Array<i32> {
             __local_98 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
             break __seq_lit: __local_98;
-            unreachable;
         }) };
         __local_106 = String { repr: array.new_data<u8>("a"), used: 1 };
         Array<String>::append(__local_13.keys, __local_106);
@@ -385,15 +374,12 @@ condition: v == 30
         __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_52: block -> ref FrozenMap<i32> {
             __local_111 = value_copy FrozenMapBuilder<i32>(__local_13);
             break __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_52: FrozenMap<i32> { keys: ref.as_non_null(__local_111.keys), values: ref.as_non_null(__local_111.values) };
-            unreachable;
         };
         break __kv_lit;
-        unreachable;
     };
     __v0_15 = __inline_Array_String___len_54: block -> i32 {
         __local_113 = m2.keys;
         break __inline_Array_String___len_54: __local_113.used;
-        unreachable;
     };
     __cond_16 = __v0_15 == 2;
     if __cond_16 == 0 {
@@ -421,7 +407,6 @@ condition: m2.len() == 2
             i32::fmt_decimal(__v0_15, __local_122);
             String::append_char(__local_25, 10);
             break __tmpl: __local_25;
-            unreachable;
         });
         unreachable;
     };
@@ -516,7 +501,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
-            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -650,7 +634,6 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
-        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -668,10 +651,8 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -785,7 +766,6 @@ fn Array<String>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<ref String>(new_capacity);
     old_repr = self.repr;
@@ -831,7 +811,6 @@ fn FrozenMap<i32>::get(self, key) {
             if String^Eq::eq(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
                 __local_5 = i;
                 break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_11, __local_5);
-                unreachable;
             }, key) {
                 return 0; __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
                     __local_7 = i;
@@ -840,7 +819,6 @@ fn FrozenMap<i32>::get(self, key) {
                         unreachable;
                     };
                     break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_13, __local_7);
-                    unreachable;
                 };
             };
             i = i + 1;
@@ -872,7 +850,6 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;
