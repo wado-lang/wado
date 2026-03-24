@@ -129,6 +129,7 @@ fn __test_0_container_of_boxes() {
     __sroa_c_items = __seq_lit: block -> ref Array<Box<i32>> {
         __local_10 = Array<Box<i32>> { repr: builtin::array_new<ref "core:internal/Box<i32>">(0), used: 0 };
         break __seq_lit: __local_10;
+        unreachable;
     };
     item = "core:internal/Box<i32>" { value: 42 };
     Array<Box<i32>>::append(__sroa_c_items, item);
@@ -138,6 +139,7 @@ fn __test_0_container_of_boxes() {
             unreachable;
         };
         break __inline_Array_Box_i32___IndexValue__index_value_15: builtin::array_get<ref "core:internal/Box<i32>">(__sroa_c_items.repr, 0);
+        unreachable;
     }.value;
     __cond = __v0 == 42;
     if __cond == 0 {
@@ -163,6 +165,7 @@ condition: c.items[0].value == 42
             i32::fmt_decimal(__v0, __local_38);
             String::append_char(__local_7, 10);
             break __tmpl: __local_7;
+            unreachable;
         });
         unreachable;
     };
@@ -192,6 +195,7 @@ fn __test_1_array_of_boxes() {
     arr = __seq_lit: block -> ref Array<Box<i32>> {
         __local_0 = Array<Box<i32>> { repr: builtin::array_new<ref "core:internal/Box<i32>">(0), used: 0 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     Array<Box<i32>>::append(arr, "core:internal/Box<i32>" { value: 10 });
     Array<Box<i32>>::append(arr, "core:internal/Box<i32>" { value: 20 });
@@ -220,6 +224,7 @@ condition: arr.len() == 2
             i32::fmt_decimal(__v0_2, __local_29);
             String::append_char(__local_8, 10);
             break __tmpl: __local_8;
+            unreachable;
         });
         unreachable;
     };
@@ -229,6 +234,7 @@ condition: arr.len() == 2
             unreachable;
         };
         break __inline_Array_Box_i32___IndexValue__index_value_15: builtin::array_get<ref "core:internal/Box<i32>">(arr.repr, 0);
+        unreachable;
     }.value;
     __cond_5 = __v0_4 == 10;
     if __cond_5 == 0 {
@@ -254,6 +260,7 @@ condition: arr[0].value == 10
             i32::fmt_decimal(__v0_4, __local_42);
             String::append_char(__local_10, 10);
             break __tmpl: __local_10;
+            unreachable;
         });
         unreachable;
     };
@@ -263,6 +270,7 @@ condition: arr[0].value == 10
             unreachable;
         };
         break __inline_Array_Box_i32___IndexValue__index_value_23: builtin::array_get<ref "core:internal/Box<i32>">(arr.repr, 1);
+        unreachable;
     }.value;
     __cond_7 = __v0_6 == 20;
     if __cond_7 == 0 {
@@ -288,6 +296,7 @@ condition: arr[1].value == 20
             i32::fmt_decimal(__v0_6, __local_55);
             String::append_char(__local_12, 10);
             break __tmpl: __local_12;
+            unreachable;
         });
         unreachable;
     };
@@ -350,6 +359,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -483,6 +493,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -500,8 +511,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -584,6 +597,7 @@ fn Array<Box<i32>>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "core:internal/Box<i32>">(new_capacity);
     old_repr = self.repr;

@@ -211,12 +211,14 @@ fn run() with Stdout {
 condition: b matches { None }
 "), used: 31 });
             break __tmpl: __local_18;
+            unreachable;
         });
         unreachable;
     };
     arr = __seq_lit: block -> ref Array<i32> {
         __local_6 = Array<i32> { repr: array.new_fixed<i32>(-1, -2, 3, 4), used: 4 };
         break __seq_lit: __local_6;
+        unreachable;
     };
     c = first_positive(arr);
     if ref.test Option<i32>::Some(c) {
@@ -249,6 +251,7 @@ condition: v == 3
                 i32::fmt_decimal(v, __local_65);
                 String::append_char(__local_20, 10);
                 break __tmpl: __local_20;
+                unreachable;
             });
             unreachable;
         };
@@ -256,6 +259,7 @@ condition: v == 3
     empty = __seq_lit: block -> ref Array<i32> {
         __local_12 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_12;
+        unreachable;
     };
     d = first_positive(empty);
     let __match_scrut_1: ref Option<i32>;
@@ -284,6 +288,7 @@ condition: v == 3
 condition: d matches { None }
 "), used: 31 });
             break __tmpl: __local_22;
+            unreachable;
         });
         unreachable;
     };
@@ -378,6 +383,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -511,6 +517,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -528,8 +535,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -612,6 +621,7 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

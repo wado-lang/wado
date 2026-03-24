@@ -244,6 +244,7 @@ fn __test_4_closure_fn_param_capture() {
     result = __inline_ClosureBox_i32___apply___Closure_7_2: block -> i32 {
         __local_24 = 3;
         break __inline_ClosureBox_i32___apply___Closure_7_2: 15;
+        unreachable;
     };
     __cond = result == 15;
     if __cond == 0 {
@@ -276,6 +277,7 @@ condition: result == 15
             i32::fmt_decimal(result, __local_20);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
+            unreachable;
         });
         unreachable;
     };
@@ -306,6 +308,7 @@ fn __test_5_closure_fn_param_effectful() {
     items = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     result = for_each_item$__Closure_8(items, __Closure_8 {  });
     __v0_3 = __inline_Array_i32__IndexValue__index_value_8: block -> i32 {
@@ -314,6 +317,7 @@ fn __test_5_closure_fn_param_effectful() {
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_8: builtin::array_get<i32>(result.repr, 0);
+        unreachable;
     };
     __cond_4 = __v0_3 == 10;
     if __cond_4 == 0 {
@@ -339,6 +343,7 @@ condition: result[0] == 10
             i32::fmt_decimal(__v0_3, __local_35);
             String::append_char(__local_9, 10);
             break __tmpl: __local_9;
+            unreachable;
         });
         unreachable;
     };
@@ -348,6 +353,7 @@ condition: result[0] == 10
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_16: builtin::array_get<i32>(result.repr, 1);
+        unreachable;
     };
     __cond_6 = __v0_5 == 20;
     if __cond_6 == 0 {
@@ -373,6 +379,7 @@ condition: result[1] == 20
             i32::fmt_decimal(__v0_5, __local_48);
             String::append_char(__local_11, 10);
             break __tmpl: __local_11;
+            unreachable;
         });
         unreachable;
     };
@@ -382,6 +389,7 @@ condition: result[1] == 20
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_24: builtin::array_get<i32>(result.repr, 2);
+        unreachable;
     };
     __cond_8 = __v0_7 == 30;
     if __cond_8 == 0 {
@@ -407,6 +415,7 @@ condition: result[2] == 30
             i32::fmt_decimal(__v0_7, __local_61);
             String::append_char(__local_13, 10);
             break __tmpl: __local_13;
+            unreachable;
         });
         unreachable;
     };
@@ -433,6 +442,7 @@ fn __test_7_closure_fn_param_no_args() {
     result = __inline_call_twice___Closure_11_2: block -> i32 {
         __local_40 = 21;
         break __inline_call_twice___Closure_11_2: 42;
+        unreachable;
     };
     __cond_3 = result == 42;
     if __cond_3 == 0 {
@@ -465,12 +475,14 @@ condition: result == 42
             i32::fmt_decimal(result, __local_24);
             String::append_char(__local_8, 10);
             break __tmpl: __local_8;
+            unreachable;
         });
         unreachable;
     };
     b = __inline_call_and_get_bool___Closure_12_12: block -> bool {
         __local_41 = 1;
         break __inline_call_and_get_bool___Closure_12_12: 1;
+        unreachable;
     };
     __cond_7 = b == 1;
     if __cond_7 == 0 {
@@ -502,6 +514,7 @@ condition: b == true
             });
             String::append_char(__local_10, 10);
             break __tmpl: __local_10;
+            unreachable;
         });
         unreachable;
     };
@@ -546,6 +559,7 @@ condition: greet() == \"hello\"
             String^Inspect::inspect(__v0, __local_4);
             String::append_char(__local_3, 10);
             break __tmpl: __local_3;
+            unreachable;
         });
         unreachable;
     };
@@ -618,6 +632,7 @@ condition: add5(3) == 8
             i32::fmt_decimal(__v0_2, __local_25);
             String::append_char(__local_8, 10);
             break __tmpl: __local_8;
+            unreachable;
         });
         unreachable;
     };
@@ -650,6 +665,7 @@ condition: triple(4) == 12
             i32::fmt_decimal(__v0_4, __local_36);
             String::append_char(__local_10, 10);
             break __tmpl: __local_10;
+            unreachable;
         });
         unreachable;
     };
@@ -686,6 +702,7 @@ condition: add5(triple(2)) == 11
             i32::fmt_decimal(__v0_6, __local_47);
             String::append_char(__local_12, 10);
             break __tmpl: __local_12;
+            unreachable;
         });
         unreachable;
     };
@@ -776,6 +793,7 @@ fn for_each_item$__Closure_8(items, f) {
     result = __seq_lit: block -> ref Array<i32> {
         __local_2 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_2;
+        unreachable;
     };
     __iter_4 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(items.repr), used: items.used, index: 0 };
     b18: block {
@@ -842,6 +860,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -975,6 +994,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -992,8 +1012,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -1079,6 +1101,7 @@ fn StrCharIter^Iterator::next(self) {
         return 0; __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     };
     if b0 <u 224 {
@@ -1151,6 +1174,7 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;
@@ -1335,8 +1359,10 @@ fn String^Inspect::inspect(self, f) {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
             break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+        unreachable;
     };
     _licm_buf_33 = f.buf;
     b82: block {

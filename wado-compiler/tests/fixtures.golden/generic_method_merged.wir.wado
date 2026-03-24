@@ -234,6 +234,7 @@ fn __test_4_double_generics() {
     result = __inline_DGContainer_i32___transform_i32__10: block -> i32 {
         drop(42);
         break __inline_DGContainer_i32___transform_i32__10: 100;
+        unreachable;
     };
     __cond_5 = result == 100;
     if __cond_5 == 0 {
@@ -266,12 +267,14 @@ condition: result == 100
             i32::fmt_decimal(result, __local_48);
             String::append_char(__local_17, 10);
             break __tmpl: __local_17;
+            unreachable;
         });
         unreachable;
     };
     __v0 = __inline_DGContainer_i64___transform_i32__35: block -> i32 {
         drop(1000_i64);
         break __inline_DGContainer_i64___transform_i32__35: 99;
+        unreachable;
     };
     __cond_14 = __v0 == 99;
     if __cond_14 == 0 {
@@ -297,6 +300,7 @@ condition: c2.transform(99) == 99
             i32::fmt_decimal(__v0, __local_94);
             String::append_char(__local_23, 10);
             break __tmpl: __local_23;
+            unreachable;
         });
         unreachable;
     };
@@ -323,6 +327,7 @@ fn __test_5_static_trait_method_through_type_param() {
         __local_26 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_25) };
         i32::fmt_decimal(99, __local_26);
         break __tmpl: __local_25;
+        unreachable;
     };
     __v0 = b;
     __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("99"), used: 2 });
@@ -350,6 +355,7 @@ condition: b == \"99\"
             String^Inspect::inspect(__v0, __local_9);
             String::append_char(__local_8, 10);
             break __tmpl: __local_8;
+            unreachable;
         });
         unreachable;
     };
@@ -396,6 +402,7 @@ fn __test_7_closure_param() {
     result1 = __inline___Closure_0____call_3: block -> i32 {
         __local_47 = c.value;
         break __inline___Closure_0____call_3: __local_47 * 2;
+        unreachable;
     };
     __cond_3 = result1 == 10;
     if __cond_3 == 0 {
@@ -421,6 +428,7 @@ condition: result1 == 10
             i32::fmt_decimal(result1, __local_24);
             String::append_char(__local_7, 10);
             break __tmpl: __local_7;
+            unreachable;
         });
         unreachable;
     };
@@ -434,6 +442,7 @@ condition: result1 == 10
                 call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, "core:internal/Box<i32>" { value: c.value });
             };
             break __inline_ClosureContainer_i32___transform_12;
+            unreachable;
         };
         __local_48 = __local_29;
         __inline_ClosureContainer_i32___transform_14: block -> i32 {
@@ -444,8 +453,10 @@ condition: result1 == 10
                 call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env, "core:internal/Box<i32>" { value: __local_48 });
             };
             break __inline_ClosureContainer_i32___transform_14;
+            unreachable;
         };
         break __inline_ClosureContainer_i32___double_transform___Closure_1_11;
+        unreachable;
     };
     __cond_6 = result2 == 20;
     if __cond_6 == 0 {
@@ -471,6 +482,7 @@ condition: result2 == 20
             i32::fmt_decimal(result2, __local_44);
             String::append_char(__local_9, 10);
             break __tmpl: __local_9;
+            unreachable;
         });
         unreachable;
     };
@@ -593,6 +605,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -734,6 +747,7 @@ fn Array<u64>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u64>(new_capacity);
     old_repr = self.repr;
@@ -771,6 +785,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -788,8 +803,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -875,6 +892,7 @@ fn StrCharIter^Iterator::next(self) {
         return 0; __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     };
     if b0 <u 224 {
@@ -1041,8 +1059,10 @@ fn String^Inspect::inspect(self, f) {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
             break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+        unreachable;
     };
     _licm_buf_33 = f.buf;
     b76: block {

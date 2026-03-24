@@ -177,6 +177,7 @@ fn run() with Stdout {
     let __v0_16: i32;
     let __cond_17: bool;
     let __local_18: ref Array<i32>;
+    let c: ref Array<i32>;
     let __v0_20: i32;
     let __cond_21: bool;
     let __local_22: ref Array<i32>;
@@ -290,8 +291,9 @@ fn run() with Stdout {
     a = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
-    __v0_2 = 3;
+    __v0_2 = a.used;
     __cond_3 = __v0_2 == 3;
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -318,15 +320,17 @@ condition: a.len() == 3
             i32::fmt_decimal(__v0_2, __local_109);
             String::append_char(__local_52, 10);
             break __tmpl: __local_52;
+            unreachable;
         });
         unreachable;
     };
     __v0_4 = __inline_Array_i32__IndexValue__index_value_16: block -> i32 {
-        if 0 {
+        if 0 >= a.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_16: builtin::array_get<i32>(a.repr, 0);
+        unreachable;
     };
     __cond_5 = __v0_4 == 10;
     if __cond_5 == 0 {
@@ -359,15 +363,17 @@ condition: a[0] == 10
             i32::fmt_decimal(__v0_4, __local_122);
             String::append_char(__local_54, 10);
             break __tmpl: __local_54;
+            unreachable;
         });
         unreachable;
     };
     __v0_6 = __inline_Array_i32__IndexValue__index_value_24: block -> i32 {
-        if 0 {
+        if 1 >= a.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_24: builtin::array_get<i32>(a.repr, 1);
+        unreachable;
     };
     __cond_7 = __v0_6 == 20;
     if __cond_7 == 0 {
@@ -400,15 +406,17 @@ condition: a[1] == 20
             i32::fmt_decimal(__v0_6, __local_135);
             String::append_char(__local_56, 10);
             break __tmpl: __local_56;
+            unreachable;
         });
         unreachable;
     };
     __v0_8 = __inline_Array_i32__IndexValue__index_value_32: block -> i32 {
-        if 0 {
+        if 2 >= a.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_32: builtin::array_get<i32>(a.repr, 2);
+        unreachable;
     };
     __cond_9 = __v0_8 == 30;
     if __cond_9 == 0 {
@@ -441,14 +449,16 @@ condition: a[2] == 30
             i32::fmt_decimal(__v0_8, __local_148);
             String::append_char(__local_58, 10);
             break __tmpl: __local_58;
+            unreachable;
         });
         unreachable;
     };
     b = __seq_lit: block -> ref Array<i32> {
         __local_10 = Array<i32> { repr: array.new_fixed<i32>(100, 200), used: 2 };
         break __seq_lit: __local_10;
+        unreachable;
     };
-    __v0_12 = 2;
+    __v0_12 = b.used;
     __cond_13 = __v0_12 == 2;
     if __cond_13 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -475,15 +485,17 @@ condition: b.len() == 2
             i32::fmt_decimal(__v0_12, __local_167);
             String::append_char(__local_60, 10);
             break __tmpl: __local_60;
+            unreachable;
         });
         unreachable;
     };
     __v0_14 = __inline_Array_i32__IndexValue__index_value_53: block -> i32 {
-        if 0 {
+        if 0 >= b.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_53: builtin::array_get<i32>(b.repr, 0);
+        unreachable;
     };
     __cond_15 = __v0_14 == 100;
     if __cond_15 == 0 {
@@ -516,15 +528,17 @@ condition: b[0] == 100
             i32::fmt_decimal(__v0_14, __local_180);
             String::append_char(__local_62, 10);
             break __tmpl: __local_62;
+            unreachable;
         });
         unreachable;
     };
     __v0_16 = __inline_Array_i32__IndexValue__index_value_61: block -> i32 {
-        if 0 {
+        if 1 >= b.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_61: builtin::array_get<i32>(b.repr, 1);
+        unreachable;
     };
     __cond_17 = __v0_16 == 200;
     if __cond_17 == 0 {
@@ -557,14 +571,16 @@ condition: b[1] == 200
             i32::fmt_decimal(__v0_16, __local_193);
             String::append_char(__local_64, 10);
             break __tmpl: __local_64;
+            unreachable;
         });
         unreachable;
     };
-    drop(__seq_lit: block -> ref Array<i32> {
+    c = __seq_lit: block -> ref Array<i32> {
         __local_18 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_18;
-    });
-    __v0_20 = 0;
+        unreachable;
+    };
+    __v0_20 = c.used;
     __cond_21 = __v0_20 == 0;
     if __cond_21 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -591,14 +607,16 @@ condition: c.len() == 0
             i32::fmt_decimal(__v0_20, __local_208);
             String::append_char(__local_66, 10);
             break __tmpl: __local_66;
+            unreachable;
         });
         unreachable;
     };
     d = __seq_lit: block -> ref Array<i32> {
         __local_22 = Array<i32> { repr: array.new_fixed<i32>(42), used: 1 };
         break __seq_lit: __local_22;
+        unreachable;
     };
-    __v0_24 = 1;
+    __v0_24 = d.used;
     __cond_25 = __v0_24 == 1;
     if __cond_25 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -625,15 +643,17 @@ condition: d.len() == 1
             i32::fmt_decimal(__v0_24, __local_225);
             String::append_char(__local_68, 10);
             break __tmpl: __local_68;
+            unreachable;
         });
         unreachable;
     };
     __v0_26 = __inline_Array_i32__IndexValue__index_value_92: block -> i32 {
-        if 0 {
+        if 0 >= d.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_92: builtin::array_get<i32>(d.repr, 0);
+        unreachable;
     };
     __cond_27 = __v0_26 == 42;
     if __cond_27 == 0 {
@@ -666,14 +686,16 @@ condition: d[0] == 42
             i32::fmt_decimal(__v0_26, __local_238);
             String::append_char(__local_70, 10);
             break __tmpl: __local_70;
+            unreachable;
         });
         unreachable;
     };
     e = __seq_lit: block -> ref Array<i64> {
         __local_28 = Array<i64> { repr: array.new_fixed<i64>(1_i64, 2_i64, 3_i64), used: 3 };
         break __seq_lit: __local_28;
+        unreachable;
     };
-    __v0_30 = 3;
+    __v0_30 = e.used;
     __cond_31 = __v0_30 == 3;
     if __cond_31 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -700,15 +722,17 @@ condition: e.len() == 3
             i32::fmt_decimal(__v0_30, __local_259);
             String::append_char(__local_72, 10);
             break __tmpl: __local_72;
+            unreachable;
         });
         unreachable;
     };
     __v0_32 = __inline_Array_i64__IndexValue__index_value_114: block -> i64 {
-        if 0 {
+        if 0 >= e.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i64__IndexValue__index_value_114: builtin::array_get<i64>(e.repr, 0);
+        unreachable;
     };
     __cond_33 = __v0_32 == 1_i64;
     if __cond_33 == 0 {
@@ -741,14 +765,16 @@ condition: e[0] == 1
             i64::fmt_decimal(__v0_32, __local_272);
             String::append_char(__local_74, 10);
             break __tmpl: __local_74;
+            unreachable;
         });
         unreachable;
     };
     f = __seq_lit: block -> ref Array<String> {
         __local_34 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("hello"), used: 5 }, String { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
         break __seq_lit: __local_34;
+        unreachable;
     };
-    __v0_36 = 2;
+    __v0_36 = f.used;
     __cond_37 = __v0_36 == 2;
     if __cond_37 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -775,15 +801,17 @@ condition: f.len() == 2
             i32::fmt_decimal(__v0_36, __local_291);
             String::append_char(__local_76, 10);
             break __tmpl: __local_76;
+            unreachable;
         });
         unreachable;
     };
     __v0_38 = __inline_Array_String__IndexValue__index_value_135: block -> ref String {
-        if 0 {
+        if 0 >= f.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_String__IndexValue__index_value_135: builtin::array_get<ref String>(f.repr, 0);
+        unreachable;
     };
     __cond_39 = String^Eq::eq(__v0_38, String { repr: array.new_data<u8>("hello"), used: 5 });
     if __cond_39 == 0 {
@@ -815,15 +843,17 @@ condition: f[0] == \"hello\"
             String^Inspect::inspect(__v0_38, __local_79);
             String::append_char(__local_78, 10);
             break __tmpl: __local_78;
+            unreachable;
         });
         unreachable;
     };
     __v0_40 = __inline_Array_String__IndexValue__index_value_141: block -> ref String {
-        if 0 {
+        if 1 >= f.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_String__IndexValue__index_value_141: builtin::array_get<ref String>(f.repr, 1);
+        unreachable;
     };
     __cond_41 = String^Eq::eq(__v0_40, String { repr: array.new_data<u8>("world"), used: 5 });
     if __cond_41 == 0 {
@@ -855,16 +885,19 @@ condition: f[1] == \"world\"
             String^Inspect::inspect(__v0_40, __local_81);
             String::append_char(__local_80, 10);
             break __tmpl: __local_80;
+            unreachable;
         });
         unreachable;
     };
     g = __seq_lit: block -> ref SeqVec<i32> {
         __local_42 = SeqVec<i32> { items: Array<i32> { repr: array.new_fixed<i32>(5, 10, 15), used: 3 } };
         break __seq_lit: __local_42;
+        unreachable;
     };
     __v0_44 = __inline_Array_i32___len_153: block -> i32 {
         __local_321 = g.items;
         break __inline_Array_i32___len_153: __local_321.used;
+        unreachable;
     };
     __cond_45 = __v0_44 == 3;
     if __cond_45 == 0 {
@@ -892,6 +925,7 @@ condition: g.items.len() == 3
             i32::fmt_decimal(__v0_44, __local_330);
             String::append_char(__local_82, 10);
             break __tmpl: __local_82;
+            unreachable;
         });
         unreachable;
     };
@@ -902,6 +936,7 @@ condition: g.items.len() == 3
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_161: builtin::array_get<i32>(__local_333.repr, 0);
+        unreachable;
     };
     __cond_47 = __v0_46 == 5;
     if __cond_47 == 0 {
@@ -929,6 +964,7 @@ condition: g.items[0] == 5
             i32::fmt_decimal(__v0_46, __local_343);
             String::append_char(__local_84, 10);
             break __tmpl: __local_84;
+            unreachable;
         });
         unreachable;
     };
@@ -939,6 +975,7 @@ condition: g.items[0] == 5
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_169: builtin::array_get<i32>(__local_346.repr, 1);
+        unreachable;
     };
     __cond_49 = __v0_48 == 10;
     if __cond_49 == 0 {
@@ -966,6 +1003,7 @@ condition: g.items[1] == 10
             i32::fmt_decimal(__v0_48, __local_356);
             String::append_char(__local_86, 10);
             break __tmpl: __local_86;
+            unreachable;
         });
         unreachable;
     };
@@ -976,6 +1014,7 @@ condition: g.items[1] == 10
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_177: builtin::array_get<i32>(__local_359.repr, 2);
+        unreachable;
     };
     __cond_51 = __v0_50 == 15;
     if __cond_51 == 0 {
@@ -1003,6 +1042,7 @@ condition: g.items[2] == 15
             i32::fmt_decimal(__v0_50, __local_369);
             String::append_char(__local_88, 10);
             break __tmpl: __local_88;
+            unreachable;
         });
         unreachable;
     };
@@ -1097,6 +1137,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -1230,6 +1271,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1254,6 +1296,7 @@ fn i64::fmt_decimal(self, f) {
         repr = __inline_String__internal_raw_bytes_0: block -> ref array<u8> {
             __local_12 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_12.repr;
+            unreachable;
         };
         write_decimal_digits(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
@@ -1268,6 +1311,7 @@ fn i64::fmt_decimal(self, f) {
         write_decimal_digits(__inline_String__internal_raw_bytes_1: block -> ref array<u8> {
             __local_13 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_13.repr;
+            unreachable;
         }, offset_11, abs_val, digit_count_10);
     };
 }
@@ -1286,8 +1330,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -1373,6 +1419,7 @@ fn StrCharIter^Iterator::next(self) {
         return 0; __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     };
     if b0 <u 224 {
@@ -1445,6 +1492,7 @@ fn Array<String>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref String>(new_capacity);
     old_repr = self.repr;
@@ -1487,6 +1535,7 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;
@@ -1529,6 +1578,7 @@ fn Array<i64>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i64>(new_capacity);
     old_repr = self.repr;
@@ -1661,8 +1711,10 @@ fn String^Inspect::inspect(self, f) {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
             break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+        unreachable;
     };
     _licm_buf_33 = f.buf;
     b98: block {

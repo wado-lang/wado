@@ -121,6 +121,7 @@ fn run() with Stdout {
             String { repr: array.new_data<u8>("false"), used: 5 };
         });
         break __tmpl: __local_0;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(43), used: 0 };
@@ -137,6 +138,7 @@ fn run() with Stdout {
             String { repr: array.new_data<u8>("true"), used: 4 };
         });
         break __tmpl: __local_2;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(42), used: 0 };
@@ -153,6 +155,7 @@ fn run() with Stdout {
             String { repr: array.new_data<u8>("false"), used: 5 };
         });
         break __tmpl: __local_4;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(43), used: 0 };
@@ -169,6 +172,7 @@ fn run() with Stdout {
             String { repr: array.new_data<u8>("true"), used: 4 };
         });
         break __tmpl: __local_6;
+        unreachable;
     });
 }
 
@@ -243,6 +247,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -308,8 +313,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

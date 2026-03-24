@@ -77,7 +77,7 @@ fn run() with Stdout {
     let __local_3: ref String;
     let __sroa_opts_align: ref Align;
     __sroa_opts_align = Align { 1 };
-    s = value_copy String(__inline_format_str_3: block -> ref String {
+    s = __inline_format_str_3: block -> ref String {
         __local_3 = String { repr: array.new_data<u8>("hello"), used: 5 };
         break __inline_format_str_3: __local_3;
         let __match_scrut_0: ref Align;
@@ -92,7 +92,8 @@ fn run() with Stdout {
             unreachable;
         };
         break __inline_format_str_3;
-    });
+        unreachable;
+    };
     "core:cli/println"(s);
 }
 
@@ -107,7 +108,7 @@ fn __cm_export__run() {
     let __local_3: ref String;
     let __sroa_opts_align: ref Align;
     __sroa_opts_align = Align { 1 };
-    s = value_copy String(__inline_format_str_4: block -> ref String {
+    s = __inline_format_str_4: block -> ref String {
         __local_3 = String { repr: array.new_data<u8>("hello"), used: 5 };
         break __inline_format_str_4: __local_3;
         let __match_scrut_0: ref Align;
@@ -122,7 +123,8 @@ fn __cm_export__run() {
             unreachable;
         };
         break __inline_format_str_4;
-    });
+        unreachable;
+    };
     "core:cli/println"(s);
     "wasi/task-return"(0);
 }
@@ -187,6 +189,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);

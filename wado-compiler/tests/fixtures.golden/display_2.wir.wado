@@ -6,6 +6,11 @@ struct Box<i32> {  // from core:internal  // Box<T> with T=i32
     mut value: i32,
 }
 
+struct PmHiLo {
+    mut hi: u64,
+    mut lo: u64,
+}
+
 struct i128 {
     mut low: u64,
     mut high: i64,
@@ -111,6 +116,8 @@ type "functype/unrounded_div" = fn(u64, u64) -> u64;
 
 type "functype/pow10_fine" = fn(i32) -> u64;
 
+type "functype/mul_pow10" = fn(i32) -> ref PmHiLo;
+
 type "functype/uscale" = fn(u64, u64, u64, i32) -> u64;
 
 type "functype/write_digits_at" = fn(ref String, i32, u64, i32);
@@ -180,8 +187,6 @@ type "functype/unpack64" = fn(f64) -> [u64, i32];
 type "functype/unpack32" = fn(f32) -> [u64, i32];
 
 type "functype/pow10_coarse" = fn(i32) -> [u64, u64];
-
-type "functype/mul_pow10" = fn(i32) -> [u64, u64];
 
 type "functype/fixed_width" = fn(f64, i32) -> [u64, i32];
 
@@ -341,6 +346,7 @@ condition: fmt_with(&x, true, false, -1, Alignment::Right) == \"+42\"
             String^Inspect::inspect(__v0_2, __local_15);
             String::append_char(__local_14, 10);
             break __tmpl: __local_14;
+            unreachable;
         });
         unreachable;
     };
@@ -368,6 +374,7 @@ condition: fmt_with(&neg, true, false, -1, Alignment::Right) == \"-42\"
             String^Inspect::inspect(__v0_4, __local_17);
             String::append_char(__local_16, 10);
             break __tmpl: __local_16;
+            unreachable;
         });
         unreachable;
     };
@@ -395,6 +402,7 @@ condition: fmt_with(&x, true, true, 8, Alignment::Right) == \"+0000042\"
             String^Inspect::inspect(__v0_6, __local_19);
             String::append_char(__local_18, 10);
             break __tmpl: __local_18;
+            unreachable;
         });
         unreachable;
     };
@@ -422,6 +430,7 @@ condition: fmt_with(&neg, false, true, 8, Alignment::Right) == \"-0000042\"
             String^Inspect::inspect(__v0_8, __local_21);
             String::append_char(__local_20, 10);
             break __tmpl: __local_20;
+            unreachable;
         });
         unreachable;
     };
@@ -449,6 +458,7 @@ condition: fmt_with(&x, true, false, 10, Alignment::Right) == \"       +42\"
             String^Inspect::inspect(__v0_10, __local_23);
             String::append_char(__local_22, 10);
             break __tmpl: __local_22;
+            unreachable;
         });
         unreachable;
     };
@@ -476,6 +486,7 @@ condition: fmt_with(&neg, false, false, 10, Alignment::Left) == \"-42       \"
             String^Inspect::inspect(__v0_12, __local_25);
             String::append_char(__local_24, 10);
             break __tmpl: __local_24;
+            unreachable;
         });
         unreachable;
     };
@@ -556,6 +567,7 @@ condition: fmt_int(&x, ' ', Alignment::Right, false, false, 10) == \"        42\
             String^Inspect::inspect(__v0_3, __local_24);
             String::append_char(__local_23, 10);
             break __tmpl: __local_23;
+            unreachable;
         });
         unreachable;
     };
@@ -583,6 +595,7 @@ condition: fmt_int(&x, ' ', Alignment::Left, false, false, 10) == \"42        \"
             String^Inspect::inspect(__v0_5, __local_26);
             String::append_char(__local_25, 10);
             break __tmpl: __local_25;
+            unreachable;
         });
         unreachable;
     };
@@ -610,6 +623,7 @@ condition: fmt_int(&x, ' ', Alignment::Center, false, false, 10) == \"    42    
             String^Inspect::inspect(__v0_7, __local_28);
             String::append_char(__local_27, 10);
             break __tmpl: __local_27;
+            unreachable;
         });
         unreachable;
     };
@@ -637,6 +651,7 @@ condition: fmt_int(&x, '0', Alignment::Right, false, true, 8) == \"00000042\"
             String^Inspect::inspect(__v0_9, __local_30);
             String::append_char(__local_29, 10);
             break __tmpl: __local_29;
+            unreachable;
         });
         unreachable;
     };
@@ -664,6 +679,7 @@ condition: fmt_int(&neg, '0', Alignment::Right, false, true, 8) == \"-0000042\"
             String^Inspect::inspect(__v0_11, __local_32);
             String::append_char(__local_31, 10);
             break __tmpl: __local_31;
+            unreachable;
         });
         unreachable;
     };
@@ -691,6 +707,7 @@ condition: fmt_int(&x, ' ', Alignment::Right, true, false, -1) == \"+42\"
             String^Inspect::inspect(__v0_13, __local_34);
             String::append_char(__local_33, 10);
             break __tmpl: __local_33;
+            unreachable;
         });
         unreachable;
     };
@@ -718,6 +735,7 @@ condition: fmt_int(&x, '*', Alignment::Center, false, false, 10) == \"****42****
             String^Inspect::inspect(__v0_15, __local_36);
             String::append_char(__local_35, 10);
             break __tmpl: __local_35;
+            unreachable;
         });
         unreachable;
     };
@@ -752,6 +770,7 @@ condition: buf == \"true    \"
             String^Inspect::inspect(__v0_19, __local_38);
             String::append_char(__local_37, 10);
             break __tmpl: __local_37;
+            unreachable;
         });
         unreachable;
     };
@@ -779,6 +798,7 @@ condition: fmt_int(&big, ' ', Alignment::Right, false, false, 2) == \"12345\"
             String^Inspect::inspect(__v0_21, __local_40);
             String::append_char(__local_39, 10);
             break __tmpl: __local_39;
+            unreachable;
         });
         unreachable;
     };
@@ -1108,6 +1128,7 @@ fn test_template_specifiers() with Stdout {
         __local_79 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_78) };
         i32::fmt_decimal(42, __local_79);
         break __tmpl: __local_78;
+        unreachable;
     }, String { repr: array.new_data<u8>("42"), used: 2 });
     if __cond_1 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1126,6 +1147,7 @@ fn test_template_specifiers() with Stdout {
 condition: `{i}` == \"42\"
 "), used: 26 });
             break __tmpl: __local_80;
+            unreachable;
         });
         unreachable;
     };
@@ -1134,6 +1156,7 @@ condition: `{i}` == \"42\"
         __local_83 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_82) };
         i32::fmt_decimal(-1, __local_83);
         break __tmpl: __local_82;
+        unreachable;
     }, String { repr: array.new_data<u8>("-1"), used: 2 });
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1152,6 +1175,7 @@ condition: `{i}` == \"42\"
 condition: `{-1}` == \"-1\"
 "), used: 27 });
             break __tmpl: __local_84;
+            unreachable;
         });
         unreachable;
     };
@@ -1174,6 +1198,7 @@ condition: `{-1}` == \"-1\"
 condition: `{s}` == \"hello\"
 "), used: 29 });
             break __tmpl: __local_86;
+            unreachable;
         });
         unreachable;
     };
@@ -1182,6 +1207,7 @@ condition: `{s}` == \"hello\"
         __local_89 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_88) };
         i32::fmt_decimal(42, __local_89);
         break __tmpl: __local_88;
+        unreachable;
     }, String { repr: array.new_data<u8>("        42"), used: 10 });
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1200,6 +1226,7 @@ condition: `{s}` == \"hello\"
 condition: `{i:10}` == \"        42\"
 "), used: 37 });
             break __tmpl: __local_90;
+            unreachable;
         });
         unreachable;
     };
@@ -1208,6 +1235,7 @@ condition: `{i:10}` == \"        42\"
         __local_93 = Formatter { fill: 32, align: 0, sign_plus: 0, zero_pad: 0, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_92) };
         i32::fmt_decimal(42, __local_93);
         break __tmpl: __local_92;
+        unreachable;
     }, String { repr: array.new_data<u8>("42        "), used: 10 });
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1226,6 +1254,7 @@ condition: `{i:10}` == \"        42\"
 condition: `{i:<10}` == \"42        \"
 "), used: 38 });
             break __tmpl: __local_94;
+            unreachable;
         });
         unreachable;
     };
@@ -1234,6 +1263,7 @@ condition: `{i:<10}` == \"42        \"
         __local_97 = Formatter { fill: 32, align: 1, sign_plus: 0, zero_pad: 0, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_96) };
         i32::fmt_decimal(42, __local_97);
         break __tmpl: __local_96;
+        unreachable;
     }, String { repr: array.new_data<u8>("    42    "), used: 10 });
     if __cond_7 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1252,6 +1282,7 @@ condition: `{i:<10}` == \"42        \"
 condition: `{i:^10}` == \"    42    \"
 "), used: 38 });
             break __tmpl: __local_98;
+            unreachable;
         });
         unreachable;
     };
@@ -1260,6 +1291,7 @@ condition: `{i:^10}` == \"    42    \"
         __local_101 = Formatter { fill: 42, align: 1, sign_plus: 0, zero_pad: 0, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_100) };
         i32::fmt_decimal(42, __local_101);
         break __tmpl: __local_100;
+        unreachable;
     }, String { repr: array.new_data<u8>("****42****"), used: 10 });
     if __cond_8 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1278,6 +1310,7 @@ condition: `{i:^10}` == \"    42    \"
 condition: `{i:*^10}` == \"****42****\"
 "), used: 39 });
             break __tmpl: __local_102;
+            unreachable;
         });
         unreachable;
     };
@@ -1286,6 +1319,7 @@ condition: `{i:*^10}` == \"****42****\"
         __local_105 = Formatter { fill: 48, align: 2, sign_plus: 0, zero_pad: 0, width: 8, precision: -1, indent: 0, buf: ref.as_non_null(__local_104) };
         i32::fmt_decimal(42, __local_105);
         break __tmpl: __local_104;
+        unreachable;
     }, String { repr: array.new_data<u8>("00000042"), used: 8 });
     if __cond_9 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1304,6 +1338,7 @@ condition: `{i:*^10}` == \"****42****\"
 condition: `{i:0>8}` == \"00000042\"
 "), used: 36 });
             break __tmpl: __local_106;
+            unreachable;
         });
         unreachable;
     };
@@ -1312,6 +1347,7 @@ condition: `{i:0>8}` == \"00000042\"
         __local_109 = Formatter { fill: 45, align: 0, sign_plus: 0, zero_pad: 0, width: 8, precision: -1, indent: 0, buf: ref.as_non_null(__local_108) };
         i32::fmt_decimal(42, __local_109);
         break __tmpl: __local_108;
+        unreachable;
     }, String { repr: array.new_data<u8>("42------"), used: 8 });
     if __cond_10 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1330,6 +1366,7 @@ condition: `{i:0>8}` == \"00000042\"
 condition: `{i:-<8}` == \"42------\"
 "), used: 36 });
             break __tmpl: __local_110;
+            unreachable;
         });
         unreachable;
     };
@@ -1338,6 +1375,7 @@ condition: `{i:-<8}` == \"42------\"
         __local_113 = Formatter { fill: 32, align: 2, sign_plus: 1, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_112) };
         i32::fmt_decimal(42, __local_113);
         break __tmpl: __local_112;
+        unreachable;
     }, String { repr: array.new_data<u8>("+42"), used: 3 });
     if __cond_11 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1356,6 +1394,7 @@ condition: `{i:-<8}` == \"42------\"
 condition: `{i:+}` == \"+42\"
 "), used: 29 });
             break __tmpl: __local_114;
+            unreachable;
         });
         unreachable;
     };
@@ -1364,6 +1403,7 @@ condition: `{i:+}` == \"+42\"
         __local_117 = Formatter { fill: 32, align: 2, sign_plus: 1, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_116) };
         i32::fmt_decimal(-42, __local_117);
         break __tmpl: __local_116;
+        unreachable;
     }, String { repr: array.new_data<u8>("-42"), used: 3 });
     if __cond_13 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1382,6 +1422,7 @@ condition: `{i:+}` == \"+42\"
 condition: `{neg:+}` == \"-42\"
 "), used: 31 });
             break __tmpl: __local_118;
+            unreachable;
         });
         unreachable;
     };
@@ -1390,6 +1431,7 @@ condition: `{neg:+}` == \"-42\"
         __local_121 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_120) };
         i32::fmt_decimal(-42, __local_121);
         break __tmpl: __local_120;
+        unreachable;
     }, String { repr: array.new_data<u8>("-42"), used: 3 });
     if __cond_14 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1408,6 +1450,7 @@ condition: `{neg:+}` == \"-42\"
 condition: `{neg}` == \"-42\"
 "), used: 29 });
             break __tmpl: __local_122;
+            unreachable;
         });
         unreachable;
     };
@@ -1416,6 +1459,7 @@ condition: `{neg}` == \"-42\"
         __local_125 = Formatter { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 8, precision: -1, indent: 0, buf: ref.as_non_null(__local_124) };
         i32::fmt_decimal(42, __local_125);
         break __tmpl: __local_124;
+        unreachable;
     }, String { repr: array.new_data<u8>("00000042"), used: 8 });
     if __cond_15 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1434,6 +1478,7 @@ condition: `{neg}` == \"-42\"
 condition: `{i:08}` == \"00000042\"
 "), used: 35 });
             break __tmpl: __local_126;
+            unreachable;
         });
         unreachable;
     };
@@ -1442,6 +1487,7 @@ condition: `{i:08}` == \"00000042\"
         __local_129 = Formatter { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 8, precision: -1, indent: 0, buf: ref.as_non_null(__local_128) };
         i32::fmt_decimal(-42, __local_129);
         break __tmpl: __local_128;
+        unreachable;
     }, String { repr: array.new_data<u8>("-0000042"), used: 8 });
     if __cond_16 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1460,6 +1506,7 @@ condition: `{i:08}` == \"00000042\"
 condition: `{neg:08}` == \"-0000042\"
 "), used: 37 });
             break __tmpl: __local_130;
+            unreachable;
         });
         unreachable;
     };
@@ -1468,6 +1515,7 @@ condition: `{neg:08}` == \"-0000042\"
         __local_133 = Formatter { fill: 48, align: 2, sign_plus: 1, zero_pad: 1, width: 8, precision: -1, indent: 0, buf: ref.as_non_null(__local_132) };
         i32::fmt_decimal(42, __local_133);
         break __tmpl: __local_132;
+        unreachable;
     }, String { repr: array.new_data<u8>("+0000042"), used: 8 });
     if __cond_17 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1486,6 +1534,7 @@ condition: `{neg:08}` == \"-0000042\"
 condition: `{i:+08}` == \"+0000042\"
 "), used: 36 });
             break __tmpl: __local_134;
+            unreachable;
         });
         unreachable;
     };
@@ -1494,6 +1543,7 @@ condition: `{i:+08}` == \"+0000042\"
         __local_137 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_136) };
         i32^Binary::fmt(42, __local_137);
         break __tmpl: __local_136;
+        unreachable;
     }, String { repr: array.new_data<u8>("101010"), used: 6 });
     if __cond_18 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1512,6 +1562,7 @@ condition: `{i:+08}` == \"+0000042\"
 condition: `{i:b}` == \"101010\"
 "), used: 32 });
             break __tmpl: __local_138;
+            unreachable;
         });
         unreachable;
     };
@@ -1520,6 +1571,7 @@ condition: `{i:b}` == \"101010\"
         __local_141 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_140) };
         i64::fmt_base(builtin::i64_extend_i32_s(255), 0, __local_141, 2, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_140;
+        unreachable;
     }, String { repr: array.new_data<u8>("11111111"), used: 8 });
     if __cond_20 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1538,6 +1590,7 @@ condition: `{i:b}` == \"101010\"
 condition: `{byte:b}` == \"11111111\"
 "), used: 37 });
             break __tmpl: __local_142;
+            unreachable;
         });
         unreachable;
     };
@@ -1546,6 +1599,7 @@ condition: `{byte:b}` == \"11111111\"
         __local_145 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_144) };
         i64::fmt_base(builtin::i64_extend_i32_s(255), 0, __local_145, 2, 0, String { repr: array.new_data<u8>("0b"), used: 2 });
         break __tmpl: __local_144;
+        unreachable;
     }, String { repr: array.new_data<u8>("0b11111111"), used: 10 });
     if __cond_21 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1564,6 +1618,7 @@ condition: `{byte:b}` == \"11111111\"
 condition: `{byte:#b}` == \"0b11111111\"
 "), used: 40 });
             break __tmpl: __local_146;
+            unreachable;
         });
         unreachable;
     };
@@ -1572,6 +1627,7 @@ condition: `{byte:#b}` == \"0b11111111\"
         __local_149 = Formatter { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 8, precision: -1, indent: 0, buf: ref.as_non_null(__local_148) };
         i32^Binary::fmt(42, __local_149);
         break __tmpl: __local_148;
+        unreachable;
     }, String { repr: array.new_data<u8>("00101010"), used: 8 });
     if __cond_22 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1590,6 +1646,7 @@ condition: `{byte:#b}` == \"0b11111111\"
 condition: `{i:08b}` == \"00101010\"
 "), used: 36 });
             break __tmpl: __local_150;
+            unreachable;
         });
         unreachable;
     };
@@ -1598,6 +1655,7 @@ condition: `{i:08b}` == \"00101010\"
         __local_153 = Formatter { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_152) };
         i32^BinaryAlt::fmt_alt(42, __local_153);
         break __tmpl: __local_152;
+        unreachable;
     }, String { repr: array.new_data<u8>("0b00101010"), used: 10 });
     if __cond_23 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1616,6 +1674,7 @@ condition: `{i:08b}` == \"00101010\"
 condition: `{i:#010b}` == \"0b00101010\"
 "), used: 40 });
             break __tmpl: __local_154;
+            unreachable;
         });
         unreachable;
     };
@@ -1624,6 +1683,7 @@ condition: `{i:#010b}` == \"0b00101010\"
         __local_157 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_156) };
         i32^Octal::fmt(42, __local_157);
         break __tmpl: __local_156;
+        unreachable;
     }, String { repr: array.new_data<u8>("52"), used: 2 });
     if __cond_24 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1642,6 +1702,7 @@ condition: `{i:#010b}` == \"0b00101010\"
 condition: `{i:o}` == \"52\"
 "), used: 28 });
             break __tmpl: __local_158;
+            unreachable;
         });
         unreachable;
     };
@@ -1650,6 +1711,7 @@ condition: `{i:o}` == \"52\"
         __local_161 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_160) };
         i32^Octal::fmt(511, __local_161);
         break __tmpl: __local_160;
+        unreachable;
     }, String { repr: array.new_data<u8>("777"), used: 3 });
     if __cond_26 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1668,6 +1730,7 @@ condition: `{i:o}` == \"52\"
 condition: `{oct_val:o}` == \"777\"
 "), used: 35 });
             break __tmpl: __local_162;
+            unreachable;
         });
         unreachable;
     };
@@ -1676,6 +1739,7 @@ condition: `{oct_val:o}` == \"777\"
         __local_165 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_164) };
         i32^OctalAlt::fmt_alt(511, __local_165);
         break __tmpl: __local_164;
+        unreachable;
     }, String { repr: array.new_data<u8>("0o777"), used: 5 });
     if __cond_27 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1694,6 +1758,7 @@ condition: `{oct_val:o}` == \"777\"
 condition: `{oct_val:#o}` == \"0o777\"
 "), used: 38 });
             break __tmpl: __local_166;
+            unreachable;
         });
         unreachable;
     };
@@ -1702,6 +1767,7 @@ condition: `{oct_val:#o}` == \"0o777\"
         __local_169 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_168) };
         i32^LowerHex::fmt(42, __local_169);
         break __tmpl: __local_168;
+        unreachable;
     }, String { repr: array.new_data<u8>("2a"), used: 2 });
     if __cond_28 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1720,6 +1786,7 @@ condition: `{oct_val:#o}` == \"0o777\"
 condition: `{i:x}` == \"2a\"
 "), used: 28 });
             break __tmpl: __local_170;
+            unreachable;
         });
         unreachable;
     };
@@ -1728,6 +1795,7 @@ condition: `{i:x}` == \"2a\"
         __local_173 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_172) };
         i32^UpperHex::fmt(42, __local_173);
         break __tmpl: __local_172;
+        unreachable;
     }, String { repr: array.new_data<u8>("2A"), used: 2 });
     if __cond_29 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1746,6 +1814,7 @@ condition: `{i:x}` == \"2a\"
 condition: `{i:X}` == \"2A\"
 "), used: 28 });
             break __tmpl: __local_174;
+            unreachable;
         });
         unreachable;
     };
@@ -1754,6 +1823,7 @@ condition: `{i:X}` == \"2A\"
         __local_177 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_176) };
         i32^LowerHex::fmt(255, __local_177);
         break __tmpl: __local_176;
+        unreachable;
     }, String { repr: array.new_data<u8>("ff"), used: 2 });
     if __cond_31 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1772,6 +1842,7 @@ condition: `{i:X}` == \"2A\"
 condition: `{hex_val:x}` == \"ff\"
 "), used: 34 });
             break __tmpl: __local_178;
+            unreachable;
         });
         unreachable;
     };
@@ -1780,6 +1851,7 @@ condition: `{hex_val:x}` == \"ff\"
         __local_181 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_180) };
         i32^UpperHex::fmt(255, __local_181);
         break __tmpl: __local_180;
+        unreachable;
     }, String { repr: array.new_data<u8>("FF"), used: 2 });
     if __cond_32 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1798,6 +1870,7 @@ condition: `{hex_val:x}` == \"ff\"
 condition: `{hex_val:X}` == \"FF\"
 "), used: 34 });
             break __tmpl: __local_182;
+            unreachable;
         });
         unreachable;
     };
@@ -1806,6 +1879,7 @@ condition: `{hex_val:X}` == \"FF\"
         __local_185 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_184) };
         i32^LowerHexAlt::fmt_alt(255, __local_185);
         break __tmpl: __local_184;
+        unreachable;
     }, String { repr: array.new_data<u8>("0xff"), used: 4 });
     if __cond_33 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1824,6 +1898,7 @@ condition: `{hex_val:X}` == \"FF\"
 condition: `{hex_val:#x}` == \"0xff\"
 "), used: 37 });
             break __tmpl: __local_186;
+            unreachable;
         });
         unreachable;
     };
@@ -1832,6 +1907,7 @@ condition: `{hex_val:#x}` == \"0xff\"
         __local_189 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_188) };
         i32^UpperHexAlt::fmt_alt(255, __local_189);
         break __tmpl: __local_188;
+        unreachable;
     }, String { repr: array.new_data<u8>("0XFF"), used: 4 });
     if __cond_34 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1850,6 +1926,7 @@ condition: `{hex_val:#x}` == \"0xff\"
 condition: `{hex_val:#X}` == \"0XFF\"
 "), used: 37 });
             break __tmpl: __local_190;
+            unreachable;
         });
         unreachable;
     };
@@ -1858,6 +1935,7 @@ condition: `{hex_val:#X}` == \"0XFF\"
         __local_193 = Formatter { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_192) };
         i32^LowerHexAlt::fmt_alt(255, __local_193);
         break __tmpl: __local_192;
+        unreachable;
     }, String { repr: array.new_data<u8>("0x000000ff"), used: 10 });
     if __cond_35 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1876,6 +1954,7 @@ condition: `{hex_val:#X}` == \"0XFF\"
 condition: `{hex_val:#010x}` == \"0x000000ff\"
 "), used: 46 });
             break __tmpl: __local_194;
+            unreachable;
         });
         unreachable;
     };
@@ -1884,6 +1963,7 @@ condition: `{hex_val:#010x}` == \"0x000000ff\"
         __local_197 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_196) };
         u32^LowerHex::fmt(-1, __local_197);
         break __tmpl: __local_196;
+        unreachable;
     }, String { repr: array.new_data<u8>("ffffffff"), used: 8 });
     if __cond_37 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1902,6 +1982,7 @@ condition: `{hex_val:#010x}` == \"0x000000ff\"
 condition: `{u32_max:x}` == \"ffffffff\"
 "), used: 40 });
             break __tmpl: __local_198;
+            unreachable;
         });
         unreachable;
     };
@@ -1910,6 +1991,7 @@ condition: `{u32_max:x}` == \"ffffffff\"
         __local_201 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_200) };
         u32^Binary::fmt(-1, __local_201);
         break __tmpl: __local_200;
+        unreachable;
     }, String { repr: array.new_data<u8>("11111111111111111111111111111111"), used: 32 });
     if __cond_38 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1928,6 +2010,7 @@ condition: `{u32_max:x}` == \"ffffffff\"
 condition: `{u32_max:b}` == \"11111111111111111111111111111111\"
 "), used: 64 });
             break __tmpl: __local_202;
+            unreachable;
         });
         unreachable;
     };
@@ -1936,6 +2019,7 @@ condition: `{u32_max:b}` == \"11111111111111111111111111111111\"
         __local_205 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_204) };
         i64^LowerHex::fmt(9223372036854775807_i64, __local_205);
         break __tmpl: __local_204;
+        unreachable;
     }, String { repr: array.new_data<u8>("7fffffffffffffff"), used: 16 });
     if __cond_40 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1954,6 +2038,7 @@ condition: `{u32_max:b}` == \"11111111111111111111111111111111\"
 condition: `{big_i64:x}` == \"7fffffffffffffff\"
 "), used: 48 });
             break __tmpl: __local_206;
+            unreachable;
         });
         unreachable;
     };
@@ -1962,6 +2047,7 @@ condition: `{big_i64:x}` == \"7fffffffffffffff\"
         __local_209 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_208) };
         i64::fmt_decimal(-1_i64, __local_209);
         break __tmpl: __local_208;
+        unreachable;
     }, String { repr: array.new_data<u8>("-1"), used: 2 });
     if __cond_42 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1980,6 +2066,7 @@ condition: `{big_i64:x}` == \"7fffffffffffffff\"
 condition: `{neg_i64}` == \"-1\"
 "), used: 32 });
             break __tmpl: __local_210;
+            unreachable;
         });
         unreachable;
     };
@@ -1988,6 +2075,7 @@ condition: `{neg_i64}` == \"-1\"
         __local_213 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_212) };
         i64^LowerHex::fmt(-1_i64, __local_213);
         break __tmpl: __local_212;
+        unreachable;
     }, String { repr: array.new_data<u8>("-1"), used: 2 });
     if __cond_43 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2006,6 +2094,7 @@ condition: `{neg_i64}` == \"-1\"
 condition: `{neg_i64:x}` == \"-1\"
 "), used: 34 });
             break __tmpl: __local_214;
+            unreachable;
         });
         unreachable;
     };
@@ -2014,6 +2103,7 @@ condition: `{neg_i64:x}` == \"-1\"
         __local_217 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_216) };
         u64::fmt_base(-1_i64, __local_217, 16, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_216;
+        unreachable;
     }, String { repr: array.new_data<u8>("ffffffffffffffff"), used: 16 });
     if __cond_45 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2032,6 +2122,7 @@ condition: `{neg_i64:x}` == \"-1\"
 condition: `{u64_max:x}` == \"ffffffffffffffff\"
 "), used: 48 });
             break __tmpl: __local_218;
+            unreachable;
         });
         unreachable;
     };
@@ -2040,6 +2131,7 @@ condition: `{u64_max:x}` == \"ffffffffffffffff\"
         __local_221 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_220) };
         u64::fmt_base(-1_i64, __local_221, 16, 1, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_220;
+        unreachable;
     }, String { repr: array.new_data<u8>("FFFFFFFFFFFFFFFF"), used: 16 });
     if __cond_46 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2058,6 +2150,7 @@ condition: `{u64_max:x}` == \"ffffffffffffffff\"
 condition: `{u64_max:X}` == \"FFFFFFFFFFFFFFFF\"
 "), used: 48 });
             break __tmpl: __local_222;
+            unreachable;
         });
         unreachable;
     };
@@ -2066,6 +2159,7 @@ condition: `{u64_max:X}` == \"FFFFFFFFFFFFFFFF\"
         __local_225 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_224) };
         u64::fmt_base(-1_i64, __local_225, 8, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_224;
+        unreachable;
     }, String { repr: array.new_data<u8>("1777777777777777777777"), used: 22 });
     if __cond_47 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2084,6 +2178,7 @@ condition: `{u64_max:X}` == \"FFFFFFFFFFFFFFFF\"
 condition: `{u64_max:o}` == \"1777777777777777777777\"
 "), used: 54 });
             break __tmpl: __local_226;
+            unreachable;
         });
         unreachable;
     };
@@ -2092,6 +2187,7 @@ condition: `{u64_max:o}` == \"1777777777777777777777\"
         __local_229 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_228) };
         u64::fmt_base(1_i64, __local_229, 2, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_228;
+        unreachable;
     }, String { repr: array.new_data<u8>("1"), used: 1 });
     if __cond_49 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2110,6 +2206,7 @@ condition: `{u64_max:o}` == \"1777777777777777777777\"
 condition: `{u64_one:b}` == \"1\"
 "), used: 33 });
             break __tmpl: __local_230;
+            unreachable;
         });
         unreachable;
     };
@@ -2118,6 +2215,7 @@ condition: `{u64_one:b}` == \"1\"
         __local_233 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_232) };
         u64::fmt_base(1_i64, __local_233, 16, 0, String { repr: array.new_data<u8>("0x"), used: 2 });
         break __tmpl: __local_232;
+        unreachable;
     }, String { repr: array.new_data<u8>("0x1"), used: 3 });
     if __cond_50 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2136,6 +2234,7 @@ condition: `{u64_one:b}` == \"1\"
 condition: `{u64_one:#x}` == \"0x1\"
 "), used: 36 });
             break __tmpl: __local_234;
+            unreachable;
         });
         unreachable;
     };
@@ -2145,6 +2244,7 @@ condition: `{u64_one:#x}` == \"0x1\"
         __local_237 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_236) };
         i128::fmt_base(i128_val, __local_237, 16, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_236;
+        unreachable;
     }, String { repr: array.new_data<u8>("ff"), used: 2 });
     if __cond_52 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2163,6 +2263,7 @@ condition: `{u64_one:#x}` == \"0x1\"
 condition: `{i128_val:x}` == \"ff\"
 "), used: 35 });
             break __tmpl: __local_238;
+            unreachable;
         });
         unreachable;
     };
@@ -2171,6 +2272,7 @@ condition: `{i128_val:x}` == \"ff\"
         __local_241 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_240) };
         i128::fmt_base(i128_val, __local_241, 16, 1, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_240;
+        unreachable;
     }, String { repr: array.new_data<u8>("FF"), used: 2 });
     if __cond_53 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2189,6 +2291,7 @@ condition: `{i128_val:x}` == \"ff\"
 condition: `{i128_val:X}` == \"FF\"
 "), used: 35 });
             break __tmpl: __local_242;
+            unreachable;
         });
         unreachable;
     };
@@ -2197,6 +2300,7 @@ condition: `{i128_val:X}` == \"FF\"
         __local_245 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_244) };
         i128::fmt_base(i128_val, __local_245, 2, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_244;
+        unreachable;
     }, String { repr: array.new_data<u8>("11111111"), used: 8 });
     if __cond_54 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2215,6 +2319,7 @@ condition: `{i128_val:X}` == \"FF\"
 condition: `{i128_val:b}` == \"11111111\"
 "), used: 41 });
             break __tmpl: __local_246;
+            unreachable;
         });
         unreachable;
     };
@@ -2223,6 +2328,7 @@ condition: `{i128_val:b}` == \"11111111\"
         __local_249 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_248) };
         i128::fmt_base(i128_val, __local_249, 8, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_248;
+        unreachable;
     }, String { repr: array.new_data<u8>("377"), used: 3 });
     if __cond_55 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2241,6 +2347,7 @@ condition: `{i128_val:b}` == \"11111111\"
 condition: `{i128_val:o}` == \"377\"
 "), used: 36 });
             break __tmpl: __local_250;
+            unreachable;
         });
         unreachable;
     };
@@ -2249,6 +2356,7 @@ condition: `{i128_val:o}` == \"377\"
         __local_253 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_252) };
         i128::fmt_base(i128_val, __local_253, 16, 0, String { repr: array.new_data<u8>("0x"), used: 2 });
         break __tmpl: __local_252;
+        unreachable;
     }, String { repr: array.new_data<u8>("0xff"), used: 4 });
     if __cond_56 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2267,6 +2375,7 @@ condition: `{i128_val:o}` == \"377\"
 condition: `{i128_val:#x}` == \"0xff\"
 "), used: 38 });
             break __tmpl: __local_254;
+            unreachable;
         });
         unreachable;
     };
@@ -2276,6 +2385,7 @@ condition: `{i128_val:#x}` == \"0xff\"
         __local_257 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_256) };
         i128::fmt_base(neg_i128, __local_257, 16, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_256;
+        unreachable;
     }, String { repr: array.new_data<u8>("-1"), used: 2 });
     if __cond_58 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2294,6 +2404,7 @@ condition: `{i128_val:#x}` == \"0xff\"
 condition: `{neg_i128:x}` == \"-1\"
 "), used: 35 });
             break __tmpl: __local_258;
+            unreachable;
         });
         unreachable;
     };
@@ -2302,6 +2413,7 @@ condition: `{neg_i128:x}` == \"-1\"
         __local_261 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_260) };
         i128::fmt_base(neg_i128, __local_261, 2, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_260;
+        unreachable;
     }, String { repr: array.new_data<u8>("-1"), used: 2 });
     if __cond_59 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2320,6 +2432,7 @@ condition: `{neg_i128:x}` == \"-1\"
 condition: `{neg_i128:b}` == \"-1\"
 "), used: 35 });
             break __tmpl: __local_262;
+            unreachable;
         });
         unreachable;
     };
@@ -2329,6 +2442,7 @@ condition: `{neg_i128:b}` == \"-1\"
         __local_265 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_264) };
         u128::fmt_base(u128_val, __local_265, 16, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_264;
+        unreachable;
     }, String { repr: array.new_data<u8>("100"), used: 3 });
     if __cond_61 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2347,6 +2461,7 @@ condition: `{neg_i128:b}` == \"-1\"
 condition: `{u128_val:x}` == \"100\"
 "), used: 36 });
             break __tmpl: __local_266;
+            unreachable;
         });
         unreachable;
     };
@@ -2355,6 +2470,7 @@ condition: `{u128_val:x}` == \"100\"
         __local_269 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_268) };
         u128::fmt_base(u128_val, __local_269, 2, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_268;
+        unreachable;
     }, String { repr: array.new_data<u8>("100000000"), used: 9 });
     if __cond_62 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2373,6 +2489,7 @@ condition: `{u128_val:x}` == \"100\"
 condition: `{u128_val:b}` == \"100000000\"
 "), used: 42 });
             break __tmpl: __local_270;
+            unreachable;
         });
         unreachable;
     };
@@ -2381,6 +2498,7 @@ condition: `{u128_val:b}` == \"100000000\"
         __local_273 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_272) };
         u128::fmt_base(u128_val, __local_273, 8, 0, String { repr: builtin::array_new<u8>(0), used: 0 });
         break __tmpl: __local_272;
+        unreachable;
     }, String { repr: array.new_data<u8>("400"), used: 3 });
     if __cond_63 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2399,6 +2517,7 @@ condition: `{u128_val:b}` == \"100000000\"
 condition: `{u128_val:o}` == \"400\"
 "), used: 36 });
             break __tmpl: __local_274;
+            unreachable;
         });
         unreachable;
     };
@@ -2407,6 +2526,7 @@ condition: `{u128_val:o}` == \"400\"
         __local_277 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_276) };
         u128::fmt_base(u128_val, __local_277, 16, 1, String { repr: array.new_data<u8>("0X"), used: 2 });
         break __tmpl: __local_276;
+        unreachable;
     }, String { repr: array.new_data<u8>("0X100"), used: 5 });
     if __cond_64 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2425,6 +2545,7 @@ condition: `{u128_val:o}` == \"400\"
 condition: `{u128_val:#X}` == \"0X100\"
 "), used: 39 });
             break __tmpl: __local_278;
+            unreachable;
         });
         unreachable;
     };
@@ -2433,6 +2554,7 @@ condition: `{u128_val:#X}` == \"0X100\"
         __local_281 = Formatter { fill: 48, align: 2, sign_plus: 1, zero_pad: 1, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_280) };
         i32::fmt_decimal(42, __local_281);
         break __tmpl: __local_280;
+        unreachable;
     }, String { repr: array.new_data<u8>("+000000042"), used: 10 });
     if __cond_65 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2451,6 +2573,7 @@ condition: `{u128_val:#X}` == \"0X100\"
 condition: `{i:+010}` == \"+000000042\"
 "), used: 39 });
             break __tmpl: __local_282;
+            unreachable;
         });
         unreachable;
     };
@@ -2459,6 +2582,7 @@ condition: `{i:+010}` == \"+000000042\"
         __local_285 = Formatter { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_284) };
         i32^LowerHexAlt::fmt_alt(42, __local_285);
         break __tmpl: __local_284;
+        unreachable;
     }, String { repr: array.new_data<u8>("0x0000002a"), used: 10 });
     if __cond_66 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2477,6 +2601,7 @@ condition: `{i:+010}` == \"+000000042\"
 condition: `{i:#010x}` == \"0x0000002a\"
 "), used: 40 });
             break __tmpl: __local_286;
+            unreachable;
         });
         unreachable;
     };
@@ -2485,6 +2610,7 @@ condition: `{i:#010x}` == \"0x0000002a\"
         __local_289 = Formatter { fill: 32, align: 0, sign_plus: 0, zero_pad: 0, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_288) };
         i32^LowerHex::fmt(42, __local_289);
         break __tmpl: __local_288;
+        unreachable;
     }, String { repr: array.new_data<u8>("2a        "), used: 10 });
     if __cond_67 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2503,6 +2629,7 @@ condition: `{i:#010x}` == \"0x0000002a\"
 condition: `{i:<10x}` == \"2a        \"
 "), used: 39 });
             break __tmpl: __local_290;
+            unreachable;
         });
         unreachable;
     };
@@ -2511,6 +2638,7 @@ condition: `{i:<10x}` == \"2a        \"
         __local_293 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_292) };
         Formatter::pad(__local_293, s);
         break __tmpl: __local_292;
+        unreachable;
     }, String { repr: array.new_data<u8>("     hello"), used: 10 });
     if __cond_68 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2529,6 +2657,7 @@ condition: `{i:<10x}` == \"2a        \"
 condition: `{s:>10}` == \"     hello\"
 "), used: 38 });
             break __tmpl: __local_294;
+            unreachable;
         });
         unreachable;
     };
@@ -2537,6 +2666,7 @@ condition: `{s:>10}` == \"     hello\"
         __local_297 = Formatter { fill: 32, align: 0, sign_plus: 0, zero_pad: 0, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_296) };
         Formatter::pad(__local_297, s);
         break __tmpl: __local_296;
+        unreachable;
     }, String { repr: array.new_data<u8>("hello     "), used: 10 });
     if __cond_69 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2555,6 +2685,7 @@ condition: `{s:>10}` == \"     hello\"
 condition: `{s:<10}` == \"hello     \"
 "), used: 38 });
             break __tmpl: __local_298;
+            unreachable;
         });
         unreachable;
     };
@@ -2563,6 +2694,7 @@ condition: `{s:<10}` == \"hello     \"
         __local_301 = Formatter { fill: 32, align: 1, sign_plus: 0, zero_pad: 0, width: 10, precision: -1, indent: 0, buf: ref.as_non_null(__local_300) };
         Formatter::pad(__local_301, s);
         break __tmpl: __local_300;
+        unreachable;
     }, String { repr: array.new_data<u8>("  hello   "), used: 10 });
     if __cond_70 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2581,6 +2713,7 @@ condition: `{s:<10}` == \"hello     \"
 condition: `{s:^10}` == \"  hello   \"
 "), used: 38 });
             break __tmpl: __local_302;
+            unreachable;
         });
         unreachable;
     };
@@ -2591,6 +2724,7 @@ condition: `{s:^10}` == \"  hello   \"
             String { repr: array.new_data<u8>("true"), used: 4 };
         });
         break __tmpl: __local_304;
+        unreachable;
     }, String { repr: array.new_data<u8>("true"), used: 4 });
     if __cond_71 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2609,6 +2743,7 @@ condition: `{s:^10}` == \"  hello   \"
 condition: `{true}` == \"true\"
 "), used: 31 });
             break __tmpl: __local_306;
+            unreachable;
         });
         unreachable;
     };
@@ -2619,6 +2754,7 @@ condition: `{true}` == \"true\"
             String { repr: array.new_data<u8>("false"), used: 5 };
         });
         break __tmpl: __local_308;
+        unreachable;
     }, String { repr: array.new_data<u8>("false"), used: 5 });
     if __cond_72 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2637,6 +2773,7 @@ condition: `{true}` == \"true\"
 condition: `{false}` == \"false\"
 "), used: 33 });
             break __tmpl: __local_310;
+            unreachable;
         });
         unreachable;
     };
@@ -2645,6 +2782,7 @@ condition: `{false}` == \"false\"
         __local_313 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_312) };
         i32^Binary::fmt(-42, __local_313);
         break __tmpl: __local_312;
+        unreachable;
     }, String { repr: array.new_data<u8>("-101010"), used: 7 });
     if __cond_74 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2663,6 +2801,7 @@ condition: `{false}` == \"false\"
 condition: `{neg_i32:b}` == \"-101010\"
 "), used: 39 });
             break __tmpl: __local_314;
+            unreachable;
         });
         unreachable;
     };
@@ -2671,6 +2810,7 @@ condition: `{neg_i32:b}` == \"-101010\"
         __local_317 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_316) };
         i32^Octal::fmt(-42, __local_317);
         break __tmpl: __local_316;
+        unreachable;
     }, String { repr: array.new_data<u8>("-52"), used: 3 });
     if __cond_75 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2689,6 +2829,7 @@ condition: `{neg_i32:b}` == \"-101010\"
 condition: `{neg_i32:o}` == \"-52\"
 "), used: 35 });
             break __tmpl: __local_318;
+            unreachable;
         });
         unreachable;
     };
@@ -2697,6 +2838,7 @@ condition: `{neg_i32:o}` == \"-52\"
         __local_321 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_320) };
         i32^LowerHex::fmt(-42, __local_321);
         break __tmpl: __local_320;
+        unreachable;
     }, String { repr: array.new_data<u8>("-2a"), used: 3 });
     if __cond_76 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2715,6 +2857,7 @@ condition: `{neg_i32:o}` == \"-52\"
 condition: `{neg_i32:x}` == \"-2a\"
 "), used: 35 });
             break __tmpl: __local_322;
+            unreachable;
         });
         unreachable;
     };
@@ -2723,6 +2866,7 @@ condition: `{neg_i32:x}` == \"-2a\"
         __local_325 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_324) };
         i32^LowerHexAlt::fmt_alt(-42, __local_325);
         break __tmpl: __local_324;
+        unreachable;
     }, String { repr: array.new_data<u8>("-0x2a"), used: 5 });
     if __cond_77 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2741,6 +2885,7 @@ condition: `{neg_i32:x}` == \"-2a\"
 condition: `{neg_i32:#x}` == \"-0x2a\"
 "), used: 38 });
             break __tmpl: __local_326;
+            unreachable;
         });
         unreachable;
     };
@@ -3134,6 +3279,7 @@ fn test_template_specifiers_float() with Stdout {
         __local_76 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_75) };
         f64::fmt_into(3.14159, __local_76);
         break __tmpl: __local_75;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14159"), used: 7 });
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3152,6 +3298,7 @@ fn test_template_specifiers_float() with Stdout {
 condition: `{pi}` == \"3.14159\"
 "), used: 32 });
             break __tmpl: __local_77;
+            unreachable;
         });
         unreachable;
     };
@@ -3160,6 +3307,7 @@ condition: `{pi}` == \"3.14159\"
         __local_80 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_79) };
         f64::fmt_into(-2.71828, __local_80);
         break __tmpl: __local_79;
+        unreachable;
     }, String { repr: array.new_data<u8>("-2.71828"), used: 8 });
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3178,6 +3326,7 @@ condition: `{pi}` == \"3.14159\"
 condition: `{neg}` == \"-2.71828\"
 "), used: 34 });
             break __tmpl: __local_81;
+            unreachable;
         });
         unreachable;
     };
@@ -3186,6 +3335,7 @@ condition: `{neg}` == \"-2.71828\"
         __local_84 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_83) };
         f64::fmt_into(0, __local_84);
         break __tmpl: __local_83;
+        unreachable;
     }, String { repr: array.new_data<u8>("0"), used: 1 });
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3204,6 +3354,7 @@ condition: `{neg}` == \"-2.71828\"
 condition: `{0.0}` == \"0\"
 "), used: 27 });
             break __tmpl: __local_85;
+            unreachable;
         });
         unreachable;
     };
@@ -3212,6 +3363,7 @@ condition: `{0.0}` == \"0\"
         __local_88 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_87) };
         f64::fmt_into(1, __local_88);
         break __tmpl: __local_87;
+        unreachable;
     }, String { repr: array.new_data<u8>("1"), used: 1 });
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3230,6 +3382,7 @@ condition: `{0.0}` == \"0\"
 condition: `{1.0}` == \"1\"
 "), used: 27 });
             break __tmpl: __local_89;
+            unreachable;
         });
         unreachable;
     };
@@ -3238,6 +3391,7 @@ condition: `{1.0}` == \"1\"
         __local_92 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_91) };
         f64::fmt_into(0.5, __local_92);
         break __tmpl: __local_91;
+        unreachable;
     }, String { repr: array.new_data<u8>("0.5"), used: 3 });
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3256,6 +3410,7 @@ condition: `{1.0}` == \"1\"
 condition: `{0.5}` == \"0.5\"
 "), used: 29 });
             break __tmpl: __local_93;
+            unreachable;
         });
         unreachable;
     };
@@ -3264,6 +3419,7 @@ condition: `{0.5}` == \"0.5\"
         __local_96 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_95) };
         f64::fmt_into(-0.5, __local_96);
         break __tmpl: __local_95;
+        unreachable;
     }, String { repr: array.new_data<u8>("-0.5"), used: 4 });
     if __cond_7 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3282,6 +3438,7 @@ condition: `{0.5}` == \"0.5\"
 condition: `{-0.5}` == \"-0.5\"
 "), used: 31 });
             break __tmpl: __local_97;
+            unreachable;
         });
         unreachable;
     };
@@ -3290,6 +3447,7 @@ condition: `{-0.5}` == \"-0.5\"
         __local_100 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_99) };
         f64::fmt_into(100, __local_100);
         break __tmpl: __local_99;
+        unreachable;
     }, String { repr: array.new_data<u8>("100"), used: 3 });
     if __cond_8 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3308,6 +3466,7 @@ condition: `{-0.5}` == \"-0.5\"
 condition: `{100.0}` == \"100\"
 "), used: 31 });
             break __tmpl: __local_101;
+            unreachable;
         });
         unreachable;
     };
@@ -3316,6 +3475,7 @@ condition: `{100.0}` == \"100\"
         __local_104 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 1, indent: 0, buf: ref.as_non_null(__local_103) };
         f64::fmt_into(3.14159, __local_104);
         break __tmpl: __local_103;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.1"), used: 3 });
     if __cond_9 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3334,6 +3494,7 @@ condition: `{100.0}` == \"100\"
 condition: `{pi:.1}` == \"3.1\"
 "), used: 31 });
             break __tmpl: __local_105;
+            unreachable;
         });
         unreachable;
     };
@@ -3342,6 +3503,7 @@ condition: `{pi:.1}` == \"3.1\"
         __local_108 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: ref.as_non_null(__local_107) };
         f64::fmt_into(3.14159, __local_108);
         break __tmpl: __local_107;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14"), used: 4 });
     if __cond_10 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3360,6 +3522,7 @@ condition: `{pi:.1}` == \"3.1\"
 condition: `{pi:.2}` == \"3.14\"
 "), used: 32 });
             break __tmpl: __local_109;
+            unreachable;
         });
         unreachable;
     };
@@ -3368,6 +3531,7 @@ condition: `{pi:.2}` == \"3.14\"
         __local_112 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 3, indent: 0, buf: ref.as_non_null(__local_111) };
         f64::fmt_into(3.14159, __local_112);
         break __tmpl: __local_111;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.142"), used: 5 });
     if __cond_11 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3386,6 +3550,7 @@ condition: `{pi:.2}` == \"3.14\"
 condition: `{pi:.3}` == \"3.142\"
 "), used: 33 });
             break __tmpl: __local_113;
+            unreachable;
         });
         unreachable;
     };
@@ -3394,6 +3559,7 @@ condition: `{pi:.3}` == \"3.142\"
         __local_116 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 4, indent: 0, buf: ref.as_non_null(__local_115) };
         f64::fmt_into(3.14159, __local_116);
         break __tmpl: __local_115;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.1416"), used: 6 });
     if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3412,6 +3578,7 @@ condition: `{pi:.3}` == \"3.142\"
 condition: `{pi:.4}` == \"3.1416\"
 "), used: 34 });
             break __tmpl: __local_117;
+            unreachable;
         });
         unreachable;
     };
@@ -3420,6 +3587,7 @@ condition: `{pi:.4}` == \"3.1416\"
         __local_120 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 5, indent: 0, buf: ref.as_non_null(__local_119) };
         f64::fmt_into(3.14159, __local_120);
         break __tmpl: __local_119;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14159"), used: 7 });
     if __cond_13 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3438,6 +3606,7 @@ condition: `{pi:.4}` == \"3.1416\"
 condition: `{pi:.5}` == \"3.14159\"
 "), used: 35 });
             break __tmpl: __local_121;
+            unreachable;
         });
         unreachable;
     };
@@ -3446,6 +3615,7 @@ condition: `{pi:.5}` == \"3.14159\"
         __local_124 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 6, indent: 0, buf: ref.as_non_null(__local_123) };
         f64::fmt_into(3.14159, __local_124);
         break __tmpl: __local_123;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.141590"), used: 8 });
     if __cond_14 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3464,6 +3634,7 @@ condition: `{pi:.5}` == \"3.14159\"
 condition: `{pi:.6}` == \"3.141590\"
 "), used: 36 });
             break __tmpl: __local_125;
+            unreachable;
         });
         unreachable;
     };
@@ -3472,6 +3643,7 @@ condition: `{pi:.6}` == \"3.141590\"
         __local_128 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: ref.as_non_null(__local_127) };
         f64::fmt_into(-2.71828, __local_128);
         break __tmpl: __local_127;
+        unreachable;
     }, String { repr: array.new_data<u8>("-2.72"), used: 5 });
     if __cond_15 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3490,6 +3662,7 @@ condition: `{pi:.6}` == \"3.141590\"
 condition: `{neg:.2}` == \"-2.72\"
 "), used: 34 });
             break __tmpl: __local_129;
+            unreachable;
         });
         unreachable;
     };
@@ -3498,6 +3671,7 @@ condition: `{neg:.2}` == \"-2.72\"
         __local_132 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 4, indent: 0, buf: ref.as_non_null(__local_131) };
         f64::fmt_into(-2.71828, __local_132);
         break __tmpl: __local_131;
+        unreachable;
     }, String { repr: array.new_data<u8>("-2.7183"), used: 7 });
     if __cond_16 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3516,6 +3690,7 @@ condition: `{neg:.2}` == \"-2.72\"
 condition: `{neg:.4}` == \"-2.7183\"
 "), used: 36 });
             break __tmpl: __local_133;
+            unreachable;
         });
         unreachable;
     };
@@ -3524,6 +3699,7 @@ condition: `{neg:.4}` == \"-2.7183\"
         __local_136 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: ref.as_non_null(__local_135) };
         f64::fmt_into(0, __local_136);
         break __tmpl: __local_135;
+        unreachable;
     }, String { repr: array.new_data<u8>("0.00"), used: 4 });
     if __cond_17 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3542,6 +3718,7 @@ condition: `{neg:.4}` == \"-2.7183\"
 condition: `{0.0:.2}` == \"0.00\"
 "), used: 33 });
             break __tmpl: __local_137;
+            unreachable;
         });
         unreachable;
     };
@@ -3550,6 +3727,7 @@ condition: `{0.0:.2}` == \"0.00\"
         __local_140 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: ref.as_non_null(__local_139) };
         f64::fmt_into(100, __local_140);
         break __tmpl: __local_139;
+        unreachable;
     }, String { repr: array.new_data<u8>("100.00"), used: 6 });
     if __cond_18 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3568,6 +3746,7 @@ condition: `{0.0:.2}` == \"0.00\"
 condition: `{100.0:.2}` == \"100.00\"
 "), used: 37 });
             break __tmpl: __local_141;
+            unreachable;
         });
         unreachable;
     };
@@ -3577,6 +3756,7 @@ condition: `{100.0:.2}` == \"100.00\"
         __local_506 = __local_144;
         f64::fmt_exp(3.14159, __local_506.precision, 0, __local_506);
         break __tmpl: __local_143;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14159e0"), used: 9 });
     if __cond_19 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3595,6 +3775,7 @@ condition: `{100.0:.2}` == \"100.00\"
 condition: `{pi:e}` == \"3.14159e0\"
 "), used: 36 });
             break __tmpl: __local_145;
+            unreachable;
         });
         unreachable;
     };
@@ -3604,6 +3785,7 @@ condition: `{pi:e}` == \"3.14159e0\"
         __local_516 = __local_148;
         f64::fmt_exp(-2.71828, __local_516.precision, 0, __local_516);
         break __tmpl: __local_147;
+        unreachable;
     }, String { repr: array.new_data<u8>("-2.71828e0"), used: 10 });
     if __cond_20 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3622,6 +3804,7 @@ condition: `{pi:e}` == \"3.14159e0\"
 condition: `{neg:e}` == \"-2.71828e0\"
 "), used: 38 });
             break __tmpl: __local_149;
+            unreachable;
         });
         unreachable;
     };
@@ -3631,6 +3814,7 @@ condition: `{neg:e}` == \"-2.71828e0\"
         __local_526 = __local_152;
         f64::fmt_exp(0, __local_526.precision, 0, __local_526);
         break __tmpl: __local_151;
+        unreachable;
     }, String { repr: array.new_data<u8>("0e0"), used: 3 });
     if __cond_21 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3649,6 +3833,7 @@ condition: `{neg:e}` == \"-2.71828e0\"
 condition: `{0.0:e}` == \"0e0\"
 "), used: 31 });
             break __tmpl: __local_153;
+            unreachable;
         });
         unreachable;
     };
@@ -3658,6 +3843,7 @@ condition: `{0.0:e}` == \"0e0\"
         __local_536 = __local_156;
         f64::fmt_exp(1, __local_536.precision, 0, __local_536);
         break __tmpl: __local_155;
+        unreachable;
     }, String { repr: array.new_data<u8>("1e0"), used: 3 });
     if __cond_22 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3676,6 +3862,7 @@ condition: `{0.0:e}` == \"0e0\"
 condition: `{1.0:e}` == \"1e0\"
 "), used: 31 });
             break __tmpl: __local_157;
+            unreachable;
         });
         unreachable;
     };
@@ -3685,6 +3872,7 @@ condition: `{1.0:e}` == \"1e0\"
         __local_546 = __local_160;
         f64::fmt_exp(100, __local_546.precision, 0, __local_546);
         break __tmpl: __local_159;
+        unreachable;
     }, String { repr: array.new_data<u8>("1e2"), used: 3 });
     if __cond_23 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3703,6 +3891,7 @@ condition: `{1.0:e}` == \"1e0\"
 condition: `{100.0:e}` == \"1e2\"
 "), used: 33 });
             break __tmpl: __local_161;
+            unreachable;
         });
         unreachable;
     };
@@ -3712,6 +3901,7 @@ condition: `{100.0:e}` == \"1e2\"
         __local_556 = __local_164;
         f64::fmt_exp(1230000000000000, __local_556.precision, 0, __local_556);
         break __tmpl: __local_163;
+        unreachable;
     }, String { repr: array.new_data<u8>("1.23e15"), used: 7 });
     if __cond_25 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3730,6 +3920,7 @@ condition: `{100.0:e}` == \"1e2\"
 condition: `{big:e}` == \"1.23e15\"
 "), used: 35 });
             break __tmpl: __local_165;
+            unreachable;
         });
         unreachable;
     };
@@ -3739,6 +3930,7 @@ condition: `{big:e}` == \"1.23e15\"
         __local_566 = __local_168;
         f64::fmt_exp(0.00000000015, __local_566.precision, 0, __local_566);
         break __tmpl: __local_167;
+        unreachable;
     }, String { repr: array.new_data<u8>("1.5e-10"), used: 7 });
     if __cond_27 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3757,6 +3949,7 @@ condition: `{big:e}` == \"1.23e15\"
 condition: `{small:e}` == \"1.5e-10\"
 "), used: 37 });
             break __tmpl: __local_169;
+            unreachable;
         });
         unreachable;
     };
@@ -3766,6 +3959,7 @@ condition: `{small:e}` == \"1.5e-10\"
         __local_576 = __local_172;
         f64::fmt_exp(3.14159, __local_576.precision, 1, __local_576);
         break __tmpl: __local_171;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14159E0"), used: 9 });
     if __cond_28 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3784,6 +3978,7 @@ condition: `{small:e}` == \"1.5e-10\"
 condition: `{pi:E}` == \"3.14159E0\"
 "), used: 36 });
             break __tmpl: __local_173;
+            unreachable;
         });
         unreachable;
     };
@@ -3793,6 +3988,7 @@ condition: `{pi:E}` == \"3.14159E0\"
         __local_586 = __local_176;
         f64::fmt_exp(-2.71828, __local_586.precision, 1, __local_586);
         break __tmpl: __local_175;
+        unreachable;
     }, String { repr: array.new_data<u8>("-2.71828E0"), used: 10 });
     if __cond_29 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3811,6 +4007,7 @@ condition: `{pi:E}` == \"3.14159E0\"
 condition: `{neg:E}` == \"-2.71828E0\"
 "), used: 38 });
             break __tmpl: __local_177;
+            unreachable;
         });
         unreachable;
     };
@@ -3820,6 +4017,7 @@ condition: `{neg:E}` == \"-2.71828E0\"
         __local_596 = __local_180;
         f64::fmt_exp(0, __local_596.precision, 1, __local_596);
         break __tmpl: __local_179;
+        unreachable;
     }, String { repr: array.new_data<u8>("0E0"), used: 3 });
     if __cond_30 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3838,6 +4036,7 @@ condition: `{neg:E}` == \"-2.71828E0\"
 condition: `{0.0:E}` == \"0E0\"
 "), used: 31 });
             break __tmpl: __local_181;
+            unreachable;
         });
         unreachable;
     };
@@ -3847,6 +4046,7 @@ condition: `{0.0:E}` == \"0E0\"
         __local_606 = __local_184;
         f64::fmt_exp(1230000000000000, __local_606.precision, 1, __local_606);
         break __tmpl: __local_183;
+        unreachable;
     }, String { repr: array.new_data<u8>("1.23E15"), used: 7 });
     if __cond_31 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3865,6 +4065,7 @@ condition: `{0.0:E}` == \"0E0\"
 condition: `{big:E}` == \"1.23E15\"
 "), used: 35 });
             break __tmpl: __local_185;
+            unreachable;
         });
         unreachable;
     };
@@ -3874,6 +4075,7 @@ condition: `{big:E}` == \"1.23E15\"
         __local_616 = __local_188;
         f64::fmt_exp(0.00000000015, __local_616.precision, 1, __local_616);
         break __tmpl: __local_187;
+        unreachable;
     }, String { repr: array.new_data<u8>("1.5E-10"), used: 7 });
     if __cond_32 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3892,6 +4094,7 @@ condition: `{big:E}` == \"1.23E15\"
 condition: `{small:E}` == \"1.5E-10\"
 "), used: 37 });
             break __tmpl: __local_189;
+            unreachable;
         });
         unreachable;
     };
@@ -3901,6 +4104,7 @@ condition: `{small:E}` == \"1.5E-10\"
         __local_625 = __local_192;
         f64::fmt_exp(3.14159, __local_625.precision, 0, __local_625);
         break __tmpl: __local_191;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.1e0"), used: 5 });
     if __cond_33 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3919,6 +4123,7 @@ condition: `{small:E}` == \"1.5E-10\"
 condition: `{pi:.1e}` == \"3.1e0\"
 "), used: 34 });
             break __tmpl: __local_193;
+            unreachable;
         });
         unreachable;
     };
@@ -3928,6 +4133,7 @@ condition: `{pi:.1e}` == \"3.1e0\"
         __local_634 = __local_196;
         f64::fmt_exp(3.14159, __local_634.precision, 0, __local_634);
         break __tmpl: __local_195;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14e0"), used: 6 });
     if __cond_34 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3946,6 +4152,7 @@ condition: `{pi:.1e}` == \"3.1e0\"
 condition: `{pi:.2e}` == \"3.14e0\"
 "), used: 35 });
             break __tmpl: __local_197;
+            unreachable;
         });
         unreachable;
     };
@@ -3955,6 +4162,7 @@ condition: `{pi:.2e}` == \"3.14e0\"
         __local_643 = __local_200;
         f64::fmt_exp(3.14159, __local_643.precision, 0, __local_643);
         break __tmpl: __local_199;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.1416e0"), used: 8 });
     if __cond_35 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -3973,6 +4181,7 @@ condition: `{pi:.2e}` == \"3.14e0\"
 condition: `{pi:.4e}` == \"3.1416e0\"
 "), used: 37 });
             break __tmpl: __local_201;
+            unreachable;
         });
         unreachable;
     };
@@ -3982,6 +4191,7 @@ condition: `{pi:.4e}` == \"3.1416e0\"
         __local_652 = __local_204;
         f64::fmt_exp(3.14159, __local_652.precision, 1, __local_652);
         break __tmpl: __local_203;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.1E0"), used: 5 });
     if __cond_36 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4000,6 +4210,7 @@ condition: `{pi:.4e}` == \"3.1416e0\"
 condition: `{pi:.1E}` == \"3.1E0\"
 "), used: 34 });
             break __tmpl: __local_205;
+            unreachable;
         });
         unreachable;
     };
@@ -4009,6 +4220,7 @@ condition: `{pi:.1E}` == \"3.1E0\"
         __local_661 = __local_208;
         f64::fmt_exp(3.14159, __local_661.precision, 1, __local_661);
         break __tmpl: __local_207;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14E0"), used: 6 });
     if __cond_37 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4027,6 +4239,7 @@ condition: `{pi:.1E}` == \"3.1E0\"
 condition: `{pi:.2E}` == \"3.14E0\"
 "), used: 35 });
             break __tmpl: __local_209;
+            unreachable;
         });
         unreachable;
     };
@@ -4036,6 +4249,7 @@ condition: `{pi:.2E}` == \"3.14E0\"
         __local_670 = __local_212;
         f64::fmt_exp(-2.71828, __local_670.precision, 0, __local_670);
         break __tmpl: __local_211;
+        unreachable;
     }, String { repr: array.new_data<u8>("-2.72e0"), used: 7 });
     if __cond_38 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4054,6 +4268,7 @@ condition: `{pi:.2E}` == \"3.14E0\"
 condition: `{neg:.2e}` == \"-2.72e0\"
 "), used: 37 });
             break __tmpl: __local_213;
+            unreachable;
         });
         unreachable;
     };
@@ -4063,6 +4278,7 @@ condition: `{neg:.2e}` == \"-2.72e0\"
         __local_679 = __local_216;
         f64::fmt_exp(1230000000000000, __local_679.precision, 0, __local_679);
         break __tmpl: __local_215;
+        unreachable;
     }, String { repr: array.new_data<u8>("1.2e15"), used: 6 });
     if __cond_39 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4081,6 +4297,7 @@ condition: `{neg:.2e}` == \"-2.72e0\"
 condition: `{big:.1e}` == \"1.2e15\"
 "), used: 36 });
             break __tmpl: __local_217;
+            unreachable;
         });
         unreachable;
     };
@@ -4090,6 +4307,7 @@ condition: `{big:.1e}` == \"1.2e15\"
         __local_688 = __local_220;
         f64::fmt_exp(1230000000000000, __local_688.precision, 0, __local_688);
         break __tmpl: __local_219;
+        unreachable;
     }, String { repr: array.new_data<u8>("1.23e15"), used: 7 });
     if __cond_40 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4108,6 +4326,7 @@ condition: `{big:.1e}` == \"1.2e15\"
 condition: `{big:.2e}` == \"1.23e15\"
 "), used: 37 });
             break __tmpl: __local_221;
+            unreachable;
         });
         unreachable;
     };
@@ -4117,6 +4336,7 @@ condition: `{big:.2e}` == \"1.23e15\"
         __local_697 = __local_224;
         f64::fmt_exp(0.00000000015, __local_697.precision, 0, __local_697);
         break __tmpl: __local_223;
+        unreachable;
     }, String { repr: array.new_data<u8>("1.500e-10"), used: 9 });
     if __cond_41 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4135,6 +4355,7 @@ condition: `{big:.2e}` == \"1.23e15\"
 condition: `{small:.3e}` == \"1.500e-10\"
 "), used: 41 });
             break __tmpl: __local_225;
+            unreachable;
         });
         unreachable;
     };
@@ -4144,6 +4365,7 @@ condition: `{small:.3e}` == \"1.500e-10\"
         __local_706 = __local_228;
         f64::fmt_exp(0, __local_706.precision, 0, __local_706);
         break __tmpl: __local_227;
+        unreachable;
     }, String { repr: array.new_data<u8>("0.00e0"), used: 6 });
     if __cond_42 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4162,6 +4384,7 @@ condition: `{small:.3e}` == \"1.500e-10\"
 condition: `{0.0:.2e}` == \"0.00e0\"
 "), used: 36 });
             break __tmpl: __local_229;
+            unreachable;
         });
         unreachable;
     };
@@ -4171,6 +4394,7 @@ condition: `{0.0:.2e}` == \"0.00e0\"
         __local_716 = __local_232;
         f64::fmt_exp(123456.789, __local_716.precision, 0, __local_716);
         break __tmpl: __local_231;
+        unreachable;
     }, String { repr: array.new_data<u8>("1.23456789e5"), used: 12 });
     if __cond_44 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4189,6 +4413,7 @@ condition: `{0.0:.2e}` == \"0.00e0\"
 condition: `{large:e}` == \"1.23456789e5\"
 "), used: 42 });
             break __tmpl: __local_233;
+            unreachable;
         });
         unreachable;
     };
@@ -4198,6 +4423,7 @@ condition: `{large:e}` == \"1.23456789e5\"
         __local_725 = __local_236;
         f64::fmt_exp(123456.789, __local_725.precision, 0, __local_725);
         break __tmpl: __local_235;
+        unreachable;
     }, String { repr: array.new_data<u8>("1.2e5"), used: 5 });
     if __cond_45 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4216,6 +4442,7 @@ condition: `{large:e}` == \"1.23456789e5\"
 condition: `{large:.1e}` == \"1.2e5\"
 "), used: 37 });
             break __tmpl: __local_237;
+            unreachable;
         });
         unreachable;
     };
@@ -4225,6 +4452,7 @@ condition: `{large:.1e}` == \"1.2e5\"
         __local_734 = __local_240;
         f64::fmt_exp(123456.789, __local_734.precision, 0, __local_734);
         break __tmpl: __local_239;
+        unreachable;
     }, String { repr: array.new_data<u8>("1.2346e5"), used: 8 });
     if __cond_46 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4243,6 +4471,7 @@ condition: `{large:.1e}` == \"1.2e5\"
 condition: `{large:.4e}` == \"1.2346e5\"
 "), used: 40 });
             break __tmpl: __local_241;
+            unreachable;
         });
         unreachable;
     };
@@ -4251,6 +4480,7 @@ condition: `{large:.4e}` == \"1.2346e5\"
         __local_244 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 10, precision: 2, indent: 0, buf: ref.as_non_null(__local_243) };
         f64::fmt_into(3.14159, __local_244);
         break __tmpl: __local_243;
+        unreachable;
     }, String { repr: array.new_data<u8>("      3.14"), used: 10 });
     if __cond_47 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4269,6 +4499,7 @@ condition: `{large:.4e}` == \"1.2346e5\"
 condition: `{pi:10.2}` == \"      3.14\"
 "), used: 40 });
             break __tmpl: __local_245;
+            unreachable;
         });
         unreachable;
     };
@@ -4277,6 +4508,7 @@ condition: `{pi:10.2}` == \"      3.14\"
         __local_248 = Formatter { fill: 32, align: 0, sign_plus: 0, zero_pad: 0, width: 10, precision: 2, indent: 0, buf: ref.as_non_null(__local_247) };
         f64::fmt_into(3.14159, __local_248);
         break __tmpl: __local_247;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14      "), used: 10 });
     if __cond_48 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4295,6 +4527,7 @@ condition: `{pi:10.2}` == \"      3.14\"
 condition: `{pi:<10.2}` == \"3.14      \"
 "), used: 41 });
             break __tmpl: __local_249;
+            unreachable;
         });
         unreachable;
     };
@@ -4303,6 +4536,7 @@ condition: `{pi:<10.2}` == \"3.14      \"
         __local_252 = Formatter { fill: 32, align: 1, sign_plus: 0, zero_pad: 0, width: 10, precision: 2, indent: 0, buf: ref.as_non_null(__local_251) };
         f64::fmt_into(3.14159, __local_252);
         break __tmpl: __local_251;
+        unreachable;
     }, String { repr: array.new_data<u8>("   3.14   "), used: 10 });
     if __cond_49 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4321,6 +4555,7 @@ condition: `{pi:<10.2}` == \"3.14      \"
 condition: `{pi:^10.2}` == \"   3.14   \"
 "), used: 41 });
             break __tmpl: __local_253;
+            unreachable;
         });
         unreachable;
     };
@@ -4329,6 +4564,7 @@ condition: `{pi:^10.2}` == \"   3.14   \"
         __local_256 = Formatter { fill: 42, align: 2, sign_plus: 0, zero_pad: 0, width: 10, precision: 2, indent: 0, buf: ref.as_non_null(__local_255) };
         f64::fmt_into(3.14159, __local_256);
         break __tmpl: __local_255;
+        unreachable;
     }, String { repr: array.new_data<u8>("******3.14"), used: 10 });
     if __cond_50 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4347,6 +4583,7 @@ condition: `{pi:^10.2}` == \"   3.14   \"
 condition: `{pi:*>10.2}` == \"******3.14\"
 "), used: 42 });
             break __tmpl: __local_257;
+            unreachable;
         });
         unreachable;
     };
@@ -4355,6 +4592,7 @@ condition: `{pi:*>10.2}` == \"******3.14\"
         __local_260 = Formatter { fill: 42, align: 0, sign_plus: 0, zero_pad: 0, width: 10, precision: 2, indent: 0, buf: ref.as_non_null(__local_259) };
         f64::fmt_into(3.14159, __local_260);
         break __tmpl: __local_259;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14******"), used: 10 });
     if __cond_51 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4373,6 +4611,7 @@ condition: `{pi:*>10.2}` == \"******3.14\"
 condition: `{pi:*<10.2}` == \"3.14******\"
 "), used: 42 });
             break __tmpl: __local_261;
+            unreachable;
         });
         unreachable;
     };
@@ -4381,6 +4620,7 @@ condition: `{pi:*<10.2}` == \"3.14******\"
         __local_264 = Formatter { fill: 42, align: 1, sign_plus: 0, zero_pad: 0, width: 10, precision: 2, indent: 0, buf: ref.as_non_null(__local_263) };
         f64::fmt_into(3.14159, __local_264);
         break __tmpl: __local_263;
+        unreachable;
     }, String { repr: array.new_data<u8>("***3.14***"), used: 10 });
     if __cond_52 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4399,6 +4639,7 @@ condition: `{pi:*<10.2}` == \"3.14******\"
 condition: `{pi:*^10.2}` == \"***3.14***\"
 "), used: 42 });
             break __tmpl: __local_265;
+            unreachable;
         });
         unreachable;
     };
@@ -4407,6 +4648,7 @@ condition: `{pi:*^10.2}` == \"***3.14***\"
         __local_268 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 15, precision: -1, indent: 0, buf: ref.as_non_null(__local_267) };
         f64::fmt_into(3.14159, __local_268);
         break __tmpl: __local_267;
+        unreachable;
     }, String { repr: array.new_data<u8>("        3.14159"), used: 15 });
     if __cond_53 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4425,6 +4667,7 @@ condition: `{pi:*^10.2}` == \"***3.14***\"
 condition: `{pi:>15}` == \"        3.14159\"
 "), used: 44 });
             break __tmpl: __local_269;
+            unreachable;
         });
         unreachable;
     };
@@ -4433,6 +4676,7 @@ condition: `{pi:>15}` == \"        3.14159\"
         __local_272 = Formatter { fill: 32, align: 0, sign_plus: 0, zero_pad: 0, width: 15, precision: -1, indent: 0, buf: ref.as_non_null(__local_271) };
         f64::fmt_into(3.14159, __local_272);
         break __tmpl: __local_271;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14159        "), used: 15 });
     if __cond_54 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4451,6 +4695,7 @@ condition: `{pi:>15}` == \"        3.14159\"
 condition: `{pi:<15}` == \"3.14159        \"
 "), used: 44 });
             break __tmpl: __local_273;
+            unreachable;
         });
         unreachable;
     };
@@ -4460,6 +4705,7 @@ condition: `{pi:<15}` == \"3.14159        \"
         __local_815 = __local_276;
         f64::fmt_exp(3.14159, __local_815.precision, 0, __local_815);
         break __tmpl: __local_275;
+        unreachable;
     }, String { repr: array.new_data<u8>("      3.14159e0"), used: 15 });
     if __cond_55 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4478,6 +4724,7 @@ condition: `{pi:<15}` == \"3.14159        \"
 condition: `{pi:>15e}` == \"      3.14159e0\"
 "), used: 45 });
             break __tmpl: __local_277;
+            unreachable;
         });
         unreachable;
     };
@@ -4487,6 +4734,7 @@ condition: `{pi:>15e}` == \"      3.14159e0\"
         __local_824 = __local_280;
         f64::fmt_exp(3.14159, __local_824.precision, 0, __local_824);
         break __tmpl: __local_279;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14159e0      "), used: 15 });
     if __cond_56 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4505,6 +4753,7 @@ condition: `{pi:>15e}` == \"      3.14159e0\"
 condition: `{pi:<15e}` == \"3.14159e0      \"
 "), used: 45 });
             break __tmpl: __local_281;
+            unreachable;
         });
         unreachable;
     };
@@ -4514,6 +4763,7 @@ condition: `{pi:<15e}` == \"3.14159e0      \"
         __local_833 = __local_284;
         f64::fmt_exp(-2.71828, __local_833.precision, 0, __local_833);
         break __tmpl: __local_283;
+        unreachable;
     }, String { repr: array.new_data<u8>("     -2.71828e0"), used: 15 });
     if __cond_57 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4532,6 +4782,7 @@ condition: `{pi:<15e}` == \"3.14159e0      \"
 condition: `{neg:>15e}` == \"     -2.71828e0\"
 "), used: 46 });
             break __tmpl: __local_285;
+            unreachable;
         });
         unreachable;
     };
@@ -4541,6 +4792,7 @@ condition: `{neg:>15e}` == \"     -2.71828e0\"
         __local_842 = __local_288;
         f64::fmt_exp(-2.71828, __local_842.precision, 0, __local_842);
         break __tmpl: __local_287;
+        unreachable;
     }, String { repr: array.new_data<u8>("-2.71828e0     "), used: 15 });
     if __cond_58 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4559,6 +4811,7 @@ condition: `{neg:>15e}` == \"     -2.71828e0\"
 condition: `{neg:<15e}` == \"-2.71828e0     \"
 "), used: 46 });
             break __tmpl: __local_289;
+            unreachable;
         });
         unreachable;
     };
@@ -4568,6 +4821,7 @@ condition: `{neg:<15e}` == \"-2.71828e0     \"
         __local_292 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: ref.as_non_null(__local_291) };
         f32::fmt_into(f, __local_292);
         break __tmpl: __local_291;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.14"), used: 4 });
     if __cond_60 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4586,6 +4840,7 @@ condition: `{neg:<15e}` == \"-2.71828e0     \"
 condition: `{f:.2}` == \"3.14\"
 "), used: 31 });
             break __tmpl: __local_293;
+            unreachable;
         });
         unreachable;
     };
@@ -4594,6 +4849,7 @@ condition: `{f:.2}` == \"3.14\"
         __local_296 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 4, indent: 0, buf: ref.as_non_null(__local_295) };
         f32::fmt_into(f, __local_296);
         break __tmpl: __local_295;
+        unreachable;
     }, String { repr: array.new_data<u8>("3.1400"), used: 6 });
     if __cond_61 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4612,6 +4868,7 @@ condition: `{f:.2}` == \"3.14\"
 condition: `{f:.4}` == \"3.1400\"
 "), used: 33 });
             break __tmpl: __local_297;
+            unreachable;
         });
         unreachable;
     };
@@ -4621,6 +4878,7 @@ condition: `{f:.4}` == \"3.1400\"
         __local_300 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 1, indent: 0, buf: ref.as_non_null(__local_299) };
         f32::fmt_into(f2, __local_300);
         break __tmpl: __local_299;
+        unreachable;
     }, String { repr: array.new_data<u8>("2.5"), used: 3 });
     if __cond_63 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4639,6 +4897,7 @@ condition: `{f:.4}` == \"3.1400\"
 condition: `{f2:.1}` == \"2.5\"
 "), used: 31 });
             break __tmpl: __local_301;
+            unreachable;
         });
         unreachable;
     };
@@ -4647,6 +4906,7 @@ condition: `{f2:.1}` == \"2.5\"
         __local_304 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 3, indent: 0, buf: ref.as_non_null(__local_303) };
         f32::fmt_into(f2, __local_304);
         break __tmpl: __local_303;
+        unreachable;
     }, String { repr: array.new_data<u8>("2.500"), used: 5 });
     if __cond_64 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4665,6 +4925,7 @@ condition: `{f2:.1}` == \"2.5\"
 condition: `{f2:.3}` == \"2.500\"
 "), used: 33 });
             break __tmpl: __local_305;
+            unreachable;
         });
         unreachable;
     };
@@ -4676,6 +4937,7 @@ condition: `{f2:.3}` == \"2.500\"
         __local_892 = builtin::f64_promote_f32(f2);
         f64::fmt_exp(__local_892, __local_889, 0, __local_887);
         break __tmpl: __local_307;
+        unreachable;
     }, String { repr: array.new_data<u8>("2.5e0"), used: 5 });
     if __cond_65 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4694,6 +4956,7 @@ condition: `{f2:.3}` == \"2.500\"
 condition: `{f2:.1e}` == \"2.5e0\"
 "), used: 34 });
             break __tmpl: __local_309;
+            unreachable;
         });
         unreachable;
     };
@@ -4705,6 +4968,7 @@ condition: `{f2:.1e}` == \"2.5e0\"
         __local_906 = builtin::f64_promote_f32(f2);
         f64::fmt_exp(__local_906, __local_903, 1, __local_901);
         break __tmpl: __local_311;
+        unreachable;
     }, String { repr: array.new_data<u8>("2.5E0"), used: 5 });
     if __cond_66 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4723,6 +4987,7 @@ condition: `{f2:.1e}` == \"2.5e0\"
 condition: `{f2:.1E}` == \"2.5E0\"
 "), used: 34 });
             break __tmpl: __local_313;
+            unreachable;
         });
         unreachable;
     };
@@ -4734,6 +4999,7 @@ condition: `{f2:.1E}` == \"2.5E0\"
         __local_921 = builtin::f64_promote_f32(f2);
         f64::fmt_exp(__local_921, __local_918, 0, __local_916);
         break __tmpl: __local_315;
+        unreachable;
     }, String { repr: array.new_data<u8>("2.5e0"), used: 5 });
     if __cond_67 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4752,6 +5018,7 @@ condition: `{f2:.1E}` == \"2.5E0\"
 condition: `{f2:e}` == \"2.5e0\"
 "), used: 32 });
             break __tmpl: __local_317;
+            unreachable;
         });
         unreachable;
     };
@@ -4761,6 +5028,7 @@ condition: `{f2:e}` == \"2.5e0\"
         __local_320 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: ref.as_non_null(__local_319) };
         f32::fmt_into(fz, __local_320);
         break __tmpl: __local_319;
+        unreachable;
     }, String { repr: array.new_data<u8>("0.00"), used: 4 });
     if __cond_69 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4779,6 +5047,7 @@ condition: `{f2:e}` == \"2.5e0\"
 condition: `{fz:.2}` == \"0.00\"
 "), used: 32 });
             break __tmpl: __local_321;
+            unreachable;
         });
         unreachable;
     };
@@ -4790,6 +5059,7 @@ condition: `{fz:.2}` == \"0.00\"
         __local_945 = builtin::f64_promote_f32(fz);
         f64::fmt_exp(__local_945, __local_942, 0, __local_940);
         break __tmpl: __local_323;
+        unreachable;
     }, String { repr: array.new_data<u8>("0e0"), used: 3 });
     if __cond_70 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4808,6 +5078,7 @@ condition: `{fz:.2}` == \"0.00\"
 condition: `{fz:e}` == \"0e0\"
 "), used: 30 });
             break __tmpl: __local_325;
+            unreachable;
         });
         unreachable;
     };
@@ -4817,6 +5088,7 @@ condition: `{fz:e}` == \"0e0\"
         __local_954 = __local_328;
         f64::fmt_exp(3.14159, __local_954.precision, 0, __local_954);
         break __tmpl: __local_327;
+        unreachable;
     }, String { repr: array.new_data<u8>("3e0"), used: 3 });
     if __cond_71 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4835,6 +5107,7 @@ condition: `{fz:e}` == \"0e0\"
 condition: `{pi:.0e}` == \"3e0\"
 "), used: 32 });
             break __tmpl: __local_329;
+            unreachable;
         });
         unreachable;
     };
@@ -4844,6 +5117,7 @@ condition: `{pi:.0e}` == \"3e0\"
         __local_963 = __local_332;
         f64::fmt_exp(123456.789, __local_963.precision, 0, __local_963);
         break __tmpl: __local_331;
+        unreachable;
     }, String { repr: array.new_data<u8>("1e5"), used: 3 });
     if __cond_72 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4862,6 +5136,7 @@ condition: `{pi:.0e}` == \"3e0\"
 condition: `{large:.0e}` == \"1e5\"
 "), used: 35 });
             break __tmpl: __local_333;
+            unreachable;
         });
         unreachable;
     };
@@ -4870,6 +5145,7 @@ condition: `{large:.0e}` == \"1e5\"
         __local_336 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: ref.as_non_null(__local_335) };
         f64::fmt_into(-0, __local_336);
         break __tmpl: __local_335;
+        unreachable;
     }, String { repr: array.new_data<u8>("-0.00"), used: 5 });
     if __cond_73 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4888,6 +5164,7 @@ condition: `{large:.0e}` == \"1e5\"
 condition: `{-0.0:.2}` == \"-0.00\"
 "), used: 35 });
             break __tmpl: __local_337;
+            unreachable;
         });
         unreachable;
     };
@@ -4896,6 +5173,7 @@ condition: `{-0.0:.2}` == \"-0.00\"
         __local_340 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 10, indent: 0, buf: ref.as_non_null(__local_339) };
         f64::fmt_into(1, __local_340);
         break __tmpl: __local_339;
+        unreachable;
     }, String { repr: array.new_data<u8>("1.0000000000"), used: 12 });
     if __cond_74 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -4914,6 +5192,7 @@ condition: `{-0.0:.2}` == \"-0.00\"
 condition: `{1.0:.10}` == \"1.0000000000\"
 "), used: 42 });
             break __tmpl: __local_341;
+            unreachable;
         });
         unreachable;
     };
@@ -5131,6 +5410,7 @@ fn test_fts_precision() with Stdout {
         __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 1, indent: 0, buf: ref.as_non_null(__local_10) };
         f64::fmt_into(0.582307589706, __local_11);
         break __tmpl: __local_10;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_12 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5142,6 +5422,7 @@ fn test_fts_precision() with Stdout {
         __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__local_12) };
         f64::fmt_into(0.582307589706, __local_13);
         break __tmpl: __local_12;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_14 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5153,6 +5434,7 @@ fn test_fts_precision() with Stdout {
         __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 3, indent: 0, buf: ref.as_non_null(__local_14) };
         f64::fmt_into(0.582307589706, __local_15);
         break __tmpl: __local_14;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_16 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5164,6 +5446,7 @@ fn test_fts_precision() with Stdout {
         __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: ref.as_non_null(__local_16) };
         f64::fmt_into(0.582307589706, __local_17);
         break __tmpl: __local_16;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_18 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5175,6 +5458,7 @@ fn test_fts_precision() with Stdout {
         __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 5, indent: 0, buf: ref.as_non_null(__local_18) };
         f64::fmt_into(0.582307589706, __local_19);
         break __tmpl: __local_18;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_20 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5186,6 +5470,7 @@ fn test_fts_precision() with Stdout {
         __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: ref.as_non_null(__local_20) };
         f64::fmt_into(0.582307589706, __local_21);
         break __tmpl: __local_20;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_22 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5197,6 +5482,7 @@ fn test_fts_precision() with Stdout {
         __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 7, indent: 0, buf: ref.as_non_null(__local_22) };
         f64::fmt_into(0.582307589706, __local_23);
         break __tmpl: __local_22;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_24 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5208,6 +5494,7 @@ fn test_fts_precision() with Stdout {
         __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 8, indent: 0, buf: ref.as_non_null(__local_24) };
         f64::fmt_into(0.582307589706, __local_25);
         break __tmpl: __local_24;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_26 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5219,6 +5506,7 @@ fn test_fts_precision() with Stdout {
         __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 9, indent: 0, buf: ref.as_non_null(__local_26) };
         f64::fmt_into(0.582307589706, __local_27);
         break __tmpl: __local_26;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_28 = String { repr: builtin::array_new<u8>(22), used: 0 };
@@ -5231,6 +5519,7 @@ fn test_fts_precision() with Stdout {
         __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 10, indent: 0, buf: ref.as_non_null(__local_28) };
         f64::fmt_into(0.582307589706, __local_29);
         break __tmpl: __local_28;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_30 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5242,6 +5531,7 @@ fn test_fts_precision() with Stdout {
         __local_31 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 1, indent: 0, buf: ref.as_non_null(__local_30) };
         f64::fmt_into(0.001234567, __local_31);
         break __tmpl: __local_30;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_32 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5253,6 +5543,7 @@ fn test_fts_precision() with Stdout {
         __local_33 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__local_32) };
         f64::fmt_into(0.001234567, __local_33);
         break __tmpl: __local_32;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_34 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5264,6 +5555,7 @@ fn test_fts_precision() with Stdout {
         __local_35 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 3, indent: 0, buf: ref.as_non_null(__local_34) };
         f64::fmt_into(0.001234567, __local_35);
         break __tmpl: __local_34;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_36 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5275,6 +5567,7 @@ fn test_fts_precision() with Stdout {
         __local_37 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: ref.as_non_null(__local_36) };
         f64::fmt_into(0.001234567, __local_37);
         break __tmpl: __local_36;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_38 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5286,6 +5579,7 @@ fn test_fts_precision() with Stdout {
         __local_39 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 5, indent: 0, buf: ref.as_non_null(__local_38) };
         f64::fmt_into(0.001234567, __local_39);
         break __tmpl: __local_38;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_40 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5297,6 +5591,7 @@ fn test_fts_precision() with Stdout {
         __local_41 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: ref.as_non_null(__local_40) };
         f64::fmt_into(0.001234567, __local_41);
         break __tmpl: __local_40;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_42 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5308,6 +5603,7 @@ fn test_fts_precision() with Stdout {
         __local_43 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 7, indent: 0, buf: ref.as_non_null(__local_42) };
         f64::fmt_into(0.001234567, __local_43);
         break __tmpl: __local_42;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_44 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5319,6 +5615,7 @@ fn test_fts_precision() with Stdout {
         __local_45 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 8, indent: 0, buf: ref.as_non_null(__local_44) };
         f64::fmt_into(0.001234567, __local_45);
         break __tmpl: __local_44;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_46 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5330,6 +5627,7 @@ fn test_fts_precision() with Stdout {
         __local_47 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 9, indent: 0, buf: ref.as_non_null(__local_46) };
         f64::fmt_into(0.001234567, __local_47);
         break __tmpl: __local_46;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_48 = String { repr: builtin::array_new<u8>(22), used: 0 };
@@ -5342,6 +5640,7 @@ fn test_fts_precision() with Stdout {
         __local_49 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 10, indent: 0, buf: ref.as_non_null(__local_48) };
         f64::fmt_into(0.001234567, __local_49);
         break __tmpl: __local_48;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_50 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5353,6 +5652,7 @@ fn test_fts_precision() with Stdout {
         __local_51 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 1, indent: 0, buf: ref.as_non_null(__local_50) };
         f64::fmt_into(3.14159265358979, __local_51);
         break __tmpl: __local_50;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_52 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5364,6 +5664,7 @@ fn test_fts_precision() with Stdout {
         __local_53 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__local_52) };
         f64::fmt_into(3.14159265358979, __local_53);
         break __tmpl: __local_52;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_54 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5375,6 +5676,7 @@ fn test_fts_precision() with Stdout {
         __local_55 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 3, indent: 0, buf: ref.as_non_null(__local_54) };
         f64::fmt_into(3.14159265358979, __local_55);
         break __tmpl: __local_54;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_56 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5386,6 +5688,7 @@ fn test_fts_precision() with Stdout {
         __local_57 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: ref.as_non_null(__local_56) };
         f64::fmt_into(3.14159265358979, __local_57);
         break __tmpl: __local_56;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_58 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5397,6 +5700,7 @@ fn test_fts_precision() with Stdout {
         __local_59 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 5, indent: 0, buf: ref.as_non_null(__local_58) };
         f64::fmt_into(3.14159265358979, __local_59);
         break __tmpl: __local_58;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_60 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5408,6 +5712,7 @@ fn test_fts_precision() with Stdout {
         __local_61 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: ref.as_non_null(__local_60) };
         f64::fmt_into(3.14159265358979, __local_61);
         break __tmpl: __local_60;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_62 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5419,6 +5724,7 @@ fn test_fts_precision() with Stdout {
         __local_63 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 7, indent: 0, buf: ref.as_non_null(__local_62) };
         f64::fmt_into(3.14159265358979, __local_63);
         break __tmpl: __local_62;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_64 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5430,6 +5736,7 @@ fn test_fts_precision() with Stdout {
         __local_65 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 8, indent: 0, buf: ref.as_non_null(__local_64) };
         f64::fmt_into(3.14159265358979, __local_65);
         break __tmpl: __local_64;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_66 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5441,6 +5748,7 @@ fn test_fts_precision() with Stdout {
         __local_67 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 9, indent: 0, buf: ref.as_non_null(__local_66) };
         f64::fmt_into(3.14159265358979, __local_67);
         break __tmpl: __local_66;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_68 = String { repr: builtin::array_new<u8>(22), used: 0 };
@@ -5453,6 +5761,7 @@ fn test_fts_precision() with Stdout {
         __local_69 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 10, indent: 0, buf: ref.as_non_null(__local_68) };
         f64::fmt_into(3.14159265358979, __local_69);
         break __tmpl: __local_68;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_70 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5464,6 +5773,7 @@ fn test_fts_precision() with Stdout {
         __local_71 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 1, indent: 0, buf: ref.as_non_null(__local_70) };
         f64::fmt_into(99.999999, __local_71);
         break __tmpl: __local_70;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_72 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5475,6 +5785,7 @@ fn test_fts_precision() with Stdout {
         __local_73 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__local_72) };
         f64::fmt_into(99.999999, __local_73);
         break __tmpl: __local_72;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_74 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5486,6 +5797,7 @@ fn test_fts_precision() with Stdout {
         __local_75 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 3, indent: 0, buf: ref.as_non_null(__local_74) };
         f64::fmt_into(99.999999, __local_75);
         break __tmpl: __local_74;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_76 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5497,6 +5809,7 @@ fn test_fts_precision() with Stdout {
         __local_77 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: ref.as_non_null(__local_76) };
         f64::fmt_into(99.999999, __local_77);
         break __tmpl: __local_76;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_78 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5508,6 +5821,7 @@ fn test_fts_precision() with Stdout {
         __local_79 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 5, indent: 0, buf: ref.as_non_null(__local_78) };
         f64::fmt_into(99.999999, __local_79);
         break __tmpl: __local_78;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_80 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5519,6 +5833,7 @@ fn test_fts_precision() with Stdout {
         __local_81 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: ref.as_non_null(__local_80) };
         f64::fmt_into(99.999999, __local_81);
         break __tmpl: __local_80;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_82 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5530,6 +5845,7 @@ fn test_fts_precision() with Stdout {
         __local_83 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 7, indent: 0, buf: ref.as_non_null(__local_82) };
         f64::fmt_into(99.999999, __local_83);
         break __tmpl: __local_82;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_84 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5541,6 +5857,7 @@ fn test_fts_precision() with Stdout {
         __local_85 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 8, indent: 0, buf: ref.as_non_null(__local_84) };
         f64::fmt_into(99.999999, __local_85);
         break __tmpl: __local_84;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_86 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5552,6 +5869,7 @@ fn test_fts_precision() with Stdout {
         __local_87 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 9, indent: 0, buf: ref.as_non_null(__local_86) };
         f64::fmt_into(99.999999, __local_87);
         break __tmpl: __local_86;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_88 = String { repr: builtin::array_new<u8>(22), used: 0 };
@@ -5564,6 +5882,7 @@ fn test_fts_precision() with Stdout {
         __local_89 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 10, indent: 0, buf: ref.as_non_null(__local_88) };
         f64::fmt_into(99.999999, __local_89);
         break __tmpl: __local_88;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_90 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5575,6 +5894,7 @@ fn test_fts_precision() with Stdout {
         __local_91 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 1, indent: 0, buf: ref.as_non_null(__local_90) };
         f64::fmt_into(0.9999995, __local_91);
         break __tmpl: __local_90;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_92 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5586,6 +5906,7 @@ fn test_fts_precision() with Stdout {
         __local_93 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__local_92) };
         f64::fmt_into(0.9999995, __local_93);
         break __tmpl: __local_92;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_94 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5597,6 +5918,7 @@ fn test_fts_precision() with Stdout {
         __local_95 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 3, indent: 0, buf: ref.as_non_null(__local_94) };
         f64::fmt_into(0.9999995, __local_95);
         break __tmpl: __local_94;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_96 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5608,6 +5930,7 @@ fn test_fts_precision() with Stdout {
         __local_97 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: ref.as_non_null(__local_96) };
         f64::fmt_into(0.9999995, __local_97);
         break __tmpl: __local_96;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_98 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5619,6 +5942,7 @@ fn test_fts_precision() with Stdout {
         __local_99 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 5, indent: 0, buf: ref.as_non_null(__local_98) };
         f64::fmt_into(0.9999995, __local_99);
         break __tmpl: __local_98;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_100 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5630,6 +5954,7 @@ fn test_fts_precision() with Stdout {
         __local_101 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: ref.as_non_null(__local_100) };
         f64::fmt_into(0.9999995, __local_101);
         break __tmpl: __local_100;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_102 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5641,6 +5966,7 @@ fn test_fts_precision() with Stdout {
         __local_103 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 7, indent: 0, buf: ref.as_non_null(__local_102) };
         f64::fmt_into(0.9999995, __local_103);
         break __tmpl: __local_102;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_104 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5652,6 +5978,7 @@ fn test_fts_precision() with Stdout {
         __local_105 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 8, indent: 0, buf: ref.as_non_null(__local_104) };
         f64::fmt_into(0.9999995, __local_105);
         break __tmpl: __local_104;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_106 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5663,6 +5990,7 @@ fn test_fts_precision() with Stdout {
         __local_107 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 9, indent: 0, buf: ref.as_non_null(__local_106) };
         f64::fmt_into(0.9999995, __local_107);
         break __tmpl: __local_106;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_108 = String { repr: builtin::array_new<u8>(22), used: 0 };
@@ -5675,6 +6003,7 @@ fn test_fts_precision() with Stdout {
         __local_109 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 10, indent: 0, buf: ref.as_non_null(__local_108) };
         f64::fmt_into(0.9999995, __local_109);
         break __tmpl: __local_108;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_110 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5686,6 +6015,7 @@ fn test_fts_precision() with Stdout {
         __local_111 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 1, indent: 0, buf: ref.as_non_null(__local_110) };
         f64::fmt_into(0.5, __local_111);
         break __tmpl: __local_110;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_112 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5697,6 +6027,7 @@ fn test_fts_precision() with Stdout {
         __local_113 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__local_112) };
         f64::fmt_into(0.5, __local_113);
         break __tmpl: __local_112;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_114 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5708,6 +6039,7 @@ fn test_fts_precision() with Stdout {
         __local_115 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 3, indent: 0, buf: ref.as_non_null(__local_114) };
         f64::fmt_into(0.5, __local_115);
         break __tmpl: __local_114;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_116 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5719,6 +6051,7 @@ fn test_fts_precision() with Stdout {
         __local_117 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: ref.as_non_null(__local_116) };
         f64::fmt_into(0.5, __local_117);
         break __tmpl: __local_116;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_118 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5730,6 +6063,7 @@ fn test_fts_precision() with Stdout {
         __local_119 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 5, indent: 0, buf: ref.as_non_null(__local_118) };
         f64::fmt_into(0.5, __local_119);
         break __tmpl: __local_118;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_120 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5741,6 +6075,7 @@ fn test_fts_precision() with Stdout {
         __local_121 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: ref.as_non_null(__local_120) };
         f64::fmt_into(0.5, __local_121);
         break __tmpl: __local_120;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_122 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5752,6 +6087,7 @@ fn test_fts_precision() with Stdout {
         __local_123 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 7, indent: 0, buf: ref.as_non_null(__local_122) };
         f64::fmt_into(0.5, __local_123);
         break __tmpl: __local_122;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_124 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5763,6 +6099,7 @@ fn test_fts_precision() with Stdout {
         __local_125 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 8, indent: 0, buf: ref.as_non_null(__local_124) };
         f64::fmt_into(0.5, __local_125);
         break __tmpl: __local_124;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_126 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5774,6 +6111,7 @@ fn test_fts_precision() with Stdout {
         __local_127 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 9, indent: 0, buf: ref.as_non_null(__local_126) };
         f64::fmt_into(0.5, __local_127);
         break __tmpl: __local_126;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_128 = String { repr: builtin::array_new<u8>(22), used: 0 };
@@ -5786,6 +6124,7 @@ fn test_fts_precision() with Stdout {
         __local_129 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 10, indent: 0, buf: ref.as_non_null(__local_128) };
         f64::fmt_into(0.5, __local_129);
         break __tmpl: __local_128;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_130 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5797,6 +6136,7 @@ fn test_fts_precision() with Stdout {
         __local_131 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 1, indent: 0, buf: ref.as_non_null(__local_130) };
         f64::fmt_into(0.000009876, __local_131);
         break __tmpl: __local_130;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_132 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5808,6 +6148,7 @@ fn test_fts_precision() with Stdout {
         __local_133 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__local_132) };
         f64::fmt_into(0.000009876, __local_133);
         break __tmpl: __local_132;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_134 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5819,6 +6160,7 @@ fn test_fts_precision() with Stdout {
         __local_135 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 3, indent: 0, buf: ref.as_non_null(__local_134) };
         f64::fmt_into(0.000009876, __local_135);
         break __tmpl: __local_134;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_136 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5830,6 +6172,7 @@ fn test_fts_precision() with Stdout {
         __local_137 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: ref.as_non_null(__local_136) };
         f64::fmt_into(0.000009876, __local_137);
         break __tmpl: __local_136;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_138 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5841,6 +6184,7 @@ fn test_fts_precision() with Stdout {
         __local_139 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 5, indent: 0, buf: ref.as_non_null(__local_138) };
         f64::fmt_into(0.000009876, __local_139);
         break __tmpl: __local_138;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_140 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5852,6 +6196,7 @@ fn test_fts_precision() with Stdout {
         __local_141 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: ref.as_non_null(__local_140) };
         f64::fmt_into(0.000009876, __local_141);
         break __tmpl: __local_140;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_142 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5863,6 +6208,7 @@ fn test_fts_precision() with Stdout {
         __local_143 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 7, indent: 0, buf: ref.as_non_null(__local_142) };
         f64::fmt_into(0.000009876, __local_143);
         break __tmpl: __local_142;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_144 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5874,6 +6220,7 @@ fn test_fts_precision() with Stdout {
         __local_145 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 8, indent: 0, buf: ref.as_non_null(__local_144) };
         f64::fmt_into(0.000009876, __local_145);
         break __tmpl: __local_144;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_146 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5885,6 +6232,7 @@ fn test_fts_precision() with Stdout {
         __local_147 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 9, indent: 0, buf: ref.as_non_null(__local_146) };
         f64::fmt_into(0.000009876, __local_147);
         break __tmpl: __local_146;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_148 = String { repr: builtin::array_new<u8>(22), used: 0 };
@@ -5897,6 +6245,7 @@ fn test_fts_precision() with Stdout {
         __local_149 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 10, indent: 0, buf: ref.as_non_null(__local_148) };
         f64::fmt_into(0.000009876, __local_149);
         break __tmpl: __local_148;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_150 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5908,6 +6257,7 @@ fn test_fts_precision() with Stdout {
         __local_151 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 1, indent: 0, buf: ref.as_non_null(__local_150) };
         f64::fmt_into(-0.582307589706, __local_151);
         break __tmpl: __local_150;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_152 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5919,6 +6269,7 @@ fn test_fts_precision() with Stdout {
         __local_153 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__local_152) };
         f64::fmt_into(-0.582307589706, __local_153);
         break __tmpl: __local_152;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_154 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5930,6 +6281,7 @@ fn test_fts_precision() with Stdout {
         __local_155 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 3, indent: 0, buf: ref.as_non_null(__local_154) };
         f64::fmt_into(-0.582307589706, __local_155);
         break __tmpl: __local_154;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_156 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5941,6 +6293,7 @@ fn test_fts_precision() with Stdout {
         __local_157 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: ref.as_non_null(__local_156) };
         f64::fmt_into(-0.582307589706, __local_157);
         break __tmpl: __local_156;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_158 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5952,6 +6305,7 @@ fn test_fts_precision() with Stdout {
         __local_159 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 5, indent: 0, buf: ref.as_non_null(__local_158) };
         f64::fmt_into(-0.582307589706, __local_159);
         break __tmpl: __local_158;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_160 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5963,6 +6317,7 @@ fn test_fts_precision() with Stdout {
         __local_161 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: ref.as_non_null(__local_160) };
         f64::fmt_into(-0.582307589706, __local_161);
         break __tmpl: __local_160;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_162 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5974,6 +6329,7 @@ fn test_fts_precision() with Stdout {
         __local_163 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 7, indent: 0, buf: ref.as_non_null(__local_162) };
         f64::fmt_into(-0.582307589706, __local_163);
         break __tmpl: __local_162;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_164 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5985,6 +6341,7 @@ fn test_fts_precision() with Stdout {
         __local_165 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 8, indent: 0, buf: ref.as_non_null(__local_164) };
         f64::fmt_into(-0.582307589706, __local_165);
         break __tmpl: __local_164;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_166 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -5996,6 +6353,7 @@ fn test_fts_precision() with Stdout {
         __local_167 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 9, indent: 0, buf: ref.as_non_null(__local_166) };
         f64::fmt_into(-0.582307589706, __local_167);
         break __tmpl: __local_166;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_168 = String { repr: builtin::array_new<u8>(22), used: 0 };
@@ -6008,6 +6366,7 @@ fn test_fts_precision() with Stdout {
         __local_169 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 10, indent: 0, buf: ref.as_non_null(__local_168) };
         f64::fmt_into(-0.582307589706, __local_169);
         break __tmpl: __local_168;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_170 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6019,6 +6378,7 @@ fn test_fts_precision() with Stdout {
         __local_171 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 1, indent: 0, buf: ref.as_non_null(__local_170) };
         f64::fmt_into(-3.14159265358979, __local_171);
         break __tmpl: __local_170;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_172 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6030,6 +6390,7 @@ fn test_fts_precision() with Stdout {
         __local_173 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__local_172) };
         f64::fmt_into(-3.14159265358979, __local_173);
         break __tmpl: __local_172;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_174 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6041,6 +6402,7 @@ fn test_fts_precision() with Stdout {
         __local_175 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 3, indent: 0, buf: ref.as_non_null(__local_174) };
         f64::fmt_into(-3.14159265358979, __local_175);
         break __tmpl: __local_174;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_176 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6052,6 +6414,7 @@ fn test_fts_precision() with Stdout {
         __local_177 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: ref.as_non_null(__local_176) };
         f64::fmt_into(-3.14159265358979, __local_177);
         break __tmpl: __local_176;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_178 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6063,6 +6426,7 @@ fn test_fts_precision() with Stdout {
         __local_179 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 5, indent: 0, buf: ref.as_non_null(__local_178) };
         f64::fmt_into(-3.14159265358979, __local_179);
         break __tmpl: __local_178;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_180 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6074,6 +6438,7 @@ fn test_fts_precision() with Stdout {
         __local_181 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: ref.as_non_null(__local_180) };
         f64::fmt_into(-3.14159265358979, __local_181);
         break __tmpl: __local_180;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_182 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6085,6 +6450,7 @@ fn test_fts_precision() with Stdout {
         __local_183 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 7, indent: 0, buf: ref.as_non_null(__local_182) };
         f64::fmt_into(-3.14159265358979, __local_183);
         break __tmpl: __local_182;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_184 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6096,6 +6462,7 @@ fn test_fts_precision() with Stdout {
         __local_185 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 8, indent: 0, buf: ref.as_non_null(__local_184) };
         f64::fmt_into(-3.14159265358979, __local_185);
         break __tmpl: __local_184;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_186 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6107,6 +6474,7 @@ fn test_fts_precision() with Stdout {
         __local_187 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 9, indent: 0, buf: ref.as_non_null(__local_186) };
         f64::fmt_into(-3.14159265358979, __local_187);
         break __tmpl: __local_186;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_188 = String { repr: builtin::array_new<u8>(22), used: 0 };
@@ -6119,6 +6487,7 @@ fn test_fts_precision() with Stdout {
         __local_189 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 10, indent: 0, buf: ref.as_non_null(__local_188) };
         f64::fmt_into(-3.14159265358979, __local_189);
         break __tmpl: __local_188;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_190 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6130,6 +6499,7 @@ fn test_fts_precision() with Stdout {
         __local_191 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 1, indent: 0, buf: ref.as_non_null(__local_190) };
         f64::fmt_into(-0.001234567, __local_191);
         break __tmpl: __local_190;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_192 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6141,6 +6511,7 @@ fn test_fts_precision() with Stdout {
         __local_193 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__local_192) };
         f64::fmt_into(-0.001234567, __local_193);
         break __tmpl: __local_192;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_194 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6152,6 +6523,7 @@ fn test_fts_precision() with Stdout {
         __local_195 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 3, indent: 0, buf: ref.as_non_null(__local_194) };
         f64::fmt_into(-0.001234567, __local_195);
         break __tmpl: __local_194;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_196 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6163,6 +6535,7 @@ fn test_fts_precision() with Stdout {
         __local_197 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: ref.as_non_null(__local_196) };
         f64::fmt_into(-0.001234567, __local_197);
         break __tmpl: __local_196;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_198 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6174,6 +6547,7 @@ fn test_fts_precision() with Stdout {
         __local_199 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 5, indent: 0, buf: ref.as_non_null(__local_198) };
         f64::fmt_into(-0.001234567, __local_199);
         break __tmpl: __local_198;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_200 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6185,6 +6559,7 @@ fn test_fts_precision() with Stdout {
         __local_201 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: ref.as_non_null(__local_200) };
         f64::fmt_into(-0.001234567, __local_201);
         break __tmpl: __local_200;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_202 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6196,6 +6571,7 @@ fn test_fts_precision() with Stdout {
         __local_203 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 7, indent: 0, buf: ref.as_non_null(__local_202) };
         f64::fmt_into(-0.001234567, __local_203);
         break __tmpl: __local_202;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_204 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6207,6 +6583,7 @@ fn test_fts_precision() with Stdout {
         __local_205 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 8, indent: 0, buf: ref.as_non_null(__local_204) };
         f64::fmt_into(-0.001234567, __local_205);
         break __tmpl: __local_204;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_206 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -6218,6 +6595,7 @@ fn test_fts_precision() with Stdout {
         __local_207 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 9, indent: 0, buf: ref.as_non_null(__local_206) };
         f64::fmt_into(-0.001234567, __local_207);
         break __tmpl: __local_206;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_208 = String { repr: builtin::array_new<u8>(22), used: 0 };
@@ -6230,6 +6608,7 @@ fn test_fts_precision() with Stdout {
         __local_209 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 10, indent: 0, buf: ref.as_non_null(__local_208) };
         f64::fmt_into(-0.001234567, __local_209);
         break __tmpl: __local_208;
+        unreachable;
     });
 }
 
@@ -6347,6 +6726,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -6430,6 +6810,7 @@ fn unpack64(f) {
     let e: i32;
     bits = __inline_f64__to_bits_0: block -> i64 {
         break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(f);
+        unreachable;
     };
     raw_mantissa = bits & 4503599627370495_i64;
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
@@ -6456,6 +6837,7 @@ fn unpack32(f) {
     let e: i32;
     bits = __inline_f32__to_bits_0: block -> i32 {
         break __inline_f32__to_bits_0: builtin::i32_reinterpret_f32(f);
+        unreachable;
     };
     raw_mantissa = builtin::i64_extend_i32_u(bits & 8388607);
     raw_exp = (bits >>u 23) & 255;
@@ -6740,9 +7122,9 @@ fn mul_pow10(p) {
         top_lo = top_lo << 1_i64;
     };
     if top_lo != 0_i64 {
-        return top_hi + 1_i64; 0_i64 - top_lo;
+        return PmHiLo { hi: top_hi + 1_i64, lo: 0_i64 - top_lo };
     };
-    return top_hi; 0_i64;
+    return PmHiLo { hi: top_hi, lo: 0_i64 };
 }
 
 fn uscale(x, pm_hi, pm_lo, s) {
@@ -6776,6 +7158,7 @@ fn fixed_width(f, n) {
     let e: i32;
     let p: i32;
     let lp: i32;
+    let pm: ref PmHiLo;
     let s: i32;
     let u: u64;
     let d: u64;
@@ -6815,6 +7198,7 @@ condition: n <= 18
             i32::fmt_decimal(n, __local_23);
             String::append_char(__local_13, 10);
             break __tmpl: __local_13;
+            unreachable;
         });
         unreachable;
     };
@@ -6826,13 +7210,12 @@ condition: n <= 18
     p = (n - 1) - __inline_log10_pow2_7: block -> i32 {
         __local_26 = e + 63;
         break __inline_log10_pow2_7: (__local_26 * 78913) >> 18;
+        unreachable;
     };
     lp = (p * 108853) >> 15;
-    let __sroa_pm_hi: u64;
-    let __sroa_pm_lo: u64;
-    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(p);
+    pm = mul_pow10(p);
     s = 0 - ((e + lp) + 3);
-    u = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
+    u = uscale(m, pm.hi, pm.lo, s);
     d = ((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64;
     if d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
         __local_32 = POW10;
@@ -6841,10 +7224,12 @@ condition: n <= 18
             unreachable;
         };
         break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_32.repr, n);
+        unreachable;
     } {
         d = __inline_unrounded_round_12: block -> u64 {
             __local_31 = unrounded_div(u, 10_i64);
             break __inline_unrounded_round_12: ((__local_31 + 1_i64) + ((__local_31 >>u 2_i64) & 1_i64)) >>u 2_i64;
+            unreachable;
         };
         return d; (0 - p) + 1;
     };
@@ -6857,6 +7242,7 @@ fn fixed_width_for_prec(f, precision) {
     let log10_e63: i32;
     let p1: i32;
     let lp1: i32;
+    let pm1: ref PmHiLo;
     let s1: i32;
     let u1: u64;
     let d1_floor: u64;
@@ -6865,6 +7251,7 @@ fn fixed_width_for_prec(f, precision) {
     let n: i32;
     let p: i32;
     let lp: i32;
+    let pm: ref PmHiLo;
     let s: i32;
     let u: u64;
     let d: u64;
@@ -6879,14 +7266,13 @@ fn fixed_width_for_prec(f, precision) {
     log10_e63 = __inline_log10_pow2_0: block -> i32 {
         __local_21 = e + 63;
         break __inline_log10_pow2_0: (__local_21 * 78913) >> 18;
+        unreachable;
     };
     p1 = 0 - log10_e63;
     lp1 = (p1 * 108853) >> 15;
-    let __sroa_pm1_hi: u64;
-    let __sroa_pm1_lo: u64;
-    multivalue_bind [__sroa_pm1_hi, __sroa_pm1_lo] = mul_pow10(p1);
+    pm1 = mul_pow10(p1);
     s1 = 0 - ((e + lp1) + 3);
-    u1 = uscale(m, __sroa_pm1_hi, __sroa_pm1_lo, s1);
+    u1 = uscale(m, pm1.hi, pm1.lo, s1);
     d1_floor = (u1 + 0_i64) >>u 2_i64;
     decimal_pos = if d1_floor >=u 10_i64 -> i32 {
         2 - p1;
@@ -6901,11 +7287,9 @@ fn fixed_width_for_prec(f, precision) {
     };
     p = (n - 1) - log10_e63;
     lp = (p * 108853) >> 15;
-    let __sroa_pm_hi: u64;
-    let __sroa_pm_lo: u64;
-    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(p);
+    pm = mul_pow10(p);
     s = 0 - ((e + lp) + 3);
-    u = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
+    u = uscale(m, pm.hi, pm.lo, s);
     d = ((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64;
     if d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
         __local_30 = POW10;
@@ -6914,10 +7298,12 @@ fn fixed_width_for_prec(f, precision) {
             unreachable;
         };
         break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_30.repr, n);
+        unreachable;
     } {
         d = __inline_unrounded_round_8: block -> u64 {
             __local_29 = unrounded_div(u, 10_i64);
             break __inline_unrounded_round_8: ((__local_29 + 1_i64) + ((__local_29 >>u 2_i64) & 1_i64)) >>u 2_i64;
+            unreachable;
         };
         return d; (0 - p) + 1;
     };
@@ -6934,6 +7320,7 @@ fn short(f) {
     let max_m: u64;
     let odd: i32;
     let lp: i32;
+    let pm: ref PmHiLo;
     let s: i32;
     let dmin: u64;
     let dmax: u64;
@@ -6969,6 +7356,7 @@ fn short(f) {
         p = 0 - __inline_skewed_0: block -> i32 {
             __local_22 = e + 11;
             break __inline_skewed_0: ((__local_22 * 631305) - 261663) >> 21;
+            unreachable;
         };
         min_m = m - 512_i64;
     } else {
@@ -6978,6 +7366,7 @@ fn short(f) {
         p = 0 - __inline_log10_pow2_1: block -> i32 {
             __local_23 = e + z;
             break __inline_log10_pow2_1: (__local_23 * 78913) >> 18;
+            unreachable;
         };
         min_m = m - (1_i64 << builtin::i64_extend_i32_s(z - 1));
     };
@@ -6986,26 +7375,32 @@ fn short(f) {
     lp = __inline_log2_pow10_2: block -> i32 {
         __local_24 = p;
         break __inline_log2_pow10_2: (__local_24 * 108853) >> 15;
+        unreachable;
     };
-    let __sroa_pm_hi: u64;
-    let __sroa_pm_lo: u64;
-    __local_25 = p;
-    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(__local_25);
+    pm = __inline_get_pow10_3: block -> ref PmHiLo {
+        __local_25 = p;
+        break __inline_get_pow10_3: mul_pow10(__local_25);
+        unreachable;
+    };
     s = 0 - ((e + lp) + 3);
     dmin = __inline_unrounded_ceil_4: block -> u64 {
         __local_26 = __inline_unrounded_nudge_5: block -> u64 {
-            __local_27 = uscale(min_m, __sroa_pm_hi, __sroa_pm_lo, s);
+            __local_27 = uscale(min_m, pm.hi, pm.lo, s);
             break __inline_unrounded_nudge_5: __local_27 + builtin::i64_extend_i32_s(odd);
+            unreachable;
         };
         break __inline_unrounded_ceil_4: (__local_26 + 3_i64) >>u 2_i64;
+        unreachable;
     };
     dmax = __inline_unrounded_floor_6: block -> u64 {
         __local_29 = __inline_unrounded_nudge_7: block -> u64 {
-            __local_30 = uscale(max_m, __sroa_pm_hi, __sroa_pm_lo, s);
+            __local_30 = uscale(max_m, pm.hi, pm.lo, s);
             __local_31 = 0 - odd;
             break __inline_unrounded_nudge_7: __local_30 + builtin::i64_extend_i32_s(__local_31);
+            unreachable;
         };
         break __inline_unrounded_floor_6: (__local_29 + 0_i64) >>u 2_i64;
+        unreachable;
     };
     d_div_10 = dmax /u 10_i64;
     can_trim = (d_div_10 * 10_i64) >=u dmin;
@@ -7020,8 +7415,9 @@ fn short(f) {
     d = dmin;
     if dmin <u dmax {
         d = __inline_unrounded_round_8: block -> u64 {
-            __local_32 = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
+            __local_32 = uscale(m, pm.hi, pm.lo, s);
             break __inline_unrounded_round_8: ((__local_32 + 1_i64) + ((__local_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
+            unreachable;
         };
     };
     return d; 0 - p;
@@ -7037,6 +7433,7 @@ fn short32(f) {
     let max_m: u64;
     let odd: i32;
     let lp: i32;
+    let pm: ref PmHiLo;
     let s: i32;
     let dmin: u64;
     let dmax: u64;
@@ -7072,6 +7469,7 @@ fn short32(f) {
         p = 0 - __inline_skewed_0: block -> i32 {
             __local_22 = e + 40;
             break __inline_skewed_0: ((__local_22 * 631305) - 261663) >> 21;
+            unreachable;
         };
         min_m = m - 274877906944_i64;
     } else {
@@ -7081,6 +7479,7 @@ fn short32(f) {
         p = 0 - __inline_log10_pow2_1: block -> i32 {
             __local_23 = e + z;
             break __inline_log10_pow2_1: (__local_23 * 78913) >> 18;
+            unreachable;
         };
         min_m = m - (1_i64 << builtin::i64_extend_i32_s(z - 1));
     };
@@ -7089,26 +7488,32 @@ fn short32(f) {
     lp = __inline_log2_pow10_2: block -> i32 {
         __local_24 = p;
         break __inline_log2_pow10_2: (__local_24 * 108853) >> 15;
+        unreachable;
     };
-    let __sroa_pm_hi: u64;
-    let __sroa_pm_lo: u64;
-    __local_25 = p;
-    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(__local_25);
+    pm = __inline_get_pow10_3: block -> ref PmHiLo {
+        __local_25 = p;
+        break __inline_get_pow10_3: mul_pow10(__local_25);
+        unreachable;
+    };
     s = 0 - ((e + lp) + 3);
     dmin = __inline_unrounded_ceil_4: block -> u64 {
         __local_26 = __inline_unrounded_nudge_5: block -> u64 {
-            __local_27 = uscale(min_m, __sroa_pm_hi, __sroa_pm_lo, s);
+            __local_27 = uscale(min_m, pm.hi, pm.lo, s);
             break __inline_unrounded_nudge_5: __local_27 + builtin::i64_extend_i32_s(odd);
+            unreachable;
         };
         break __inline_unrounded_ceil_4: (__local_26 + 3_i64) >>u 2_i64;
+        unreachable;
     };
     dmax = __inline_unrounded_floor_6: block -> u64 {
         __local_29 = __inline_unrounded_nudge_7: block -> u64 {
-            __local_30 = uscale(max_m, __sroa_pm_hi, __sroa_pm_lo, s);
+            __local_30 = uscale(max_m, pm.hi, pm.lo, s);
             __local_31 = 0 - odd;
             break __inline_unrounded_nudge_7: __local_30 + builtin::i64_extend_i32_s(__local_31);
+            unreachable;
         };
         break __inline_unrounded_floor_6: (__local_29 + 0_i64) >>u 2_i64;
+        unreachable;
     };
     d_div_10 = dmax /u 10_i64;
     can_trim = (d_div_10 * 10_i64) >=u dmin;
@@ -7123,8 +7528,9 @@ fn short32(f) {
     d = dmin;
     if dmin <u dmax {
         d = __inline_unrounded_round_8: block -> u64 {
-            __local_32 = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
+            __local_32 = uscale(m, pm.hi, pm.lo, s);
             break __inline_unrounded_round_8: ((__local_32 + 1_i64) + ((__local_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
+            unreachable;
         };
     };
     return d; 0 - p;
@@ -7160,8 +7566,10 @@ fn trim_zeros(x, p) {
             __local_19 = xv;
             multivalue_bind [__local_21, _] = i64.mul_wide_u(__local_19, -3689348814741910323_i64);
             break __inline_u64_mul_1: __local_21;
+            unreachable;
         };
         break __inline_rotate_right_0: (__local_17 >>u 1_i64) | (__local_17 << 63_i64);
+        unreachable;
     };
     if d1 <=u 1844674407370955161_i64 {
         xv = d1;
@@ -7174,8 +7582,10 @@ fn trim_zeros(x, p) {
             __local_24 = xv;
             multivalue_bind [__local_26, _] = i64.mul_wide_u(__local_24, -4078282918271054303_i64);
             break __inline_u64_mul_3: __local_26;
+            unreachable;
         };
         break __inline_rotate_right_2: (__local_22 >>u 8_i64) | (__local_22 << 56_i64);
+        unreachable;
     };
     if d8 <=u 184467440737_i64 {
         xv = d8;
@@ -7186,8 +7596,10 @@ fn trim_zeros(x, p) {
             __local_29 = xv;
             multivalue_bind [__local_31, _] = i64.mul_wide_u(__local_29, -3276141747490816367_i64);
             break __inline_u64_mul_5: __local_31;
+            unreachable;
         };
         break __inline_rotate_right_4: (__local_27 >>u 4_i64) | (__local_27 << 60_i64);
+        unreachable;
     };
     if d4 <=u 1844674407370955_i64 {
         xv = d4;
@@ -7198,8 +7610,10 @@ fn trim_zeros(x, p) {
             __local_34 = xv;
             multivalue_bind [__local_36, _] = i64.mul_wide_u(__local_34, -8116567392432202711_i64);
             break __inline_u64_mul_7: __local_36;
+            unreachable;
         };
         break __inline_rotate_right_6: (__local_32 >>u 2_i64) | (__local_32 << 62_i64);
+        unreachable;
     };
     if d2 <=u 184467440737095516_i64 {
         xv = d2;
@@ -7210,8 +7624,10 @@ fn trim_zeros(x, p) {
             __local_39 = xv;
             multivalue_bind [__local_41, _] = i64.mul_wide_u(__local_39, -3689348814741910323_i64);
             break __inline_u64_mul_9: __local_41;
+            unreachable;
         };
         break __inline_rotate_right_8: (__local_37 >>u 1_i64) | (__local_37 << 63_i64);
+        unreachable;
     };
     if d1b <=u 1844674407370955161_i64 {
         xv = d1b;
@@ -7329,36 +7745,44 @@ fn write_exp(buf, d, p, nd, upper) {
         String::append_char(buf, __inline_char__from_u32_unchecked_6: block -> char {
             __local_20 = 48 + abs_exp;
             break __inline_char__from_u32_unchecked_6: __local_20;
+            unreachable;
         });
     } else if abs_exp < 100 {
         String::append_char(buf, __inline_char__from_u32_unchecked_0: block -> char {
             __local_26 = 48 + (abs_exp / 10);
             break __inline_char__from_u32_unchecked_0: __local_26;
+            unreachable;
         });
         String::append_char(buf, __inline_char__from_u32_unchecked_1: block -> char {
             __local_27 = 48 + (abs_exp % 10);
             break __inline_char__from_u32_unchecked_1: __local_27;
+            unreachable;
         });
     } else {
         String::append_char(buf, __inline_char__from_u32_unchecked_9: block -> char {
             __local_23 = 48 + (abs_exp / 100);
             break __inline_char__from_u32_unchecked_9: __local_23;
+            unreachable;
         });
         String::append_char(buf, __inline_i2a_first_10: block -> char {
             __local_24 = abs_exp % 100;
             __inline_char__from_u32_unchecked_2: block -> char {
                 __local_28 = 48 + (__local_24 / 10);
                 break __inline_char__from_u32_unchecked_2: __local_28;
+                unreachable;
             };
             break __inline_i2a_first_10;
+            unreachable;
         });
         String::append_char(buf, __inline_i2a_second_11: block -> char {
             __local_25 = abs_exp % 100;
             __inline_char__from_u32_unchecked_3: block -> char {
                 __local_29 = 48 + (__local_25 % 10);
                 break __inline_char__from_u32_unchecked_3: __local_29;
+                unreachable;
             };
             break __inline_i2a_second_11;
+            unreachable;
         });
     };
 }
@@ -7558,36 +7982,44 @@ fn write_exp_prec(buf, d, p, nd, precision, upper) {
         String::append_char(buf, __inline_char__from_u32_unchecked_7: block -> char {
             __local_31 = 48 + abs_exp;
             break __inline_char__from_u32_unchecked_7: __local_31;
+            unreachable;
         });
     } else if abs_exp < 100 {
         String::append_char(buf, __inline_char__from_u32_unchecked_0: block -> char {
             __local_37 = 48 + (abs_exp / 10);
             break __inline_char__from_u32_unchecked_0: __local_37;
+            unreachable;
         });
         String::append_char(buf, __inline_char__from_u32_unchecked_1: block -> char {
             __local_38 = 48 + (abs_exp % 10);
             break __inline_char__from_u32_unchecked_1: __local_38;
+            unreachable;
         });
     } else {
         String::append_char(buf, __inline_char__from_u32_unchecked_10: block -> char {
             __local_34 = 48 + (abs_exp / 100);
             break __inline_char__from_u32_unchecked_10: __local_34;
+            unreachable;
         });
         String::append_char(buf, __inline_i2a_first_11: block -> char {
             __local_35 = abs_exp % 100;
             __inline_char__from_u32_unchecked_2: block -> char {
                 __local_39 = 48 + (__local_35 / 10);
                 break __inline_char__from_u32_unchecked_2: __local_39;
+                unreachable;
             };
             break __inline_i2a_first_11;
+            unreachable;
         });
         String::append_char(buf, __inline_i2a_second_12: block -> char {
             __local_36 = abs_exp % 100;
             __inline_char__from_u32_unchecked_3: block -> char {
                 __local_40 = 48 + (__local_36 % 10);
                 break __inline_char__from_u32_unchecked_3: __local_40;
+                unreachable;
             };
             break __inline_i2a_second_12;
+            unreachable;
         });
     };
 }
@@ -7599,6 +8031,7 @@ fn check_special(f) {
     bits = __inline_f64__to_bits_0: block -> i64 {
         __local_6 = f;
         break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(__local_6);
+        unreachable;
     };
     if bits == 0_i64 {
         return 1; 0; 1;
@@ -7621,6 +8054,7 @@ fn __initialize_module() {
     POW10 = __seq_lit: block -> ref Array<u64> {
         __local_0 = Array<u64> { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
         break __seq_lit: __local_0;
+        unreachable;
     };
 }
 
@@ -7818,6 +8252,7 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     mark = __inline_String__len_1: block -> i32 {
         __local_6 = f.buf;
         break __inline_String__len_1: __local_6.used;
+        unreachable;
     };
     if kind == 3 {
         String::append_char(f.buf, 78);
@@ -7862,6 +8297,7 @@ fn Array<u64>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u64>(new_capacity);
     old_repr = self.repr;
@@ -7956,6 +8392,7 @@ fn u128::fmt_base(self, f, base, upper, prefix) {
     arr = __inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_26 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_26.repr;
+        unreachable;
     };
     if is_zero {
         builtin::array_set_u8(arr, offset, 48);
@@ -8049,6 +8486,7 @@ fn i128::fmt_base(self, f, base, upper, prefix) {
             0;
         };
         break __inline_u128_Eq__eq_1;
+        unreachable;
     };
     digit_count = if is_zero -> i32 {
         1;
@@ -8093,6 +8531,7 @@ fn i128::fmt_base(self, f, base, upper, prefix) {
     arr = __inline_String__internal_raw_bytes_3: block -> ref array<u8> {
         __local_31 = f.buf;
         break __inline_String__internal_raw_bytes_3: __local_31.repr;
+        unreachable;
     };
     if is_zero {
         builtin::array_set_u8(arr, offset, 48);
@@ -8146,6 +8585,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -8170,6 +8610,7 @@ fn i64::fmt_decimal(self, f) {
         repr = __inline_String__internal_raw_bytes_0: block -> ref array<u8> {
             __local_12 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_12.repr;
+            unreachable;
         };
         write_decimal_digits(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
@@ -8184,6 +8625,7 @@ fn i64::fmt_decimal(self, f) {
         write_decimal_digits(__inline_String__internal_raw_bytes_1: block -> ref array<u8> {
             __local_13 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_13.repr;
+            unreachable;
         }, offset_11, abs_val, digit_count_10);
     };
 }
@@ -8199,6 +8641,7 @@ fn i64::fmt_base(self, is_negative, f, base, upper, prefix) {
     write_base_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_9 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_9.repr;
+        unreachable;
     }, offset, abs_val, digit_count, base, upper);
 }
 
@@ -8221,6 +8664,7 @@ fn u64::fmt_base(self, f, base, upper, prefix) {
     write_u64_base_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_10 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_10.repr;
+        unreachable;
     }, offset, val_i64, digit_count, bits_per_digit, mask, upper);
 }
 
@@ -8270,6 +8714,7 @@ fn f32::fmt_into(self, f) {
         __local_17 = __inline_log10_pow2_2: block -> i32 {
             __local_18 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
             break __inline_log10_pow2_2: (__local_18 * 78913) >> 18;
+            unreachable;
         };
         break __inline_digits_1: __local_17 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
             __local_25 = POW10;
@@ -8278,11 +8723,14 @@ fn f32::fmt_into(self, f) {
                 unreachable;
             };
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_25.repr, __local_17);
+            unreachable;
         });
+        unreachable;
     };
     mark = __inline_String__len_6: block -> i32 {
         __local_22 = f.buf;
         break __inline_String__len_6: __local_22.used;
+        unreachable;
     };
     if is_neg {
         String::append_char(f.buf, 45);
@@ -8337,6 +8785,7 @@ fn f64::fmt_into(self, f) {
         __local_14 = __inline_log10_pow2_1: block -> i32 {
             __local_15 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
             break __inline_log10_pow2_1: (__local_15 * 78913) >> 18;
+            unreachable;
         };
         break __inline_digits_0: __local_14 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
             __local_22 = POW10;
@@ -8345,11 +8794,14 @@ fn f64::fmt_into(self, f) {
                 unreachable;
             };
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_22.repr, __local_14);
+            unreachable;
         });
+        unreachable;
     };
     mark = __inline_String__len_5: block -> i32 {
         __local_19 = f.buf;
         break __inline_String__len_5: __local_19.used;
+        unreachable;
     };
     if is_neg {
         String::append_char(f.buf, 45);
@@ -8406,6 +8858,7 @@ fn f64::fmt_fixed(self, precision, f) {
         mark_7 = __inline_String__len_1: block -> i32 {
             __local_16 = f.buf;
             break __inline_String__len_1: __local_16.used;
+            unreachable;
         };
         if is_neg {
             String::append_char(f.buf, 45);
@@ -8434,6 +8887,7 @@ fn f64::fmt_fixed(self, precision, f) {
         __local_20 = __inline_log10_pow2_4: block -> i32 {
             __local_21 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
             break __inline_log10_pow2_4: (__local_21 * 78913) >> 18;
+            unreachable;
         };
         break __inline_digits_3: __local_20 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
             __local_28 = POW10;
@@ -8442,11 +8896,14 @@ fn f64::fmt_fixed(self, precision, f) {
                 unreachable;
             };
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_28.repr, __local_20);
+            unreachable;
         });
+        unreachable;
     };
     mark_13 = __inline_String__len_8: block -> i32 {
         __local_25 = f.buf;
         break __inline_String__len_8: __local_25.used;
+        unreachable;
     };
     if is_neg {
         String::append_char(f.buf, 45);
@@ -8513,6 +8970,7 @@ fn f64::fmt_exp(self, precision, upper, f) {
         mark_9 = __inline_String__len_1: block -> i32 {
             __local_24 = f.buf;
             break __inline_String__len_1: __local_24.used;
+            unreachable;
         };
         if is_neg {
             String::append_char(f.buf, 45);
@@ -8541,6 +8999,7 @@ fn f64::fmt_exp(self, precision, upper, f) {
     mark_11 = __inline_String__len_4: block -> i32 {
         __local_28 = f.buf;
         break __inline_String__len_4: __local_28.used;
+        unreachable;
     };
     if is_neg {
         String::append_char(f.buf, 45);
@@ -8563,6 +9022,7 @@ fn f64::fmt_exp(self, precision, upper, f) {
             __local_32 = __inline_log10_pow2_7: block -> i32 {
                 __local_33 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d_15));
                 break __inline_log10_pow2_7: (__local_33 * 78913) >> 18;
+                unreachable;
             };
             break __inline_digits_6: __local_32 + (d_15 >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
                 __local_41 = POW10;
@@ -8571,7 +9031,9 @@ fn f64::fmt_exp(self, precision, upper, f) {
                     unreachable;
                 };
                 break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_41.repr, __local_32);
+                unreachable;
             });
+            unreachable;
         };
         write_exp_prec(f.buf, d_15, p_16, nd_17, precision, upper_bool);
     } else {
@@ -8584,6 +9046,7 @@ fn f64::fmt_exp(self, precision, upper, f) {
             __local_37 = __inline_log10_pow2_11: block -> i32 {
                 __local_38 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d_19));
                 break __inline_log10_pow2_11: (__local_38 * 78913) >> 18;
+                unreachable;
             };
             break __inline_digits_10: __local_37 + (d_19 >=u __inline_Array_u64__IndexValue__index_value_1: block -> u64 {
                 __local_43 = POW10;
@@ -8592,7 +9055,9 @@ fn f64::fmt_exp(self, precision, upper, f) {
                     unreachable;
                 };
                 break __inline_Array_u64__IndexValue__index_value_1: builtin::array_get<u64>(__local_43.repr, __local_37);
+                unreachable;
             });
+            unreachable;
         };
         write_exp(f.buf, d_19, p_20, nd_21, upper_bool);
     };
@@ -8767,8 +9232,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -8867,6 +9334,7 @@ fn StrCharIter^Iterator::next(self) {
         return 0; __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     };
     if b0 <u 224 {
@@ -9001,6 +9469,7 @@ fn Formatter::apply_padding(self, start_pos) {
     content_len = __inline_String__len_0: block -> i32 {
         __local_12 = self.buf;
         break __inline_String__len_0: __local_12.used;
+        unreachable;
     } - start_pos;
     if if self.width <= 0 -> i32 {
         1;
@@ -9032,6 +9501,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 value_15 = __inline_String__get_byte_2: block -> u8 {
                     __local_17 = start_pos + i_8;
                     break __inline_String__get_byte_2: builtin::array_get_u8(_licm_repr_33, __local_17);
+                    unreachable;
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
@@ -9069,6 +9539,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 value_23 = __inline_String__get_byte_5: block -> u8 {
                     __local_25 = start_pos + i_10;
                     break __inline_String__get_byte_5: builtin::array_get_u8(_licm_repr_35, __local_25);
+                    unreachable;
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
@@ -9187,8 +9658,10 @@ fn String^Inspect::inspect(self, f) {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
             break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+        unreachable;
     };
     _licm_buf_33 = f.buf;
     b481: block {

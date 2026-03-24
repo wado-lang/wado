@@ -405,6 +405,25 @@ fn check_fusion_preconditions(let_stmt: &TirStmt, if_stmt: &TirStmt) -> Option<F
         return None;
     }
 
+    // --- THEN/ELSE blocks must not contain free unlabeled break/continue ---
+    //
+    // Fusion clones the THEN and ELSE blocks into a new nesting position that
+    // may be deeper (e.g., inside the inner loop of an inlined iterator). An
+    // unlabeled `break;` or `continue` targets the *innermost* enclosing loop,
+    // so if the block is cloned inside an extra `loop {}`, the break/continue
+    // would target the wrong loop and produce incorrect control flow.
+    //
+    // A "free" break/continue is one NOT nested inside a `loop {}` within the
+    // block itself — those are safe because they target a loop inside the block.
+    if block_has_free_unlabeled_loop_exit(then_block) {
+        return None;
+    }
+    if let Some(eb) = else_block
+        && block_has_free_unlabeled_loop_exit(eb)
+    {
+        return None;
+    }
+
     Some(FusionInfo {
         temp_local: *temp_local,
         label: label.clone(),
@@ -1685,5 +1704,157 @@ fn subst_variant_payload_in_expr(
             subst_variant_payload_in_expr(body, temp_local, case_index, payload_local);
         }
         _ => {}
+    }
+}
+
+/// Returns `true` if `block` contains a "free" unlabeled `break;` or `continue`
+/// — one that is *not* nested inside a `loop {}` within the block itself.
+///
+/// Such statements are context-sensitive: they target the *innermost* enclosing
+/// loop at their use site. If the block is cloned into a deeper nesting level
+/// (e.g., inside the inner loop of an inlined iterator adapter), the unlabeled
+/// break/continue would target the wrong loop, producing incorrect control flow.
+///
+/// Breaks/continues nested inside a `loop {}` within the block are safe: they
+/// target that inner loop, not any outer loop.
+fn block_has_free_unlabeled_loop_exit(block: &TirBlock) -> bool {
+    stmts_have_free_unlabeled_loop_exit(&block.stmts, 0)
+}
+
+fn stmts_have_free_unlabeled_loop_exit(stmts: &[TirStmt], loop_depth: u32) -> bool {
+    stmts
+        .iter()
+        .any(|s| stmt_has_free_unlabeled_loop_exit(s, loop_depth))
+}
+
+fn stmt_has_free_unlabeled_loop_exit(stmt: &TirStmt, loop_depth: u32) -> bool {
+    match &stmt.kind {
+        TirStmtKind::Break { label: None, .. } | TirStmtKind::Continue => loop_depth == 0,
+        TirStmtKind::Loop { body } => {
+            stmts_have_free_unlabeled_loop_exit(&body.stmts, loop_depth + 1)
+        }
+        TirStmtKind::LabeledBlock { block, .. } => {
+            stmts_have_free_unlabeled_loop_exit(&block.stmts, loop_depth)
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            expr_has_free_unlabeled_loop_exit(condition, loop_depth)
+                || stmts_have_free_unlabeled_loop_exit(&then_block.stmts, loop_depth)
+                || else_block
+                    .as_ref()
+                    .is_some_and(|b| stmts_have_free_unlabeled_loop_exit(&b.stmts, loop_depth))
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            expr_has_free_unlabeled_loop_exit(scrutinee, loop_depth)
+                || stmts_have_free_unlabeled_loop_exit(&then_block.stmts, loop_depth)
+                || else_block
+                    .as_ref()
+                    .is_some_and(|b| stmts_have_free_unlabeled_loop_exit(&b.stmts, loop_depth))
+        }
+        TirStmtKind::Let { value, .. }
+        | TirStmtKind::LetDestructure { value, .. }
+        | TirStmtKind::Expr(value)
+        | TirStmtKind::Return { value: Some(value) }
+        | TirStmtKind::Break {
+            value: Some(value), ..
+        }
+        | TirStmtKind::TaskReturn { value } => expr_has_free_unlabeled_loop_exit(value, loop_depth),
+        _ => false,
+    }
+}
+
+fn expr_has_free_unlabeled_loop_exit(expr: &TirExpr, loop_depth: u32) -> bool {
+    match &expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            stmts_have_free_unlabeled_loop_exit(&block.stmts, loop_depth)
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            expr_has_free_unlabeled_loop_exit(condition, loop_depth)
+                || stmts_have_free_unlabeled_loop_exit(&then_branch.stmts, loop_depth)
+                || else_branch
+                    .as_ref()
+                    .is_some_and(|b| stmts_have_free_unlabeled_loop_exit(&b.stmts, loop_depth))
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            expr_has_free_unlabeled_loop_exit(left, loop_depth)
+                || expr_has_free_unlabeled_loop_exit(right, loop_depth)
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::ClosureToCanonical { functor: inner, .. }
+        | TirExprKind::GlobalVarSet { value: inner, .. } => {
+            expr_has_free_unlabeled_loop_exit(inner, loop_depth)
+        }
+        TirExprKind::Assign { target, value } => {
+            expr_has_free_unlabeled_loop_exit(target, loop_depth)
+                || expr_has_free_unlabeled_loop_exit(value, loop_depth)
+        }
+        TirExprKind::Call { args, .. } => args
+            .iter()
+            .any(|a| expr_has_free_unlabeled_loop_exit(&a.expr, loop_depth)),
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            expr_has_free_unlabeled_loop_exit(receiver, loop_depth)
+                || args
+                    .iter()
+                    .any(|a| expr_has_free_unlabeled_loop_exit(&a.expr, loop_depth))
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            expr_has_free_unlabeled_loop_exit(callee, loop_depth)
+                || args
+                    .iter()
+                    .any(|a| expr_has_free_unlabeled_loop_exit(a, loop_depth))
+        }
+        TirExprKind::CmRawCall { args, .. } => args
+            .iter()
+            .any(|a| expr_has_free_unlabeled_loop_exit(a, loop_depth)),
+        TirExprKind::Index { expr: inner, index } => {
+            expr_has_free_unlabeled_loop_exit(inner, loop_depth)
+                || expr_has_free_unlabeled_loop_exit(index, loop_depth)
+        }
+        TirExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .any(|f| expr_has_free_unlabeled_loop_exit(&f.value, loop_depth)),
+        TirExprKind::TupleLiteral { elements } => elements
+            .iter()
+            .any(|e| expr_has_free_unlabeled_loop_exit(e, loop_depth)),
+        TirExprKind::VariantConstruct { payload, .. } => payload
+            .as_deref()
+            .is_some_and(|p| expr_has_free_unlabeled_loop_exit(p, loop_depth)),
+        TirExprKind::Closure { body, .. } => expr_has_free_unlabeled_loop_exit(body, loop_depth),
+        TirExprKind::Match { expr, arms } => {
+            expr_has_free_unlabeled_loop_exit(expr, loop_depth)
+                || arms
+                    .iter()
+                    .any(|arm| expr_has_free_unlabeled_loop_exit(&arm.body, loop_depth))
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            expr_has_free_unlabeled_loop_exit(scrutinee, loop_depth)
+                || arms
+                    .iter()
+                    .any(|b| stmts_have_free_unlabeled_loop_exit(&b.stmts, loop_depth))
+                || stmts_have_free_unlabeled_loop_exit(&default.stmts, loop_depth)
+        }
+        _ => false,
     }
 }

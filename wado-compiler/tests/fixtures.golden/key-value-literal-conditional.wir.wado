@@ -196,10 +196,12 @@ fn run() with Stdout {
         __local_1 = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
             __local_17 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
             break __seq_lit: __local_17;
+            unreachable;
         }), size: 0, deleted_count: 0 };
         __local_19 = String { repr: array.new_data<u8>("a"), used: 1 };
         TreeMap<String,i32>::insert(__local_1, __local_19, 1);
         break __kv_lit: __local_1;
+        unreachable;
     };
     __v0_4 = TreeMap<String,i32>^IndexValue::index_value(m, String { repr: array.new_data<u8>("a"), used: 1 });
     __cond_5 = __v0_4 == 1;
@@ -235,6 +237,7 @@ condition: m[\"a\"] == 1
             i32::fmt_decimal(__v0_4, __local_36);
             String::append_char(__local_11, 10);
             break __tmpl: __local_11;
+            unreachable;
         });
         unreachable;
     };
@@ -242,10 +245,12 @@ condition: m[\"a\"] == 1
         __local_7 = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
             __local_46 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
             break __seq_lit: __local_46;
+            unreachable;
         }), size: 0, deleted_count: 0 };
         __local_48 = String { repr: array.new_data<u8>("b"), used: 1 };
         TreeMap<String,i32>::insert(__local_7, __local_48, 2);
         break __kv_lit: __local_7;
+        unreachable;
     };
     __v0_9 = TreeMap<String,i32>^IndexValue::index_value(m2, String { repr: array.new_data<u8>("b"), used: 1 });
     __cond_10 = __v0_9 == 2;
@@ -274,6 +279,7 @@ condition: m2[\"b\"] == 2
             i32::fmt_decimal(__v0_9, __local_59);
             String::append_char(__local_13, 10);
             break __tmpl: __local_13;
+            unreachable;
         });
         unreachable;
     };
@@ -368,6 +374,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -501,6 +508,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -518,8 +526,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -648,6 +658,7 @@ fn StrCharIter^Iterator::next(self) {
         return 0; __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     };
     if b0 <u 224 {
@@ -711,6 +722,7 @@ fn TreeMap<String,i32>^IndexValue::index_value(self, key) {
             __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
             String^Inspect::inspect(key, __local_4);
             break __tmpl: __local_3;
+            unreachable;
         });
         unreachable;
     };
@@ -721,6 +733,7 @@ fn TreeMap<String,i32>^IndexValue::index_value(self, key) {
             unreachable;
         };
         break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_2: builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(__local_7.repr, index);
+        unreachable;
     }.value;
 }
 
@@ -750,6 +763,7 @@ fn TreeMap<String,i32>::find_index(self, key) {
                             unreachable;
                         };
                         break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(_licm_repr_10, __local_7);
+                        unreachable;
                     };
                     if entry.deleted {
                         return -1;
@@ -785,12 +799,14 @@ fn TreeMap<String,i32>::insert(self, key, value) {
                 unreachable;
             };
             break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(__local_6.repr, existing_index);
+            unreachable;
         }.value = value;
         return;
     };
     new_index = __inline_Array_TreeMapEntry_String_i32____len_1: block -> i32 {
         __local_8 = self.entries;
         break __inline_Array_TreeMapEntry_String_i32____len_1: __local_8.used;
+        unreachable;
     };
     entry = "core:allocator/TreeMapEntry<String,i32>" { key: ref.as_non_null(key), value: value, deleted: 0 };
     Array<TreeMapEntry<String,i32>>::append(self.entries, entry);
@@ -889,6 +905,7 @@ fn Array<TreeMapEntry<String,i32>>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(new_capacity);
     old_repr = self.repr;
@@ -1021,8 +1038,10 @@ fn String^Inspect::inspect(self, f) {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
             break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+        unreachable;
     };
     _licm_buf_33 = f.buf;
     b87: block {

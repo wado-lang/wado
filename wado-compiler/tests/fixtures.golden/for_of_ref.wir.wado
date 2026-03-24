@@ -187,12 +187,14 @@ fn test_for_of_ref_array() with Stdout {
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     sum = 0;
     __iter_3 = __inline___i32__IntoIterator__into_iter_6: block -> ref "core:allocator/ArrayRefIter<i32>" {
         __local_19 = arr;
         __local_20 = __local_19;
         break __inline___i32__IntoIterator__into_iter_6: "core:allocator/ArrayRefIter<i32>" { repr: ref.as_non_null(__local_20.repr), used: __local_20.used, index: 0 };
+        unreachable;
     };
     b0: block {
         l1: loop {
@@ -235,6 +237,7 @@ condition: sum == 60
             i32::fmt_decimal(__v0, __local_29);
             String::append_char(__local_7, 10);
             break __tmpl: __local_7;
+            unreachable;
         });
         unreachable;
     };
@@ -259,12 +262,14 @@ fn test_for_of_ref_struct() with Stdout {
     points = __seq_lit: block -> ref Array<Point> {
         __local_0 = Array<Point> { repr: array.new_fixed<ref Point>(Point { x: 1, y: 2 }, Point { x: 3, y: 4 }), used: 2 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     sum = 0;
     __iter_3 = __inline___Point__IntoIterator__into_iter_5: block -> ref "core:allocator/ArrayRefIter<Point>" {
         __local_17 = points;
         __local_18 = __local_17;
         break __inline___Point__IntoIterator__into_iter_5: "core:allocator/ArrayRefIter<Point>" { repr: ref.as_non_null(__local_18.repr), used: __local_18.used, index: 0 };
+        unreachable;
     };
     b4: block {
         l5: loop {
@@ -307,6 +312,7 @@ condition: sum == 10
             i32::fmt_decimal(__v0, __local_27);
             String::append_char(__local_7, 10);
             break __tmpl: __local_7;
+            unreachable;
         });
         unreachable;
     };
@@ -331,12 +337,14 @@ fn test_for_of_ref_var() with Stdout {
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     ra = arr;
     sum = 0;
     __iter_4 = __inline___i32__IntoIterator__into_iter_6: block -> ref "core:allocator/ArrayRefIter<i32>" {
         __local_21 = ra;
         break __inline___i32__IntoIterator__into_iter_6: "core:allocator/ArrayRefIter<i32>" { repr: ref.as_non_null(__local_21.repr), used: __local_21.used, index: 0 };
+        unreachable;
     };
     b8: block {
         l9: loop {
@@ -379,6 +387,7 @@ condition: sum == 6
             i32::fmt_decimal(__v0, __local_30);
             String::append_char(__local_8, 10);
             break __tmpl: __local_8;
+            unreachable;
         });
         unreachable;
     };
@@ -400,9 +409,10 @@ fn test_for_of_value_unchanged() with Stdout {
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     sum = 0;
-    __iter_3 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
+    __iter_3 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: arr.used, index: 0 };
     b12: block {
         l13: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -446,6 +456,7 @@ condition: sum == 6
             i32::fmt_decimal(__v0, __local_28);
             String::append_char(__local_7, 10);
             break __tmpl: __local_7;
+            unreachable;
         });
         unreachable;
     };
@@ -550,6 +561,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -683,6 +695,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -700,8 +713,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -804,6 +819,7 @@ fn Array<Point>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref Point>(new_capacity);
     old_repr = self.repr;
@@ -856,6 +872,7 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

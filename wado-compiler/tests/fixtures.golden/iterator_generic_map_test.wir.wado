@@ -195,8 +195,9 @@ fn __test_0_generic_map_iterator_doubles_values() {
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
-    iter = GenericMapIter<ArrayIter<i32>,i32> { inner: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 }, f: "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__closure_wrapper_0") } };
+    iter = GenericMapIter<ArrayIter<i32>,i32> { inner: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: arr.used, index: 0 }, f: "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__closure_wrapper_0") } };
     let __match_scrut_0: ref Option<i32>;
     __match_scrut_0 = GenericMapIter<ArrayIter<i32>,i32>^Iterator::next(iter);
     __cond_3 = if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
@@ -223,6 +224,7 @@ fn __test_0_generic_map_iterator_doubles_values() {
 condition: iter.next() matches { Some(2) }
 "), used: 44 });
             break __tmpl: __local_7;
+            unreachable;
         });
         unreachable;
     };
@@ -252,6 +254,7 @@ condition: iter.next() matches { Some(2) }
 condition: iter.next() matches { Some(4) }
 "), used: 44 });
             break __tmpl: __local_9;
+            unreachable;
         });
         unreachable;
     };
@@ -281,6 +284,7 @@ condition: iter.next() matches { Some(4) }
 condition: iter.next() matches { Some(6) }
 "), used: 44 });
             break __tmpl: __local_11;
+            unreachable;
         });
         unreachable;
     };
@@ -308,6 +312,7 @@ condition: iter.next() matches { Some(6) }
 condition: iter.next() matches { None }
 "), used: 41 });
             break __tmpl: __local_13;
+            unreachable;
         });
         unreachable;
     };
@@ -329,8 +334,9 @@ fn __test_1_generic_map_iterator_type_conversion() {
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(65, 66, 67), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
-    iter = GenericMapIter<ArrayIter<i32>,char> { inner: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 }, f: "canonical/CanonicalClosure_1" { env: __Closure_1 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__closure_wrapper_1") } };
+    iter = GenericMapIter<ArrayIter<i32>,char> { inner: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: arr.used, index: 0 }, f: "canonical/CanonicalClosure_1" { env: __Closure_1 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__closure_wrapper_1") } };
     let __match_scrut_0: ref Option<char>;
     __match_scrut_0 = GenericMapIter<ArrayIter<i32>,char>^Iterator::next(iter);
     __cond_3 = if ref.test Option<char>::Some(__match_scrut_0) -> bool {
@@ -357,6 +363,7 @@ fn __test_1_generic_map_iterator_type_conversion() {
 condition: iter.next() matches { Some('A') }
 "), used: 46 });
             break __tmpl: __local_6;
+            unreachable;
         });
         unreachable;
     };
@@ -386,6 +393,7 @@ condition: iter.next() matches { Some('A') }
 condition: iter.next() matches { Some('B') }
 "), used: 46 });
             break __tmpl: __local_8;
+            unreachable;
         });
         unreachable;
     };
@@ -415,6 +423,7 @@ condition: iter.next() matches { Some('B') }
 condition: iter.next() matches { Some('C') }
 "), used: 46 });
             break __tmpl: __local_10;
+            unreachable;
         });
         unreachable;
     };
@@ -477,6 +486,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -610,6 +620,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -627,8 +638,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -753,6 +766,7 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;
@@ -782,6 +796,7 @@ fn __Closure_1::__call(self, x) {
     return __inline_char__from_u32_unchecked_0: block -> char {
         __local_2 = x;
         break __inline_char__from_u32_unchecked_0: __local_2;
+        unreachable;
     };
 }
 

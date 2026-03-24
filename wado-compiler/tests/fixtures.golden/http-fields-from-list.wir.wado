@@ -523,10 +523,12 @@ fn handle(request) {
     name_bytes = __seq_lit: block -> ref Array<u8> {
         __local_1 = Array<u8> { repr: array.new_fixed<u8>(118, 49), used: 2 };
         break __seq_lit: __local_1;
+        unreachable;
     };
     entries = __seq_lit: block -> ref Array<Tuple<String,Array<u8>>> {
         __local_3 = Array<Tuple<String,Array<u8>>> { repr: array.new_fixed<ref "tuple/[String, Array<u8>]">("tuple/[String, Array<u8>]" { 0: String { repr: array.new_data<u8>("x-one"), used: 5 }, 1: ref.as_non_null(name_bytes) }), used: 1 };
         break __seq_lit: __local_3;
+        unreachable;
     };
     result = __cm_binding__Fields_from_list(entries);
     if ref.test Result<Fields,HeaderError>::Ok(result) {
@@ -564,6 +566,7 @@ condition: fields.has(\"x-one\" as FieldName)
                 });
                 String::append_char(__local_14, 10);
                 break __tmpl: __local_14;
+                unreachable;
             });
             unreachable;
         };
@@ -939,6 +942,7 @@ fn __cm_binding__Fields_from_list(entries) {
                     unreachable;
                 };
                 break __inline_Array_Tuple_String_Array_u8____IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, Array<u8>]">(__local_15.repr, __local_16);
+                unreachable;
             };
             __packed = "core:internal/cm_lower_string"(__entries_elem.0);
             builtin::store_i32(__entries_addr, builtin::i32_wrap_i64(__packed));
@@ -948,6 +952,7 @@ fn __cm_binding__Fields_from_list(entries) {
                 __local_18 = __local_17.repr;
                 __local_19 = __local_17.used;
                 break __inline_cm_lower_array_u8_2: "core:internal/cm_lower_list_u8"(__local_18, __local_19);
+                unreachable;
             };
             builtin::store_i32(__entries_addr + 8, builtin::i32_wrap_i64(__elem_packed));
             builtin::store_i32((__entries_addr + 8) + 4, builtin::i32_wrap_i64(__elem_packed >> 32_i64));
@@ -1050,6 +1055,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -1194,6 +1200,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1211,8 +1218,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -1295,6 +1304,7 @@ fn Array<Tuple<String,Array<u8>>>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "tuple/[String, Array<u8>]">(new_capacity);
     old_repr = self.repr;
@@ -1337,6 +1347,7 @@ fn Array<u8>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     old_repr = self.repr;

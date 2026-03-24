@@ -150,6 +150,7 @@ fn run() with Stdout {
     __v0_1 = __inline_Perms__has_read_2: block -> bool {
         __local_101 = 3;
         break __inline_Perms__has_read_2: 1;
+        unreachable;
     };
     if __v0_1 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -180,12 +181,14 @@ condition: rw.has_read()
             });
             String::append_char(__local_14, 10);
             break __tmpl: __local_14;
+            unreachable;
         });
         unreachable;
     };
     __v0_3 = __inline_Perms__has_write_10: block -> bool {
         __local_102 = 3;
         break __inline_Perms__has_write_10: 1;
+        unreachable;
     };
     if __v0_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -216,12 +219,14 @@ condition: rw.has_write()
             });
             String::append_char(__local_16, 10);
             break __tmpl: __local_16;
+            unreachable;
         });
         unreachable;
     };
     __v0_5 = __inline_Perms_HasRead__check_read_18: block -> bool {
         __local_105 = 3;
         break __inline_Perms_HasRead__check_read_18: 1;
+        unreachable;
     };
     if __v0_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -252,12 +257,14 @@ condition: rw.check_read()
             });
             String::append_char(__local_18, 10);
             break __tmpl: __local_18;
+            unreachable;
         });
         unreachable;
     };
     __v0_8 = __inline_Perms__has_read_27: block -> bool {
         __local_103 = 2;
         break __inline_Perms__has_read_27: 0;
+        unreachable;
     };
     __cond_9 = __v0_8 == 0;
     if __cond_9 == 0 {
@@ -289,12 +296,14 @@ condition: !w.has_read()
             });
             String::append_char(__local_20, 10);
             break __tmpl: __local_20;
+            unreachable;
         });
         unreachable;
     };
     __v0_10 = __inline_Perms__has_write_35: block -> bool {
         __local_104 = 2;
         break __inline_Perms__has_write_35: 1;
+        unreachable;
     };
     if __v0_10 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -325,12 +334,14 @@ condition: w.has_write()
             });
             String::append_char(__local_22, 10);
             break __tmpl: __local_22;
+            unreachable;
         });
         unreachable;
     };
     __v0_12 = __inline_Perms_HasRead__check_read_43: block -> bool {
         __local_106 = 2;
         break __inline_Perms_HasRead__check_read_43: 0;
+        unreachable;
     };
     __cond_13 = __v0_12 == 0;
     if __cond_13 == 0 {
@@ -362,6 +373,7 @@ condition: !w.check_read()
             });
             String::append_char(__local_24, 10);
             break __tmpl: __local_24;
+            unreachable;
         });
         unreachable;
     };
@@ -456,6 +468,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -589,6 +602,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -606,8 +620,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

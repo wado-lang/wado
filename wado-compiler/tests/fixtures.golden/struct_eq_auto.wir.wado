@@ -195,6 +195,7 @@ condition: a == b
             Point^Inspect::inspect(__v1_4, __local_28);
             String::append_char(__local_27, 10);
             break __tmpl: __local_27;
+            unreachable;
         });
         unreachable;
     };
@@ -250,6 +251,7 @@ condition: !a == c
             });
             String::append_char(__local_29, 10);
             break __tmpl: __local_29;
+            unreachable;
         });
         unreachable;
     };
@@ -288,6 +290,7 @@ condition: a != c
             Point^Inspect::inspect(__v1_11, __local_32);
             String::append_char(__local_31, 10);
             break __tmpl: __local_31;
+            unreachable;
         });
         unreachable;
     };
@@ -335,6 +338,7 @@ condition: red1 == red2
             Color^Inspect::inspect(__v1_17, __local_34);
             String::append_char(__local_33, 10);
             break __tmpl: __local_33;
+            unreachable;
         });
         unreachable;
     };
@@ -379,6 +383,7 @@ condition: red1 != blue
             Color^Inspect::inspect(__v1_20, __local_36);
             String::append_char(__local_35, 10);
             break __tmpl: __local_35;
+            unreachable;
         });
         unreachable;
     };
@@ -436,6 +441,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -569,6 +575,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -586,8 +593,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -651,9 +660,11 @@ fn String::append_char(self, c) {
 fn Point^Eq::eq(self, other) {
     return if __inline_i32_Eq__eq_0: block -> bool {
         break __inline_i32_Eq__eq_0: self.x == other.x;
+        unreachable;
     } -> i32 {
         __inline_i32_Eq__eq_1: block -> bool {
             break __inline_i32_Eq__eq_1: self.y == other.y;
+            unreachable;
         };
     } else {
         0;
@@ -663,15 +674,18 @@ fn Point^Eq::eq(self, other) {
 fn Color^Eq::eq(self, other) {
     return if if __inline_u8_Eq__eq_0: block -> bool {
         break __inline_u8_Eq__eq_0: self.r == other.r;
+        unreachable;
     } -> i32 {
         __inline_u8_Eq__eq_1: block -> bool {
             break __inline_u8_Eq__eq_1: self.g == other.g;
+            unreachable;
         };
     } else {
         0;
     } -> i32 {
         __inline_u8_Eq__eq_2: block -> bool {
             break __inline_u8_Eq__eq_2: self.b == other.b;
+            unreachable;
         };
     } else {
         0;

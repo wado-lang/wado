@@ -159,6 +159,7 @@ fn run() with Stdout {
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         u128::fmt_decimal(__sroa_b_a, __local_4);
         break __tmpl: __local_3;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(18), used: 0 };
@@ -167,6 +168,7 @@ fn run() with Stdout {
         __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i128::fmt_decimal(__sroa_b_b, __local_6);
         break __tmpl: __local_5;
+        unreachable;
     });
     x = u128 { low: 12345_i64, high: 0_i64 };
     y = i128 { low: -67890_i64, high: -1_i64 };
@@ -177,6 +179,7 @@ fn run() with Stdout {
         __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         u128::fmt_decimal(x, __local_8);
         break __tmpl: __local_7;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(18), used: 0 };
@@ -185,6 +188,7 @@ fn run() with Stdout {
         __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
         i128::fmt_decimal(y, __local_10);
         break __tmpl: __local_9;
+        unreachable;
     });
 }
 
@@ -276,6 +280,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -372,6 +377,7 @@ fn u128::div_rem(self, divisor) {
             0;
         };
         break __inline_u128_Eq__eq_1;
+        unreachable;
     } {
         return "tuple/[u128, u128]" { 0: u128 { low: 1_i64, high: 0_i64 }, 1: u128 { low: 0_i64, high: 0_i64 } };
     };
@@ -454,11 +460,13 @@ fn u128::fmt_decimal(self, f) {
             0;
         };
         break __inline_u128_Eq__eq_1;
+        unreachable;
     } {
         offset_2 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, 1);
         arr_3 = __inline_String__internal_raw_bytes_2: block -> ref array<u8> {
             __local_16 = f.buf;
             break __inline_String__internal_raw_bytes_2: __local_16.repr;
+            unreachable;
         };
         builtin::array_set_u8(arr_3, offset_2, 48);
         return;
@@ -477,6 +485,7 @@ fn u128::fmt_decimal(self, f) {
                     __local_19 = temp_7;
                     __local_21 = u128::div_rem(__local_19, ten);
                     break __inline_u128_Div__div_5: __local_21.0;
+                    unreachable;
                 };
                 continue l22;
             };
@@ -486,6 +495,7 @@ fn u128::fmt_decimal(self, f) {
     arr_9 = __inline_String__internal_raw_bytes_6: block -> ref array<u8> {
         __local_22 = f.buf;
         break __inline_String__internal_raw_bytes_6: __local_22.repr;
+        unreachable;
     };
     pos = offset_8 + digit_count;
     __for_1: block {
@@ -501,14 +511,17 @@ fn u128::fmt_decimal(self, f) {
                         __local_24 = temp_11;
                         __local_26 = u128::div_rem(__local_24, ten);
                         break __inline_u128_Rem__rem_8: __local_26.1;
+                        unreachable;
                     };
                     break __inline_u128__low_9: __local_27.low;
+                    unreachable;
                 });
                 builtin::array_set_u8(arr_9, pos, (48 + digit) & 255);
                 temp_11 = __inline_u128_Div__div_10: block -> ref u128 {
                     __local_28 = temp_11;
                     __local_30 = u128::div_rem(__local_28, ten);
                     break __inline_u128_Div__div_10: __local_30.0;
+                    unreachable;
                 };
                 continue l25;
             };
@@ -610,6 +623,7 @@ fn i128::fmt_decimal(self, f) {
         arr_5 = __inline_String__internal_raw_bytes_1: block -> ref array<u8> {
             __local_16 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_16.repr;
+            unreachable;
         };
         builtin::array_set_u8(arr_5, offset_4, 48);
         return;
@@ -628,6 +642,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_19 = temp_9;
                     __local_21 = u128::div_rem(__local_19, ten);
                     break __inline_u128_Div__div_4: __local_21.0;
+                    unreachable;
                 };
                 continue l38;
             };
@@ -637,6 +652,7 @@ fn i128::fmt_decimal(self, f) {
     arr_11 = __inline_String__internal_raw_bytes_5: block -> ref array<u8> {
         __local_22 = f.buf;
         break __inline_String__internal_raw_bytes_5: __local_22.repr;
+        unreachable;
     };
     pos = offset_10 + digit_count;
     __for_3: block {
@@ -652,14 +668,17 @@ fn i128::fmt_decimal(self, f) {
                         __local_24 = temp_13;
                         __local_26 = u128::div_rem(__local_24, ten);
                         break __inline_u128_Rem__rem_7: __local_26.1;
+                        unreachable;
                     };
                     break __inline_u128__low_8: __local_27.low;
+                    unreachable;
                 });
                 builtin::array_set_u8(arr_11, pos, (48 + digit) & 255);
                 temp_13 = __inline_u128_Div__div_9: block -> ref u128 {
                     __local_28 = temp_13;
                     __local_30 = u128::div_rem(__local_28, ten);
                     break __inline_u128_Div__div_9: __local_30.0;
+                    unreachable;
                 };
                 continue l41;
             };
@@ -681,8 +700,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

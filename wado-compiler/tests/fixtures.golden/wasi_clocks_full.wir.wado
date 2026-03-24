@@ -222,6 +222,7 @@ condition: t2 >= t1
             String::append(__local_25.buf, __local_31);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
+            unreachable;
         });
         unreachable;
     };
@@ -266,6 +267,7 @@ condition: res > 0
             String::append(__local_14.buf, __local_20);
             String::append_char(__local_3, 10);
             break __tmpl: __local_3;
+            unreachable;
         });
         unreachable;
     };
@@ -331,6 +333,7 @@ condition: after >= before
             String::append(__local_25.buf, __local_31);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
+            unreachable;
         });
         unreachable;
     };
@@ -398,6 +401,7 @@ condition: after >= target
             String::append(__local_26.buf, __local_32);
             String::append_char(__local_6, 10);
             break __tmpl: __local_6;
+            unreachable;
         });
         unreachable;
     };
@@ -463,6 +467,7 @@ condition: after >= before
             String::append(__local_25.buf, __local_31);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
+            unreachable;
         });
         unreachable;
     };
@@ -510,6 +515,7 @@ condition: after > 0
             String::append(__local_14.buf, __local_20);
             String::append_char(__local_3, 10);
             break __tmpl: __local_3;
+            unreachable;
         });
         unreachable;
     };
@@ -555,6 +561,7 @@ condition: instant.seconds > 0
             i64::fmt_decimal(__v0_1, __local_18);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
+            unreachable;
         });
         unreachable;
     };
@@ -583,6 +590,7 @@ condition: instant.nanoseconds < 1_000_000_000 as u32
             u32::fmt_decimal(__v0_3, __local_29);
             String::append_char(__local_7, 10);
             break __tmpl: __local_7;
+            unreachable;
         });
         unreachable;
     };
@@ -627,6 +635,7 @@ condition: res > 0
             String::append(__local_14.buf, __local_20);
             String::append_char(__local_3, 10);
             break __tmpl: __local_3;
+            unreachable;
         });
         unreachable;
     };
@@ -678,6 +687,7 @@ condition: t2.nanoseconds >= t1.nanoseconds
                 u32::fmt_decimal(__v1, __local_30);
                 String::append_char(__local_8, 10);
                 break __tmpl: __local_8;
+                unreachable;
             });
             unreachable;
         };
@@ -814,6 +824,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -947,6 +958,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -967,6 +979,7 @@ fn u32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -991,6 +1004,7 @@ fn i64::fmt_decimal(self, f) {
         repr = __inline_String__internal_raw_bytes_0: block -> ref array<u8> {
             __local_12 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_12.repr;
+            unreachable;
         };
         write_decimal_digits(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
@@ -1005,6 +1019,7 @@ fn i64::fmt_decimal(self, f) {
         write_decimal_digits(__inline_String__internal_raw_bytes_1: block -> ref array<u8> {
             __local_13 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_13.repr;
+            unreachable;
         }, offset_11, abs_val, digit_count_10);
     };
 }
@@ -1034,6 +1049,7 @@ fn u64::fmt_decimal(self, f) {
         builtin::array_set_u8(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
             __local_19 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_19.repr;
+            unreachable;
         }, offset_3, 48);
         return;
     };
@@ -1064,6 +1080,7 @@ fn u64::fmt_decimal(self, f) {
     repr = __inline_String__internal_raw_bytes_1: block -> ref array<u8> {
         __local_20 = f.buf;
         break __inline_String__internal_raw_bytes_1: __local_20.repr;
+        unreachable;
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
@@ -1112,8 +1129,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

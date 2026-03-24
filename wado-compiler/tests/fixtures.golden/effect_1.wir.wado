@@ -152,10 +152,12 @@ fn effect_poly_basic() with Stdout {
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         i32::fmt_decimal(42, __local_3);
         break __tmpl: __local_2;
+        unreachable;
     });
     result2 = __inline_apply_i32____Closure_3_8: block -> i32 {
         __local_20 = __Closure_3 {  };
         break __inline_apply_i32____Closure_3_8: __Closure_3::__call(__local_20, 21);
+        unreachable;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(25), used: 0 };
@@ -163,6 +165,7 @@ fn effect_poly_basic() with Stdout {
         __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         i32::fmt_decimal(result2, __local_7);
         break __tmpl: __local_6;
+        unreachable;
     });
 }
 
@@ -183,8 +186,10 @@ fn effect_poly_chain() with Stdout {
                 call_ref "functype/$canonical_closure_fn_1"(__indirect_call_0.func, __indirect_call_0.env, 10);
             };
             break __inline_apply_i32__1;
+            unreachable;
         };
         break __inline_chained___Closure_4_0: __local_6;
+        unreachable;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(24), used: 0 };
@@ -199,6 +204,7 @@ fn effect_poly_chain() with Stdout {
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(result, __local_4);
         break __tmpl: __local_3;
+        unreachable;
     });
 }
 
@@ -321,6 +327,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -436,6 +443,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -453,8 +461,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -528,6 +538,7 @@ fn __Closure_3::__call(self, x) {
         __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i32::fmt_decimal(x, __local_6);
         break __tmpl: __local_5;
+        unreachable;
     });
     return x * 2;
 }
@@ -544,6 +555,7 @@ fn __Closure_4::__call(self, x) {
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         i32::fmt_decimal(x, __local_3);
         break __tmpl: __local_2;
+        unreachable;
     });
     return x + 1;
 }

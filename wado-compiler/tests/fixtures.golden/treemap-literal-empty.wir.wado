@@ -138,6 +138,7 @@ import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout {
     let __local_0: ref "core:allocator/TreeMap<String,i32>";
+    let m: ref "core:allocator/TreeMap<String,i32>";
     let __v0_2: i32;
     let __cond: bool;
     let __v0_4: bool;
@@ -150,14 +151,16 @@ fn run() with Stdout {
     let __local_23: ref Formatter;
     let __local_30: ref Formatter;
     let __local_35: ref Formatter;
-    drop(__kv_lit: block -> ref "core:allocator/TreeMap<String,i32>" {
+    m = __kv_lit: block -> ref "core:allocator/TreeMap<String,i32>" {
         __local_0 = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
             __local_12 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
             break __seq_lit: __local_12;
+            unreachable;
         }), size: 0, deleted_count: 0 };
         break __kv_lit: __local_0;
-    });
-    __v0_2 = 0;
+        unreachable;
+    };
+    __v0_2 = m.size;
     __cond = __v0_2 == 0;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -184,10 +187,11 @@ condition: m.len() == 0
             i32::fmt_decimal(__v0_2, __local_23);
             String::append_char(__local_6, 10);
             break __tmpl: __local_6;
+            unreachable;
         });
         unreachable;
     };
-    __v0_4 = 1;
+    __v0_4 = m.size == 0;
     if __v0_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_8 = String { repr: builtin::array_new<u8>(129), used: 0 };
@@ -217,6 +221,7 @@ condition: m.is_empty()
             });
             String::append_char(__local_8, 10);
             break __tmpl: __local_8;
+            unreachable;
         });
         unreachable;
     };
@@ -311,6 +316,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -444,6 +450,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -461,8 +468,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

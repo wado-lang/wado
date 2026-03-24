@@ -215,6 +215,7 @@ fn run() with Stdout, Stderr, Preopens {
             unreachable;
         };
         break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: builtin::array_get<ref "tuple/[Descriptor, String]">(dirs.repr, 0);
+        unreachable;
     }.0;
     stat_result = __cm_binding__Descriptor_stat_at(dir, 0, String { repr: array.new_data<u8>("hello.txt"), used: 9 });
     if ref.test Result<DescriptorStat,ErrorCode>::Ok(stat_result) {
@@ -234,6 +235,7 @@ fn run() with Stdout, Stderr, Preopens {
                 __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
                 u64::fmt_decimal(size_u64, __local_10);
                 break __tmpl: __local_9;
+                unreachable;
             });
         };
         "core:cli/println"(String { repr: array.new_data<u8>("stat_at: test passed"), used: 20 });
@@ -304,6 +306,7 @@ fn __cm_binding__Preopens_get_directories() {
                 __local_10 = builtin::load_i32((__elem_addr + 4) + 4);
                 __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
                 break __inline_memory_to_gc_string_1: String { repr: ref.as_non_null(__local_11), used: __local_10 };
+                unreachable;
             };
             Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: ref.as_non_null(__lifted_result_7) });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
@@ -634,6 +637,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -739,6 +743,7 @@ fn u64::fmt_decimal(self, f) {
         builtin::array_set_u8(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
             __local_19 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_19.repr;
+            unreachable;
         }, offset_3, 48);
         return;
     };
@@ -769,6 +774,7 @@ fn u64::fmt_decimal(self, f) {
     repr = __inline_String__internal_raw_bytes_1: block -> ref array<u8> {
         __local_20 = f.buf;
         break __inline_String__internal_raw_bytes_1: __local_20.repr;
+        unreachable;
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
@@ -817,8 +823,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -901,6 +909,7 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "tuple/[Descriptor, String]">(new_capacity);
     old_repr = self.repr;

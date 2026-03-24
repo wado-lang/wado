@@ -213,6 +213,7 @@ condition: b.1 == \"hello\"
             String^Inspect::inspect(__v0, __local_11);
             String::append_char(__local_10, 10);
             break __tmpl: __local_10;
+            unreachable;
         });
         unreachable;
     };
@@ -263,12 +264,14 @@ condition: c.2 == \"hello\"
             String^Inspect::inspect(__v0, __local_13);
             String::append_char(__local_12, 10);
             break __tmpl: __local_12;
+            unreachable;
         });
         unreachable;
     };
 }
 
 fn __test_2_spread_eval_once() {
+    let __local_0: ref "tuple/[i32, i32]";
     let a: ref "tuple/[i32, i32, i32]";
     let __v0_2: i32;
     let __cond_3: bool;
@@ -276,6 +279,7 @@ fn __test_2_spread_eval_once() {
     let __cond_5: bool;
     let __v0_6: i32;
     let __cond_7: bool;
+    let b: ref "tuple/[i32, i32, i32]";
     let __v0_9: i32;
     let __cond_10: bool;
     let __v0_11: i32;
@@ -320,11 +324,12 @@ fn __test_2_spread_eval_once() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    drop(__inline_make_pair_1: block -> ref "tuple/[i32, i32]" {
+    __local_0 = __inline_make_pair_1: block -> ref "tuple/[i32, i32]" {
         call_count = call_count + 1;
         break __inline_make_pair_1: "tuple/[i32, i32]" { 0: 10, 1: 20 };
-    });
-    a = "tuple/[i32, i32, i32]" { 0: 10, 1: 20, 2: 30 };
+        unreachable;
+    };
+    a = "tuple/[i32, i32, i32]" { 0: __local_0.0, 1: __local_0.1, 2: 30 };
     __v0_2 = a.0;
     __cond_3 = __v0_2 == 10;
     if __cond_3 == 0 {
@@ -354,6 +359,7 @@ condition: a.0 == 10
             i32::fmt_decimal(__v0_2, __local_39);
             String::append_char(__local_17, 10);
             break __tmpl: __local_17;
+            unreachable;
         });
         unreachable;
     };
@@ -386,6 +392,7 @@ condition: a.1 == 20
             i32::fmt_decimal(__v0_4, __local_50);
             String::append_char(__local_19, 10);
             break __tmpl: __local_19;
+            unreachable;
         });
         unreachable;
     };
@@ -417,17 +424,20 @@ condition: call_count == 1
             i32::fmt_decimal(__v0_6, __local_61);
             String::append_char(__local_21, 10);
             break __tmpl: __local_21;
+            unreachable;
         });
         unreachable;
     };
-    drop(__inline_eval_prepend_i32_Tuple_i32_i32___23: block -> ref "tuple/[i32, i32, i32]" {
+    b = __inline_eval_prepend_i32_Tuple_i32_i32___23: block -> ref "tuple/[i32, i32, i32]" {
         __local_65 = __inline_make_pair_24: block -> ref "tuple/[i32, i32]" {
             call_count = call_count + 1;
             break __inline_make_pair_24: "tuple/[i32, i32]" { 0: 10, 1: 20 };
+            unreachable;
         };
-        break __inline_eval_prepend_i32_Tuple_i32_i32___23: "tuple/[i32, i32, i32]" { 0: 99, 1: 10, 2: 20 };
-    });
-    __v0_9 = 99;
+        break __inline_eval_prepend_i32_Tuple_i32_i32___23: "tuple/[i32, i32, i32]" { 0: 99, 1: __local_65.0, 2: __local_65.1 };
+        unreachable;
+    };
+    __v0_9 = b.0;
     __cond_10 = __v0_9 == 99;
     if __cond_10 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -456,10 +466,11 @@ condition: b.0 == 99
             i32::fmt_decimal(__v0_9, __local_74);
             String::append_char(__local_23, 10);
             break __tmpl: __local_23;
+            unreachable;
         });
         unreachable;
     };
-    __v0_11 = 10;
+    __v0_11 = b.1;
     __cond_12 = __v0_11 == 10;
     if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -488,10 +499,11 @@ condition: b.1 == 10
             i32::fmt_decimal(__v0_11, __local_85);
             String::append_char(__local_25, 10);
             break __tmpl: __local_25;
+            unreachable;
         });
         unreachable;
     };
-    __v0_13 = 20;
+    __v0_13 = b.2;
     __cond_14 = __v0_13 == 20;
     if __cond_14 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -520,6 +532,7 @@ condition: b.2 == 20
             i32::fmt_decimal(__v0_13, __local_96);
             String::append_char(__local_27, 10);
             break __tmpl: __local_27;
+            unreachable;
         });
         unreachable;
     };
@@ -551,6 +564,7 @@ condition: call_count == 2
             i32::fmt_decimal(__v0_15, __local_107);
             String::append_char(__local_29, 10);
             break __tmpl: __local_29;
+            unreachable;
         });
         unreachable;
     };
@@ -601,6 +615,7 @@ condition: c.1 == \"hello\"
             String^Inspect::inspect(__v0, __local_14);
             String::append_char(__local_13, 10);
             break __tmpl: __local_13;
+            unreachable;
         });
         unreachable;
     };
@@ -651,12 +666,14 @@ condition: d.2 == \"hello\"
             String^Inspect::inspect(__v0, __local_15);
             String::append_char(__local_14, 10);
             break __tmpl: __local_14;
+            unreachable;
         });
         unreachable;
     };
 }
 
 fn __test_5_spread_vs_field_access() {
+    let result: ref "tuple/[i32, i32, i32]";
     let __v0_1: i32;
     let __cond_2: bool;
     let __v0_3: i32;
@@ -680,14 +697,15 @@ fn __test_5_spread_vs_field_access() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    drop(__inline_combine_Tuple_i32_i32___1: block -> ref "tuple/[i32, i32, i32]" {
+    result = __inline_combine_Tuple_i32_i32___1: block -> ref "tuple/[i32, i32, i32]" {
         __local_33 = 10;
         __local_34 = 20;
         __local_35 = 30;
         __local_36 = 40;
         break __inline_combine_Tuple_i32_i32___1: "tuple/[i32, i32, i32]" { 0: 10, 1: 30, 2: 40 };
-    });
-    __v0_1 = 10;
+        unreachable;
+    };
+    __v0_1 = result.0;
     __cond_2 = __v0_1 == 10;
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -712,10 +730,11 @@ condition: result.0 == 10
             i32::fmt_decimal(__v0_1, __local_19);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
+            unreachable;
         });
         unreachable;
     };
-    __v0_3 = 30;
+    __v0_3 = result.1;
     __cond_4 = __v0_3 == 30;
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -740,6 +759,7 @@ condition: result.1 == 30
             i32::fmt_decimal(__v0_3, __local_30);
             String::append_char(__local_7, 10);
             break __tmpl: __local_7;
+            unreachable;
         });
         unreachable;
     };
@@ -782,6 +802,7 @@ fn __test_6_for_of_try_op() {
 condition: result matches { Ok(_) }
 "), used: 37 });
             break __tmpl: __local_2;
+            unreachable;
         });
         unreachable;
     };
@@ -837,6 +858,7 @@ fn process_all<Tuple<i32,String,bool>>(items) {
     __match_scrut_0 = __inline_i32_Processable__process_0: block -> ref null String {
         __local_15 = v_5;
         break __inline_i32_Processable__process_0: ref.null none;
+        unreachable;
     };
     if ref.is_null(__match_scrut_0) {
     } else if ref.is_null(__match_scrut_0) == 0 {
@@ -844,6 +866,7 @@ fn process_all<Tuple<i32,String,bool>>(items) {
         __cast_1 = ref.as_non_null(__match_scrut_0);
         __local_3 = ref.as_non_null(__cast_1);
         return ref.as_non_null(__local_3);
+        unreachable;
         unreachable;
     } else {
         unreachable;
@@ -857,6 +880,7 @@ fn process_all<Tuple<i32,String,bool>>(items) {
         __local_8 = ref.as_non_null(__cast_2);
         return ref.as_non_null(__local_8);
         unreachable;
+        unreachable;
     } else {
         unreachable;
     };
@@ -865,6 +889,7 @@ fn process_all<Tuple<i32,String,bool>>(items) {
     __match_scrut_2 = __inline_bool_Processable__process_2: block -> ref null String {
         __local_16 = v_9;
         break __inline_bool_Processable__process_2: ref.null none;
+        unreachable;
     };
     if ref.is_null(__match_scrut_2) {
     } else if ref.is_null(__match_scrut_2) == 0 {
@@ -872,6 +897,7 @@ fn process_all<Tuple<i32,String,bool>>(items) {
         __cast_3 = ref.as_non_null(__match_scrut_2);
         __local_11 = ref.as_non_null(__cast_3);
         return ref.as_non_null(__local_11);
+        unreachable;
         unreachable;
     } else {
         unreachable;
@@ -926,6 +952,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -1067,6 +1094,7 @@ fn Array<u64>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u64>(new_capacity);
     old_repr = self.repr;
@@ -1104,6 +1132,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1121,8 +1150,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -1208,6 +1239,7 @@ fn StrCharIter^Iterator::next(self) {
         return 0; __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     };
     if b0 <u 224 {
@@ -1370,8 +1402,10 @@ fn String^Inspect::inspect(self, f) {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
             break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+        unreachable;
     };
     _licm_buf_33 = f.buf;
     b84: block {

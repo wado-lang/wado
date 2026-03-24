@@ -882,6 +882,13 @@ impl FunctionTranslator<'_, '_> {
             if let Some(instr) = self.translate_stmt(stmt) {
                 instrs.push(instr);
             }
+            // If this was the last statement and none of the value-producing special
+            // cases above matched, the fallthrough path is dead code: e.g. a Loop that
+            // always exits via labeled `break` to an outer block. Add `unreachable` so
+            // the Wasm validator knows no value is expected on the fallthrough path.
+            if is_last {
+                instrs.push(WirInstr::Unreachable);
+            }
         }
         instrs
     }

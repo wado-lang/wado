@@ -191,6 +191,7 @@ condition: first == 10
             i32::fmt_decimal(first, __local_41);
             String::append_char(__local_14, 10);
             break __tmpl: __local_14;
+            unreachable;
         });
         unreachable;
     };
@@ -227,6 +228,7 @@ condition: second == 20
             i32::fmt_decimal(second, __local_52);
             String::append_char(__local_16, 10);
             break __tmpl: __local_16;
+            unreachable;
         });
         unreachable;
     };
@@ -242,6 +244,7 @@ condition: second == 20
         __local_63 = __local_19;
         i32::fmt_decimal(second, __local_63);
         break __tmpl: __local_18;
+        unreachable;
     });
     ms = IntStore { a: 1, b: 2, c: 3 };
     IntStore^IndexAssign::index_assign(ms, 0, 100);
@@ -279,6 +282,7 @@ condition: ms[0] == 100
             i32::fmt_decimal(__v0_8, __local_76);
             String::append_char(__local_20, 10);
             break __tmpl: __local_20;
+            unreachable;
         });
         unreachable;
     };
@@ -315,6 +319,7 @@ condition: ms[1] == 2
             i32::fmt_decimal(__v0_10, __local_89);
             String::append_char(__local_22, 10);
             break __tmpl: __local_22;
+            unreachable;
         });
         unreachable;
     };
@@ -351,6 +356,7 @@ condition: ms[2] == 300
             i32::fmt_decimal(__v0_12, __local_102);
             String::append_char(__local_24, 10);
             break __tmpl: __local_24;
+            unreachable;
         });
         unreachable;
     };
@@ -371,6 +377,7 @@ condition: ms[2] == 300
         __local_122 = __local_27;
         i32::fmt_decimal(ms.c, __local_122);
         break __tmpl: __local_26;
+        unreachable;
     });
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
 }
@@ -463,6 +470,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -596,6 +604,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -613,8 +622,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

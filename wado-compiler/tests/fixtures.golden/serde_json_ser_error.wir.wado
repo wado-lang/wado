@@ -10,6 +10,11 @@ struct Box<f32> {  // from core:internal  // Box<T> with T=f32
     mut value: f32,
 }
 
+struct PmHiLo {
+    mut hi: u64,
+    mut lo: u64,
+}
+
 array array<u8> (mut u8);
 
 struct StrCharIter {
@@ -126,6 +131,8 @@ type "functype/unrounded_div" = fn(u64, u64) -> u64;
 
 type "functype/pow10_fine" = fn(i32) -> u64;
 
+type "functype/mul_pow10" = fn(i32) -> ref PmHiLo;
+
 type "functype/uscale" = fn(u64, u64, u64, i32) -> u64;
 
 type "functype/write_digits_at" = fn(ref String, i32, u64, i32);
@@ -177,8 +184,6 @@ type "functype/wasi/stream-new" = fn() -> i64;
 type "functype/unpack64" = fn(f64) -> [u64, i32];
 
 type "functype/pow10_coarse" = fn(i32) -> [u64, u64];
-
-type "functype/mul_pow10" = fn(i32) -> [u64, u64];
 
 type "functype/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];
 
@@ -253,6 +258,7 @@ fn __test_0_f64_nan() {
                 0;
             };
             break __inline_is_unsupported_1;
+            unreachable;
         };
         if __v0 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
@@ -281,6 +287,7 @@ condition: is_unsupported(e.kind)
                 });
                 String::append_char(__local_5, 10);
                 break __tmpl: __local_5;
+                unreachable;
             });
             unreachable;
         };
@@ -321,6 +328,7 @@ fn __test_1_f64_infinity() {
                 0;
             };
             break __inline_is_unsupported_1;
+            unreachable;
         };
         if __v0 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
@@ -349,6 +357,7 @@ condition: is_unsupported(e.kind)
                 });
                 String::append_char(__local_5, 10);
                 break __tmpl: __local_5;
+                unreachable;
             });
             unreachable;
         };
@@ -389,6 +398,7 @@ fn __test_2_f64_negative_infinity() {
                 0;
             };
             break __inline_is_unsupported_1;
+            unreachable;
         };
         if __v0 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
@@ -417,6 +427,7 @@ condition: is_unsupported(e.kind)
                 });
                 String::append_char(__local_5, 10);
                 break __tmpl: __local_5;
+                unreachable;
             });
             unreachable;
         };
@@ -457,6 +468,7 @@ fn __test_3_f32_nan() {
                 0;
             };
             break __inline_is_unsupported_1;
+            unreachable;
         };
         if __v0 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
@@ -485,6 +497,7 @@ condition: is_unsupported(e.kind)
                 });
                 String::append_char(__local_5, 10);
                 break __tmpl: __local_5;
+                unreachable;
             });
             unreachable;
         };
@@ -525,6 +538,7 @@ fn __test_4_f32_infinity() {
                 0;
             };
             break __inline_is_unsupported_1;
+            unreachable;
         };
         if __v0 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
@@ -553,6 +567,7 @@ condition: is_unsupported(e.kind)
                 });
                 String::append_char(__local_5, 10);
                 break __tmpl: __local_5;
+                unreachable;
             });
             unreachable;
         };
@@ -593,6 +608,7 @@ fn __test_5_f32_negative_infinity() {
                 0;
             };
             break __inline_is_unsupported_1;
+            unreachable;
         };
         if __v0 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
@@ -621,6 +637,7 @@ condition: is_unsupported(e.kind)
                 });
                 String::append_char(__local_5, 10);
                 break __tmpl: __local_5;
+                unreachable;
             });
             unreachable;
         };
@@ -676,6 +693,7 @@ condition: s == \"3.14\"
                 String^Inspect::inspect(__v0, __local_5);
                 String::append_char(__local_4, 10);
                 break __tmpl: __local_4;
+                unreachable;
             });
             unreachable;
         };
@@ -731,6 +749,7 @@ condition: s == \"2.5\"
                 String^Inspect::inspect(__v0, __local_6);
                 String::append_char(__local_5, 10);
                 break __tmpl: __local_5;
+                unreachable;
             });
             unreachable;
         };
@@ -853,6 +872,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -936,6 +956,7 @@ fn unpack64(f) {
     let e: i32;
     bits = __inline_f64__to_bits_0: block -> i64 {
         break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(f);
+        unreachable;
     };
     raw_mantissa = bits & 4503599627370495_i64;
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
@@ -1220,9 +1241,9 @@ fn mul_pow10(p) {
         top_lo = top_lo << 1_i64;
     };
     if top_lo != 0_i64 {
-        return top_hi + 1_i64; 0_i64 - top_lo;
+        return PmHiLo { hi: top_hi + 1_i64, lo: 0_i64 - top_lo };
     };
-    return top_hi; 0_i64;
+    return PmHiLo { hi: top_hi, lo: 0_i64 };
 }
 
 fn uscale(x, pm_hi, pm_lo, s) {
@@ -1256,6 +1277,7 @@ fn fixed_width_for_prec(f, precision) {
     let log10_e63: i32;
     let p1: i32;
     let lp1: i32;
+    let pm1: ref PmHiLo;
     let s1: i32;
     let u1: u64;
     let d1_floor: u64;
@@ -1264,6 +1286,7 @@ fn fixed_width_for_prec(f, precision) {
     let n: i32;
     let p: i32;
     let lp: i32;
+    let pm: ref PmHiLo;
     let s: i32;
     let u: u64;
     let d: u64;
@@ -1278,14 +1301,13 @@ fn fixed_width_for_prec(f, precision) {
     log10_e63 = __inline_log10_pow2_0: block -> i32 {
         __local_21 = e + 63;
         break __inline_log10_pow2_0: (__local_21 * 78913) >> 18;
+        unreachable;
     };
     p1 = 0 - log10_e63;
     lp1 = (p1 * 108853) >> 15;
-    let __sroa_pm1_hi: u64;
-    let __sroa_pm1_lo: u64;
-    multivalue_bind [__sroa_pm1_hi, __sroa_pm1_lo] = mul_pow10(p1);
+    pm1 = mul_pow10(p1);
     s1 = 0 - ((e + lp1) + 3);
-    u1 = uscale(m, __sroa_pm1_hi, __sroa_pm1_lo, s1);
+    u1 = uscale(m, pm1.hi, pm1.lo, s1);
     d1_floor = (u1 + 0_i64) >>u 2_i64;
     decimal_pos = if d1_floor >=u 10_i64 -> i32 {
         2 - p1;
@@ -1300,11 +1322,9 @@ fn fixed_width_for_prec(f, precision) {
     };
     p = (n - 1) - log10_e63;
     lp = (p * 108853) >> 15;
-    let __sroa_pm_hi: u64;
-    let __sroa_pm_lo: u64;
-    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(p);
+    pm = mul_pow10(p);
     s = 0 - ((e + lp) + 3);
-    u = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
+    u = uscale(m, pm.hi, pm.lo, s);
     d = ((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64;
     if d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
         __local_30 = POW10;
@@ -1313,10 +1333,12 @@ fn fixed_width_for_prec(f, precision) {
             unreachable;
         };
         break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_30.repr, n);
+        unreachable;
     } {
         d = __inline_unrounded_round_8: block -> u64 {
             __local_29 = unrounded_div(u, 10_i64);
             break __inline_unrounded_round_8: ((__local_29 + 1_i64) + ((__local_29 >>u 2_i64) & 1_i64)) >>u 2_i64;
+            unreachable;
         };
         return d; (0 - p) + 1;
     };
@@ -1333,6 +1355,7 @@ fn short(f) {
     let max_m: u64;
     let odd: i32;
     let lp: i32;
+    let pm: ref PmHiLo;
     let s: i32;
     let dmin: u64;
     let dmax: u64;
@@ -1368,6 +1391,7 @@ fn short(f) {
         p = 0 - __inline_skewed_0: block -> i32 {
             __local_22 = e + 11;
             break __inline_skewed_0: ((__local_22 * 631305) - 261663) >> 21;
+            unreachable;
         };
         min_m = m - 512_i64;
     } else {
@@ -1377,6 +1401,7 @@ fn short(f) {
         p = 0 - __inline_log10_pow2_1: block -> i32 {
             __local_23 = e + z;
             break __inline_log10_pow2_1: (__local_23 * 78913) >> 18;
+            unreachable;
         };
         min_m = m - (1_i64 << builtin::i64_extend_i32_s(z - 1));
     };
@@ -1385,26 +1410,32 @@ fn short(f) {
     lp = __inline_log2_pow10_2: block -> i32 {
         __local_24 = p;
         break __inline_log2_pow10_2: (__local_24 * 108853) >> 15;
+        unreachable;
     };
-    let __sroa_pm_hi: u64;
-    let __sroa_pm_lo: u64;
-    __local_25 = p;
-    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(__local_25);
+    pm = __inline_get_pow10_3: block -> ref PmHiLo {
+        __local_25 = p;
+        break __inline_get_pow10_3: mul_pow10(__local_25);
+        unreachable;
+    };
     s = 0 - ((e + lp) + 3);
     dmin = __inline_unrounded_ceil_4: block -> u64 {
         __local_26 = __inline_unrounded_nudge_5: block -> u64 {
-            __local_27 = uscale(min_m, __sroa_pm_hi, __sroa_pm_lo, s);
+            __local_27 = uscale(min_m, pm.hi, pm.lo, s);
             break __inline_unrounded_nudge_5: __local_27 + builtin::i64_extend_i32_s(odd);
+            unreachable;
         };
         break __inline_unrounded_ceil_4: (__local_26 + 3_i64) >>u 2_i64;
+        unreachable;
     };
     dmax = __inline_unrounded_floor_6: block -> u64 {
         __local_29 = __inline_unrounded_nudge_7: block -> u64 {
-            __local_30 = uscale(max_m, __sroa_pm_hi, __sroa_pm_lo, s);
+            __local_30 = uscale(max_m, pm.hi, pm.lo, s);
             __local_31 = 0 - odd;
             break __inline_unrounded_nudge_7: __local_30 + builtin::i64_extend_i32_s(__local_31);
+            unreachable;
         };
         break __inline_unrounded_floor_6: (__local_29 + 0_i64) >>u 2_i64;
+        unreachable;
     };
     d_div_10 = dmax /u 10_i64;
     can_trim = (d_div_10 * 10_i64) >=u dmin;
@@ -1419,8 +1450,9 @@ fn short(f) {
     d = dmin;
     if dmin <u dmax {
         d = __inline_unrounded_round_8: block -> u64 {
-            __local_32 = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
+            __local_32 = uscale(m, pm.hi, pm.lo, s);
             break __inline_unrounded_round_8: ((__local_32 + 1_i64) + ((__local_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
+            unreachable;
         };
     };
     return d; 0 - p;
@@ -1456,8 +1488,10 @@ fn trim_zeros(x, p) {
             __local_19 = xv;
             multivalue_bind [__local_21, _] = i64.mul_wide_u(__local_19, -3689348814741910323_i64);
             break __inline_u64_mul_1: __local_21;
+            unreachable;
         };
         break __inline_rotate_right_0: (__local_17 >>u 1_i64) | (__local_17 << 63_i64);
+        unreachable;
     };
     if d1 <=u 1844674407370955161_i64 {
         xv = d1;
@@ -1470,8 +1504,10 @@ fn trim_zeros(x, p) {
             __local_24 = xv;
             multivalue_bind [__local_26, _] = i64.mul_wide_u(__local_24, -4078282918271054303_i64);
             break __inline_u64_mul_3: __local_26;
+            unreachable;
         };
         break __inline_rotate_right_2: (__local_22 >>u 8_i64) | (__local_22 << 56_i64);
+        unreachable;
     };
     if d8 <=u 184467440737_i64 {
         xv = d8;
@@ -1482,8 +1518,10 @@ fn trim_zeros(x, p) {
             __local_29 = xv;
             multivalue_bind [__local_31, _] = i64.mul_wide_u(__local_29, -3276141747490816367_i64);
             break __inline_u64_mul_5: __local_31;
+            unreachable;
         };
         break __inline_rotate_right_4: (__local_27 >>u 4_i64) | (__local_27 << 60_i64);
+        unreachable;
     };
     if d4 <=u 1844674407370955_i64 {
         xv = d4;
@@ -1494,8 +1532,10 @@ fn trim_zeros(x, p) {
             __local_34 = xv;
             multivalue_bind [__local_36, _] = i64.mul_wide_u(__local_34, -8116567392432202711_i64);
             break __inline_u64_mul_7: __local_36;
+            unreachable;
         };
         break __inline_rotate_right_6: (__local_32 >>u 2_i64) | (__local_32 << 62_i64);
+        unreachable;
     };
     if d2 <=u 184467440737095516_i64 {
         xv = d2;
@@ -1506,8 +1546,10 @@ fn trim_zeros(x, p) {
             __local_39 = xv;
             multivalue_bind [__local_41, _] = i64.mul_wide_u(__local_39, -3689348814741910323_i64);
             break __inline_u64_mul_9: __local_41;
+            unreachable;
         };
         break __inline_rotate_right_8: (__local_37 >>u 1_i64) | (__local_37 << 63_i64);
+        unreachable;
     };
     if d1b <=u 1844674407370955161_i64 {
         xv = d1b;
@@ -1690,6 +1732,7 @@ fn check_special(f) {
     bits = __inline_f64__to_bits_0: block -> i64 {
         __local_6 = f;
         break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(__local_6);
+        unreachable;
     };
     if bits == 0_i64 {
         return 1; 0; 1;
@@ -1712,6 +1755,7 @@ fn __initialize_module() {
     POW10 = __seq_lit: block -> ref Array<u64> {
         __local_0 = Array<u64> { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
         break __seq_lit: __local_0;
+        unreachable;
     };
 }
 
@@ -1768,6 +1812,7 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     mark = __inline_String__len_1: block -> i32 {
         __local_6 = f.buf;
         break __inline_String__len_1: __local_6.used;
+        unreachable;
     };
     if kind == 3 {
         String::append_char(f.buf, 78);
@@ -1812,6 +1857,7 @@ fn Array<u64>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u64>(new_capacity);
     old_repr = self.repr;
@@ -1849,6 +1895,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1896,6 +1943,7 @@ fn f64::fmt_into(self, f) {
         __local_14 = __inline_log10_pow2_1: block -> i32 {
             __local_15 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
             break __inline_log10_pow2_1: (__local_15 * 78913) >> 18;
+            unreachable;
         };
         break __inline_digits_0: __local_14 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
             __local_22 = POW10;
@@ -1904,11 +1952,14 @@ fn f64::fmt_into(self, f) {
                 unreachable;
             };
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_22.repr, __local_14);
+            unreachable;
         });
+        unreachable;
     };
     mark = __inline_String__len_5: block -> i32 {
         __local_19 = f.buf;
         break __inline_String__len_5: __local_19.used;
+        unreachable;
     };
     if is_neg {
         String::append_char(f.buf, 45);
@@ -1965,6 +2016,7 @@ fn f64::fmt_fixed(self, precision, f) {
         mark_7 = __inline_String__len_1: block -> i32 {
             __local_16 = f.buf;
             break __inline_String__len_1: __local_16.used;
+            unreachable;
         };
         if is_neg {
             String::append_char(f.buf, 45);
@@ -1993,6 +2045,7 @@ fn f64::fmt_fixed(self, precision, f) {
         __local_20 = __inline_log10_pow2_4: block -> i32 {
             __local_21 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
             break __inline_log10_pow2_4: (__local_21 * 78913) >> 18;
+            unreachable;
         };
         break __inline_digits_3: __local_20 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
             __local_28 = POW10;
@@ -2001,11 +2054,14 @@ fn f64::fmt_fixed(self, precision, f) {
                 unreachable;
             };
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_28.repr, __local_20);
+            unreachable;
         });
+        unreachable;
     };
     mark_13 = __inline_String__len_8: block -> i32 {
         __local_25 = f.buf;
         break __inline_String__len_8: __local_25.used;
+        unreachable;
     };
     if is_neg {
         String::append_char(f.buf, 45);
@@ -2030,8 +2086,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -2130,6 +2188,7 @@ fn StrCharIter^Iterator::next(self) {
         return 0; __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     };
     if b0 <u 224 {
@@ -2188,12 +2247,14 @@ fn "core:json/JsonSerializer^Serializer::serialize_f32"(self, v) {  // from core
     if __inline_f32__is_nan_0: block -> bool {
         __local_10 = v;
         break __inline_f32__is_nan_0: __local_10 != __local_10;
+        unreachable;
     } {
         return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
     };
     if __inline_f32__is_finite_1: block -> bool {
         __local_5 = "core:internal/Box<f32>" { value: v };
         break __inline_f32__is_finite_1: (v - v) == 0_f32;
+        unreachable;
     } == 0 {
         return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
     };
@@ -2202,6 +2263,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_f32"(self, v) {  // from core
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         f64::fmt_into(builtin::f64_promote_f32(v), __local_3);
         break __tmpl: __local_2;
+        unreachable;
     });
     return ref.null none;
 }
@@ -2214,12 +2276,14 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core
     if __inline_f64__is_nan_0: block -> bool {
         __local_10 = v;
         break __inline_f64__is_nan_0: __local_10 != __local_10;
+        unreachable;
     } {
         return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
     };
     if __inline_f64__is_finite_1: block -> bool {
         __local_5 = "core:internal/Box<f64>" { value: v };
         break __inline_f64__is_finite_1: (v - v) == 0;
+        unreachable;
     } == 0 {
         return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
     };
@@ -2228,6 +2292,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         f64::fmt_into(v, __local_3);
         break __tmpl: __local_2;
+        unreachable;
     });
     return ref.null none;
 }
@@ -2316,6 +2381,7 @@ fn Formatter::apply_padding(self, start_pos) {
     content_len = __inline_String__len_0: block -> i32 {
         __local_12 = self.buf;
         break __inline_String__len_0: __local_12.used;
+        unreachable;
     } - start_pos;
     if if self.width <= 0 -> i32 {
         1;
@@ -2347,6 +2413,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 value_15 = __inline_String__get_byte_2: block -> u8 {
                     __local_17 = start_pos + i_8;
                     break __inline_String__get_byte_2: builtin::array_get_u8(_licm_repr_33, __local_17);
+                    unreachable;
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
@@ -2384,6 +2451,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 value_23 = __inline_String__get_byte_5: block -> u8 {
                     __local_25 = start_pos + i_10;
                     break __inline_String__get_byte_5: builtin::array_get_u8(_licm_repr_35, __local_25);
+                    unreachable;
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
@@ -2502,8 +2570,10 @@ fn String^Inspect::inspect(self, f) {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
             break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+        unreachable;
     };
     _licm_buf_33 = f.buf;
     b242: block {

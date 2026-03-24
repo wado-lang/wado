@@ -191,6 +191,7 @@ fn find_key_index(keys, key) {
                         unreachable;
                     };
                     break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_7, __local_5);
+                    unreachable;
                 }, key) == 0;
             } else {
                 0;
@@ -217,6 +218,7 @@ fn array_index_inline() with Stdout {
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     first = __inline_Array_i32__IndexValue__index_value_6: block -> i32 {
         if 0 >= arr.used {
@@ -224,6 +226,7 @@ fn array_index_inline() with Stdout {
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_6: builtin::array_get<i32>(arr.repr, 0);
+        unreachable;
     };
     second = __inline_Array_i32__IndexValue__index_value_7: block -> i32 {
         if 1 >= arr.used {
@@ -231,6 +234,7 @@ fn array_index_inline() with Stdout {
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_7: builtin::array_get<i32>(arr.repr, 1);
+        unreachable;
     };
     if 2 >= arr.used {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -257,8 +261,10 @@ fn array_index_inline() with Stdout {
                 unreachable;
             };
             break __inline_Array_i32__IndexValue__index_value_18: builtin::array_get<i32>(arr.repr, 2);
+            unreachable;
         }, __local_35);
         break __tmpl: __local_4;
+        unreachable;
     });
 }
 
@@ -272,9 +278,11 @@ fn array_index_inline_btree() with Stdout {
     tree = Tree<String> { root: Node<String> { keys: ref.as_non_null(__seq_lit: block -> ref Array<String> {
         __local_1 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("apple"), used: 5 }, String { repr: array.new_data<u8>("banana"), used: 6 }, String { repr: array.new_data<u8>("cherry"), used: 6 }, String { repr: array.new_data<u8>("date"), used: 4 }), used: 4 };
         break __seq_lit: __local_1;
+        unreachable;
     }), deleted: ref.as_non_null(__seq_lit: block -> ref Array<bool> {
         __local_0 = Array<bool> { repr: array.new_fixed<bool>(0, 1, 0, 0), used: 4 };
         break __seq_lit: __local_0;
+        unreachable;
     }) }, max_keys: 5 };
     result = Tree<String>::check(tree);
     "core:cli/println"(__tmpl: block -> ref String {
@@ -290,6 +298,7 @@ fn array_index_inline_btree() with Stdout {
         __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
         i32::fmt_decimal(result, __local_5);
         break __tmpl: __local_4;
+        unreachable;
     });
 }
 
@@ -302,6 +311,7 @@ fn array_index_inline_compare() with Stdout {
     keys = __seq_lit: block -> ref Array<String> {
         __local_0 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("apple"), used: 5 }, String { repr: array.new_data<u8>("banana"), used: 6 }, String { repr: array.new_data<u8>("cherry"), used: 6 }, String { repr: array.new_data<u8>("date"), used: 4 }), used: 4 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     result = find_key_index(keys, String { repr: array.new_data<u8>("cherry"), used: 6 });
     "core:cli/println"(__tmpl: block -> ref String {
@@ -316,6 +326,7 @@ fn array_index_inline_compare() with Stdout {
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(result, __local_4);
         break __tmpl: __local_3;
+        unreachable;
     });
 }
 
@@ -333,27 +344,31 @@ fn array_index_inline_generic() with Stdout {
     __sroa_c_items = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     first = __inline_Array_i32__IndexValue__index_value_6: block -> i32 {
-        if 0 {
+        if 0 >= __sroa_c_items.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_6: builtin::array_get<i32>(__sroa_c_items.repr, 0);
+        unreachable;
     };
     second = __inline_Array_i32__IndexValue__index_value_7: block -> i32 {
-        if 0 {
+        if 1 >= __sroa_c_items.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_7: builtin::array_get<i32>(__sroa_c_items.repr, 1);
+        unreachable;
     };
     third = __inline_Array_i32__IndexValue__index_value_8: block -> i32 {
-        if 0 {
+        if 2 >= __sroa_c_items.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_8: builtin::array_get<i32>(__sroa_c_items.repr, 2);
+        unreachable;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(52), used: 0 };
@@ -371,6 +386,7 @@ fn array_index_inline_generic() with Stdout {
         __local_35 = __local_6;
         i32::fmt_decimal(third, __local_35);
         break __tmpl: __local_5;
+        unreachable;
     });
 }
 
@@ -399,11 +415,12 @@ fn array_index_inline_loop() with Stdout {
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30, 40, 50), used: 5 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     sum = 0;
     __for_2: block {
         i_3 = 0;
-        _licm_used_67 = 5;
+        _licm_used_67 = arr.used;
         _licm_repr_68 = arr.repr;
         block {
             l13: loop {
@@ -413,6 +430,7 @@ fn array_index_inline_loop() with Stdout {
                 sum = sum + __inline_Array_i32__IndexValue__index_value_9: block -> i32 {
                     __local_26 = i_3;
                     break __inline_Array_i32__IndexValue__index_value_9: builtin::array_get<i32>(_licm_repr_68, __local_26);
+                    unreachable;
                 };
                 i_3 = i_3 + 1;
                 continue l13;
@@ -429,10 +447,12 @@ fn array_index_inline_loop() with Stdout {
         __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         i32::fmt_decimal(sum, __local_8);
         break __tmpl: __local_7;
+        unreachable;
     });
     arr2 = __seq_lit: block -> ref Array<i32> {
         __local_4 = Array<i32> { repr: array.new_fixed<i32>(0, 0, 0), used: 3 };
         break __seq_lit: __local_4;
+        unreachable;
     };
     __for_3: block {
         i_6 = 0;
@@ -465,6 +485,7 @@ fn array_index_inline_loop() with Stdout {
                 unreachable;
             };
             break __inline_Array_i32__IndexValue__index_value_24: builtin::array_get<i32>(arr2.repr, 0);
+            unreachable;
         }, __local_48);
         String::append_char(__local_9, 44);
         String::append_char(__local_9, 32);
@@ -476,6 +497,7 @@ fn array_index_inline_loop() with Stdout {
                 unreachable;
             };
             break __inline_Array_i32__IndexValue__index_value_28: builtin::array_get<i32>(arr2.repr, 1);
+            unreachable;
         }, __local_55);
         String::append_char(__local_9, 44);
         String::append_char(__local_9, 32);
@@ -487,8 +509,10 @@ fn array_index_inline_loop() with Stdout {
                 unreachable;
             };
             break __inline_Array_i32__IndexValue__index_value_32: builtin::array_get<i32>(arr2.repr, 2);
+            unreachable;
         }, __local_62);
         break __tmpl: __local_9;
+        unreachable;
     });
 }
 
@@ -592,6 +616,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -725,6 +750,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -742,8 +768,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -869,6 +897,7 @@ fn Array<String>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref String>(new_capacity);
     old_repr = self.repr;
@@ -922,6 +951,7 @@ fn Node<String>::find_index(self, key) {
                         unreachable;
                     };
                     break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_8, __local_5);
+                    unreachable;
                 }, key) == 0;
             } else {
                 0;
@@ -964,6 +994,7 @@ fn Node<String>::is_full(self, max_keys) {
                         unreachable;
                     };
                     break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_11, __local_6);
+                    unreachable;
                 } == 0 {
                     count = count + 1;
                 };
@@ -1004,6 +1035,7 @@ fn Node<String>::count_active(self) {
                         unreachable;
                     };
                     break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_10, __local_5);
+                    unreachable;
                 } == 0 {
                     count = count + 1;
                 };
@@ -1037,6 +1069,7 @@ fn Array<bool>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<bool>(new_capacity);
     old_repr = self.repr;
@@ -1079,6 +1112,7 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

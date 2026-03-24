@@ -176,6 +176,7 @@ fn print_basic_point(p) with Stdout {
         __local_11 = __local_2;
         i32::fmt_decimal(p.y, __local_11);
         break __tmpl: __local_1;
+        unreachable;
     });
 }
 
@@ -202,6 +203,7 @@ fn ref_struct_mut() with Stdout {
         __local_11 = __local_2;
         i32::fmt_decimal(p.y, __local_11);
         break __tmpl: __local_1;
+        unreachable;
     });
 }
 
@@ -215,12 +217,14 @@ fn ref_struct_nested() with Stdout {
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(42, __local_2);
         break __tmpl: __local_1;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(100, __local_4);
         break __tmpl: __local_3;
+        unreachable;
     });
 }
 
@@ -240,6 +244,7 @@ fn ref_struct_string_field() with Stdout {
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(30, __local_2);
         break __tmpl: __local_1;
+        unreachable;
     });
     new_name = String { repr: array.new_data<u8>("Bob"), used: 3 };
     __sroa_u_name = new_name;
@@ -251,6 +256,7 @@ fn ref_struct_string_field() with Stdout {
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(31, __local_4);
         break __tmpl: __local_3;
+        unreachable;
     });
 }
 
@@ -266,13 +272,15 @@ fn ref_array_basic() with Stdout {
     nums = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     before = __inline_Array_i32__IndexValue__index_value_6: block -> i32 {
-        if 0 {
+        if 0 >= nums.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_6: builtin::array_get<i32>(nums.repr, 0);
+        unreachable;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(24), used: 0 };
@@ -287,18 +295,20 @@ fn ref_array_basic() with Stdout {
         __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
         i32::fmt_decimal(before, __local_5);
         break __tmpl: __local_4;
+        unreachable;
     });
-    if 0 {
+    if 0 >= nums.used {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     };
     builtin::array_set<i32>(nums.repr, 0, 100);
     after = __inline_Array_i32__IndexValue__index_value_13: block -> i32 {
-        if 0 {
+        if 0 >= nums.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_13: builtin::array_get<i32>(nums.repr, 0);
+        unreachable;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(23), used: 0 };
@@ -312,6 +322,7 @@ fn ref_array_basic() with Stdout {
         __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         i32::fmt_decimal(after, __local_7);
         break __tmpl: __local_6;
+        unreachable;
     });
 }
 
@@ -328,6 +339,7 @@ fn ref_array_ref_element() with Stdout {
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     __sroa_r_value = __inline_Array_i32__IndexValue__index_value_6: block -> i32 {
         if 1 >= arr.used {
@@ -335,6 +347,7 @@ fn ref_array_ref_element() with Stdout {
             unreachable;
         };
         break __inline_Array_i32__IndexValue__index_value_6: builtin::array_get<i32>(arr.repr, 1);
+        unreachable;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(29), used: 0 };
@@ -342,6 +355,7 @@ fn ref_array_ref_element() with Stdout {
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(__sroa_r_value, __local_4);
         break __tmpl: __local_3;
+        unreachable;
     });
     if 1 >= arr.used {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -365,8 +379,10 @@ fn ref_array_ref_element() with Stdout {
                 unreachable;
             };
             break __inline_Array_i32__IndexValue__index_value_15: builtin::array_get<i32>(arr.repr, 1);
+            unreachable;
         }, __local_6);
         break __tmpl: __local_5;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(27), used: 0 };
@@ -374,6 +390,7 @@ fn ref_array_ref_element() with Stdout {
         __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         i32::fmt_decimal(__sroa_r_value, __local_8);
         break __tmpl: __local_7;
+        unreachable;
     });
 }
 
@@ -390,10 +407,12 @@ fn ref_closure_capture() with Stdout {
         __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
         i32::fmt_decimal(84, __local_5);
         break __tmpl: __local_4;
+        unreachable;
     });
     result2 = __inline_apply_to_ref___Closure_1_6: block -> i32 {
         __local_29 = 3;
         break __inline_apply_to_ref___Closure_1_6: 126;
+        unreachable;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(25), used: 0 };
@@ -401,6 +420,7 @@ fn ref_closure_capture() with Stdout {
         __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         i32::fmt_decimal(result2, __local_7);
         break __tmpl: __local_6;
+        unreachable;
     });
 }
 
@@ -418,6 +438,7 @@ fn ref_closure_mut_param() with Stdout {
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(y.value, __local_2);
         break __tmpl: __local_1;
+        unreachable;
     });
 }
 
@@ -436,6 +457,7 @@ fn ref_method_receivers_test() with Stdout {
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(0, __local_2);
         break __tmpl: __local_1;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(33), used: 0 };
@@ -443,6 +465,7 @@ fn ref_method_receivers_test() with Stdout {
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(3, __local_4);
         break __tmpl: __local_3;
+        unreachable;
     });
 }
 
@@ -454,6 +477,7 @@ fn ref_edge_coercion() with Stdout {
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         i32::fmt_decimal(42, __local_3);
         break __tmpl: __local_2;
+        unreachable;
     });
 }
 
@@ -470,6 +494,7 @@ fn ref_edge_double_deref() with Stdout {
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(a.value, __local_4);
         break __tmpl: __local_3;
+        unreachable;
     });
 }
 
@@ -492,6 +517,7 @@ fn ref_edge_multi_mut() with Stdout {
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(a.value, __local_2);
         break __tmpl: __local_1;
+        unreachable;
     });
 }
 
@@ -507,6 +533,7 @@ fn ref_edge_nested() with Stdout {
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(r.value, __local_4);
         break __tmpl: __local_3;
+        unreachable;
     });
 }
 
@@ -518,6 +545,7 @@ fn ref_edge_temp() with Stdout {
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(3, __local_2);
         break __tmpl: __local_1;
+        unreachable;
     });
 }
 
@@ -628,6 +656,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -761,6 +790,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -778,8 +808,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -862,6 +894,7 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

@@ -1,0 +1,20 @@
+// Regression test: filter().collect() at O3 previously produced an infinite
+// loop. labeled_block_fusion incorrectly fused the IterFilter::next result
+// block when the ELSE branch contained a free unlabeled break targeting the
+// outer collect loop, causing it to break the inner filter loop instead.
+
+export fn run() {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect();
+    assert evens.len() == 2;
+    assert evens[0] == 2;
+    assert evens[1] == 4;
+
+    // Also test filter chain to exercise deeper nesting
+    let big_evens = arr.iter().filter(|x: i32| x % 2 == 0).filter(|x: i32| x > 2).collect();
+    assert big_evens.len() == 1;
+    assert big_evens[0] == 4;
+}
+
+__DATA__
+{"stdout": ""}

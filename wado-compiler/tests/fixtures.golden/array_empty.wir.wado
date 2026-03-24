@@ -78,6 +78,7 @@ fn run() with Stdout {
     drop(__seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_0;
+        unreachable;
     });
     "core:cli/println"(String { repr: array.new_data<u8>("empty array ok"), used: 14 });
 }
@@ -93,6 +94,7 @@ fn __cm_export__run() {
     drop(__seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_0;
+        unreachable;
     });
     "core:cli/println"(String { repr: array.new_data<u8>("empty array ok"), used: 14 });
     "wasi/task-return"(0);
@@ -158,6 +160,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);

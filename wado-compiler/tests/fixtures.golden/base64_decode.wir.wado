@@ -26,6 +26,16 @@ struct Formatter {
     mut buf: ref String,
 }
 
+variant Option<u8> {
+    Some(u8),
+    None,
+}
+
+struct Option<u8>::Some {
+    discriminant: i32,
+    payload_0: u8,
+}
+
 struct Array<u8> {  // Array<T> with T=u8
     mut repr: ref array<u8>,
     mut used: i32,
@@ -204,11 +214,13 @@ fn run() with Stdout {
     };
     hello = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_2: block -> ref StrUtf8ByteIter {
         break __inline_String__bytes_2: StrUtf8ByteIter { repr: array.new_data<u8>("Hello"), used: 5, index: 0 };
+        unreachable;
     });
     let __match_scrut_0: ref null Array<u8>;
     __match_scrut_0 = __inline_decode_3: block -> ref null Array<u8> {
         __local_40 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("SGVsbG8="), used: 8, index: 0 });
         break __inline_decode_3: "core:base64/decode_impl"(__local_40, __local_40.used);
+        unreachable;
     };
     __cond_2 = if ref.is_null(__match_scrut_0) == 0 -> bool {
         let __cast_1: ref null Array<u8>;
@@ -237,6 +249,7 @@ fn run() with Stdout {
 condition: decode(\"SGVsbG8=\") matches { Some(d) && d == hello }
 "), used: 65 });
             break __tmpl: __local_19;
+            unreachable;
         });
         unreachable;
     };
@@ -244,6 +257,7 @@ condition: decode(\"SGVsbG8=\") matches { Some(d) && d == hello }
     __match_scrut_1 = __inline_decode_8: block -> ref null Array<u8> {
         __local_48 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("SGVsbG8"), used: 7, index: 0 });
         break __inline_decode_8: "core:base64/decode_impl"(__local_48, __local_48.used);
+        unreachable;
     };
     __cond_4 = if ref.is_null(__match_scrut_1) == 0 -> bool {
         let __cast_2: ref null Array<u8>;
@@ -272,6 +286,7 @@ condition: decode(\"SGVsbG8=\") matches { Some(d) && d == hello }
 condition: decode(\"SGVsbG8\") matches { Some(d) && d == hello }
 "), used: 64 });
             break __tmpl: __local_21;
+            unreachable;
         });
         unreachable;
     };
@@ -279,6 +294,7 @@ condition: decode(\"SGVsbG8\") matches { Some(d) && d == hello }
     __match_scrut_2 = __inline_decode_13: block -> ref null Array<u8> {
         __local_56 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: builtin::array_new<u8>(0), used: 0, index: 0 });
         break __inline_decode_13: "core:base64/decode_impl"(__local_56, __local_56.used);
+        unreachable;
     };
     __cond_6 = if ref.is_null(__match_scrut_2) == 0 -> bool {
         let __cast_3: ref null Array<u8>;
@@ -307,18 +323,21 @@ condition: decode(\"SGVsbG8\") matches { Some(d) && d == hello }
 condition: decode(\"\") matches { Some(d) && d.len() == 0 }
 "), used: 59 });
             break __tmpl: __local_23;
+            unreachable;
         });
         unreachable;
     };
     data = __seq_lit: block -> ref Array<u8> {
         __local_7 = Array<u8> { repr: array.new_fixed<u8>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_7;
+        unreachable;
     };
     let __match_scrut_3: ref null Array<u8>;
     __match_scrut_3 = __inline_decode_28: block -> ref null Array<u8> {
         __local_78 = "core:base64/encode_impl"(data, STANDARD_TABLE, 1);
         __local_79 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_78.repr), used: __local_78.used, index: 0 });
         break __inline_decode_28: "core:base64/decode_impl"(__local_79, __local_79.used);
+        unreachable;
     };
     __cond_10 = if ref.is_null(__match_scrut_3) == 0 -> bool {
         let __cast_4: ref null Array<u8>;
@@ -347,6 +366,7 @@ condition: decode(\"\") matches { Some(d) && d.len() == 0 }
 condition: decode(encode(&data)) matches { Some(d) && d == data }
 "), used: 67 });
             break __tmpl: __local_25;
+            unreachable;
         });
         unreachable;
     };
@@ -355,6 +375,7 @@ condition: decode(encode(&data)) matches { Some(d) && d == data }
         __local_87 = "core:base64/encode_impl"(data, URL_SAFE_TABLE, 0);
         __local_88 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_87.repr), used: __local_87.used, index: 0 });
         break __inline_decode_34: "core:base64/decode_impl"(__local_88, __local_88.used);
+        unreachable;
     };
     __cond_12 = if ref.is_null(__match_scrut_4) == 0 -> bool {
         let __cast_5: ref null Array<u8>;
@@ -383,16 +404,19 @@ condition: decode(encode(&data)) matches { Some(d) && d == data }
 condition: decode(encode_url(&data)) matches { Some(d) && d == data }
 "), used: 71 });
             break __tmpl: __local_27;
+            unreachable;
         });
         unreachable;
     };
     raw = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_39: block -> ref StrUtf8ByteIter {
         break __inline_String__bytes_39: StrUtf8ByteIter { repr: array.new_data<u8>("SGVsbG8="), used: 8, index: 0 };
+        unreachable;
     });
     let __match_scrut_5: ref null Array<u8>;
     __match_scrut_5 = __inline_decode_bytes_40: block -> ref null Array<u8> {
         __local_96 = raw;
         break __inline_decode_bytes_40: "core:base64/decode_impl"(__local_96, __local_96.used);
+        unreachable;
     };
     __cond_15 = if ref.is_null(__match_scrut_5) == 0 -> bool {
         let __cast_6: ref null Array<u8>;
@@ -421,6 +445,7 @@ condition: decode(encode_url(&data)) matches { Some(d) && d == data }
 condition: decode_bytes(&raw) matches { Some(d) && d == hello }
 "), used: 65 });
             break __tmpl: __local_29;
+            unreachable;
         });
         unreachable;
     };
@@ -428,6 +453,7 @@ condition: decode_bytes(&raw) matches { Some(d) && d == hello }
     __match_scrut_6 = __inline_decode_45: block -> ref null Array<u8> {
         __local_104 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("abc+def_ghi"), used: 11, index: 0 });
         break __inline_decode_45: "core:base64/decode_impl"(__local_104, __local_104.used);
+        unreachable;
     };
     __cond_16 = if ref.is_null(__match_scrut_6) == 0 -> bool {
         let __cast_7: ref null Array<u8>;
@@ -455,6 +481,7 @@ condition: decode_bytes(&raw) matches { Some(d) && d == hello }
 condition: decode(\"abc+def_ghi\") matches { Some(_) }
 "), used: 54 });
             break __tmpl: __local_31;
+            unreachable;
         });
         unreachable;
     };
@@ -462,6 +489,7 @@ condition: decode(\"abc+def_ghi\") matches { Some(_) }
     __match_scrut_7 = __inline_decode_50: block -> ref null Array<u8> {
         __local_112 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("!!!"), used: 3, index: 0 });
         break __inline_decode_50: "core:base64/decode_impl"(__local_112, __local_112.used);
+        unreachable;
     };
     __cond_17 = if ref.is_null(__match_scrut_7) -> bool {
         1;
@@ -487,6 +515,7 @@ condition: decode(\"abc+def_ghi\") matches { Some(_) }
 condition: decode(\"!!!\") matches { None }
 "), used: 43 });
             break __tmpl: __local_33;
+            unreachable;
         });
         unreachable;
     };
@@ -494,6 +523,7 @@ condition: decode(\"!!!\") matches { None }
     __match_scrut_8 = __inline_decode_55: block -> ref null Array<u8> {
         __local_120 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("A"), used: 1, index: 0 });
         break __inline_decode_55: "core:base64/decode_impl"(__local_120, __local_120.used);
+        unreachable;
     };
     __cond_18 = if ref.is_null(__match_scrut_8) -> bool {
         1;
@@ -519,6 +549,7 @@ condition: decode(\"!!!\") matches { None }
 condition: decode(\"A\") matches { None }
 "), used: 41 });
             break __tmpl: __local_35;
+            unreachable;
         });
         unreachable;
     };
@@ -558,10 +589,11 @@ fn "core:base64/build_decode_table"() {  // from core:base64
         __local_6 = builtin::array_new<u8>(256);
         builtin::array_fill<u8>(__local_6, 0, 255, 256);
         break __inline_Array_u8___filled_0: Array<u8> { repr: ref.as_non_null(__local_6), used: 256 };
+        unreachable;
     };
     __for_0: block {
         i_1 = 0;
-        _licm_used_31 = 256;
+        _licm_used_31 = table.used;
         _licm_repr_32 = table.repr;
         block {
             l20: loop {
@@ -582,7 +614,7 @@ fn "core:base64/build_decode_table"() {  // from core:base64
     };
     __for_1: block {
         i_2 = 0;
-        _licm_used_33 = 256;
+        _licm_used_33 = table.used;
         _licm_repr_34 = table.repr;
         block {
             l24: loop {
@@ -603,7 +635,7 @@ fn "core:base64/build_decode_table"() {  // from core:base64
     };
     __for_2: block {
         i_3 = 0;
-        _licm_used_35 = 256;
+        _licm_used_35 = table.used;
         _licm_repr_36 = table.repr;
         block {
             l28: loop {
@@ -622,27 +654,27 @@ fn "core:base64/build_decode_table"() {  // from core:base64
             };
         };
     };
-    if 0 {
+    if 43 >= table.used {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     };
     builtin::array_set_u8(table.repr, 43, 62);
-    if 0 {
+    if 47 >= table.used {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     };
     builtin::array_set_u8(table.repr, 47, 63);
-    if 0 {
+    if 45 >= table.used {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     };
     builtin::array_set_u8(table.repr, 45, 62);
-    if 0 {
+    if 95 >= table.used {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     };
     builtin::array_set_u8(table.repr, 95, 63);
-    if 0 {
+    if 61 >= table.used {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     };
@@ -689,6 +721,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
     out = __inline_String__with_capacity_1: block -> ref String {
         __local_14 = ((len + 2) / 3) * 4;
         break __inline_String__with_capacity_1: String { repr: builtin::array_new<u8>(__local_14), used: 0 };
+        unreachable;
     };
     i = 0;
     _licm_used_45 = data.used;
@@ -707,6 +740,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_2: builtin::array_get<u8>(_licm_repr_46, __local_16);
+                unreachable;
             };
             b1_8 = __inline_Array_u8__IndexValue__index_value_3: block -> u8 {
                 __local_18 = i + 1;
@@ -715,6 +749,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_3: builtin::array_get<u8>(_licm_repr_46, __local_18);
+                unreachable;
             };
             b2 = __inline_Array_u8__IndexValue__index_value_4: block -> u8 {
                 __local_20 = i + 2;
@@ -723,6 +758,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_4: builtin::array_get<u8>(_licm_repr_46, __local_20);
+                unreachable;
             };
             String::append_char(out, __inline_Array_u8__IndexValue__index_value_5: block -> u8 {
                 __local_22 = (b0_7 >> 2) & 63;
@@ -731,6 +767,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_5: builtin::array_get<u8>(_licm_repr_48, __local_22);
+                unreachable;
             });
             String::append_char(out, __inline_Array_u8__IndexValue__index_value_6: block -> u8 {
                 __local_24 = ((b0_7 << 4) | (b1_8 >> 4)) & 63;
@@ -739,6 +776,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_6: builtin::array_get<u8>(_licm_repr_48, __local_24);
+                unreachable;
             });
             String::append_char(out, __inline_Array_u8__IndexValue__index_value_7: block -> u8 {
                 __local_26 = ((b1_8 << 2) | (b2 >> 6)) & 63;
@@ -747,6 +785,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_7: builtin::array_get<u8>(_licm_repr_48, __local_26);
+                unreachable;
             });
             String::append_char(out, __inline_Array_u8__IndexValue__index_value_8: block -> u8 {
                 __local_28 = b2 & 63;
@@ -755,6 +794,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_8: builtin::array_get<u8>(_licm_repr_48, __local_28);
+                unreachable;
             });
             i = i + 3;
             continue l38;
@@ -768,6 +808,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_9: builtin::array_get<u8>(data.repr, __local_30);
+            unreachable;
         };
         String::append_char(out, __inline_Array_u8__IndexValue__index_value_10: block -> u8 {
             __local_32 = (b0_10 >> 2) & 63;
@@ -776,6 +817,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_10: builtin::array_get<u8>(table.repr, __local_32);
+            unreachable;
         });
         String::append_char(out, __inline_Array_u8__IndexValue__index_value_11: block -> u8 {
             __local_34 = (b0_10 << 4) & 63;
@@ -784,6 +826,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_11: builtin::array_get<u8>(table.repr, __local_34);
+            unreachable;
         });
         if pad {
             String::append_char(out, 61);
@@ -797,6 +840,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_12: builtin::array_get<u8>(data.repr, __local_36);
+            unreachable;
         };
         b1_12 = __inline_Array_u8__IndexValue__index_value_13: block -> u8 {
             __local_38 = i + 1;
@@ -805,6 +849,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_13: builtin::array_get<u8>(data.repr, __local_38);
+            unreachable;
         };
         String::append_char(out, __inline_Array_u8__IndexValue__index_value_14: block -> u8 {
             __local_40 = (b0_11 >> 2) & 63;
@@ -813,6 +858,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_14: builtin::array_get<u8>(table.repr, __local_40);
+            unreachable;
         });
         String::append_char(out, __inline_Array_u8__IndexValue__index_value_15: block -> u8 {
             __local_42 = ((b0_11 << 4) | (b1_12 >> 4)) & 63;
@@ -821,6 +867,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_15: builtin::array_get<u8>(table.repr, __local_42);
+            unreachable;
         });
         String::append_char(out, __inline_Array_u8__IndexValue__index_value_16: block -> u8 {
             __local_44 = (b1_12 << 2) & 63;
@@ -829,6 +876,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_16: builtin::array_get<u8>(table.repr, __local_44);
+            unreachable;
         });
         if pad {
             String::append_char(out, 61);
@@ -893,6 +941,7 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                         unreachable;
                     };
                     break __inline_Array_u8__IndexValue__index_value_0: builtin::array_get<u8>(_licm_repr_58, __local_19);
+                    unreachable;
                 } == 61;
             } else {
                 0;
@@ -917,6 +966,7 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     out = __inline_Array_u8___with_capacity_1: block -> ref Array<u8> {
         __local_20 = out_len;
         break __inline_Array_u8___with_capacity_1: Array<u8> { repr: builtin::array_new<u8>(__local_20), used: 0 };
+        unreachable;
     };
     table = DECODE_TABLE;
     i = 0;
@@ -937,12 +987,14 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                         unreachable;
                     };
                     break __inline_Array_u8__IndexValue__index_value_2: builtin::array_get<u8>(_licm_repr_60, __local_22);
+                    unreachable;
                 };
                 if __local_24 >= _licm_used_61 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_3: builtin::array_get<u8>(_licm_repr_62, __local_24);
+                unreachable;
             };
             v1_10 = __inline_Array_u8__IndexValue__index_value_5: block -> u8 {
                 __local_28 = __inline_Array_u8__IndexValue__index_value_4: block -> u8 {
@@ -952,12 +1004,14 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                         unreachable;
                     };
                     break __inline_Array_u8__IndexValue__index_value_4: builtin::array_get<u8>(_licm_repr_60, __local_26);
+                    unreachable;
                 };
                 if __local_28 >= _licm_used_61 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_5: builtin::array_get<u8>(_licm_repr_62, __local_28);
+                unreachable;
             };
             v2_11 = __inline_Array_u8__IndexValue__index_value_7: block -> u8 {
                 __local_32 = __inline_Array_u8__IndexValue__index_value_6: block -> u8 {
@@ -967,12 +1021,14 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                         unreachable;
                     };
                     break __inline_Array_u8__IndexValue__index_value_6: builtin::array_get<u8>(_licm_repr_60, __local_30);
+                    unreachable;
                 };
                 if __local_32 >= _licm_used_61 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_7: builtin::array_get<u8>(_licm_repr_62, __local_32);
+                unreachable;
             };
             v3 = __inline_Array_u8__IndexValue__index_value_9: block -> u8 {
                 __local_36 = __inline_Array_u8__IndexValue__index_value_8: block -> u8 {
@@ -982,12 +1038,14 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                         unreachable;
                     };
                     break __inline_Array_u8__IndexValue__index_value_8: builtin::array_get<u8>(_licm_repr_60, __local_34);
+                    unreachable;
                 };
                 if __local_36 >= _licm_used_61 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_9: builtin::array_get<u8>(_licm_repr_62, __local_36);
+                unreachable;
             };
             if if if if v0_9 >= 254 -> i32 {
                 1;
@@ -1020,12 +1078,14 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_10: builtin::array_get<u8>(input.repr, __local_38);
+                unreachable;
             };
             if __local_40 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_11: builtin::array_get<u8>(table.repr, __local_40);
+            unreachable;
         };
         v1_14 = __inline_Array_u8__IndexValue__index_value_13: block -> u8 {
             __local_44 = __inline_Array_u8__IndexValue__index_value_12: block -> u8 {
@@ -1035,12 +1095,14 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_12: builtin::array_get<u8>(input.repr, __local_42);
+                unreachable;
             };
             if __local_44 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_13: builtin::array_get<u8>(table.repr, __local_44);
+            unreachable;
         };
         if if v0_13 >= 254 -> i32 {
             1;
@@ -1059,12 +1121,14 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_14: builtin::array_get<u8>(input.repr, __local_46);
+                unreachable;
             };
             if __local_48 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_15: builtin::array_get<u8>(table.repr, __local_48);
+            unreachable;
         };
         v1_16 = __inline_Array_u8__IndexValue__index_value_17: block -> u8 {
             __local_52 = __inline_Array_u8__IndexValue__index_value_16: block -> u8 {
@@ -1074,12 +1138,14 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_16: builtin::array_get<u8>(input.repr, __local_50);
+                unreachable;
             };
             if __local_52 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_17: builtin::array_get<u8>(table.repr, __local_52);
+            unreachable;
         };
         v2_17 = __inline_Array_u8__IndexValue__index_value_19: block -> u8 {
             __local_56 = __inline_Array_u8__IndexValue__index_value_18: block -> u8 {
@@ -1089,12 +1155,14 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                     unreachable;
                 };
                 break __inline_Array_u8__IndexValue__index_value_18: builtin::array_get<u8>(input.repr, __local_54);
+                unreachable;
             };
             if __local_56 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
             break __inline_Array_u8__IndexValue__index_value_19: builtin::array_get<u8>(table.repr, __local_56);
+            unreachable;
         };
         if if if v0_15 >= 254 -> i32 {
             1;
@@ -1119,10 +1187,12 @@ fn "core:base64/__initialize_module"() {  // from core:base64
     STANDARD_TABLE = __seq_lit: block -> ref Array<u8> {
         __local_0 = Array<u8> { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 43, 47), used: 64 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     URL_SAFE_TABLE = __seq_lit: block -> ref Array<u8> {
         __local_1 = Array<u8> { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 45, 95), used: 64 };
         break __seq_lit: __local_1;
+        unreachable;
     };
     DECODE_TABLE = "core:base64/build_decode_table"();
 }
@@ -1204,6 +1274,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -1342,6 +1413,7 @@ fn "core:base64/Array<u8>::grow"(self) {  // from core:base64
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     old_repr = self.repr;
@@ -1379,6 +1451,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1396,8 +1469,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -1434,36 +1509,42 @@ fn String::append(self, other) {
 fn StrUtf8ByteIter^Iterator::collect(self) {
     let __local_1: ref Array<u8>;
     let result: ref Array<u8>;
-    let byte: u8;
-    let _licm_used_11: i32;
-    let _licm_repr_12: ref array<u8>;
-    let _hfs_index_13: i32;
+    let item: u8;
+    let __pattern_temp_0: ref Option<u8>;
+    let __local_9: u8;
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref array<u8>;
+    let _hfs_index_12: i32;
     result = __seq_lit: block -> ref Array<u8> {
         __local_1 = Array<u8> { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
+        unreachable;
     };
-    _licm_used_11 = self.used;
-    _licm_repr_12 = self.repr;
-    _hfs_index_13 = self.index;
+    _licm_used_10 = self.used;
+    _licm_repr_11 = self.repr;
+    _hfs_index_12 = self.index;
     b123: block {
         l124: loop {
-            __fused___inline_StrUtf8ByteIter_Iterator__next_3: block {
-                if _hfs_index_13 >= _licm_used_11 {
-                    self.index = _hfs_index_13;
-                    break b123;
-                    self.index = _hfs_index_13;
-                    break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
+            __pattern_temp_0 = __inline_StrUtf8ByteIter_Iterator__next_3: block -> ref Option<u8> {
+                if _hfs_index_12 >= _licm_used_10 {
+                    break __inline_StrUtf8ByteIter_Iterator__next_3: Option<u8> { 1 };
                 };
-                byte = builtin::array_get_u8(_licm_repr_12, _hfs_index_13);
-                _hfs_index_13 = _hfs_index_13 + 1;
-                Array<u8>::append(result, byte);
-                self.index = _hfs_index_13;
-                break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
+                __local_9 = builtin::array_get_u8(_licm_repr_11, _hfs_index_12);
+                _hfs_index_12 = _hfs_index_12 + 1;
+                break __inline_StrUtf8ByteIter_Iterator__next_3: Option<u8>::Some { discriminant: 0, payload_0: __local_9 };
+                unreachable;
+            };
+            if ref.test Option<u8>::Some(__pattern_temp_0) {
+                item = ref.cast Option<u8>::Some(__pattern_temp_0).payload_0;
+                Array<u8>::append(result, item);
+            } else {
+                self.index = _hfs_index_12;
+                break b123;
             };
             continue l124;
         };
     };
-    self.index = _hfs_index_13;
+    self.index = _hfs_index_12;
     return result;
 }
 
@@ -1516,6 +1597,7 @@ fn Array<u8>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     old_repr = self.repr;
@@ -1523,13 +1605,13 @@ fn Array<u8>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l132: loop {
+            l133: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l132;
+                continue l133;
             };
         };
     };
@@ -1558,6 +1640,7 @@ fn Array<u8>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     old_repr = self.repr;
@@ -1565,13 +1648,13 @@ fn Array<u8>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l136: loop {
+            l137: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l136;
+                continue l137;
             };
         };
     };
@@ -1592,7 +1675,7 @@ fn Array<u8>^Eq::eq(self, other) {
         _licm_repr_4 = self.repr;
         _licm_repr_5 = other.repr;
         block {
-            l140: loop {
+            l141: loop {
                 if (i < _licm_used_3) == 0 {
                     break __for_3;
                 };
@@ -1600,7 +1683,7 @@ fn Array<u8>^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l140;
+                continue l141;
             };
         };
     };
@@ -1614,13 +1697,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l144: loop {
+            l145: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l144;
+                continue l145;
             };
         };
     };

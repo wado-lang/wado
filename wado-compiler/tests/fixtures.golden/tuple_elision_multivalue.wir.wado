@@ -144,6 +144,7 @@ fn run() with Stdout {
         __local_31 = __local_11;
         i64::fmt_decimal(__local_1, __local_31);
         break __tmpl: __local_10;
+        unreachable;
     });
     multivalue_bind [__local_2, __local_3] = i64.sub128(150_i64, 225_i64, 50_i64, 25_i64);
     "core:cli/println"(__tmpl: block -> ref String {
@@ -161,6 +162,7 @@ fn run() with Stdout {
         __local_42 = __local_13;
         i64::fmt_decimal(__local_3, __local_42);
         break __tmpl: __local_12;
+        unreachable;
     });
     multivalue_bind [__local_4, __local_5] = i64.mul_wide_u(10_i64, 20_i64);
     "core:cli/println"(__tmpl: block -> ref String {
@@ -178,6 +180,7 @@ fn run() with Stdout {
         __local_53 = __local_15;
         i64::fmt_decimal(__local_5, __local_53);
         break __tmpl: __local_14;
+        unreachable;
     });
     multivalue_bind [__local_6, __local_7] = i64.mul_wide_s(-10_i64, 20_i64);
     "core:cli/println"(__tmpl: block -> ref String {
@@ -195,6 +198,7 @@ fn run() with Stdout {
         __local_64 = __local_17;
         i64::fmt_decimal(__local_7, __local_64);
         break __tmpl: __local_16;
+        unreachable;
     });
     multivalue_bind [__local_8, _] = i64.mul_wide_u(100_i64, 100_i64);
     "core:cli/println"(__tmpl: block -> ref String {
@@ -203,6 +207,7 @@ fn run() with Stdout {
         __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
         i64::fmt_decimal(__local_8, __local_19);
         break __tmpl: __local_18;
+        unreachable;
     });
     multivalue_bind [_, __local_9] = i64.mul_wide_u(-9223372036854775808_i64, 2_i64);
     "core:cli/println"(__tmpl: block -> ref String {
@@ -211,6 +216,7 @@ fn run() with Stdout {
         __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
         i64::fmt_decimal(__local_9, __local_21);
         break __tmpl: __local_20;
+        unreachable;
     });
 }
 
@@ -285,6 +291,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -404,6 +411,7 @@ fn i64::fmt_decimal(self, f) {
         repr = __inline_String__internal_raw_bytes_0: block -> ref array<u8> {
             __local_12 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_12.repr;
+            unreachable;
         };
         write_decimal_digits(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
@@ -418,6 +426,7 @@ fn i64::fmt_decimal(self, f) {
         write_decimal_digits(__inline_String__internal_raw_bytes_1: block -> ref array<u8> {
             __local_13 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_13.repr;
+            unreachable;
         }, offset_11, abs_val, digit_count_10);
     };
 }
@@ -436,8 +445,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

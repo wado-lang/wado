@@ -168,12 +168,14 @@ fn auto_deref_for_of() with Stdout {
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     ra = arr;
     sum = 0;
     __iter_4 = __inline___i32__IntoIterator__into_iter_6: block -> ref "core:allocator/ArrayRefIter<i32>" {
         __local_31 = ra;
         break __inline___i32__IntoIterator__into_iter_6: "core:allocator/ArrayRefIter<i32>" { repr: ref.as_non_null(__local_31.repr), used: __local_31.used, index: 0 };
+        unreachable;
     };
     b0: block {
         l1: loop {
@@ -216,6 +218,7 @@ condition: sum == 6
             i32::fmt_decimal(__v0_6, __local_40);
             String::append_char(__local_15, 10);
             break __tmpl: __local_15;
+            unreachable;
         });
         unreachable;
     };
@@ -266,6 +269,7 @@ condition: count == 3
             i32::fmt_decimal(__v0_13, __local_53);
             String::append_char(__local_17, 10);
             break __tmpl: __local_17;
+            unreachable;
         });
         unreachable;
     };
@@ -326,6 +330,7 @@ condition: box_ref.get() == 42
             i32::fmt_decimal(__v0_11, __local_98);
             String::append_char(__local_39, 10);
             break __tmpl: __local_39;
+            unreachable;
         });
         unreachable;
     };
@@ -355,6 +360,7 @@ condition: inner.len() == 5
             i32::fmt_decimal(__v0_16, __local_111);
             String::append_char(__local_41, 10);
             break __tmpl: __local_41;
+            unreachable;
         });
         unreachable;
     };
@@ -384,6 +390,7 @@ condition: s_ref.len() == 5
             i32::fmt_decimal(__v0_20, __local_123);
             String::append_char(__local_43, 10);
             break __tmpl: __local_43;
+            unreachable;
         });
         unreachable;
     };
@@ -420,6 +427,7 @@ condition: b == 'h' as u8
                 i32::fmt_decimal(byte, __local_137);
                 String::append_char(__local_45, 10);
                 break __tmpl: __local_45;
+                unreachable;
             });
             unreachable;
         };
@@ -522,6 +530,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
@@ -655,6 +664,7 @@ fn i32::fmt_decimal(self, f) {
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -672,8 +682,10 @@ fn String::grow(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -728,6 +740,7 @@ fn StrCharIter^Iterator::next(self) {
         return 0; __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     };
     if b0 <u 224 {
@@ -810,6 +823,7 @@ fn Array<i32>::grow(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

@@ -75,6 +75,7 @@ fn run() with Stdout {
     ord = __inline_compare_2: block -> enum:Ordering {
         break __inline_compare_2: 0;
         break __inline_compare_2: 1;
+        unreachable;
     };
     if ord == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("1 < 2"), used: 5 });
@@ -86,6 +87,7 @@ fn run() with Stdout {
     ord3 = __inline_compare_4: block -> enum:Ordering {
         break __inline_compare_4: 2;
         break __inline_compare_4: 1;
+        unreachable;
     };
     if ord3 == 2 {
         "core:cli/println"(String { repr: array.new_data<u8>("5 > 1"), used: 5 });
@@ -163,6 +165,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             __local_4 = subtask;
             "wasi/waitable-join"(__local_4, ws);
             break __inline_cm_waitable_join_0: __local_4;
+            unreachable;
         });
         "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
