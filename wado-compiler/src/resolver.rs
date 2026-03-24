@@ -145,7 +145,7 @@ pub struct Resolver<'a, H: CompilerHost> {
         Option<(TypeId, ast::SelfKind, String, ModuleSource)>,
     >,
     /// Recursion guard for `type_implements_trait` to avoid infinite recursion
-    /// on recursive types (e.g., variant Elem containing struct RepeatElem with field Elem).
+    /// on recursive types (e.g., variant Elem containing struct `RepeatElem` with field Elem).
     trait_check_stack: RefCell<Vec<(TypeId, String)>>,
 }
 

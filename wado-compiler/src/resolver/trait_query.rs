@@ -58,15 +58,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         result
     }
 
-    fn type_implements_trait_inner(
-        &self,
-        resolved: &ResolvedType,
-        trait_name: &str,
-    ) -> bool {
+    fn type_implements_trait_inner(&self, resolved: &ResolvedType, trait_name: &str) -> bool {
         // Type parameters satisfy bounds declared on them (e.g., T: Describable
         // means T implements Describable within the scope of that declaration)
-        if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } =
-            resolved
+        if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
         {
             if let Some(bounds) = self.trait_ctx.type_param_bounds.get(name) {
                 return bounds.iter().any(|b| b.name == trait_name);
@@ -105,10 +100,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             && matches!(trait_name, "Eq" | "Ord")
             && let Some(info) = self.variant_cases.get(name)
         {
-            let all_impl = info
-                .cases
-                .iter()
-                .all(|c| c.payload == TypeTable::UNIT || self.type_implements_trait(c.payload, trait_name));
+            let all_impl = info.cases.iter().all(|c| {
+                c.payload == TypeTable::UNIT || self.type_implements_trait(c.payload, trait_name)
+            });
             if all_impl {
                 return true;
             }
