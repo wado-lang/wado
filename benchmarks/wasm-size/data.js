@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774359496113,
+  "lastUpdate": 1774366241550,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6809,6 +6809,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ea7ff2c2336492831fbf20d2a92271da433c878a"
         },
         "date": 1774359495909,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "15004c885caad74eea4e1a0fa96e83c57a41c449",
+          "message": "Merge pull request #678 from wado-lang/claude/implement-variant-eq-8rToz\n\nImplement auto-derived Eq for variant types",
+          "timestamp": "2026-03-25T00:28:13+09:00",
+          "tree_id": "77c1aa8187058a4b19998b645a69f3893b17a3dc",
+          "url": "https://github.com/wado-lang/wado/commit/15004c885caad74eea4e1a0fa96e83c57a41c449"
+        },
+        "date": 1774366241339,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
