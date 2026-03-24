@@ -46,7 +46,12 @@ pub fn synthesize_traits(project: Project) -> Project {
 }
 
 /// Check if a trait method implementation already exists for a type.
-fn has_existing_impl(existing: &IndexSet<String>, name: &str, trait_name: &str, method: &str) -> bool {
+fn has_existing_impl(
+    existing: &IndexSet<String>,
+    name: &str,
+    trait_name: &str,
+    method: &str,
+) -> bool {
     existing.contains(&MethodName::format_local(name, Some(trait_name), method))
 }
 
@@ -71,7 +76,7 @@ fn should_generate_fallback(
     existing.contains(&inspect_key) || all_fn_names.contains(&inspect_key)
 }
 
-/// Resolve type parameter definitions into TypeIds.
+/// Resolve type parameter definitions into `TypeIds`.
 fn make_type_param_ids(type_params: &[TirTypeParam], tt: &mut TypeTable) -> Vec<TypeId> {
     type_params
         .iter()
@@ -155,9 +160,7 @@ fn collect_generic_variant_cases(
 }
 
 /// Collect non-generic struct info for Inspect/InspectAlt synthesis (excludes hidden fields).
-fn collect_struct_visible_fields(
-    module: &TirModule,
-) -> Vec<(String, Vec<FieldInfo>, bool, Span)> {
+fn collect_struct_visible_fields(module: &TirModule) -> Vec<(String, Vec<FieldInfo>, bool, Span)> {
     module
         .structs
         .iter()
@@ -2039,7 +2042,11 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
             continue;
         }
         if has_existing_impl(&existing, &nt.name, "InspectAlt", "inspect_alt")
-            || !has_inspect(&MethodName::format_local(&nt.name, Some("Inspect"), "inspect"))
+            || !has_inspect(&MethodName::format_local(
+                &nt.name,
+                Some("Inspect"),
+                "inspect",
+            ))
         {
             continue;
         }
@@ -2529,8 +2536,17 @@ fn inspect_alt_call(
     span: Span,
 ) -> TirStmt {
     let call = trait_call_on_type(
-        value, value_type, "InspectAlt", "inspect_alt", TypeTable::UNIT,
-        vec![fmt], true, inspect_impl_module, module_source, tt, span,
+        value,
+        value_type,
+        "InspectAlt",
+        "inspect_alt",
+        TypeTable::UNIT,
+        vec![fmt],
+        true,
+        inspect_impl_module,
+        module_source,
+        tt,
+        span,
     );
     TirStmt::new(TirStmtKind::Expr(call), span)
 }
@@ -2618,7 +2634,15 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
         .map(|e| e.name.clone())
         .collect::<Vec<_>>()
     {
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "Display", "fmt", "Inspect", "inspect") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "Display",
+            "fmt",
+            "Inspect",
+            "inspect",
+        ) {
             continue;
         }
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
@@ -2646,7 +2670,15 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
         if name == "String" || name == "Formatter" {
             continue;
         }
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "Display", "fmt", "Inspect", "inspect") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "Display",
+            "fmt",
+            "Inspect",
+            "inspect",
+        ) {
             continue;
         }
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
@@ -2674,7 +2706,15 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
         if name == "Array" {
             continue;
         }
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "Display", "fmt", "Inspect", "inspect") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "Display",
+            "fmt",
+            "Inspect",
+            "inspect",
+        ) {
             continue;
         }
         let type_param_ids = make_type_param_ids(&type_params, &mut tt);
@@ -2701,7 +2741,15 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
         .map(|v| v.name.clone())
         .collect::<Vec<_>>()
     {
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "Display", "fmt", "Inspect", "inspect") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "Display",
+            "fmt",
+            "Inspect",
+            "inspect",
+        ) {
             continue;
         }
         let variant_type = tt.make_variant(name.clone(), module_source.clone());
@@ -2726,7 +2774,15 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
         .map(|v| (v.name.clone(), v.type_params.clone()))
         .collect::<Vec<_>>()
     {
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "Display", "fmt", "Inspect", "inspect") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "Display",
+            "fmt",
+            "Inspect",
+            "inspect",
+        ) {
             continue;
         }
         let type_param_ids = make_type_param_ids(&type_params, &mut tt);
@@ -2752,7 +2808,15 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
         .map(|f| (f.name.clone(), f.type_id))
         .collect::<Vec<_>>()
     {
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "Display", "fmt", "Inspect", "inspect") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "Display",
+            "fmt",
+            "Inspect",
+            "inspect",
+        ) {
             continue;
         }
         let ref_type = tt.make_ref(flags_type_id);
@@ -2773,7 +2837,15 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
         if module.flags.iter().any(|f| f.type_id == nt.type_id) {
             continue;
         }
-        if !should_generate_fallback(&existing, &all_fn_names, &nt.name, "Display", "fmt", "Inspect", "inspect") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &nt.name,
+            "Display",
+            "fmt",
+            "Inspect",
+            "inspect",
+        ) {
             continue;
         }
         let ref_type = tt.make_ref(nt.type_id);
@@ -2962,7 +3034,15 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         .map(|e| e.name.clone())
         .collect::<Vec<_>>()
     {
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "DisplayAlt", "fmt_alt", "InspectAlt", "inspect_alt") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "DisplayAlt",
+            "fmt_alt",
+            "InspectAlt",
+            "inspect_alt",
+        ) {
             continue;
         }
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
@@ -2990,7 +3070,15 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         if name == "String" || name == "Formatter" {
             continue;
         }
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "DisplayAlt", "fmt_alt", "InspectAlt", "inspect_alt") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "DisplayAlt",
+            "fmt_alt",
+            "InspectAlt",
+            "inspect_alt",
+        ) {
             continue;
         }
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
@@ -3018,7 +3106,15 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         if name == "Array" {
             continue;
         }
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "DisplayAlt", "fmt_alt", "InspectAlt", "inspect_alt") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "DisplayAlt",
+            "fmt_alt",
+            "InspectAlt",
+            "inspect_alt",
+        ) {
             continue;
         }
         let type_param_ids = make_type_param_ids(&type_params, &mut tt);
@@ -3045,7 +3141,15 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         .map(|v| v.name.clone())
         .collect::<Vec<_>>()
     {
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "DisplayAlt", "fmt_alt", "InspectAlt", "inspect_alt") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "DisplayAlt",
+            "fmt_alt",
+            "InspectAlt",
+            "inspect_alt",
+        ) {
             continue;
         }
         let variant_type = tt.make_variant(name.clone(), module_source.clone());
@@ -3070,7 +3174,15 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         .map(|v| (v.name.clone(), v.type_params.clone()))
         .collect::<Vec<_>>()
     {
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "DisplayAlt", "fmt_alt", "InspectAlt", "inspect_alt") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "DisplayAlt",
+            "fmt_alt",
+            "InspectAlt",
+            "inspect_alt",
+        ) {
             continue;
         }
         let type_param_ids = make_type_param_ids(&type_params, &mut tt);
@@ -3096,7 +3208,15 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         .map(|f| (f.name.clone(), f.type_id))
         .collect::<Vec<_>>()
     {
-        if !should_generate_fallback(&existing, &all_fn_names, &name, "DisplayAlt", "fmt_alt", "InspectAlt", "inspect_alt") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &name,
+            "DisplayAlt",
+            "fmt_alt",
+            "InspectAlt",
+            "inspect_alt",
+        ) {
             continue;
         }
         let ref_type = tt.make_ref(flags_type_id);
@@ -3117,7 +3237,15 @@ fn generate_display_alt_fallback_impls(module: &mut TirModule) {
         if module.flags.iter().any(|f| f.type_id == nt.type_id) {
             continue;
         }
-        if !should_generate_fallback(&existing, &all_fn_names, &nt.name, "DisplayAlt", "fmt_alt", "InspectAlt", "inspect_alt") {
+        if !should_generate_fallback(
+            &existing,
+            &all_fn_names,
+            &nt.name,
+            "DisplayAlt",
+            "fmt_alt",
+            "InspectAlt",
+            "inspect_alt",
+        ) {
             continue;
         }
         let ref_type = tt.make_ref(nt.type_id);
@@ -3182,8 +3310,17 @@ fn inspect_call(
     span: Span,
 ) -> TirStmt {
     let call = trait_call_on_type(
-        value, value_type, "Inspect", "inspect", TypeTable::UNIT,
-        vec![fmt], true, inspect_impl_module, module_source, tt, span,
+        value,
+        value_type,
+        "Inspect",
+        "inspect",
+        TypeTable::UNIT,
+        vec![fmt],
+        true,
+        inspect_impl_module,
+        module_source,
+        tt,
+        span,
     );
     TirStmt::new(TirStmtKind::Expr(call), span)
 }
@@ -3251,8 +3388,8 @@ fn decompose_type_for_method_name(
 /// Determine the module where an Inspect impl lives for a given type.
 /// Determine the module where a trait impl lives for a given type.
 ///
-/// `ref_module` is used for Ref/MutRef types (traits() for Eq/Ord, format() for Inspect).
-/// `string_module` is used for String (string() for Eq/Ord, format() for Inspect).
+/// `ref_module` is used for Ref/MutRef types (`traits()` for Eq/Ord, `format()` for Inspect).
+/// `string_module` is used for String (`string()` for Eq/Ord, `format()` for Inspect).
 fn trait_impl_module(
     type_id: TypeId,
     tt: &TypeTable,
@@ -3281,7 +3418,13 @@ fn trait_impl_module(
 }
 
 fn inspect_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) -> ModuleSource {
-    trait_impl_module(type_id, tt, default, ModuleSource::format(), ModuleSource::format())
+    trait_impl_module(
+        type_id,
+        tt,
+        default,
+        ModuleSource::format(),
+        ModuleSource::format(),
+    )
 }
 
 /// Collect parameterized types that need Inspect/Display impls.
@@ -3743,8 +3886,17 @@ fn eq_call_expr(
     let ref_type = tt.make_ref(field_type);
     let arg = ref_expr(other_field, ref_type, span);
     trait_call_on_type(
-        self_field, field_type, "Eq", "eq", TypeTable::BOOL,
-        vec![arg], true, eq_impl_module, module_source, tt, span,
+        self_field,
+        field_type,
+        "Eq",
+        "eq",
+        TypeTable::BOOL,
+        vec![arg],
+        true,
+        eq_impl_module,
+        module_source,
+        tt,
+        span,
     )
 }
 
@@ -3761,14 +3913,29 @@ fn cmp_call_expr(
     let ref_type = tt.make_ref(field_type);
     let arg = ref_expr(other_field, ref_type, span);
     trait_call_on_type(
-        self_field, field_type, "Ord", "cmp", ordering_type,
-        vec![arg], false, eq_impl_module, module_source, tt, span,
+        self_field,
+        field_type,
+        "Ord",
+        "cmp",
+        ordering_type,
+        vec![arg],
+        false,
+        eq_impl_module,
+        module_source,
+        tt,
+        span,
     )
 }
 
 /// Resolve the module source for a type's Eq/Ord implementation.
 fn eq_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) -> ModuleSource {
-    trait_impl_module(type_id, tt, default, ModuleSource::traits(), ModuleSource::string())
+    trait_impl_module(
+        type_id,
+        tt,
+        default,
+        ModuleSource::traits(),
+        ModuleSource::string(),
+    )
 }
 
 /// Generate `StructName^Eq::eq(&self, &Self) -> bool` for non-generic structs.
