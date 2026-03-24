@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774370355424,
+  "lastUpdate": 1774370543322,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6926,6 +6926,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1c616f664e12028d0f79235dc460a8c3a36fe716"
         },
         "date": 1774370355260,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9cbcd00b7546f12af57c98940e17de5ed051d2b5",
+          "message": "Merge pull request #681 from wado-lang/claude/refactor-traits-rs-c3GbV\n\nRefactor trait synthesis helpers and simplify formatter calls",
+          "timestamp": "2026-03-25T01:38:06+09:00",
+          "tree_id": "f49cce6f597a30ec55baeb43cbff8c4d1485e0a2",
+          "url": "https://github.com/wado-lang/wado/commit/9cbcd00b7546f12af57c98940e17de5ed051d2b5"
+        },
+        "date": 1774370543112,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
