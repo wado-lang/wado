@@ -268,7 +268,7 @@ for let { x, y } of points {
 }
 ```
 
-Structs auto-derive `Eq` (field-wise equality) and `Ord` (lexicographic by field order) when all fields implement those traits. Custom `impl Eq`/`impl Ord` overrides auto-derive.
+Structs auto-derive `Eq` (field-wise equality) and `Ord` (lexicographic by field order) when all fields implement those traits. Custom `impl Eq`/`impl Ord` overrides auto-derive. Variants also auto-derive `Eq` when all payload types implement `Eq`.
 
 ## Enums
 
@@ -596,7 +596,7 @@ impl<T: Eq> Eq for Pair<T> {
 }
 ```
 
-All primitives implement `Eq` and `Ord`. Structs auto-derive `Eq` and `Ord` when all fields implement the trait. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `Array<T: Eq>` implement `Eq`. `Array<T: Ord>` implements `Ord`.
+All primitives implement `Eq` and `Ord`. Structs auto-derive `Eq` and `Ord` when all fields implement the trait. Variants auto-derive `Eq` when all payload types implement `Eq`. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `Array<T: Eq>` implement `Eq`. `Array<T: Ord>` implements `Ord`.
 
 ## Control Flow
 

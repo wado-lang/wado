@@ -1,0 +1,38 @@
+// Test: auto-derived Eq for variant types
+use { println } from "core:cli";
+
+variant Shape {
+    Circle(f64),
+    Rectangle(f64),
+    Point,
+}
+
+export fn run() with Stdout {
+    let s1 = Shape::Circle(3.14);
+    let s2 = Shape::Circle(3.14);
+    let s3 = Shape::Circle(2.0);
+    let s4 = Shape::Rectangle(1.0);
+    let s5 = Shape::Rectangle(1.0);
+    let s6 = Shape::Rectangle(3.0);
+    let s7 = Shape::Point;
+    let s8 = Shape::Point;
+
+    // Same case, same payload
+    if s1 == s2 { println("circle == circle"); }
+    // Same case, different payload
+    if !(s1 == s3) { println("circle(3.14) != circle(2.0)"); }
+    // Different cases
+    if !(s1 == s4) { println("circle != rectangle"); }
+    // Rectangle equality
+    if s4 == s5 { println("rect == rect"); }
+    if !(s4 == s6) { println("rect(1) != rect(3)"); }
+    // Unit case equality
+    if s7 == s8 { println("point == point"); }
+    // Unit vs payload
+    if !(s7 == s1) { println("point != circle"); }
+    // != operator
+    if s1 != s3 { println("!= works"); }
+}
+
+__DATA__
+{"stdout": "circle == circle\ncircle(3.14) != circle(2.0)\ncircle != rectangle\nrect == rect\nrect(1) != rect(3)\npoint == point\npoint != circle\n!= works\n"}

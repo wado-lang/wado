@@ -144,6 +144,9 @@ pub struct Resolver<'a, H: CompilerHost> {
         (String, TypeId, String, String, String),
         Option<(TypeId, ast::SelfKind, String, ModuleSource)>,
     >,
+    /// Recursion guard for `type_implements_trait` to avoid infinite recursion
+    /// on recursive types (e.g., variant Elem containing struct RepeatElem with field Elem).
+    trait_check_stack: RefCell<Vec<(TypeId, String)>>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -197,6 +200,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             included_files,
             known_type_names_cache: IndexSet::default(),
             indexing_trait_cache: IndexMap::default(),
+            trait_check_stack: RefCell::new(Vec::new()),
         }
     }
 
