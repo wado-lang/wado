@@ -569,6 +569,34 @@ impl Monomorphizer {
         }
     }
 
+    /// Queue a struct instantiation if not already queued. Returns true if newly queued.
+    fn try_queue_struct(&mut self, key: InstantiationKey, mangled_name: String) -> bool {
+        if self.structs.instantiated.contains_key(&key) {
+            return false;
+        }
+        self.structs
+            .instantiated
+            .insert(key.clone(), mangled_name.clone());
+        self.structs.mangled_to_key.insert(mangled_name, key.clone());
+        self.structs.pending.push(key);
+        true
+    }
+
+    /// Queue a function instantiation if not already queued. Returns true if newly queued.
+    fn try_queue_function(&mut self, key: InstantiationKey, mangled_name: String) -> bool {
+        if self.functions.instantiated.contains_key(&key) {
+            return false;
+        }
+        self.functions
+            .instantiated
+            .insert(key.clone(), mangled_name.clone());
+        self.functions
+            .mangled_to_key
+            .insert(mangled_name, key.clone());
+        self.functions.pending.push(key);
+        true
+    }
+
     /// Perform monomorphization on a module, optionally with access to external generic
     /// functions and structs from other modules (e.g., Array methods from prelude).
     ///
@@ -907,14 +935,8 @@ impl Monomorphizer {
                         method_info: None, // Struct instantiation,
                     };
 
-                    if !self.structs.instantiated.contains_key(&key) {
-                        let mangled = self.instantiation_name(&key, type_table);
-                        self.structs
-                            .instantiated
-                            .insert(key.clone(), mangled.clone());
-                        self.structs.mangled_to_key.insert(mangled, key.clone());
-                        self.structs.pending.push(key);
-                    }
+                    let mangled = self.instantiation_name(&key, type_table);
+                    self.try_queue_struct(key, mangled);
                 }
             }
         }
@@ -1375,14 +1397,8 @@ impl Monomorphizer {
                         method_type_args: type_args.clone(),
                         method_info: func.method_info.clone(),
                     };
-                    if !self.functions.instantiated.contains_key(&key) {
-                        let mangled = self.function_instantiation_name(&key, type_table);
-                        self.functions
-                            .instantiated
-                            .insert(key.clone(), mangled.clone());
-                        self.functions.mangled_to_key.insert(mangled, key.clone());
-                        self.functions.pending.push(key);
-                    }
+                    let mangled = self.function_instantiation_name(&key, type_table);
+                    self.try_queue_function(key, mangled);
                 }
                 // Also check if this is a static method call on a monomorphized struct
                 // (formerly StaticCall). Use method_info metadata to get struct/method name.
@@ -1432,18 +1448,12 @@ impl Monomorphizer {
                                     method_type_args,
                                     method_info,
                                 };
-                                if !self.functions.instantiated.contains_key(&key) {
-                                    let mangled = self.method_instantiation_name(
-                                        &key,
-                                        type_table,
-                                        impl_type_args.len(),
-                                    );
-                                    self.functions
-                                        .instantiated
-                                        .insert(key.clone(), mangled.clone());
-                                    self.functions.mangled_to_key.insert(mangled, key.clone());
-                                    self.functions.pending.push(key);
-                                }
+                                let mangled = self.method_instantiation_name(
+                                    &key,
+                                    type_table,
+                                    impl_type_args.len(),
+                                );
+                                self.try_queue_function(key, mangled);
                             }
                             break;
                         }
@@ -1509,17 +1519,11 @@ impl Monomorphizer {
                                     method_type_args: type_args.clone(),
                                     method_info: Some(method_info),
                                 };
-                                if !self.functions.instantiated.contains_key(&key) {
-                                    let mangled = self.method_instantiation_name(
-                                        &key, type_table,
-                                        0, // non-generic struct: no impl type params
-                                    );
-                                    self.functions
-                                        .instantiated
-                                        .insert(key.clone(), mangled.clone());
-                                    self.functions.mangled_to_key.insert(mangled, key.clone());
-                                    self.functions.pending.push(key);
-                                }
+                                let mangled = self.method_instantiation_name(
+                                    &key, type_table,
+                                    0, // non-generic struct: no impl type params
+                                );
+                                self.try_queue_function(key, mangled);
                                 found = true;
                                 break;
                             }
@@ -1586,20 +1590,12 @@ impl Monomorphizer {
                                                 method_type_args: type_args.clone(),
                                                 method_info: Some(method_info),
                                             };
-                                            if !self.functions.instantiated.contains_key(&key) {
-                                                let mangled = self.method_instantiation_name(
-                                                    &key,
-                                                    type_table,
-                                                    impl_type_args.len(),
-                                                );
-                                                self.functions
-                                                    .instantiated
-                                                    .insert(key.clone(), mangled.clone());
-                                                self.functions
-                                                    .mangled_to_key
-                                                    .insert(mangled, key.clone());
-                                                self.functions.pending.push(key);
-                                            }
+                                            let mangled = self.method_instantiation_name(
+                                                &key,
+                                                type_table,
+                                                impl_type_args.len(),
+                                            );
+                                            self.try_queue_function(key, mangled);
                                             break;
                                         }
                                     }
@@ -1664,18 +1660,12 @@ impl Monomorphizer {
                                     method_type_args: method_type_args_for_key,
                                     method_info,
                                 };
-                                if !self.functions.instantiated.contains_key(&key) {
-                                    let mangled = self.method_instantiation_name(
-                                        &key,
-                                        type_table,
-                                        impl_type_args.len(),
-                                    );
-                                    self.functions
-                                        .instantiated
-                                        .insert(key.clone(), mangled.clone());
-                                    self.functions.mangled_to_key.insert(mangled, key.clone());
-                                    self.functions.pending.push(key);
-                                }
+                                let mangled = self.method_instantiation_name(
+                                    &key,
+                                    type_table,
+                                    impl_type_args.len(),
+                                );
+                                self.try_queue_function(key, mangled);
                                 break;
                             }
                         }
@@ -1731,18 +1721,12 @@ impl Monomorphizer {
                                     method_type_args: method_type_args_for_key,
                                     method_info,
                                 };
-                                if !self.functions.instantiated.contains_key(&key) {
-                                    let mangled = self.method_instantiation_name(
-                                        &key,
-                                        type_table,
-                                        impl_type_args.len(),
-                                    );
-                                    self.functions
-                                        .instantiated
-                                        .insert(key.clone(), mangled.clone());
-                                    self.functions.mangled_to_key.insert(mangled, key.clone());
-                                    self.functions.pending.push(key);
-                                }
+                                let mangled = self.method_instantiation_name(
+                                    &key,
+                                    type_table,
+                                    impl_type_args.len(),
+                                );
+                                self.try_queue_function(key, mangled);
                                 break;
                             }
                         }
@@ -1822,20 +1806,14 @@ impl Monomorphizer {
                         method_type_args: method_ta,
                         method_info,
                     };
-                    if !self.functions.instantiated.contains_key(&key) {
-                        let impl_type_params_count = generic_func.impl_type_params.len();
-                        let mangled = self.method_instantiation_name_inner(
-                            &key,
-                            type_table,
-                            impl_type_params_count,
-                            &generic_func.impl_type_params,
-                        );
-                        self.functions
-                            .instantiated
-                            .insert(key.clone(), mangled.clone());
-                        self.functions.mangled_to_key.insert(mangled, key.clone());
-                        self.functions.pending.push(key);
-                    }
+                    let impl_type_params_count = generic_func.impl_type_params.len();
+                    let mangled = self.method_instantiation_name_inner(
+                        &key,
+                        type_table,
+                        impl_type_params_count,
+                        &generic_func.impl_type_params,
+                    );
+                    self.try_queue_function(key, mangled);
                 }
 
                 self.collect_func_instantiation_sites_in_expr(
