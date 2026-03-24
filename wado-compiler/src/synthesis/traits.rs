@@ -3946,6 +3946,24 @@ fn eq_call_expr(
         eq_impl_module(field_type, tt, module_source)
     };
 
+    // Reference types need monomorph_info for the generic `impl Eq for &T` / `impl Eq for &mut T`
+    let monomorph_info = match &resolved {
+        ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
+            let base_info = LocalMethodName::new(
+                info.base_struct_name.clone(),
+                Some("Eq".to_string()),
+                "eq".to_string(),
+            );
+            Some(MonomorphInfo {
+                generic_name: base_info.to_mangled_name(),
+                impl_type_args: vec![*inner_id],
+                method_type_args: vec![],
+                is_blanket: true,
+            })
+        }
+        _ => None,
+    };
+
     let fn_name = info.to_mangled_name();
     TirExpr::new(
         TirExprKind::MethodCall {
@@ -3953,7 +3971,7 @@ fn eq_call_expr(
             func: FunctionRef {
                 module_source: impl_module,
                 name: fn_name,
-                monomorph_info: None,
+                monomorph_info,
                 method_info: Some(info),
                 is_cm_binding: false,
             },
@@ -4020,6 +4038,7 @@ fn cmp_call_expr(
 fn eq_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) -> ModuleSource {
     match tt.get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitive(),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => ModuleSource::traits(),
         ResolvedType::Struct { ref name, .. } if name == "String" => ModuleSource::string(),
         ResolvedType::Struct {
             ref module_source, ..

@@ -1,0 +1,14 @@
+// Ordering comparison on references is not allowed
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() {
+    let p1 = Point { x: 1, y: 2 };
+    let p2 = Point { x: 3, y: 4 };
+    let _ = &p1 < &p2;
+}
+
+__DATA__
+{"compile_error": "cannot be applied to type `&Point`"}
