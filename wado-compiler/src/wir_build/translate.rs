@@ -882,11 +882,11 @@ impl FunctionTranslator<'_, '_> {
             if let Some(instr) = self.translate_stmt(stmt) {
                 instrs.push(instr);
             }
-            // If this was the last statement and none of the value-producing special
-            // cases above matched, the fallthrough path is dead code: e.g. a Loop that
-            // always exits via labeled `break` to an outer block. Add `unreachable` so
-            // the Wasm validator knows no value is expected on the fallthrough path.
-            if is_last {
+            // A Loop that always exits via a labeled `break` to an outer block never
+            // falls through in Wado, but the Wasm `loop` instruction itself can fall
+            // through. Add `unreachable` so the Wasm validator knows the fallthrough
+            // path of the enclosing value-block is dead.
+            if is_last && matches!(stmt.kind, TirStmtKind::Loop { .. }) {
                 instrs.push(WirInstr::Unreachable);
             }
         }
