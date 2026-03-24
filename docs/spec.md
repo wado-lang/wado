@@ -2098,6 +2098,8 @@ Structs auto-derive `Eq` (field-wise equality) and `Ord` (lexicographic comparis
 
 For generic structs, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Foo<T>`, `impl<T: Ord> Ord for Foo<T>`.
 
+Variants auto-derive `Eq` when all payload types implement `Eq`. The generated `eq` method checks that both values are the same case and, for cases with payloads, compares the payloads. A user-provided `impl Eq` takes precedence over the auto-derived implementation. For generic variants, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Maybe<T>`.
+
 ### Generic Type Inference
 
 Wado infers type arguments for generic type constructors (struct literals and variant constructors) using two complementary mechanisms:

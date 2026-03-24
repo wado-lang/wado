@@ -1,0 +1,48 @@
+// Test: auto-derived Eq for structs containing variant fields
+use { println } from "core:cli";
+
+variant Color {
+    Red,
+    Green,
+    Blue(i32),
+}
+
+struct Pixel {
+    x: i32,
+    y: i32,
+    color: Color,
+}
+
+struct Container {
+    label: String,
+    value: Option<i32>,
+}
+
+export fn run() with Stdout {
+    let p1 = Pixel { x: 1, y: 2, color: Color::Red };
+    let p2 = Pixel { x: 1, y: 2, color: Color::Red };
+    let p3 = Pixel { x: 1, y: 2, color: Color::Green };
+    let p4 = Pixel { x: 1, y: 2, color: Color::Blue(42) };
+    let p5 = Pixel { x: 1, y: 2, color: Color::Blue(42) };
+    let p6 = Pixel { x: 1, y: 2, color: Color::Blue(7) };
+    let p7 = Pixel { x: 3, y: 2, color: Color::Red };
+
+    if p1 == p2 { println("same pixel"); }
+    if p1 != p3 { println("different color case"); }
+    if p4 == p5 { println("same blue payload"); }
+    if p4 != p6 { println("different blue payload"); }
+    if p1 != p7 { println("different coords"); }
+
+    // Struct with Option (prelude variant) field
+    let c1 = Container { label: "a", value: Option::Some(10) };
+    let c2 = Container { label: "a", value: Option::Some(10) };
+    let c3 = Container { label: "a", value: null };
+    let c4 = Container { label: "b", value: Option::Some(10) };
+
+    if c1 == c2 { println("same container"); }
+    if c1 != c3 { println("some != none"); }
+    if c1 != c4 { println("different label"); }
+}
+
+__DATA__
+{"stdout": "same pixel\ndifferent color case\nsame blue payload\ndifferent blue payload\ndifferent coords\nsame container\nsome != none\ndifferent label\n"}

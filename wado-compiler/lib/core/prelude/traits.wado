@@ -17,6 +17,18 @@ pub trait Eq {
     fn eq(&self, other: &Self) -> bool;
 }
 
+impl<T> Eq for &T {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
+impl<T> Eq for &mut T {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
 /// Trait for ordering comparisons.
 /// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
 pub trait Ord {

@@ -3,6 +3,7 @@
 //! Generates auto-derived trait implementations for types that support them:
 //! - `EnumName^Eq::eq(&self, &Self) -> bool` - discriminant equality
 //! - `EnumName^Ord::cmp(&self, &Self) -> Ordering` - discriminant ordering
+//! - `VariantName^Eq::eq(&self, &Self) -> bool` - case-discriminated payload equality
 //! - `TypeName^Inspect::inspect(&self, &mut Formatter)` - debug formatting
 //! - `TypeName^Display::fmt(&self, &mut Formatter)` - display fallback (delegates to Inspect)
 //!
@@ -35,6 +36,7 @@ pub fn synthesize_traits(project: Project) -> Project {
     for module in project.tir_modules.values_mut() {
         generate_enum_trait_impls(module);
         generate_struct_eq_ord_impls(module);
+        generate_variant_eq_impls(module);
         generate_inspect_impls(module);
         generate_inspect_alt_impls(module);
         generate_display_fallback_impls(module);
@@ -227,6 +229,101 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule) {
             );
             generated.push(Rc::new(RefCell::new(func)));
         }
+    }
+
+    drop(tt);
+    module.functions.extend(generated);
+}
+
+/// Generate auto-derived Eq trait implementations for variant types in a module.
+///
+/// For each variant whose payload types all support Eq, generates:
+/// - `VariantName^Eq::eq(&self, &Self) -> bool` — case-discriminated payload equality
+///
+/// Skips variants that already have user-provided implementations.
+fn generate_variant_eq_impls(module: &mut TirModule) {
+    if module.variants.is_empty() {
+        return;
+    }
+
+    let module_source = module.module_source.clone();
+    let existing = collect_existing_trait_methods(module);
+    let mut generated = Vec::new();
+
+    let mut tt = module.type_table.borrow_mut();
+
+    // Non-generic variants
+    let variant_infos: Vec<_> = module
+        .variants
+        .iter()
+        .filter(|v| v.type_params.is_empty())
+        .map(|v| {
+            let cases: Vec<_> = v
+                .cases
+                .iter()
+                .map(|c| (c.name.clone(), c.index, c.payload))
+                .collect();
+            (v.name.clone(), cases, v.span)
+        })
+        .collect();
+
+    for (name, cases, span) in &variant_infos {
+        let eq_key = MethodName::format_local(name, Some("Eq"), "eq");
+        if existing.contains(&eq_key) {
+            continue;
+        }
+        let variant_type = tt.make_variant(name.clone(), module_source.clone());
+        let ref_variant_type = tt.make_ref(variant_type);
+        let func = generate_variant_eq_fn(
+            name,
+            cases,
+            variant_type,
+            ref_variant_type,
+            &module_source,
+            &mut tt,
+            *span,
+        );
+        generated.push(Rc::new(RefCell::new(func)));
+    }
+
+    // Generic variants
+    let generic_variant_infos: Vec<_> = module
+        .variants
+        .iter()
+        .filter(|v| !v.type_params.is_empty())
+        .map(|v| {
+            let cases: Vec<_> = v
+                .cases
+                .iter()
+                .map(|c| (c.name.clone(), c.index, c.payload))
+                .collect();
+            (v.name.clone(), v.type_params.clone(), cases, v.span)
+        })
+        .collect();
+
+    for (name, type_params, cases, span) in &generic_variant_infos {
+        let eq_key = MethodName::format_local(name, Some("Eq"), "eq");
+        if existing.contains(&eq_key) {
+            continue;
+        }
+        let type_param_ids: Vec<TypeId> = type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        let variant_type =
+            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let ref_variant_type = tt.make_ref(variant_type);
+        let func = generate_generic_variant_eq_fn(
+            name,
+            type_params,
+            cases,
+            variant_type,
+            ref_variant_type,
+            &module_source,
+            &mut tt,
+            *span,
+        );
+        generated.push(Rc::new(RefCell::new(func)));
     }
 
     drop(tt);
@@ -3849,6 +3946,24 @@ fn eq_call_expr(
         eq_impl_module(field_type, tt, module_source)
     };
 
+    // Reference types need monomorph_info for the generic `impl Eq for &T` / `impl Eq for &mut T`
+    let monomorph_info = match &resolved {
+        ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
+            let base_info = LocalMethodName::new(
+                info.base_struct_name.clone(),
+                Some("Eq".to_string()),
+                "eq".to_string(),
+            );
+            Some(MonomorphInfo {
+                generic_name: base_info.to_mangled_name(),
+                impl_type_args: vec![*inner_id],
+                method_type_args: vec![],
+                is_blanket: true,
+            })
+        }
+        _ => None,
+    };
+
     let fn_name = info.to_mangled_name();
     TirExpr::new(
         TirExprKind::MethodCall {
@@ -3856,7 +3971,7 @@ fn eq_call_expr(
             func: FunctionRef {
                 module_source: impl_module,
                 name: fn_name,
-                monomorph_info: None,
+                monomorph_info,
                 method_info: Some(info),
                 is_cm_binding: false,
             },
@@ -3923,6 +4038,7 @@ fn cmp_call_expr(
 fn eq_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) -> ModuleSource {
     match tt.get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitive(),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => ModuleSource::traits(),
         ResolvedType::Struct { ref name, .. } if name == "String" => ModuleSource::string(),
         ResolvedType::Struct {
             ref module_source, ..
@@ -4440,6 +4556,330 @@ fn generate_generic_struct_eq_fn(
         export_name: None,
         allocator_tag: None,
     }
+}
+
+/// Generate `VariantName^Eq::eq(&self, &Self) -> bool` for non-generic variants.
+///
+/// Body: if-else chain testing each case with `VariantTest`, comparing payloads via `eq_call_expr`.
+fn generate_variant_eq_fn(
+    variant_name: &str,
+    cases: &[(String, u32, TypeId)],
+    variant_type: TypeId,
+    ref_variant_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        variant_name.to_string(),
+        Some("Eq".to_string()),
+        "eq".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let params = vec![
+        TirParam {
+            name: "self".to_string(),
+            type_id: ref_variant_type,
+            local_index: 0,
+            is_mut: false,
+            span,
+        },
+        TirParam {
+            name: "other".to_string(),
+            type_id: ref_variant_type,
+            local_index: 1,
+            is_mut: false,
+            span,
+        },
+    ];
+
+    let deref_self = || {
+        deref_expr(
+            TirExpr::new(
+                TirExprKind::Local {
+                    index: 0,
+                    name: "self".to_string(),
+                },
+                ref_variant_type,
+                span,
+            ),
+            variant_type,
+            span,
+        )
+    };
+    let deref_other = || {
+        deref_expr(
+            TirExpr::new(
+                TirExprKind::Local {
+                    index: 1,
+                    name: "other".to_string(),
+                },
+                ref_variant_type,
+                span,
+            ),
+            variant_type,
+            span,
+        )
+    };
+
+    let body_stmts = variant_eq_body(cases, &deref_self, &deref_other, module_source, tt, span);
+    let body = TirBlock::new(body_stmts, span);
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        params,
+        TypeTable::BOOL,
+        body,
+        vec![ref_variant_type, ref_variant_type],
+    )
+}
+
+/// Generate `VariantName^Eq::eq(&self, &Self) -> bool` for generic variants.
+///
+/// Same structure as `generate_variant_eq_fn` but with `impl_type_params` set so the
+/// monomorphizer can specialize payload comparisons for each concrete instantiation.
+fn generate_generic_variant_eq_fn(
+    variant_name: &str,
+    type_params: &[TirTypeParam],
+    cases: &[(String, u32, TypeId)],
+    variant_type: TypeId,
+    ref_variant_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        variant_name.to_string(),
+        Some("Eq".to_string()),
+        "eq".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let params = vec![
+        TirParam {
+            name: "self".to_string(),
+            type_id: ref_variant_type,
+            local_index: 0,
+            is_mut: false,
+            span,
+        },
+        TirParam {
+            name: "other".to_string(),
+            type_id: ref_variant_type,
+            local_index: 1,
+            is_mut: false,
+            span,
+        },
+    ];
+
+    let deref_self = || {
+        deref_expr(
+            TirExpr::new(
+                TirExprKind::Local {
+                    index: 0,
+                    name: "self".to_string(),
+                },
+                ref_variant_type,
+                span,
+            ),
+            variant_type,
+            span,
+        )
+    };
+    let deref_other = || {
+        deref_expr(
+            TirExpr::new(
+                TirExprKind::Local {
+                    index: 1,
+                    name: "other".to_string(),
+                },
+                ref_variant_type,
+                span,
+            ),
+            variant_type,
+            span,
+        )
+    };
+
+    let body_stmts = variant_eq_body(cases, &deref_self, &deref_other, module_source, tt, span);
+    let body = TirBlock::new(body_stmts, span);
+
+    let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
+
+    TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params,
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params,
+        return_type: TypeTable::BOOL,
+        effects: Vec::new(),
+        stores: vec![],
+        body: Some(body),
+        span,
+        local_count: 2,
+        local_types: vec![ref_variant_type, ref_variant_type],
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+        export_name: None,
+        allocator_tag: None,
+    }
+}
+
+/// Build the body statements for variant Eq: a chain of if-else testing each case.
+///
+/// For each case:
+/// - If both `self` and `other` are that case, compare payloads (or return true for unit cases)
+/// - Otherwise fall through to the next case
+/// - Final fallback: return false (different cases)
+fn variant_eq_body(
+    cases: &[(String, u32, TypeId)],
+    deref_self: &dyn Fn() -> TirExpr,
+    deref_other: &dyn Fn() -> TirExpr,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> Vec<TirStmt> {
+    let mut stmts = Vec::new();
+
+    for (case_name, case_index, payload_type) in cases {
+        let is_unit = *payload_type == TypeTable::UNIT;
+
+        // Condition: self is this case
+        let self_test = TirExpr::new(
+            TirExprKind::VariantTest {
+                expr: Box::new(deref_self()),
+                case_index: *case_index,
+                case_name: case_name.clone(),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+
+        let then_stmts = if is_unit {
+            // Unit case: return whether other is the same case
+            let other_test = TirExpr::new(
+                TirExprKind::VariantTest {
+                    expr: Box::new(deref_other()),
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                },
+                TypeTable::BOOL,
+                span,
+            );
+            vec![TirStmt::new(
+                TirStmtKind::Return {
+                    value: Some(other_test),
+                },
+                span,
+            )]
+        } else {
+            // Payload case: if other is the same case, compare payloads; else return false
+            let other_test = TirExpr::new(
+                TirExprKind::VariantTest {
+                    expr: Box::new(deref_other()),
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                },
+                TypeTable::BOOL,
+                span,
+            );
+
+            let self_payload = TirExpr::new(
+                TirExprKind::VariantPayload {
+                    expr: Box::new(deref_self()),
+                    case_index: *case_index,
+                    payload_type: *payload_type,
+                },
+                *payload_type,
+                span,
+            );
+            let other_payload = TirExpr::new(
+                TirExprKind::VariantPayload {
+                    expr: Box::new(deref_other()),
+                    case_index: *case_index,
+                    payload_type: *payload_type,
+                },
+                *payload_type,
+                span,
+            );
+
+            let eq_result = eq_call_expr(
+                self_payload,
+                other_payload,
+                *payload_type,
+                module_source,
+                tt,
+                span,
+            );
+
+            let inner_if = TirExpr::new(
+                TirExprKind::If {
+                    condition: Box::new(other_test),
+                    then_branch: TirBlock::new(
+                        vec![TirStmt::new(
+                            TirStmtKind::Return {
+                                value: Some(eq_result),
+                            },
+                            span,
+                        )],
+                        span,
+                    ),
+                    else_branch: None,
+                },
+                TypeTable::UNIT,
+                span,
+            );
+
+            vec![
+                TirStmt::new(TirStmtKind::Expr(inner_if), span),
+                TirStmt::new(
+                    TirStmtKind::Return {
+                        value: Some(TirExpr::new(
+                            TirExprKind::BoolLiteral(false),
+                            TypeTable::BOOL,
+                            span,
+                        )),
+                    },
+                    span,
+                ),
+            ]
+        };
+
+        let if_expr = TirExpr::new(
+            TirExprKind::If {
+                condition: Box::new(self_test),
+                then_branch: TirBlock::new(then_stmts, span),
+                else_branch: None,
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        stmts.push(TirStmt::new(TirStmtKind::Expr(if_expr), span));
+    }
+
+    // Final fallback: return false (unreachable if all cases are covered)
+    stmts.push(TirStmt::new(
+        TirStmtKind::Return {
+            value: Some(TirExpr::new(
+                TirExprKind::BoolLiteral(false),
+                TypeTable::BOOL,
+                span,
+            )),
+        },
+        span,
+    ));
+
+    stmts
 }
 
 /// Generate `StructName^Ord::cmp(&self, &Self) -> Ordering` for generic structs.

@@ -1,0 +1,45 @@
+// Reference equality uses ref.eq (identity comparison)
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "same reference is equal" {
+    let p = Point { x: 1, y: 2 };
+    let r1 = &p;
+    let r2 = &p;
+    assert r1 == r2;
+}
+
+test "different references are not equal" {
+    let p1 = Point { x: 1, y: 2 };
+    let p2 = Point { x: 1, y: 2 };
+    let r1 = &p1;
+    let r2 = &p2;
+    assert r1 != r2;
+}
+
+test "mut ref equality" {
+    let mut p = Point { x: 1, y: 2 };
+    let r1 = &mut p;
+    let r2 = &mut p;
+    assert r1 == r2;
+}
+
+test "primitive ref equality" {
+    let x = 42;
+    let r1 = &x;
+    let r2 = &x;
+    assert r1 == r2;
+}
+
+test "primitive ref inequality" {
+    let x = 42;
+    let y = 42;
+    let r1 = &x;
+    let r2 = &y;
+    assert r1 != r2;
+}
+
+__DATA__
+{"test": {}}

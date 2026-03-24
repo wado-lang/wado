@@ -12263,6 +12263,25 @@ pub fn "Holder^Ord::cmp"(self: &Holder, other: &Holder) -> Ordering {
     return Ordering::Equal;
 }
 
+pub fn "Shape^Eq::eq"(self: Box<Shape>, other: Box<Shape>) -> bool {
+    if __variant_test(self.value, case=0, name=Circle) {
+        if __variant_test(other.value, case=0, name=Circle) {
+            return Box<f64> { value: __variant_payload(self.value, case=0) }."f64^Eq::eq"(Box<f64> { value: __variant_payload(other.value, case=0) });
+        };
+        return false;
+    };
+    if __variant_test(self.value, case=1, name=Rectangle) {
+        if __variant_test(other.value, case=1, name=Rectangle) {
+            return __variant_payload(self.value, case=1)."Tuple<f64,f64>^Eq::eq"(&__variant_payload(other.value, case=1));
+        };
+        return false;
+    };
+    if __variant_test(self.value, case=2, name=Point) {
+        return __variant_test(other.value, case=2, name=Point);
+    };
+    return false;
+}
+
 pub fn "Color^Inspect::inspect"(self: &Color, f: &mut Formatter) {
     if (*self == 0) {
         f.Formatter::write_str("Color::Red");
@@ -13048,6 +13067,10 @@ pub fn "&<Point>^Inspect::inspect"(self: &&Point, f: &mut Formatter) {
     f.Formatter::write_str("&");
     let inner: &Point = *self;
     *inner."Point^Inspect::inspect"(f);
+}
+
+pub fn "&<Point>^Eq::eq"(self: &&Point, other: &&Point) -> bool {
+    return (*self ref.eq *other);
 }
 
 fn "ArrayIter<Point>^Iterator::next"(self: &mut ArrayIter<Point>) -> Option<Point> {
@@ -19339,6 +19362,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J::Item]) -> bool, f
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "&mut<String>^Eq::eq"(self: &&mut String, other: &&mut String) -> bool {
+    return (*self ref.eq *other);
 }
 
 fn "StrCharIter^IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {

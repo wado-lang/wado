@@ -1,0 +1,31 @@
+// Test: auto-derived Eq for generic variant types
+use { println } from "core:cli";
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+export fn run() with Stdout {
+    let a = Maybe::<i32>::Just(42);
+    let b = Maybe::<i32>::Just(42);
+    let c = Maybe::<i32>::Just(7);
+    let d: Maybe<i32> = Maybe::Nothing;
+    let e: Maybe<i32> = Maybe::Nothing;
+
+    if a == b { println("Just(42) == Just(42)"); }
+    if !(a == c) { println("Just(42) != Just(7)"); }
+    if !(a == d) { println("Just(42) != Nothing"); }
+    if d == e { println("Nothing == Nothing"); }
+    if a != c { println("!= works"); }
+
+    // Also test with Option (prelude variant, has user impl)
+    let x: Option<i32> = Option::Some(10);
+    let y: Option<i32> = Option::Some(10);
+    let z: Option<i32> = null;
+    if x == y { println("Some(10) == Some(10)"); }
+    if !(x == z) { println("Some(10) != None"); }
+}
+
+__DATA__
+{"stdout": "Just(42) == Just(42)\nJust(42) != Just(7)\nJust(42) != Nothing\nNothing == Nothing\n!= works\nSome(10) == Some(10)\nSome(10) != None\n"}

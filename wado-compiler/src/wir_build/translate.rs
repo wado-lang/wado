@@ -1318,6 +1318,8 @@ impl FunctionTranslator<'_, '_> {
                         | TirBinaryOp::GtEq
                         | TirBinaryOp::And
                         | TirBinaryOp::Or
+                        | TirBinaryOp::RefEq
+                        | TirBinaryOp::RefNotEq
                 ) && let ResolvedType::Primitive(prim) = self.type_table.get(left.type_id)
                 {
                     return Self::truncate_to_sub_i32(result, prim);
@@ -2174,6 +2176,8 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::I32ShrS(left, right)
                 }
             }
+            TirBinaryOp::RefEq => WirInstr::RefEq(left, right),
+            TirBinaryOp::RefNotEq => WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right))),
         }
     }
 
@@ -2754,6 +2758,13 @@ impl FunctionTranslator<'_, '_> {
             "builtin::f32_min" => binary_f32!(self, args, WirInstr::F32Min),
             "builtin::f32_max" => binary_f32!(self, args, WirInstr::F32Max),
             "builtin::f32_copysign" => binary_f32!(self, args, WirInstr::F32Copysign),
+
+            // === Reference Identity ===
+            "builtin::ref_eq" => {
+                let l = self.translate_expr(&args[0].expr);
+                let r = self.translate_expr(&args[1].expr);
+                Some(WirInstr::RefEq(Box::new(l), Box::new(r)))
+            }
 
             // === Bitwise/Integer ===
             "builtin::i32_and" => {
