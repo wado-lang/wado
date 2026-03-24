@@ -78,10 +78,27 @@ pub struct SexprNode {
     pub eof: Token,
 }
 
+impl Eq for SexprNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.item_list == other.item_list && self.eof == other.eof;
+    }
+}
+
 pub variant ItemNode {
     Alt0(ItemAlt0),
     Alt1(ItemAlt1),
     Alt2(ItemAlt2),
+}
+
+impl Eq for ItemNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            _ => false,
+        };
+    }
 }
 
 pub struct ItemAlt0 {
@@ -89,9 +106,21 @@ pub struct ItemAlt0 {
     pub atom: AtomNode,
 }
 
+impl Eq for ItemAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.atom == other.atom;
+    }
+}
+
 pub struct ItemAlt1 {
     pub span: Span,
     pub list_: ListNode,
+}
+
+impl Eq for ItemAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.list_ == other.list_;
+    }
 }
 
 pub struct ItemAlt2 {
@@ -103,11 +132,23 @@ pub struct ItemAlt2 {
     pub rparen: Token,
 }
 
+impl Eq for ItemAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.lparen == other.lparen && self.item == other.item && self.dot == other.dot && self.item_2 == other.item_2 && self.rparen == other.rparen;
+    }
+}
+
 pub struct ListNode {
     pub span: Span,
     pub lparen: Token,
     pub item_list: Array<ItemNode>,
     pub rparen: Token,
+}
+
+impl Eq for ListNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.lparen == other.lparen && self.item_list == other.item_list && self.rparen == other.rparen;
+    }
 }
 
 pub variant AtomNode {
@@ -117,9 +158,27 @@ pub variant AtomNode {
     Alt3(AtomAlt3),
 }
 
+impl Eq for AtomNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            [Alt3(a), Alt3(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct AtomAlt0 {
     pub span: Span,
     pub string: Token,
+}
+
+impl Eq for AtomAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.string == other.string;
+    }
 }
 
 pub struct AtomAlt1 {
@@ -127,14 +186,32 @@ pub struct AtomAlt1 {
     pub symbol: Token,
 }
 
+impl Eq for AtomAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.symbol == other.symbol;
+    }
+}
+
 pub struct AtomAlt2 {
     pub span: Span,
     pub number: Token,
 }
 
+impl Eq for AtomAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.number == other.number;
+    }
+}
+
 pub struct AtomAlt3 {
     pub span: Span,
     pub dot: Token,
+}
+
+impl Eq for AtomAlt3 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.dot == other.dot;
+    }
 }
 
 global TK_STRING: i32 = 0;

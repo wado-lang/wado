@@ -227,9 +227,21 @@ pub struct ParseNode {
     pub eof: Token,
 }
 
+impl Eq for ParseNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.eof == other.eof;
+    }
+}
+
 pub struct ErrorNode {
     pub span: Span,
     pub unexpected_char: Token,
+}
+
+impl Eq for ErrorNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.unexpected_char == other.unexpected_char;
+    }
 }
 
 pub struct SqlStmtListNode {
@@ -239,8 +251,20 @@ pub struct SqlStmtListNode {
     pub semicolon_list_2: Array<Token>,
 }
 
+impl Eq for SqlStmtListNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.semicolon_list == other.semicolon_list && self.sql_stmt == other.sql_stmt && self.semicolon_list_2 == other.semicolon_list_2;
+    }
+}
+
 pub struct SqlStmtNode {
     pub span: Span,
+}
+
+impl Eq for SqlStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span;
+    }
 }
 
 pub struct AlterTableStmtNode {
@@ -250,9 +274,21 @@ pub struct AlterTableStmtNode {
     pub table_name: TableNameNode,
 }
 
+impl Eq for AlterTableStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_alter == other.k_alter && self.k_table == other.k_table && self.table_name == other.table_name;
+    }
+}
+
 pub struct AnalyzeStmtNode {
     pub span: Span,
     pub k_analyze: Token,
+}
+
+impl Eq for AnalyzeStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_analyze == other.k_analyze;
+    }
 }
 
 pub struct AttachStmtNode {
@@ -264,19 +300,43 @@ pub struct AttachStmtNode {
     pub database_name: DatabaseNameNode,
 }
 
+impl Eq for AttachStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_attach == other.k_attach && self.k_database == other.k_database && self.expr == other.expr && self.k_as == other.k_as && self.database_name == other.database_name;
+    }
+}
+
 pub struct BeginStmtNode {
     pub span: Span,
     pub k_begin: Token,
+}
+
+impl Eq for BeginStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_begin == other.k_begin;
+    }
 }
 
 pub struct CommitStmtNode {
     pub span: Span,
 }
 
+impl Eq for CommitStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span;
+    }
+}
+
 pub struct CompoundSelectStmtNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
     pub select_core: SelectCoreNode,
+}
+
+impl Eq for CompoundSelectStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.with_clause == other.with_clause && self.select_core == other.select_core;
+    }
 }
 
 pub struct CreateIndexStmtNode {
@@ -292,11 +352,23 @@ pub struct CreateIndexStmtNode {
     pub rparen: Token,
 }
 
+impl Eq for CreateIndexStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_create == other.k_create && self.k_unique == other.k_unique && self.k_index == other.k_index && self.index_name == other.index_name && self.k_on == other.k_on && self.table_name == other.table_name && self.lparen == other.lparen && self.indexed_column == other.indexed_column && self.rparen == other.rparen;
+    }
+}
+
 pub struct CreateTableStmtNode {
     pub span: Span,
     pub k_create: Token,
     pub k_table: Token,
     pub table_name: TableNameNode,
+}
+
+impl Eq for CreateTableStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_create == other.k_create && self.k_table == other.k_table && self.table_name == other.table_name;
+    }
 }
 
 pub struct CreateTriggerStmtNode {
@@ -310,6 +382,12 @@ pub struct CreateTriggerStmtNode {
     pub k_end: Token,
 }
 
+impl Eq for CreateTriggerStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_create == other.k_create && self.k_trigger == other.k_trigger && self.trigger_name == other.trigger_name && self.k_on == other.k_on && self.table_name == other.table_name && self.k_begin == other.k_begin && self.k_end == other.k_end;
+    }
+}
+
 pub struct CreateViewStmtNode {
     pub span: Span,
     pub k_create: Token,
@@ -317,6 +395,12 @@ pub struct CreateViewStmtNode {
     pub view_name: ViewNameNode,
     pub k_as: Token,
     pub select_stmt: SelectStmtNode,
+}
+
+impl Eq for CreateViewStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_create == other.k_create && self.k_view == other.k_view && self.view_name == other.view_name && self.k_as == other.k_as && self.select_stmt == other.select_stmt;
+    }
 }
 
 pub struct CreateVirtualTableStmtNode {
@@ -329,12 +413,24 @@ pub struct CreateVirtualTableStmtNode {
     pub module_name: ModuleNameNode,
 }
 
+impl Eq for CreateVirtualTableStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_create == other.k_create && self.k_virtual == other.k_virtual && self.k_table == other.k_table && self.table_name == other.table_name && self.k_using == other.k_using && self.module_name == other.module_name;
+    }
+}
+
 pub struct DeleteStmtNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
     pub k_delete: Token,
     pub k_from: Token,
     pub qualified_table_name: QualifiedTableNameNode,
+}
+
+impl Eq for DeleteStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.with_clause == other.with_clause && self.k_delete == other.k_delete && self.k_from == other.k_from && self.qualified_table_name == other.qualified_table_name;
+    }
 }
 
 pub struct DeleteStmtLimitedNode {
@@ -345,11 +441,23 @@ pub struct DeleteStmtLimitedNode {
     pub qualified_table_name: QualifiedTableNameNode,
 }
 
+impl Eq for DeleteStmtLimitedNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.with_clause == other.with_clause && self.k_delete == other.k_delete && self.k_from == other.k_from && self.qualified_table_name == other.qualified_table_name;
+    }
+}
+
 pub struct DetachStmtNode {
     pub span: Span,
     pub k_detach: Token,
     pub k_database: Option<Token>,
     pub database_name: DatabaseNameNode,
+}
+
+impl Eq for DetachStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_detach == other.k_detach && self.k_database == other.k_database && self.database_name == other.database_name;
+    }
 }
 
 pub struct DropIndexStmtNode {
@@ -359,11 +467,23 @@ pub struct DropIndexStmtNode {
     pub index_name: IndexNameNode,
 }
 
+impl Eq for DropIndexStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_drop == other.k_drop && self.k_index == other.k_index && self.index_name == other.index_name;
+    }
+}
+
 pub struct DropTableStmtNode {
     pub span: Span,
     pub k_drop: Token,
     pub k_table: Token,
     pub table_name: TableNameNode,
+}
+
+impl Eq for DropTableStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_drop == other.k_drop && self.k_table == other.k_table && self.table_name == other.table_name;
+    }
 }
 
 pub struct DropTriggerStmtNode {
@@ -373,6 +493,12 @@ pub struct DropTriggerStmtNode {
     pub trigger_name: TriggerNameNode,
 }
 
+impl Eq for DropTriggerStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_drop == other.k_drop && self.k_trigger == other.k_trigger && self.trigger_name == other.trigger_name;
+    }
+}
+
 pub struct DropViewStmtNode {
     pub span: Span,
     pub k_drop: Token,
@@ -380,10 +506,22 @@ pub struct DropViewStmtNode {
     pub view_name: ViewNameNode,
 }
 
+impl Eq for DropViewStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_drop == other.k_drop && self.k_view == other.k_view && self.view_name == other.view_name;
+    }
+}
+
 pub struct FactoredSelectStmtNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
     pub select_core: SelectCoreNode,
+}
+
+impl Eq for FactoredSelectStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.with_clause == other.with_clause && self.select_core == other.select_core;
+    }
 }
 
 pub struct InsertStmtNode {
@@ -393,15 +531,33 @@ pub struct InsertStmtNode {
     pub table_name: TableNameNode,
 }
 
+impl Eq for InsertStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.with_clause == other.with_clause && self.k_into == other.k_into && self.table_name == other.table_name;
+    }
+}
+
 pub struct PragmaStmtNode {
     pub span: Span,
     pub k_pragma: Token,
     pub pragma_name: PragmaNameNode,
 }
 
+impl Eq for PragmaStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_pragma == other.k_pragma && self.pragma_name == other.pragma_name;
+    }
+}
+
 pub struct ReindexStmtNode {
     pub span: Span,
     pub k_reindex: Token,
+}
+
+impl Eq for ReindexStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_reindex == other.k_reindex;
+    }
 }
 
 pub struct ReleaseStmtNode {
@@ -411,9 +567,21 @@ pub struct ReleaseStmtNode {
     pub savepoint_name: SavepointNameNode,
 }
 
+impl Eq for ReleaseStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_release == other.k_release && self.k_savepoint == other.k_savepoint && self.savepoint_name == other.savepoint_name;
+    }
+}
+
 pub struct RollbackStmtNode {
     pub span: Span,
     pub k_rollback: Token,
+}
+
+impl Eq for RollbackStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_rollback == other.k_rollback;
+    }
 }
 
 pub struct SavepointStmtNode {
@@ -422,10 +590,22 @@ pub struct SavepointStmtNode {
     pub savepoint_name: SavepointNameNode,
 }
 
+impl Eq for SavepointStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_savepoint == other.k_savepoint && self.savepoint_name == other.savepoint_name;
+    }
+}
+
 pub struct SimpleSelectStmtNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
     pub select_core: SelectCoreNode,
+}
+
+impl Eq for SimpleSelectStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.with_clause == other.with_clause && self.select_core == other.select_core;
+    }
 }
 
 pub struct SelectStmtNode {
@@ -434,9 +614,25 @@ pub struct SelectStmtNode {
     pub select_or_values: SelectOrValuesNode,
 }
 
+impl Eq for SelectStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.with_clause == other.with_clause && self.select_or_values == other.select_or_values;
+    }
+}
+
 pub variant SelectOrValuesNode {
     Alt0(SelectOrValuesAlt0),
     Alt1(SelectOrValuesAlt1),
+}
+
+impl Eq for SelectOrValuesNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            _ => false,
+        };
+    }
 }
 
 pub struct SelectOrValuesAlt0 {
@@ -445,12 +641,24 @@ pub struct SelectOrValuesAlt0 {
     pub result_column: ResultColumnNode,
 }
 
+impl Eq for SelectOrValuesAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_select == other.k_select && self.result_column == other.result_column;
+    }
+}
+
 pub struct SelectOrValuesAlt1 {
     pub span: Span,
     pub k_values: Token,
     pub lparen: Token,
     pub expr: ExprNode,
     pub rparen: Token,
+}
+
+impl Eq for SelectOrValuesAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_values == other.k_values && self.lparen == other.lparen && self.expr == other.expr && self.rparen == other.rparen;
+    }
 }
 
 pub struct UpdateStmtNode {
@@ -464,6 +672,12 @@ pub struct UpdateStmtNode {
     pub expr: ExprNode,
 }
 
+impl Eq for UpdateStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.with_clause == other.with_clause && self.k_update == other.k_update && self.qualified_table_name == other.qualified_table_name && self.k_set == other.k_set && self.column_name == other.column_name && self.eq == other.eq && self.expr == other.expr;
+    }
+}
+
 pub struct UpdateStmtLimitedNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
@@ -475,9 +689,21 @@ pub struct UpdateStmtLimitedNode {
     pub expr: ExprNode,
 }
 
+impl Eq for UpdateStmtLimitedNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.with_clause == other.with_clause && self.k_update == other.k_update && self.qualified_table_name == other.qualified_table_name && self.k_set == other.k_set && self.column_name == other.column_name && self.eq == other.eq && self.expr == other.expr;
+    }
+}
+
 pub struct VacuumStmtNode {
     pub span: Span,
     pub k_vacuum: Token,
+}
+
+impl Eq for VacuumStmtNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_vacuum == other.k_vacuum;
+    }
 }
 
 pub struct ColumnDefNode {
@@ -487,17 +713,41 @@ pub struct ColumnDefNode {
     pub column_constraint_list: Array<ColumnConstraintNode>,
 }
 
+impl Eq for ColumnDefNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.column_name == other.column_name && self.type_name == other.type_name && self.column_constraint_list == other.column_constraint_list;
+    }
+}
+
 pub struct TypeNameNode {
     pub span: Span,
     pub name_list: Array<NameNode>,
+}
+
+impl Eq for TypeNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.name_list == other.name_list;
+    }
 }
 
 pub struct ColumnConstraintNode {
     pub span: Span,
 }
 
+impl Eq for ColumnConstraintNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span;
+    }
+}
+
 pub struct ConflictClauseNode {
     pub span: Span,
+}
+
+impl Eq for ConflictClauseNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span;
+    }
 }
 
 pub variant ExprNode {
@@ -527,9 +777,47 @@ pub variant ExprNode {
     Alt23(ExprAlt23),
 }
 
+impl Eq for ExprNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            [Alt3(a), Alt3(b)] => a == b,
+            [Alt4(a), Alt4(b)] => a == b,
+            [Alt5(a), Alt5(b)] => a == b,
+            [Alt6(a), Alt6(b)] => a == b,
+            [Alt7(a), Alt7(b)] => a == b,
+            [Alt8(a), Alt8(b)] => a == b,
+            [Alt9(a), Alt9(b)] => a == b,
+            [Alt10(a), Alt10(b)] => a == b,
+            [Alt11(a), Alt11(b)] => a == b,
+            [Alt12(a), Alt12(b)] => a == b,
+            [Alt13(a), Alt13(b)] => a == b,
+            [Alt14(a), Alt14(b)] => a == b,
+            [Alt15(a), Alt15(b)] => a == b,
+            [Alt16(a), Alt16(b)] => a == b,
+            [Alt17(a), Alt17(b)] => a == b,
+            [Alt18(a), Alt18(b)] => a == b,
+            [Alt19(a), Alt19(b)] => a == b,
+            [Alt20(a), Alt20(b)] => a == b,
+            [Alt21(a), Alt21(b)] => a == b,
+            [Alt22(a), Alt22(b)] => a == b,
+            [Alt23(a), Alt23(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct ExprAlt0 {
     pub span: Span,
     pub literal_value: LiteralValueNode,
+}
+
+impl Eq for ExprAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.literal_value == other.literal_value;
+    }
 }
 
 pub struct ExprAlt1 {
@@ -537,15 +825,33 @@ pub struct ExprAlt1 {
     pub bind_parameter: Token,
 }
 
+impl Eq for ExprAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.bind_parameter == other.bind_parameter;
+    }
+}
+
 pub struct ExprAlt2 {
     pub span: Span,
     pub column_name: ColumnNameNode,
+}
+
+impl Eq for ExprAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.column_name == other.column_name;
+    }
 }
 
 pub struct ExprAlt3 {
     pub span: Span,
     pub unary_operator: UnaryOperatorNode,
     pub expr: ExprNode,
+}
+
+impl Eq for ExprAlt3 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.unary_operator == other.unary_operator && self.expr == other.expr;
+    }
 }
 
 pub struct ExprAlt4 {
@@ -555,10 +861,22 @@ pub struct ExprAlt4 {
     pub expr_2: ExprNode,
 }
 
+impl Eq for ExprAlt4 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.lit___ == other.lit___ && self.expr_2 == other.expr_2;
+    }
+}
+
 pub struct ExprAlt5 {
     pub span: Span,
     pub expr: ExprNode,
     pub expr_2: ExprNode,
+}
+
+impl Eq for ExprAlt5 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.expr_2 == other.expr_2;
+    }
 }
 
 pub struct ExprAlt6 {
@@ -567,10 +885,22 @@ pub struct ExprAlt6 {
     pub expr_2: ExprNode,
 }
 
+impl Eq for ExprAlt6 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.expr_2 == other.expr_2;
+    }
+}
+
 pub struct ExprAlt7 {
     pub span: Span,
     pub expr: ExprNode,
     pub expr_2: ExprNode,
+}
+
+impl Eq for ExprAlt7 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.expr_2 == other.expr_2;
+    }
 }
 
 pub struct ExprAlt8 {
@@ -579,10 +909,22 @@ pub struct ExprAlt8 {
     pub expr_2: ExprNode,
 }
 
+impl Eq for ExprAlt8 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.expr_2 == other.expr_2;
+    }
+}
+
 pub struct ExprAlt9 {
     pub span: Span,
     pub expr: ExprNode,
     pub expr_2: ExprNode,
+}
+
+impl Eq for ExprAlt9 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.expr_2 == other.expr_2;
+    }
 }
 
 pub struct ExprAlt10 {
@@ -592,11 +934,23 @@ pub struct ExprAlt10 {
     pub k_in: Token,
 }
 
+impl Eq for ExprAlt10 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.k_not == other.k_not && self.k_in == other.k_in;
+    }
+}
+
 pub struct ExprAlt11 {
     pub span: Span,
     pub expr: ExprNode,
     pub k_and: Token,
     pub expr_2: ExprNode,
+}
+
+impl Eq for ExprAlt11 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.k_and == other.k_and && self.expr_2 == other.expr_2;
+    }
 }
 
 pub struct ExprAlt12 {
@@ -606,6 +960,12 @@ pub struct ExprAlt12 {
     pub expr_2: ExprNode,
 }
 
+impl Eq for ExprAlt12 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.k_or == other.k_or && self.expr_2 == other.expr_2;
+    }
+}
+
 pub struct ExprAlt13 {
     pub span: Span,
     pub function_name: FunctionNameNode,
@@ -613,11 +973,23 @@ pub struct ExprAlt13 {
     pub rparen: Token,
 }
 
+impl Eq for ExprAlt13 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.function_name == other.function_name && self.lparen == other.lparen && self.rparen == other.rparen;
+    }
+}
+
 pub struct ExprAlt14 {
     pub span: Span,
     pub lparen: Token,
     pub expr: ExprNode,
     pub rparen: Token,
+}
+
+impl Eq for ExprAlt14 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.lparen == other.lparen && self.expr == other.expr && self.rparen == other.rparen;
+    }
 }
 
 pub struct ExprAlt15 {
@@ -630,11 +1002,23 @@ pub struct ExprAlt15 {
     pub rparen: Token,
 }
 
+impl Eq for ExprAlt15 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_cast == other.k_cast && self.lparen == other.lparen && self.expr == other.expr && self.k_as == other.k_as && self.type_name == other.type_name && self.rparen == other.rparen;
+    }
+}
+
 pub struct ExprAlt16 {
     pub span: Span,
     pub expr: ExprNode,
     pub k_collate: Token,
     pub collation_name: CollationNameNode,
+}
+
+impl Eq for ExprAlt16 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.k_collate == other.k_collate && self.collation_name == other.collation_name;
+    }
 }
 
 pub struct ExprAlt17 {
@@ -644,9 +1028,21 @@ pub struct ExprAlt17 {
     pub expr_2: ExprNode,
 }
 
+impl Eq for ExprAlt17 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.k_not == other.k_not && self.expr_2 == other.expr_2;
+    }
+}
+
 pub struct ExprAlt18 {
     pub span: Span,
     pub expr: ExprNode,
+}
+
+impl Eq for ExprAlt18 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr;
+    }
 }
 
 pub struct ExprAlt19 {
@@ -655,6 +1051,12 @@ pub struct ExprAlt19 {
     pub k_is: Token,
     pub k_not: Option<Token>,
     pub expr_2: ExprNode,
+}
+
+impl Eq for ExprAlt19 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.k_is == other.k_is && self.k_not == other.k_not && self.expr_2 == other.expr_2;
+    }
 }
 
 pub struct ExprAlt20 {
@@ -667,11 +1069,23 @@ pub struct ExprAlt20 {
     pub expr_3: ExprNode,
 }
 
+impl Eq for ExprAlt20 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr && self.k_not == other.k_not && self.k_between == other.k_between && self.expr_2 == other.expr_2 && self.k_and == other.k_and && self.expr_3 == other.expr_3;
+    }
+}
+
 pub struct ExprAlt21 {
     pub span: Span,
     pub lparen: Token,
     pub select_stmt: SelectStmtNode,
     pub rparen: Token,
+}
+
+impl Eq for ExprAlt21 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.lparen == other.lparen && self.select_stmt == other.select_stmt && self.rparen == other.rparen;
+    }
 }
 
 pub struct ExprAlt22 {
@@ -681,15 +1095,33 @@ pub struct ExprAlt22 {
     pub k_end: Token,
 }
 
+impl Eq for ExprAlt22 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_case == other.k_case && self.expr == other.expr && self.k_end == other.k_end;
+    }
+}
+
 pub struct ExprAlt23 {
     pub span: Span,
     pub raise_function: RaiseFunctionNode,
+}
+
+impl Eq for ExprAlt23 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.raise_function == other.raise_function;
+    }
 }
 
 pub struct ForeignKeyClauseNode {
     pub span: Span,
     pub k_references: Token,
     pub foreign_table: ForeignTableNode,
+}
+
+impl Eq for ForeignKeyClauseNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_references == other.k_references && self.foreign_table == other.foreign_table;
+    }
 }
 
 pub struct RaiseFunctionNode {
@@ -699,13 +1131,31 @@ pub struct RaiseFunctionNode {
     pub rparen: Token,
 }
 
+impl Eq for RaiseFunctionNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_raise == other.k_raise && self.lparen == other.lparen && self.rparen == other.rparen;
+    }
+}
+
 pub struct IndexedColumnNode {
     pub span: Span,
     pub column_name: ColumnNameNode,
 }
 
+impl Eq for IndexedColumnNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.column_name == other.column_name;
+    }
+}
+
 pub struct TableConstraintNode {
     pub span: Span,
+}
+
+impl Eq for TableConstraintNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span;
+    }
 }
 
 pub struct WithClauseNode {
@@ -715,14 +1165,32 @@ pub struct WithClauseNode {
     pub common_table_expression: CommonTableExpressionNode,
 }
 
+impl Eq for WithClauseNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_with == other.k_with && self.k_recursive == other.k_recursive && self.common_table_expression == other.common_table_expression;
+    }
+}
+
 pub struct QualifiedTableNameNode {
     pub span: Span,
     pub table_name: TableNameNode,
 }
 
+impl Eq for QualifiedTableNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.table_name == other.table_name;
+    }
+}
+
 pub struct OrderingTermNode {
     pub span: Span,
     pub expr: ExprNode,
+}
+
+impl Eq for OrderingTermNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr;
+    }
 }
 
 pub variant PragmaValueNode {
@@ -731,9 +1199,26 @@ pub variant PragmaValueNode {
     Alt2(PragmaValueAlt2),
 }
 
+impl Eq for PragmaValueNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct PragmaValueAlt0 {
     pub span: Span,
     pub signed_number: SignedNumberNode,
+}
+
+impl Eq for PragmaValueAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.signed_number == other.signed_number;
+    }
 }
 
 pub struct PragmaValueAlt1 {
@@ -741,9 +1226,21 @@ pub struct PragmaValueAlt1 {
     pub name: NameNode,
 }
 
+impl Eq for PragmaValueAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.name == other.name;
+    }
+}
+
 pub struct PragmaValueAlt2 {
     pub span: Span,
     pub string_literal: Token,
+}
+
+impl Eq for PragmaValueAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.string_literal == other.string_literal;
+    }
 }
 
 pub struct CommonTableExpressionNode {
@@ -755,15 +1252,38 @@ pub struct CommonTableExpressionNode {
     pub rparen: Token,
 }
 
+impl Eq for CommonTableExpressionNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.table_name == other.table_name && self.k_as == other.k_as && self.lparen == other.lparen && self.select_stmt == other.select_stmt && self.rparen == other.rparen;
+    }
+}
+
 pub variant ResultColumnNode {
     Alt0(ResultColumnAlt0),
     Alt1(ResultColumnAlt1),
     Alt2(ResultColumnAlt2),
 }
 
+impl Eq for ResultColumnNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct ResultColumnAlt0 {
     pub span: Span,
     pub star: Token,
+}
+
+impl Eq for ResultColumnAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.star == other.star;
+    }
 }
 
 pub struct ResultColumnAlt1 {
@@ -773,9 +1293,21 @@ pub struct ResultColumnAlt1 {
     pub star: Token,
 }
 
+impl Eq for ResultColumnAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.table_name == other.table_name && self.dot == other.dot && self.star == other.star;
+    }
+}
+
 pub struct ResultColumnAlt2 {
     pub span: Span,
     pub expr: ExprNode,
+}
+
+impl Eq for ResultColumnAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr;
+    }
 }
 
 pub variant TableOrSubqueryNode {
@@ -785,9 +1317,27 @@ pub variant TableOrSubqueryNode {
     Alt3(TableOrSubqueryAlt3),
 }
 
+impl Eq for TableOrSubqueryNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            [Alt3(a), Alt3(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct TableOrSubqueryAlt0 {
     pub span: Span,
     pub table_name: TableNameNode,
+}
+
+impl Eq for TableOrSubqueryAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.table_name == other.table_name;
+    }
 }
 
 pub struct TableOrSubqueryAlt1 {
@@ -797,10 +1347,22 @@ pub struct TableOrSubqueryAlt1 {
     pub rparen: Token,
 }
 
+impl Eq for TableOrSubqueryAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.table_function_name == other.table_function_name && self.lparen == other.lparen && self.rparen == other.rparen;
+    }
+}
+
 pub struct TableOrSubqueryAlt2 {
     pub span: Span,
     pub lparen: Token,
     pub rparen: Token,
+}
+
+impl Eq for TableOrSubqueryAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.lparen == other.lparen && self.rparen == other.rparen;
+    }
 }
 
 pub struct TableOrSubqueryAlt3 {
@@ -810,9 +1372,21 @@ pub struct TableOrSubqueryAlt3 {
     pub rparen: Token,
 }
 
+impl Eq for TableOrSubqueryAlt3 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.lparen == other.lparen && self.select_stmt == other.select_stmt && self.rparen == other.rparen;
+    }
+}
+
 pub struct JoinClauseNode {
     pub span: Span,
     pub table_or_subquery: TableOrSubqueryNode,
+}
+
+impl Eq for JoinClauseNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.table_or_subquery == other.table_or_subquery;
+    }
 }
 
 pub variant JoinOperatorNode {
@@ -820,9 +1394,25 @@ pub variant JoinOperatorNode {
     Alt1(JoinOperatorAlt1),
 }
 
+impl Eq for JoinOperatorNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct JoinOperatorAlt0 {
     pub span: Span,
     pub comma: Token,
+}
+
+impl Eq for JoinOperatorAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.comma == other.comma;
+    }
 }
 
 pub struct JoinOperatorAlt1 {
@@ -831,8 +1421,20 @@ pub struct JoinOperatorAlt1 {
     pub k_join: Token,
 }
 
+impl Eq for JoinOperatorAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_natural == other.k_natural && self.k_join == other.k_join;
+    }
+}
+
 pub struct JoinConstraintNode {
     pub span: Span,
+}
+
+impl Eq for JoinConstraintNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span;
+    }
 }
 
 pub variant SelectCoreNode {
@@ -840,10 +1442,26 @@ pub variant SelectCoreNode {
     Alt1(SelectCoreAlt1),
 }
 
+impl Eq for SelectCoreNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct SelectCoreAlt0 {
     pub span: Span,
     pub k_select: Token,
     pub result_column: ResultColumnNode,
+}
+
+impl Eq for SelectCoreAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_select == other.k_select && self.result_column == other.result_column;
+    }
 }
 
 pub struct SelectCoreAlt1 {
@@ -854,6 +1472,12 @@ pub struct SelectCoreAlt1 {
     pub rparen: Token,
 }
 
+impl Eq for SelectCoreAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_values == other.k_values && self.lparen == other.lparen && self.expr == other.expr && self.rparen == other.rparen;
+    }
+}
+
 pub variant CompoundOperatorNode {
     Alt0(CompoundOperatorAlt0),
     Alt1(CompoundOperatorAlt1),
@@ -861,9 +1485,27 @@ pub variant CompoundOperatorNode {
     Alt3(CompoundOperatorAlt3),
 }
 
+impl Eq for CompoundOperatorNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            [Alt3(a), Alt3(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct CompoundOperatorAlt0 {
     pub span: Span,
     pub k_union: Token,
+}
+
+impl Eq for CompoundOperatorAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_union == other.k_union;
+    }
 }
 
 pub struct CompoundOperatorAlt1 {
@@ -872,9 +1514,21 @@ pub struct CompoundOperatorAlt1 {
     pub k_all: Token,
 }
 
+impl Eq for CompoundOperatorAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_union == other.k_union && self.k_all == other.k_all;
+    }
+}
+
 pub struct CompoundOperatorAlt2 {
     pub span: Span,
     pub k_intersect: Token,
+}
+
+impl Eq for CompoundOperatorAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_intersect == other.k_intersect;
+    }
 }
 
 pub struct CompoundOperatorAlt3 {
@@ -882,9 +1536,21 @@ pub struct CompoundOperatorAlt3 {
     pub k_except: Token,
 }
 
+impl Eq for CompoundOperatorAlt3 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_except == other.k_except;
+    }
+}
+
 pub struct SignedNumberNode {
     pub span: Span,
     pub numeric_literal: Token,
+}
+
+impl Eq for SignedNumberNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.numeric_literal == other.numeric_literal;
+    }
 }
 
 pub variant LiteralValueNode {
@@ -897,9 +1563,30 @@ pub variant LiteralValueNode {
     Alt6(LiteralValueAlt6),
 }
 
+impl Eq for LiteralValueNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            [Alt3(a), Alt3(b)] => a == b,
+            [Alt4(a), Alt4(b)] => a == b,
+            [Alt5(a), Alt5(b)] => a == b,
+            [Alt6(a), Alt6(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct LiteralValueAlt0 {
     pub span: Span,
     pub numeric_literal: Token,
+}
+
+impl Eq for LiteralValueAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.numeric_literal == other.numeric_literal;
+    }
 }
 
 pub struct LiteralValueAlt1 {
@@ -907,9 +1594,21 @@ pub struct LiteralValueAlt1 {
     pub string_literal: Token,
 }
 
+impl Eq for LiteralValueAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.string_literal == other.string_literal;
+    }
+}
+
 pub struct LiteralValueAlt2 {
     pub span: Span,
     pub blob_literal: Token,
+}
+
+impl Eq for LiteralValueAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.blob_literal == other.blob_literal;
+    }
 }
 
 pub struct LiteralValueAlt3 {
@@ -917,9 +1616,21 @@ pub struct LiteralValueAlt3 {
     pub k_null: Token,
 }
 
+impl Eq for LiteralValueAlt3 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_null == other.k_null;
+    }
+}
+
 pub struct LiteralValueAlt4 {
     pub span: Span,
     pub k_current_time: Token,
+}
+
+impl Eq for LiteralValueAlt4 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_current_time == other.k_current_time;
+    }
 }
 
 pub struct LiteralValueAlt5 {
@@ -927,9 +1638,21 @@ pub struct LiteralValueAlt5 {
     pub k_current_date: Token,
 }
 
+impl Eq for LiteralValueAlt5 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_current_date == other.k_current_date;
+    }
+}
+
 pub struct LiteralValueAlt6 {
     pub span: Span,
     pub k_current_timestamp: Token,
+}
+
+impl Eq for LiteralValueAlt6 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_current_timestamp == other.k_current_timestamp;
+    }
 }
 
 pub variant UnaryOperatorNode {
@@ -939,9 +1662,27 @@ pub variant UnaryOperatorNode {
     Alt3(UnaryOperatorAlt3),
 }
 
+impl Eq for UnaryOperatorNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            [Alt3(a), Alt3(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct UnaryOperatorAlt0 {
     pub span: Span,
     pub minus: Token,
+}
+
+impl Eq for UnaryOperatorAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.minus == other.minus;
+    }
 }
 
 pub struct UnaryOperatorAlt1 {
@@ -949,9 +1690,21 @@ pub struct UnaryOperatorAlt1 {
     pub plus: Token,
 }
 
+impl Eq for UnaryOperatorAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.plus == other.plus;
+    }
+}
+
 pub struct UnaryOperatorAlt2 {
     pub span: Span,
     pub tilde: Token,
+}
+
+impl Eq for UnaryOperatorAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.tilde == other.tilde;
+    }
 }
 
 pub struct UnaryOperatorAlt3 {
@@ -959,9 +1712,21 @@ pub struct UnaryOperatorAlt3 {
     pub k_not: Token,
 }
 
+impl Eq for UnaryOperatorAlt3 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_not == other.k_not;
+    }
+}
+
 pub struct ErrorMessageNode {
     pub span: Span,
     pub string_literal: Token,
+}
+
+impl Eq for ErrorMessageNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.string_literal == other.string_literal;
+    }
 }
 
 pub variant ModuleArgumentNode {
@@ -969,9 +1734,25 @@ pub variant ModuleArgumentNode {
     Alt1(ModuleArgumentAlt1),
 }
 
+impl Eq for ModuleArgumentNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct ModuleArgumentAlt0 {
     pub span: Span,
     pub expr: ExprNode,
+}
+
+impl Eq for ModuleArgumentAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.expr == other.expr;
+    }
 }
 
 pub struct ModuleArgumentAlt1 {
@@ -979,9 +1760,25 @@ pub struct ModuleArgumentAlt1 {
     pub column_def: ColumnDefNode,
 }
 
+impl Eq for ModuleArgumentAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.column_def == other.column_def;
+    }
+}
+
 pub variant ColumnAliasNode {
     Alt0(ColumnAliasAlt0),
     Alt1(ColumnAliasAlt1),
+}
+
+impl Eq for ColumnAliasNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            _ => false,
+        };
+    }
 }
 
 pub struct ColumnAliasAlt0 {
@@ -989,9 +1786,21 @@ pub struct ColumnAliasAlt0 {
     pub identifier: Token,
 }
 
+impl Eq for ColumnAliasAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.identifier == other.identifier;
+    }
+}
+
 pub struct ColumnAliasAlt1 {
     pub span: Span,
     pub string_literal: Token,
+}
+
+impl Eq for ColumnAliasAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.string_literal == other.string_literal;
+    }
 }
 
 pub variant KeywordNode {
@@ -1121,9 +1930,147 @@ pub variant KeywordNode {
     Alt123(KeywordAlt123),
 }
 
+impl Eq for KeywordNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            [Alt3(a), Alt3(b)] => a == b,
+            [Alt4(a), Alt4(b)] => a == b,
+            [Alt5(a), Alt5(b)] => a == b,
+            [Alt6(a), Alt6(b)] => a == b,
+            [Alt7(a), Alt7(b)] => a == b,
+            [Alt8(a), Alt8(b)] => a == b,
+            [Alt9(a), Alt9(b)] => a == b,
+            [Alt10(a), Alt10(b)] => a == b,
+            [Alt11(a), Alt11(b)] => a == b,
+            [Alt12(a), Alt12(b)] => a == b,
+            [Alt13(a), Alt13(b)] => a == b,
+            [Alt14(a), Alt14(b)] => a == b,
+            [Alt15(a), Alt15(b)] => a == b,
+            [Alt16(a), Alt16(b)] => a == b,
+            [Alt17(a), Alt17(b)] => a == b,
+            [Alt18(a), Alt18(b)] => a == b,
+            [Alt19(a), Alt19(b)] => a == b,
+            [Alt20(a), Alt20(b)] => a == b,
+            [Alt21(a), Alt21(b)] => a == b,
+            [Alt22(a), Alt22(b)] => a == b,
+            [Alt23(a), Alt23(b)] => a == b,
+            [Alt24(a), Alt24(b)] => a == b,
+            [Alt25(a), Alt25(b)] => a == b,
+            [Alt26(a), Alt26(b)] => a == b,
+            [Alt27(a), Alt27(b)] => a == b,
+            [Alt28(a), Alt28(b)] => a == b,
+            [Alt29(a), Alt29(b)] => a == b,
+            [Alt30(a), Alt30(b)] => a == b,
+            [Alt31(a), Alt31(b)] => a == b,
+            [Alt32(a), Alt32(b)] => a == b,
+            [Alt33(a), Alt33(b)] => a == b,
+            [Alt34(a), Alt34(b)] => a == b,
+            [Alt35(a), Alt35(b)] => a == b,
+            [Alt36(a), Alt36(b)] => a == b,
+            [Alt37(a), Alt37(b)] => a == b,
+            [Alt38(a), Alt38(b)] => a == b,
+            [Alt39(a), Alt39(b)] => a == b,
+            [Alt40(a), Alt40(b)] => a == b,
+            [Alt41(a), Alt41(b)] => a == b,
+            [Alt42(a), Alt42(b)] => a == b,
+            [Alt43(a), Alt43(b)] => a == b,
+            [Alt44(a), Alt44(b)] => a == b,
+            [Alt45(a), Alt45(b)] => a == b,
+            [Alt46(a), Alt46(b)] => a == b,
+            [Alt47(a), Alt47(b)] => a == b,
+            [Alt48(a), Alt48(b)] => a == b,
+            [Alt49(a), Alt49(b)] => a == b,
+            [Alt50(a), Alt50(b)] => a == b,
+            [Alt51(a), Alt51(b)] => a == b,
+            [Alt52(a), Alt52(b)] => a == b,
+            [Alt53(a), Alt53(b)] => a == b,
+            [Alt54(a), Alt54(b)] => a == b,
+            [Alt55(a), Alt55(b)] => a == b,
+            [Alt56(a), Alt56(b)] => a == b,
+            [Alt57(a), Alt57(b)] => a == b,
+            [Alt58(a), Alt58(b)] => a == b,
+            [Alt59(a), Alt59(b)] => a == b,
+            [Alt60(a), Alt60(b)] => a == b,
+            [Alt61(a), Alt61(b)] => a == b,
+            [Alt62(a), Alt62(b)] => a == b,
+            [Alt63(a), Alt63(b)] => a == b,
+            [Alt64(a), Alt64(b)] => a == b,
+            [Alt65(a), Alt65(b)] => a == b,
+            [Alt66(a), Alt66(b)] => a == b,
+            [Alt67(a), Alt67(b)] => a == b,
+            [Alt68(a), Alt68(b)] => a == b,
+            [Alt69(a), Alt69(b)] => a == b,
+            [Alt70(a), Alt70(b)] => a == b,
+            [Alt71(a), Alt71(b)] => a == b,
+            [Alt72(a), Alt72(b)] => a == b,
+            [Alt73(a), Alt73(b)] => a == b,
+            [Alt74(a), Alt74(b)] => a == b,
+            [Alt75(a), Alt75(b)] => a == b,
+            [Alt76(a), Alt76(b)] => a == b,
+            [Alt77(a), Alt77(b)] => a == b,
+            [Alt78(a), Alt78(b)] => a == b,
+            [Alt79(a), Alt79(b)] => a == b,
+            [Alt80(a), Alt80(b)] => a == b,
+            [Alt81(a), Alt81(b)] => a == b,
+            [Alt82(a), Alt82(b)] => a == b,
+            [Alt83(a), Alt83(b)] => a == b,
+            [Alt84(a), Alt84(b)] => a == b,
+            [Alt85(a), Alt85(b)] => a == b,
+            [Alt86(a), Alt86(b)] => a == b,
+            [Alt87(a), Alt87(b)] => a == b,
+            [Alt88(a), Alt88(b)] => a == b,
+            [Alt89(a), Alt89(b)] => a == b,
+            [Alt90(a), Alt90(b)] => a == b,
+            [Alt91(a), Alt91(b)] => a == b,
+            [Alt92(a), Alt92(b)] => a == b,
+            [Alt93(a), Alt93(b)] => a == b,
+            [Alt94(a), Alt94(b)] => a == b,
+            [Alt95(a), Alt95(b)] => a == b,
+            [Alt96(a), Alt96(b)] => a == b,
+            [Alt97(a), Alt97(b)] => a == b,
+            [Alt98(a), Alt98(b)] => a == b,
+            [Alt99(a), Alt99(b)] => a == b,
+            [Alt100(a), Alt100(b)] => a == b,
+            [Alt101(a), Alt101(b)] => a == b,
+            [Alt102(a), Alt102(b)] => a == b,
+            [Alt103(a), Alt103(b)] => a == b,
+            [Alt104(a), Alt104(b)] => a == b,
+            [Alt105(a), Alt105(b)] => a == b,
+            [Alt106(a), Alt106(b)] => a == b,
+            [Alt107(a), Alt107(b)] => a == b,
+            [Alt108(a), Alt108(b)] => a == b,
+            [Alt109(a), Alt109(b)] => a == b,
+            [Alt110(a), Alt110(b)] => a == b,
+            [Alt111(a), Alt111(b)] => a == b,
+            [Alt112(a), Alt112(b)] => a == b,
+            [Alt113(a), Alt113(b)] => a == b,
+            [Alt114(a), Alt114(b)] => a == b,
+            [Alt115(a), Alt115(b)] => a == b,
+            [Alt116(a), Alt116(b)] => a == b,
+            [Alt117(a), Alt117(b)] => a == b,
+            [Alt118(a), Alt118(b)] => a == b,
+            [Alt119(a), Alt119(b)] => a == b,
+            [Alt120(a), Alt120(b)] => a == b,
+            [Alt121(a), Alt121(b)] => a == b,
+            [Alt122(a), Alt122(b)] => a == b,
+            [Alt123(a), Alt123(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct KeywordAlt0 {
     pub span: Span,
     pub k_abort: Token,
+}
+
+impl Eq for KeywordAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_abort == other.k_abort;
+    }
 }
 
 pub struct KeywordAlt1 {
@@ -1131,9 +2078,21 @@ pub struct KeywordAlt1 {
     pub k_action: Token,
 }
 
+impl Eq for KeywordAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_action == other.k_action;
+    }
+}
+
 pub struct KeywordAlt2 {
     pub span: Span,
     pub k_add: Token,
+}
+
+impl Eq for KeywordAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_add == other.k_add;
+    }
 }
 
 pub struct KeywordAlt3 {
@@ -1141,9 +2100,21 @@ pub struct KeywordAlt3 {
     pub k_after: Token,
 }
 
+impl Eq for KeywordAlt3 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_after == other.k_after;
+    }
+}
+
 pub struct KeywordAlt4 {
     pub span: Span,
     pub k_all: Token,
+}
+
+impl Eq for KeywordAlt4 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_all == other.k_all;
+    }
 }
 
 pub struct KeywordAlt5 {
@@ -1151,9 +2122,21 @@ pub struct KeywordAlt5 {
     pub k_alter: Token,
 }
 
+impl Eq for KeywordAlt5 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_alter == other.k_alter;
+    }
+}
+
 pub struct KeywordAlt6 {
     pub span: Span,
     pub k_analyze: Token,
+}
+
+impl Eq for KeywordAlt6 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_analyze == other.k_analyze;
+    }
 }
 
 pub struct KeywordAlt7 {
@@ -1161,9 +2144,21 @@ pub struct KeywordAlt7 {
     pub k_and: Token,
 }
 
+impl Eq for KeywordAlt7 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_and == other.k_and;
+    }
+}
+
 pub struct KeywordAlt8 {
     pub span: Span,
     pub k_as: Token,
+}
+
+impl Eq for KeywordAlt8 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_as == other.k_as;
+    }
 }
 
 pub struct KeywordAlt9 {
@@ -1171,9 +2166,21 @@ pub struct KeywordAlt9 {
     pub k_asc: Token,
 }
 
+impl Eq for KeywordAlt9 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_asc == other.k_asc;
+    }
+}
+
 pub struct KeywordAlt10 {
     pub span: Span,
     pub k_attach: Token,
+}
+
+impl Eq for KeywordAlt10 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_attach == other.k_attach;
+    }
 }
 
 pub struct KeywordAlt11 {
@@ -1181,9 +2188,21 @@ pub struct KeywordAlt11 {
     pub k_autoincrement: Token,
 }
 
+impl Eq for KeywordAlt11 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_autoincrement == other.k_autoincrement;
+    }
+}
+
 pub struct KeywordAlt12 {
     pub span: Span,
     pub k_before: Token,
+}
+
+impl Eq for KeywordAlt12 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_before == other.k_before;
+    }
 }
 
 pub struct KeywordAlt13 {
@@ -1191,9 +2210,21 @@ pub struct KeywordAlt13 {
     pub k_begin: Token,
 }
 
+impl Eq for KeywordAlt13 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_begin == other.k_begin;
+    }
+}
+
 pub struct KeywordAlt14 {
     pub span: Span,
     pub k_between: Token,
+}
+
+impl Eq for KeywordAlt14 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_between == other.k_between;
+    }
 }
 
 pub struct KeywordAlt15 {
@@ -1201,9 +2232,21 @@ pub struct KeywordAlt15 {
     pub k_by: Token,
 }
 
+impl Eq for KeywordAlt15 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_by == other.k_by;
+    }
+}
+
 pub struct KeywordAlt16 {
     pub span: Span,
     pub k_cascade: Token,
+}
+
+impl Eq for KeywordAlt16 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_cascade == other.k_cascade;
+    }
 }
 
 pub struct KeywordAlt17 {
@@ -1211,9 +2254,21 @@ pub struct KeywordAlt17 {
     pub k_case: Token,
 }
 
+impl Eq for KeywordAlt17 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_case == other.k_case;
+    }
+}
+
 pub struct KeywordAlt18 {
     pub span: Span,
     pub k_cast: Token,
+}
+
+impl Eq for KeywordAlt18 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_cast == other.k_cast;
+    }
 }
 
 pub struct KeywordAlt19 {
@@ -1221,9 +2276,21 @@ pub struct KeywordAlt19 {
     pub k_check: Token,
 }
 
+impl Eq for KeywordAlt19 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_check == other.k_check;
+    }
+}
+
 pub struct KeywordAlt20 {
     pub span: Span,
     pub k_collate: Token,
+}
+
+impl Eq for KeywordAlt20 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_collate == other.k_collate;
+    }
 }
 
 pub struct KeywordAlt21 {
@@ -1231,9 +2298,21 @@ pub struct KeywordAlt21 {
     pub k_column: Token,
 }
 
+impl Eq for KeywordAlt21 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_column == other.k_column;
+    }
+}
+
 pub struct KeywordAlt22 {
     pub span: Span,
     pub k_commit: Token,
+}
+
+impl Eq for KeywordAlt22 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_commit == other.k_commit;
+    }
 }
 
 pub struct KeywordAlt23 {
@@ -1241,9 +2320,21 @@ pub struct KeywordAlt23 {
     pub k_conflict: Token,
 }
 
+impl Eq for KeywordAlt23 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_conflict == other.k_conflict;
+    }
+}
+
 pub struct KeywordAlt24 {
     pub span: Span,
     pub k_constraint: Token,
+}
+
+impl Eq for KeywordAlt24 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_constraint == other.k_constraint;
+    }
 }
 
 pub struct KeywordAlt25 {
@@ -1251,9 +2342,21 @@ pub struct KeywordAlt25 {
     pub k_create: Token,
 }
 
+impl Eq for KeywordAlt25 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_create == other.k_create;
+    }
+}
+
 pub struct KeywordAlt26 {
     pub span: Span,
     pub k_cross: Token,
+}
+
+impl Eq for KeywordAlt26 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_cross == other.k_cross;
+    }
 }
 
 pub struct KeywordAlt27 {
@@ -1261,9 +2364,21 @@ pub struct KeywordAlt27 {
     pub k_current_date: Token,
 }
 
+impl Eq for KeywordAlt27 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_current_date == other.k_current_date;
+    }
+}
+
 pub struct KeywordAlt28 {
     pub span: Span,
     pub k_current_time: Token,
+}
+
+impl Eq for KeywordAlt28 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_current_time == other.k_current_time;
+    }
 }
 
 pub struct KeywordAlt29 {
@@ -1271,9 +2386,21 @@ pub struct KeywordAlt29 {
     pub k_current_timestamp: Token,
 }
 
+impl Eq for KeywordAlt29 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_current_timestamp == other.k_current_timestamp;
+    }
+}
+
 pub struct KeywordAlt30 {
     pub span: Span,
     pub k_database: Token,
+}
+
+impl Eq for KeywordAlt30 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_database == other.k_database;
+    }
 }
 
 pub struct KeywordAlt31 {
@@ -1281,9 +2408,21 @@ pub struct KeywordAlt31 {
     pub k_default: Token,
 }
 
+impl Eq for KeywordAlt31 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_default == other.k_default;
+    }
+}
+
 pub struct KeywordAlt32 {
     pub span: Span,
     pub k_deferrable: Token,
+}
+
+impl Eq for KeywordAlt32 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_deferrable == other.k_deferrable;
+    }
 }
 
 pub struct KeywordAlt33 {
@@ -1291,9 +2430,21 @@ pub struct KeywordAlt33 {
     pub k_deferred: Token,
 }
 
+impl Eq for KeywordAlt33 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_deferred == other.k_deferred;
+    }
+}
+
 pub struct KeywordAlt34 {
     pub span: Span,
     pub k_delete: Token,
+}
+
+impl Eq for KeywordAlt34 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_delete == other.k_delete;
+    }
 }
 
 pub struct KeywordAlt35 {
@@ -1301,9 +2452,21 @@ pub struct KeywordAlt35 {
     pub k_desc: Token,
 }
 
+impl Eq for KeywordAlt35 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_desc == other.k_desc;
+    }
+}
+
 pub struct KeywordAlt36 {
     pub span: Span,
     pub k_detach: Token,
+}
+
+impl Eq for KeywordAlt36 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_detach == other.k_detach;
+    }
 }
 
 pub struct KeywordAlt37 {
@@ -1311,9 +2474,21 @@ pub struct KeywordAlt37 {
     pub k_distinct: Token,
 }
 
+impl Eq for KeywordAlt37 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_distinct == other.k_distinct;
+    }
+}
+
 pub struct KeywordAlt38 {
     pub span: Span,
     pub k_drop: Token,
+}
+
+impl Eq for KeywordAlt38 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_drop == other.k_drop;
+    }
 }
 
 pub struct KeywordAlt39 {
@@ -1321,9 +2496,21 @@ pub struct KeywordAlt39 {
     pub k_each: Token,
 }
 
+impl Eq for KeywordAlt39 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_each == other.k_each;
+    }
+}
+
 pub struct KeywordAlt40 {
     pub span: Span,
     pub k_else: Token,
+}
+
+impl Eq for KeywordAlt40 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_else == other.k_else;
+    }
 }
 
 pub struct KeywordAlt41 {
@@ -1331,9 +2518,21 @@ pub struct KeywordAlt41 {
     pub k_end: Token,
 }
 
+impl Eq for KeywordAlt41 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_end == other.k_end;
+    }
+}
+
 pub struct KeywordAlt42 {
     pub span: Span,
     pub k_escape: Token,
+}
+
+impl Eq for KeywordAlt42 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_escape == other.k_escape;
+    }
 }
 
 pub struct KeywordAlt43 {
@@ -1341,9 +2540,21 @@ pub struct KeywordAlt43 {
     pub k_except: Token,
 }
 
+impl Eq for KeywordAlt43 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_except == other.k_except;
+    }
+}
+
 pub struct KeywordAlt44 {
     pub span: Span,
     pub k_exclusive: Token,
+}
+
+impl Eq for KeywordAlt44 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_exclusive == other.k_exclusive;
+    }
 }
 
 pub struct KeywordAlt45 {
@@ -1351,9 +2562,21 @@ pub struct KeywordAlt45 {
     pub k_exists: Token,
 }
 
+impl Eq for KeywordAlt45 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_exists == other.k_exists;
+    }
+}
+
 pub struct KeywordAlt46 {
     pub span: Span,
     pub k_explain: Token,
+}
+
+impl Eq for KeywordAlt46 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_explain == other.k_explain;
+    }
 }
 
 pub struct KeywordAlt47 {
@@ -1361,9 +2584,21 @@ pub struct KeywordAlt47 {
     pub k_fail: Token,
 }
 
+impl Eq for KeywordAlt47 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_fail == other.k_fail;
+    }
+}
+
 pub struct KeywordAlt48 {
     pub span: Span,
     pub k_for: Token,
+}
+
+impl Eq for KeywordAlt48 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_for == other.k_for;
+    }
 }
 
 pub struct KeywordAlt49 {
@@ -1371,9 +2606,21 @@ pub struct KeywordAlt49 {
     pub k_foreign: Token,
 }
 
+impl Eq for KeywordAlt49 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_foreign == other.k_foreign;
+    }
+}
+
 pub struct KeywordAlt50 {
     pub span: Span,
     pub k_from: Token,
+}
+
+impl Eq for KeywordAlt50 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_from == other.k_from;
+    }
 }
 
 pub struct KeywordAlt51 {
@@ -1381,9 +2628,21 @@ pub struct KeywordAlt51 {
     pub k_full: Token,
 }
 
+impl Eq for KeywordAlt51 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_full == other.k_full;
+    }
+}
+
 pub struct KeywordAlt52 {
     pub span: Span,
     pub k_glob: Token,
+}
+
+impl Eq for KeywordAlt52 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_glob == other.k_glob;
+    }
 }
 
 pub struct KeywordAlt53 {
@@ -1391,9 +2650,21 @@ pub struct KeywordAlt53 {
     pub k_group: Token,
 }
 
+impl Eq for KeywordAlt53 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_group == other.k_group;
+    }
+}
+
 pub struct KeywordAlt54 {
     pub span: Span,
     pub k_having: Token,
+}
+
+impl Eq for KeywordAlt54 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_having == other.k_having;
+    }
 }
 
 pub struct KeywordAlt55 {
@@ -1401,9 +2672,21 @@ pub struct KeywordAlt55 {
     pub k_if: Token,
 }
 
+impl Eq for KeywordAlt55 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_if == other.k_if;
+    }
+}
+
 pub struct KeywordAlt56 {
     pub span: Span,
     pub k_ignore: Token,
+}
+
+impl Eq for KeywordAlt56 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_ignore == other.k_ignore;
+    }
 }
 
 pub struct KeywordAlt57 {
@@ -1411,9 +2694,21 @@ pub struct KeywordAlt57 {
     pub k_immediate: Token,
 }
 
+impl Eq for KeywordAlt57 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_immediate == other.k_immediate;
+    }
+}
+
 pub struct KeywordAlt58 {
     pub span: Span,
     pub k_in: Token,
+}
+
+impl Eq for KeywordAlt58 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_in == other.k_in;
+    }
 }
 
 pub struct KeywordAlt59 {
@@ -1421,9 +2716,21 @@ pub struct KeywordAlt59 {
     pub k_index: Token,
 }
 
+impl Eq for KeywordAlt59 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_index == other.k_index;
+    }
+}
+
 pub struct KeywordAlt60 {
     pub span: Span,
     pub k_indexed: Token,
+}
+
+impl Eq for KeywordAlt60 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_indexed == other.k_indexed;
+    }
 }
 
 pub struct KeywordAlt61 {
@@ -1431,9 +2738,21 @@ pub struct KeywordAlt61 {
     pub k_initially: Token,
 }
 
+impl Eq for KeywordAlt61 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_initially == other.k_initially;
+    }
+}
+
 pub struct KeywordAlt62 {
     pub span: Span,
     pub k_inner: Token,
+}
+
+impl Eq for KeywordAlt62 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_inner == other.k_inner;
+    }
 }
 
 pub struct KeywordAlt63 {
@@ -1441,9 +2760,21 @@ pub struct KeywordAlt63 {
     pub k_insert: Token,
 }
 
+impl Eq for KeywordAlt63 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_insert == other.k_insert;
+    }
+}
+
 pub struct KeywordAlt64 {
     pub span: Span,
     pub k_instead: Token,
+}
+
+impl Eq for KeywordAlt64 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_instead == other.k_instead;
+    }
 }
 
 pub struct KeywordAlt65 {
@@ -1451,9 +2782,21 @@ pub struct KeywordAlt65 {
     pub k_intersect: Token,
 }
 
+impl Eq for KeywordAlt65 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_intersect == other.k_intersect;
+    }
+}
+
 pub struct KeywordAlt66 {
     pub span: Span,
     pub k_into: Token,
+}
+
+impl Eq for KeywordAlt66 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_into == other.k_into;
+    }
 }
 
 pub struct KeywordAlt67 {
@@ -1461,9 +2804,21 @@ pub struct KeywordAlt67 {
     pub k_is: Token,
 }
 
+impl Eq for KeywordAlt67 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_is == other.k_is;
+    }
+}
+
 pub struct KeywordAlt68 {
     pub span: Span,
     pub k_isnull: Token,
+}
+
+impl Eq for KeywordAlt68 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_isnull == other.k_isnull;
+    }
 }
 
 pub struct KeywordAlt69 {
@@ -1471,9 +2826,21 @@ pub struct KeywordAlt69 {
     pub k_join: Token,
 }
 
+impl Eq for KeywordAlt69 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_join == other.k_join;
+    }
+}
+
 pub struct KeywordAlt70 {
     pub span: Span,
     pub k_key: Token,
+}
+
+impl Eq for KeywordAlt70 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_key == other.k_key;
+    }
 }
 
 pub struct KeywordAlt71 {
@@ -1481,9 +2848,21 @@ pub struct KeywordAlt71 {
     pub k_left: Token,
 }
 
+impl Eq for KeywordAlt71 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_left == other.k_left;
+    }
+}
+
 pub struct KeywordAlt72 {
     pub span: Span,
     pub k_like: Token,
+}
+
+impl Eq for KeywordAlt72 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_like == other.k_like;
+    }
 }
 
 pub struct KeywordAlt73 {
@@ -1491,9 +2870,21 @@ pub struct KeywordAlt73 {
     pub k_limit: Token,
 }
 
+impl Eq for KeywordAlt73 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_limit == other.k_limit;
+    }
+}
+
 pub struct KeywordAlt74 {
     pub span: Span,
     pub k_match: Token,
+}
+
+impl Eq for KeywordAlt74 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_match == other.k_match;
+    }
 }
 
 pub struct KeywordAlt75 {
@@ -1501,9 +2892,21 @@ pub struct KeywordAlt75 {
     pub k_natural: Token,
 }
 
+impl Eq for KeywordAlt75 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_natural == other.k_natural;
+    }
+}
+
 pub struct KeywordAlt76 {
     pub span: Span,
     pub k_no: Token,
+}
+
+impl Eq for KeywordAlt76 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_no == other.k_no;
+    }
 }
 
 pub struct KeywordAlt77 {
@@ -1511,9 +2914,21 @@ pub struct KeywordAlt77 {
     pub k_not: Token,
 }
 
+impl Eq for KeywordAlt77 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_not == other.k_not;
+    }
+}
+
 pub struct KeywordAlt78 {
     pub span: Span,
     pub k_notnull: Token,
+}
+
+impl Eq for KeywordAlt78 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_notnull == other.k_notnull;
+    }
 }
 
 pub struct KeywordAlt79 {
@@ -1521,9 +2936,21 @@ pub struct KeywordAlt79 {
     pub k_null: Token,
 }
 
+impl Eq for KeywordAlt79 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_null == other.k_null;
+    }
+}
+
 pub struct KeywordAlt80 {
     pub span: Span,
     pub k_of: Token,
+}
+
+impl Eq for KeywordAlt80 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_of == other.k_of;
+    }
 }
 
 pub struct KeywordAlt81 {
@@ -1531,9 +2958,21 @@ pub struct KeywordAlt81 {
     pub k_offset: Token,
 }
 
+impl Eq for KeywordAlt81 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_offset == other.k_offset;
+    }
+}
+
 pub struct KeywordAlt82 {
     pub span: Span,
     pub k_on: Token,
+}
+
+impl Eq for KeywordAlt82 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_on == other.k_on;
+    }
 }
 
 pub struct KeywordAlt83 {
@@ -1541,9 +2980,21 @@ pub struct KeywordAlt83 {
     pub k_or: Token,
 }
 
+impl Eq for KeywordAlt83 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_or == other.k_or;
+    }
+}
+
 pub struct KeywordAlt84 {
     pub span: Span,
     pub k_order: Token,
+}
+
+impl Eq for KeywordAlt84 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_order == other.k_order;
+    }
 }
 
 pub struct KeywordAlt85 {
@@ -1551,9 +3002,21 @@ pub struct KeywordAlt85 {
     pub k_outer: Token,
 }
 
+impl Eq for KeywordAlt85 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_outer == other.k_outer;
+    }
+}
+
 pub struct KeywordAlt86 {
     pub span: Span,
     pub k_plan: Token,
+}
+
+impl Eq for KeywordAlt86 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_plan == other.k_plan;
+    }
 }
 
 pub struct KeywordAlt87 {
@@ -1561,9 +3024,21 @@ pub struct KeywordAlt87 {
     pub k_pragma: Token,
 }
 
+impl Eq for KeywordAlt87 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_pragma == other.k_pragma;
+    }
+}
+
 pub struct KeywordAlt88 {
     pub span: Span,
     pub k_primary: Token,
+}
+
+impl Eq for KeywordAlt88 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_primary == other.k_primary;
+    }
 }
 
 pub struct KeywordAlt89 {
@@ -1571,9 +3046,21 @@ pub struct KeywordAlt89 {
     pub k_query: Token,
 }
 
+impl Eq for KeywordAlt89 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_query == other.k_query;
+    }
+}
+
 pub struct KeywordAlt90 {
     pub span: Span,
     pub k_raise: Token,
+}
+
+impl Eq for KeywordAlt90 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_raise == other.k_raise;
+    }
 }
 
 pub struct KeywordAlt91 {
@@ -1581,9 +3068,21 @@ pub struct KeywordAlt91 {
     pub k_recursive: Token,
 }
 
+impl Eq for KeywordAlt91 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_recursive == other.k_recursive;
+    }
+}
+
 pub struct KeywordAlt92 {
     pub span: Span,
     pub k_references: Token,
+}
+
+impl Eq for KeywordAlt92 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_references == other.k_references;
+    }
 }
 
 pub struct KeywordAlt93 {
@@ -1591,9 +3090,21 @@ pub struct KeywordAlt93 {
     pub k_regexp: Token,
 }
 
+impl Eq for KeywordAlt93 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_regexp == other.k_regexp;
+    }
+}
+
 pub struct KeywordAlt94 {
     pub span: Span,
     pub k_reindex: Token,
+}
+
+impl Eq for KeywordAlt94 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_reindex == other.k_reindex;
+    }
 }
 
 pub struct KeywordAlt95 {
@@ -1601,9 +3112,21 @@ pub struct KeywordAlt95 {
     pub k_release: Token,
 }
 
+impl Eq for KeywordAlt95 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_release == other.k_release;
+    }
+}
+
 pub struct KeywordAlt96 {
     pub span: Span,
     pub k_rename: Token,
+}
+
+impl Eq for KeywordAlt96 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_rename == other.k_rename;
+    }
 }
 
 pub struct KeywordAlt97 {
@@ -1611,9 +3134,21 @@ pub struct KeywordAlt97 {
     pub k_replace: Token,
 }
 
+impl Eq for KeywordAlt97 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_replace == other.k_replace;
+    }
+}
+
 pub struct KeywordAlt98 {
     pub span: Span,
     pub k_restrict: Token,
+}
+
+impl Eq for KeywordAlt98 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_restrict == other.k_restrict;
+    }
 }
 
 pub struct KeywordAlt99 {
@@ -1621,9 +3156,21 @@ pub struct KeywordAlt99 {
     pub k_right: Token,
 }
 
+impl Eq for KeywordAlt99 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_right == other.k_right;
+    }
+}
+
 pub struct KeywordAlt100 {
     pub span: Span,
     pub k_rollback: Token,
+}
+
+impl Eq for KeywordAlt100 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_rollback == other.k_rollback;
+    }
 }
 
 pub struct KeywordAlt101 {
@@ -1631,9 +3178,21 @@ pub struct KeywordAlt101 {
     pub k_row: Token,
 }
 
+impl Eq for KeywordAlt101 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_row == other.k_row;
+    }
+}
+
 pub struct KeywordAlt102 {
     pub span: Span,
     pub k_savepoint: Token,
+}
+
+impl Eq for KeywordAlt102 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_savepoint == other.k_savepoint;
+    }
 }
 
 pub struct KeywordAlt103 {
@@ -1641,9 +3200,21 @@ pub struct KeywordAlt103 {
     pub k_select: Token,
 }
 
+impl Eq for KeywordAlt103 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_select == other.k_select;
+    }
+}
+
 pub struct KeywordAlt104 {
     pub span: Span,
     pub k_set: Token,
+}
+
+impl Eq for KeywordAlt104 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_set == other.k_set;
+    }
 }
 
 pub struct KeywordAlt105 {
@@ -1651,9 +3222,21 @@ pub struct KeywordAlt105 {
     pub k_table: Token,
 }
 
+impl Eq for KeywordAlt105 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_table == other.k_table;
+    }
+}
+
 pub struct KeywordAlt106 {
     pub span: Span,
     pub k_temp: Token,
+}
+
+impl Eq for KeywordAlt106 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_temp == other.k_temp;
+    }
 }
 
 pub struct KeywordAlt107 {
@@ -1661,9 +3244,21 @@ pub struct KeywordAlt107 {
     pub k_temporary: Token,
 }
 
+impl Eq for KeywordAlt107 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_temporary == other.k_temporary;
+    }
+}
+
 pub struct KeywordAlt108 {
     pub span: Span,
     pub k_then: Token,
+}
+
+impl Eq for KeywordAlt108 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_then == other.k_then;
+    }
 }
 
 pub struct KeywordAlt109 {
@@ -1671,9 +3266,21 @@ pub struct KeywordAlt109 {
     pub k_to: Token,
 }
 
+impl Eq for KeywordAlt109 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_to == other.k_to;
+    }
+}
+
 pub struct KeywordAlt110 {
     pub span: Span,
     pub k_transaction: Token,
+}
+
+impl Eq for KeywordAlt110 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_transaction == other.k_transaction;
+    }
 }
 
 pub struct KeywordAlt111 {
@@ -1681,9 +3288,21 @@ pub struct KeywordAlt111 {
     pub k_trigger: Token,
 }
 
+impl Eq for KeywordAlt111 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_trigger == other.k_trigger;
+    }
+}
+
 pub struct KeywordAlt112 {
     pub span: Span,
     pub k_union: Token,
+}
+
+impl Eq for KeywordAlt112 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_union == other.k_union;
+    }
 }
 
 pub struct KeywordAlt113 {
@@ -1691,9 +3310,21 @@ pub struct KeywordAlt113 {
     pub k_unique: Token,
 }
 
+impl Eq for KeywordAlt113 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_unique == other.k_unique;
+    }
+}
+
 pub struct KeywordAlt114 {
     pub span: Span,
     pub k_update: Token,
+}
+
+impl Eq for KeywordAlt114 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_update == other.k_update;
+    }
 }
 
 pub struct KeywordAlt115 {
@@ -1701,9 +3332,21 @@ pub struct KeywordAlt115 {
     pub k_using: Token,
 }
 
+impl Eq for KeywordAlt115 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_using == other.k_using;
+    }
+}
+
 pub struct KeywordAlt116 {
     pub span: Span,
     pub k_vacuum: Token,
+}
+
+impl Eq for KeywordAlt116 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_vacuum == other.k_vacuum;
+    }
 }
 
 pub struct KeywordAlt117 {
@@ -1711,9 +3354,21 @@ pub struct KeywordAlt117 {
     pub k_values: Token,
 }
 
+impl Eq for KeywordAlt117 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_values == other.k_values;
+    }
+}
+
 pub struct KeywordAlt118 {
     pub span: Span,
     pub k_view: Token,
+}
+
+impl Eq for KeywordAlt118 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_view == other.k_view;
+    }
 }
 
 pub struct KeywordAlt119 {
@@ -1721,9 +3376,21 @@ pub struct KeywordAlt119 {
     pub k_virtual: Token,
 }
 
+impl Eq for KeywordAlt119 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_virtual == other.k_virtual;
+    }
+}
+
 pub struct KeywordAlt120 {
     pub span: Span,
     pub k_when: Token,
+}
+
+impl Eq for KeywordAlt120 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_when == other.k_when;
+    }
 }
 
 pub struct KeywordAlt121 {
@@ -1731,9 +3398,21 @@ pub struct KeywordAlt121 {
     pub k_where: Token,
 }
 
+impl Eq for KeywordAlt121 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_where == other.k_where;
+    }
+}
+
 pub struct KeywordAlt122 {
     pub span: Span,
     pub k_with: Token,
+}
+
+impl Eq for KeywordAlt122 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_with == other.k_with;
+    }
 }
 
 pub struct KeywordAlt123 {
@@ -1741,9 +3420,21 @@ pub struct KeywordAlt123 {
     pub k_without: Token,
 }
 
+impl Eq for KeywordAlt123 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.k_without == other.k_without;
+    }
+}
+
 pub struct NameNode {
     pub span: Span,
     pub any_name: AnyNameNode,
+}
+
+impl Eq for NameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
 }
 
 pub struct FunctionNameNode {
@@ -1751,9 +3442,21 @@ pub struct FunctionNameNode {
     pub any_name: AnyNameNode,
 }
 
+impl Eq for FunctionNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
+}
+
 pub struct DatabaseNameNode {
     pub span: Span,
     pub any_name: AnyNameNode,
+}
+
+impl Eq for DatabaseNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
 }
 
 pub struct SchemaNameNode {
@@ -1761,9 +3464,21 @@ pub struct SchemaNameNode {
     pub any_name: AnyNameNode,
 }
 
+impl Eq for SchemaNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
+}
+
 pub struct TableFunctionNameNode {
     pub span: Span,
     pub any_name: AnyNameNode,
+}
+
+impl Eq for TableFunctionNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
 }
 
 pub struct TableNameNode {
@@ -1771,9 +3486,21 @@ pub struct TableNameNode {
     pub any_name: AnyNameNode,
 }
 
+impl Eq for TableNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
+}
+
 pub struct TableOrIndexNameNode {
     pub span: Span,
     pub any_name: AnyNameNode,
+}
+
+impl Eq for TableOrIndexNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
 }
 
 pub struct NewTableNameNode {
@@ -1781,9 +3508,21 @@ pub struct NewTableNameNode {
     pub any_name: AnyNameNode,
 }
 
+impl Eq for NewTableNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
+}
+
 pub struct ColumnNameNode {
     pub span: Span,
     pub any_name: AnyNameNode,
+}
+
+impl Eq for ColumnNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
 }
 
 pub struct CollationNameNode {
@@ -1791,9 +3530,21 @@ pub struct CollationNameNode {
     pub any_name: AnyNameNode,
 }
 
+impl Eq for CollationNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
+}
+
 pub struct ForeignTableNode {
     pub span: Span,
     pub any_name: AnyNameNode,
+}
+
+impl Eq for ForeignTableNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
 }
 
 pub struct IndexNameNode {
@@ -1801,9 +3552,21 @@ pub struct IndexNameNode {
     pub any_name: AnyNameNode,
 }
 
+impl Eq for IndexNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
+}
+
 pub struct TriggerNameNode {
     pub span: Span,
     pub any_name: AnyNameNode,
+}
+
+impl Eq for TriggerNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
 }
 
 pub struct ViewNameNode {
@@ -1811,9 +3574,21 @@ pub struct ViewNameNode {
     pub any_name: AnyNameNode,
 }
 
+impl Eq for ViewNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
+}
+
 pub struct ModuleNameNode {
     pub span: Span,
     pub any_name: AnyNameNode,
+}
+
+impl Eq for ModuleNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
 }
 
 pub struct PragmaNameNode {
@@ -1821,9 +3596,21 @@ pub struct PragmaNameNode {
     pub any_name: AnyNameNode,
 }
 
+impl Eq for PragmaNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
+}
+
 pub struct SavepointNameNode {
     pub span: Span,
     pub any_name: AnyNameNode,
+}
+
+impl Eq for SavepointNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
 }
 
 pub variant TableAliasNode {
@@ -1832,14 +3619,37 @@ pub variant TableAliasNode {
     Alt2(TableAliasAlt2),
 }
 
+impl Eq for TableAliasNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct TableAliasAlt0 {
     pub span: Span,
     pub identifier: Token,
 }
 
+impl Eq for TableAliasAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.identifier == other.identifier;
+    }
+}
+
 pub struct TableAliasAlt1 {
     pub span: Span,
     pub string_literal: Token,
+}
+
+impl Eq for TableAliasAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.string_literal == other.string_literal;
+    }
 }
 
 pub struct TableAliasAlt2 {
@@ -1849,9 +3659,21 @@ pub struct TableAliasAlt2 {
     pub rparen: Token,
 }
 
+impl Eq for TableAliasAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.lparen == other.lparen && self.table_alias == other.table_alias && self.rparen == other.rparen;
+    }
+}
+
 pub struct TransactionNameNode {
     pub span: Span,
     pub any_name: AnyNameNode,
+}
+
+impl Eq for TransactionNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.any_name == other.any_name;
+    }
 }
 
 pub variant AnyNameNode {
@@ -1861,9 +3683,27 @@ pub variant AnyNameNode {
     Alt3(AnyNameAlt3),
 }
 
+impl Eq for AnyNameNode {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Alt0(a), Alt0(b)] => a == b,
+            [Alt1(a), Alt1(b)] => a == b,
+            [Alt2(a), Alt2(b)] => a == b,
+            [Alt3(a), Alt3(b)] => a == b,
+            _ => false,
+        };
+    }
+}
+
 pub struct AnyNameAlt0 {
     pub span: Span,
     pub identifier: Token,
+}
+
+impl Eq for AnyNameAlt0 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.identifier == other.identifier;
+    }
 }
 
 pub struct AnyNameAlt1 {
@@ -1871,9 +3711,21 @@ pub struct AnyNameAlt1 {
     pub keyword: KeywordNode,
 }
 
+impl Eq for AnyNameAlt1 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.keyword == other.keyword;
+    }
+}
+
 pub struct AnyNameAlt2 {
     pub span: Span,
     pub string_literal: Token,
+}
+
+impl Eq for AnyNameAlt2 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.string_literal == other.string_literal;
+    }
 }
 
 pub struct AnyNameAlt3 {
@@ -1881,6 +3733,12 @@ pub struct AnyNameAlt3 {
     pub lparen: Token,
     pub any_name: AnyNameNode,
     pub rparen: Token,
+}
+
+impl Eq for AnyNameAlt3 {
+    fn eq(&self, other: &Self) -> bool {
+        return self.span == other.span && self.lparen == other.lparen && self.any_name == other.any_name && self.rparen == other.rparen;
+    }
 }
 
 global TK_SCOL: i32 = 0;
