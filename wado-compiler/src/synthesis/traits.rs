@@ -3829,11 +3829,23 @@ fn eq_call_expr(
     tt: &mut TypeTable,
     span: Span,
 ) -> TirExpr {
+    // Reference-typed fields use ref.eq (identity comparison) directly
+    let resolved = tt.get(field_type).clone();
+    if matches!(resolved, ResolvedType::Ref(_) | ResolvedType::MutRef(_)) {
+        return TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::RefEq,
+                left: Box::new(self_field),
+                right: Box::new(other_field),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+    }
+
     let ref_type = tt.make_ref(field_type);
     let receiver = ref_expr(self_field, ref_type, span);
     let arg = ref_expr(other_field, ref_type, span);
-
-    let resolved = tt.get(field_type).clone();
     let (base_name, is_type_param, type_arg_names) =
         decompose_type_for_method_name(&resolved, field_type, tt);
 
