@@ -39,12 +39,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let resolved = self.type_table.borrow().get(type_id).clone();
 
         // Recursion guard: if we're already checking this (type, trait) pair,
-        // return false to break infinite recursion on recursive types.
+        // optimistically return true to break infinite recursion on recursive types.
+        // This is sound because auto-derived Eq/Ord on recursive types is well-founded
+        // (Wasm GC types are heap-allocated, so the comparison terminates on structural equality).
+        // If any non-recursive field fails the trait check, it will be caught on that path.
         {
             let key = (type_id, trait_name.to_string());
             let stack = self.trait_check_stack.borrow();
             if stack.contains(&key) {
-                return false;
+                return true;
             }
         }
         self.trait_check_stack
