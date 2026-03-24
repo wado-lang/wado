@@ -413,12 +413,14 @@ trait TirMutVisitor {
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::ClosureToCanonical {
-                functor: inner, ..
-            } => {
+            | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
                 self.visit_expr(inner);
             }
-            TirExprKind::Assign { target, value } | TirExprKind::Index { expr: target, index: value } => {
+            TirExprKind::Assign { target, value }
+            | TirExprKind::Index {
+                expr: target,
+                index: value,
+            } => {
                 self.visit_expr(target);
                 self.visit_expr(value);
             }
@@ -578,7 +580,8 @@ impl Monomorphizer {
         external_generic_structs: &IndexMap<String, TirStruct>,
         trait_method_locations: &IndexMap<String, ModuleSource>,
     ) -> TirModule {
-        self.functions.trait_method_locations
+        self.functions
+            .trait_method_locations
             .clone_from(trait_method_locations);
 
         // Phase 1: Collect all generic struct definitions
@@ -909,7 +912,9 @@ impl Monomorphizer {
 
                     if !self.structs.instantiated.contains_key(&key) {
                         let mangled = self.instantiation_name(&key, type_table);
-                        self.structs.instantiated.insert(key.clone(), mangled.clone());
+                        self.structs
+                            .instantiated
+                            .insert(key.clone(), mangled.clone());
                         self.structs.mangled_to_key.insert(mangled, key.clone());
                         self.structs.pending.push(key);
                     }
@@ -979,8 +984,14 @@ impl Monomorphizer {
                 && type_args == &key.impl_type_args
             {
                 self.structs.type_substitutions.insert(id, concrete_type_id);
-                self.structs.type_to_mangled_name
-                    .insert(id, self.structs.instantiated.get(key).cloned().unwrap_or_default());
+                self.structs.type_to_mangled_name.insert(
+                    id,
+                    self.structs
+                        .instantiated
+                        .get(key)
+                        .cloned()
+                        .unwrap_or_default(),
+                );
             }
         }
 
@@ -1388,7 +1399,8 @@ impl Monomorphizer {
                     };
                     if !self.functions.instantiated.contains_key(&key) {
                         let mangled = self.function_instantiation_name(&key, type_table);
-                        self.functions.instantiated
+                        self.functions
+                            .instantiated
                             .insert(key.clone(), mangled.clone());
                         self.functions.mangled_to_key.insert(mangled, key.clone());
                         self.functions.pending.push(key);
@@ -1448,7 +1460,8 @@ impl Monomorphizer {
                                         type_table,
                                         impl_type_args.len(),
                                     );
-                                    self.functions.instantiated
+                                    self.functions
+                                        .instantiated
                                         .insert(key.clone(), mangled.clone());
                                     self.functions.mangled_to_key.insert(mangled, key.clone());
                                     self.functions.pending.push(key);
@@ -1523,7 +1536,8 @@ impl Monomorphizer {
                                         &key, type_table,
                                         0, // non-generic struct: no impl type params
                                     );
-                                    self.functions.instantiated
+                                    self.functions
+                                        .instantiated
                                         .insert(key.clone(), mangled.clone());
                                     self.functions.mangled_to_key.insert(mangled, key.clone());
                                     self.functions.pending.push(key);
@@ -1537,7 +1551,8 @@ impl Monomorphizer {
                         // Also handles GenericInstance receivers (e.g., Option<i32>)
                         if !found {
                             let base_info = self
-                                .structs.mangled_to_key
+                                .structs
+                                .mangled_to_key
                                 .get(&struct_name)
                                 .map(|k| (k.name.clone(), k.impl_type_args.clone()))
                                 .or_else(|| {
@@ -1599,9 +1614,11 @@ impl Monomorphizer {
                                                     type_table,
                                                     impl_type_args.len(),
                                                 );
-                                                self.functions.instantiated
+                                                self.functions
+                                                    .instantiated
                                                     .insert(key.clone(), mangled.clone());
-                                                self.functions.mangled_to_key
+                                                self.functions
+                                                    .mangled_to_key
                                                     .insert(mangled, key.clone());
                                                 self.functions.pending.push(key);
                                             }
@@ -1675,7 +1692,8 @@ impl Monomorphizer {
                                         type_table,
                                         impl_type_args.len(),
                                     );
-                                    self.functions.instantiated
+                                    self.functions
+                                        .instantiated
                                         .insert(key.clone(), mangled.clone());
                                     self.functions.mangled_to_key.insert(mangled, key.clone());
                                     self.functions.pending.push(key);
@@ -1741,7 +1759,8 @@ impl Monomorphizer {
                                         type_table,
                                         impl_type_args.len(),
                                     );
-                                    self.functions.instantiated
+                                    self.functions
+                                        .instantiated
                                         .insert(key.clone(), mangled.clone());
                                     self.functions.mangled_to_key.insert(mangled, key.clone());
                                     self.functions.pending.push(key);
@@ -1833,7 +1852,8 @@ impl Monomorphizer {
                             impl_type_params_count,
                             &generic_func.impl_type_params,
                         );
-                        self.functions.instantiated
+                        self.functions
+                            .instantiated
                             .insert(key.clone(), mangled.clone());
                         self.functions.mangled_to_key.insert(mangled, key.clone());
                         self.functions.pending.push(key);
@@ -4226,7 +4246,8 @@ impl Monomorphizer {
                         if new_func_name != old_func_name {
                             if info.is_type_param_receiver {
                                 let concrete_module = self
-                                    .functions.trait_method_locations
+                                    .functions
+                                    .trait_method_locations
                                     .get(&new_func_name)
                                     .cloned()
                                     .or_else(|| {
@@ -4415,7 +4436,8 @@ impl Monomorphizer {
                             // (e.g., `impl Stringify for i32` in the entry module).
                             // Fall back to type-based heuristic for built-in impls.
                             let concrete_module = self
-                                .functions.trait_method_locations
+                                .functions
+                                .trait_method_locations
                                 .get(&new_func_name)
                                 .cloned()
                                 .or_else(|| {
@@ -4450,43 +4472,46 @@ impl Monomorphizer {
                                     } if !args.is_empty()
                                 ) || matches!(type_table.get(inner), ResolvedType::BuiltinArray(_))
                             };
-                            let monomorph_info =
-                                if self.functions.trait_method_locations.contains_key(&new_func_name) {
-                                    // Direct concrete method found — no monomorphization needed
-                                    None
-                                } else if receiver_has_type_args {
-                                    // Generic impl (e.g., Array<T>) — handled by receiver scan
-                                    None
+                            let monomorph_info = if self
+                                .functions
+                                .trait_method_locations
+                                .contains_key(&new_func_name)
+                            {
+                                // Direct concrete method found — no monomorphization needed
+                                None
+                            } else if receiver_has_type_args {
+                                // Generic impl (e.g., Array<T>) — handled by receiver scan
+                                None
+                            } else {
+                                // Potential blanket impl method — mark for blanket instantiation.
+                                // The generic_name must match the key in generic_functions.
+                                //
+                                // For blanket impls with a type param receiver (e.g.,
+                                // impl<I: Iterator> IntoIterator for I), the template key is
+                                // "I^IntoIterator::into_iter" — use old_func_name which
+                                // preserves the type param name.
+                                //
+                                // For methods on associated type projections (e.g.,
+                                // S::SeqSerializer^SerializeSeq::element), old_func_name has
+                                // the unresolved projection which doesn't match any key —
+                                // use new_func_name (resolved to e.g.,
+                                // NsdSeqSerializer^SerializeSeq::element).
+                                let blanket_name = if old_func_name
+                                    .split('^')
+                                    .next()
+                                    .is_some_and(|struct_part| struct_part.contains("::"))
+                                {
+                                    new_func_name.clone()
                                 } else {
-                                    // Potential blanket impl method — mark for blanket instantiation.
-                                    // The generic_name must match the key in generic_functions.
-                                    //
-                                    // For blanket impls with a type param receiver (e.g.,
-                                    // impl<I: Iterator> IntoIterator for I), the template key is
-                                    // "I^IntoIterator::into_iter" — use old_func_name which
-                                    // preserves the type param name.
-                                    //
-                                    // For methods on associated type projections (e.g.,
-                                    // S::SeqSerializer^SerializeSeq::element), old_func_name has
-                                    // the unresolved projection which doesn't match any key —
-                                    // use new_func_name (resolved to e.g.,
-                                    // NsdSeqSerializer^SerializeSeq::element).
-                                    let blanket_name = if old_func_name
-                                        .split('^')
-                                        .next()
-                                        .is_some_and(|struct_part| struct_part.contains("::"))
-                                    {
-                                        new_func_name.clone()
-                                    } else {
-                                        old_func_name
-                                    };
-                                    Some(MonomorphInfo {
-                                        generic_name: blanket_name,
-                                        impl_type_args: type_args,
-                                        method_type_args: vec![],
-                                        is_blanket: true,
-                                    })
+                                    old_func_name
                                 };
+                                Some(MonomorphInfo {
+                                    generic_name: blanket_name,
+                                    impl_type_args: type_args,
+                                    method_type_args: vec![],
+                                    is_blanket: true,
+                                })
+                            };
                             *method_func = FunctionRef {
                                 module_source: concrete_module
                                     .unwrap_or_else(|| module_source.clone()),
@@ -5099,9 +5124,7 @@ impl Monomorphizer {
 
     fn rewrite_call_expr(&self, expr: &mut TirExpr, type_table: &TypeTable) {
         if let TirExprKind::Call {
-            func,
-            type_args,
-            ..
+            func, type_args, ..
         } = &mut expr.kind
         {
             let original_func_name = func.name.clone();
@@ -5145,8 +5168,7 @@ impl Monomorphizer {
                 method_info: Some(info),
                 ..
             } = func
-                && (!monomorph.impl_type_args.is_empty()
-                    || !monomorph.method_type_args.is_empty())
+                && (!monomorph.impl_type_args.is_empty() || !monomorph.method_type_args.is_empty())
             {
                 let mut names_to_try = vec![MethodName::format_local(
                     &info.base_struct_name,
@@ -5207,8 +5229,7 @@ impl Monomorphizer {
             .unwrap_or_else(|| method_func.name.clone());
         // If this is a generic method call, rewrite to monomorphized name
         if !type_args.is_empty()
-            && let Some(struct_name) =
-                self.get_struct_name_from_type(receiver.type_id, type_table)
+            && let Some(struct_name) = self.get_struct_name_from_type(receiver.type_id, type_table)
         {
             // Try both inherent method and trait method formats
             let trait_name_opt = method_func
@@ -5521,7 +5542,8 @@ impl Monomorphizer {
             // First check trait_method_locations (populated during cross-module collection),
             // then fall back to the type's own module_source (impl is in same module as type).
             let method_module_source = self
-                .functions.trait_method_locations
+                .functions
+                .trait_method_locations
                 .get(&mangled_name)
                 .cloned()
                 .or(type_module_source)
@@ -5592,7 +5614,8 @@ impl Monomorphizer {
 
             // Resolve the module where the trait impl lives.
             let ord_method_module_source = self
-                .functions.trait_method_locations
+                .functions
+                .trait_method_locations
                 .get(&mangled_name)
                 .cloned()
                 .or(type_module_source)
@@ -5715,8 +5738,11 @@ impl TirMutVisitor for TypeRewriter<'_> {
             let original_type_id = *struct_type;
             let new_type_id = self.rewrite_type_id(original_type_id);
             *struct_type = new_type_id;
-            if let Some(mangled_name) =
-                self.mono.structs.type_to_mangled_name.get(&original_type_id)
+            if let Some(mangled_name) = self
+                .mono
+                .structs
+                .type_to_mangled_name
+                .get(&original_type_id)
             {
                 struct_name.clone_from(mangled_name);
             } else {
@@ -5751,12 +5777,11 @@ impl TirMutVisitor for CallRewriter<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) {
         self.walk_stmt(stmt);
         // Update the Let's type_id if it was a type parameter that got substituted
-        if let TirStmtKind::Let { value, type_id, .. } = &mut stmt.kind {
-            if self.type_table.contains_type_param(*type_id)
-                && !self.type_table.contains_type_param(value.type_id)
-            {
-                *type_id = value.type_id;
-            }
+        if let TirStmtKind::Let { value, type_id, .. } = &mut stmt.kind
+            && self.type_table.contains_type_param(*type_id)
+            && !self.type_table.contains_type_param(value.type_id)
+        {
+            *type_id = value.type_id;
         }
     }
 
@@ -5784,16 +5809,16 @@ impl TirMutVisitor for ComparisonDesugarer<'_> {
         // Recurse into children first, then desugar this node
         self.walk_expr(expr);
 
-        if let TirExprKind::Binary { op, left, right } = &mut expr.kind {
-            if let Some(new_kind) = self.mono.try_desugar_comparison(
+        if let TirExprKind::Binary { op, left, right } = &mut expr.kind
+            && let Some(new_kind) = self.mono.try_desugar_comparison(
                 expr.span,
                 *op,
                 left,
                 right,
                 &mut self.type_table.borrow_mut(),
-            ) {
-                expr.kind = new_kind;
-            }
+            )
+        {
+            expr.kind = new_kind;
         }
     }
 }
