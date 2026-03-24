@@ -38,10 +38,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn type_implements_trait(&self, type_id: TypeId, trait_name: &str) -> bool {
         let resolved = self.type_table.borrow().get(type_id).clone();
 
+        // Recursion guard: if we're already checking this (type, trait) pair,
+        // return false to break infinite recursion on recursive types.
+        {
+            let key = (type_id, trait_name.to_string());
+            let stack = self.trait_check_stack.borrow();
+            if stack.contains(&key) {
+                return false;
+            }
+        }
+        self.trait_check_stack
+            .borrow_mut()
+            .push((type_id, trait_name.to_string()));
+
+        let result = self.type_implements_trait_inner(&resolved, trait_name);
+
+        self.trait_check_stack.borrow_mut().pop();
+
+        result
+    }
+
+    fn type_implements_trait_inner(&self, resolved: &ResolvedType, trait_name: &str) -> bool {
         // Type parameters satisfy bounds declared on them (e.g., T: Describable
         // means T implements Describable within the scope of that declaration)
-        if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } =
-            &resolved
+        if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
         {
             if let Some(bounds) = self.trait_ctx.type_param_bounds.get(name) {
                 return bounds.iter().any(|b| b.name == trait_name);
@@ -72,6 +92,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
             match trait_name {
                 "Eq" | "Ord" => return true,
                 _ => {}
+            }
+        }
+
+        // Variants auto-implement Eq when all payload types implement Eq
+        if let ResolvedType::Variant { name, .. } = &resolved
+            && trait_name == "Eq"
+            && let Some(info) = self.variant_cases.get(name)
+        {
+            let all_impl = info.cases.iter().all(|c| {
+                c.payload == TypeTable::UNIT || self.type_implements_trait(c.payload, trait_name)
+            });
+            if all_impl {
+                return true;
             }
         }
 
@@ -106,6 +139,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .collect();
             let all_impl = info.fields.iter().all(|(_, field_tid, _)| {
                 let concrete_tid = param_map.get(field_tid).copied().unwrap_or(*field_tid);
+                self.type_implements_trait(concrete_tid, trait_name)
+            });
+            if all_impl {
+                return true;
+            }
+        }
+
+        // Generic variants auto-implement Eq when all payload types implement Eq
+        // (with type params substituted by concrete type args)
+        if let ResolvedType::GenericInstance {
+            name, type_args, ..
+        } = &resolved
+            && trait_name == "Eq"
+            && let Some(info) = self.variant_cases.get(name)
+        {
+            let param_map: IndexMap<TypeId, TypeId> = info
+                .type_param_type_ids
+                .iter()
+                .zip(type_args.iter())
+                .map(|(param, arg)| (*param, *arg))
+                .collect();
+            let all_impl = info.cases.iter().all(|c| {
+                if c.payload == TypeTable::UNIT {
+                    return true;
+                }
+                let concrete_tid = param_map.get(&c.payload).copied().unwrap_or(c.payload);
                 self.type_implements_trait(concrete_tid, trait_name)
             });
             if all_impl {

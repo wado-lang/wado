@@ -611,6 +611,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 included_files,
                 known_type_names_cache: IndexSet::default(),
                 indexing_trait_cache: IndexMap::default(),
+                trait_check_stack: RefCell::new(Vec::new()),
             };
             resolver.rebuild_known_type_names_cache();
 
