@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774386716421,
+  "lastUpdate": 1774386967717,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7004,6 +7004,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/81b7c2bc1b53d241d450ab6cb64c22743290cca8"
         },
         "date": 1774386716253,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d836bc5ee10fe349f44af4c4a84dee6c672c0ead",
+          "message": "Merge pull request #683 from wado-lang/claude/refactor-monomorphizer-DIvNs\n\nRefactor monomorphize module for improved code organization",
+          "timestamp": "2026-03-25T06:13:34+09:00",
+          "tree_id": "320a08916b495226cf6d52a09421423b535b11c0",
+          "url": "https://github.com/wado-lang/wado/commit/d836bc5ee10fe349f44af4c4a84dee6c672c0ead"
+        },
+        "date": 1774386967528,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
