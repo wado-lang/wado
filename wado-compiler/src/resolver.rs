@@ -149,6 +149,9 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Recursion guard for `type_implements_trait` to avoid infinite recursion
     /// on recursive types (e.g., variant Elem containing struct `RepeatElem` with field Elem).
     trait_check_stack: RefCell<Vec<(TypeId, String)>>,
+    /// Cache for `lookup_method_info` results.
+    /// Key: (base_type_id, method_name) → cached MethodInfo
+    method_info_cache: IndexMap<(TypeId, String), Option<types::MethodInfo>>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -204,6 +207,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             known_type_names_cache: IndexSet::default(),
             indexing_trait_cache: IndexMap::default(),
             trait_check_stack: RefCell::new(Vec::new()),
+            method_info_cache: IndexMap::default(),
         }
     }
 
@@ -287,10 +291,16 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.effect_sources = Self::build_effect_sources(module, &module_source);
 
         // First pass: collect type definitions
-        self.collect_types(module);
+        {
+            let _span = self.logger.span("resolve/collect_types");
+            self.collect_types(module);
+        }
 
         // Second pass: collect function signatures (for call resolution)
-        self.collect_function_signatures(module);
+        {
+            let _span = self.logger.span("resolve/collect_sigs");
+            self.collect_function_signatures(module);
+        }
 
         // Collect global variable names and types (before resolving functions that may reference them)
         self.current_module_globals.clear();
@@ -364,6 +374,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Third pass: resolve functions
+        let _resolve_funcs_span = self.logger.span("resolve/resolve_funcs");
         let mut tir_module = TirModule::new(module_source);
 
         for item in &module.items {
@@ -658,6 +669,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
+        drop(_resolve_funcs_span);
         // Share the type table via Rc::clone
         tir_module.type_table = Rc::clone(&self.type_table);
 

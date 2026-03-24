@@ -442,14 +442,23 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let sorted_sources =
             Self::topological_sort_modules(modules, &all_struct_fields, &type_table.borrow());
 
-        let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
-        let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
+        let (wasi_registry, _) = {
+            let _span = logger.span("resolve/wasi_registry");
+            WasiRegistry::build_from_stdlib()
+        };
+        let builtin_registry = {
+            let _span = logger.span("resolve/builtin_registry");
+            BuiltinRegistry::build_from_stdlib(&type_table)
+        };
 
         // Build trait lookup indices once for all modules.
         // This allows find_trait_method_for_type and find_indexing_trait_impl to do O(1)
         // lookups by type name instead of scanning all items in all modules per method call.
         // Also runs orphan rule checking; violations are emitted as errors.
-        let (trait_env, orphan_violations) = super::trait_env::TraitEnv::build(modules);
+        let (trait_env, orphan_violations) = {
+            let _span = logger.span("resolve/trait_env");
+            super::trait_env::TraitEnv::build(modules)
+        };
         for violation in orphan_violations {
             let _ = logger.error(violation);
         }
@@ -509,6 +518,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         };
 
         // Second pass: resolve each module with per-module function_return_types and imports
+        let _span = logger.span("resolve/modules");
         for module_source in &sorted_sources {
             let module = modules.get(module_source).expect("module should exist");
 
@@ -663,6 +673,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 known_type_names_cache: global_known_type_names.clone(),
                 indexing_trait_cache: IndexMap::default(),
                 trait_check_stack: RefCell::new(Vec::new()),
+                method_info_cache: IndexMap::default(),
             };
             // known_type_names_cache is pre-computed globally; no per-module rebuild needed
 
@@ -677,6 +688,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
+        drop(_span);
         logger.ok_or_bail(result)
     }
 
