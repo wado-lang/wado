@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774367391778,
+  "lastUpdate": 1774370355424,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6887,6 +6887,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/21a8f41fdbc63ad39bed2c6b749d7287a4f4b125"
         },
         "date": 1774367391589,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1c616f664e12028d0f79235dc460a8c3a36fe716",
+          "message": "Merge pull request #680 from wado-lang/claude/add-parser-tests-4FMPf\n\nAdd parser AST tests and fix auto-derive Eq for recursive types",
+          "timestamp": "2026-03-25T01:36:45+09:00",
+          "tree_id": "6807b50c3282ede6b48480f46125e1dd740132a3",
+          "url": "https://github.com/wado-lang/wado/commit/1c616f664e12028d0f79235dc460a8c3a36fe716"
+        },
+        "date": 1774370355260,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
