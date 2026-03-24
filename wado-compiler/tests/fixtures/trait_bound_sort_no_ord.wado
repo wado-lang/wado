@@ -1,0 +1,20 @@
+// Test that Array::sort is unavailable when T doesn't implement Ord
+
+variant NoOrd {
+    A(i32),
+    B,
+}
+
+struct Point {
+    x: NoOrd,
+}
+
+export fn run() {
+    let mut points: Array<Point> = [];
+    points.append(Point { x: NoOrd::A(1) });
+    // Point does not implement Ord (NoOrd variant field), so sort() should not be available
+    points.sort();
+}
+
+__DATA__
+{"compile_error": "no method 'sort' found"}

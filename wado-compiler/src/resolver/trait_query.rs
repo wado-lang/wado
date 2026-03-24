@@ -95,9 +95,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Variants auto-implement Eq/Ord when all payload types implement the trait
+        // Variants auto-implement Eq when all payload types implement Eq
         if let ResolvedType::Variant { name, .. } = &resolved
-            && matches!(trait_name, "Eq" | "Ord")
+            && trait_name == "Eq"
             && let Some(info) = self.variant_cases.get(name)
         {
             let all_impl = info.cases.iter().all(|c| {
@@ -146,12 +146,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Generic variants auto-implement Eq/Ord when all payload types implement the trait
+        // Generic variants auto-implement Eq when all payload types implement Eq
         // (with type params substituted by concrete type args)
         if let ResolvedType::GenericInstance {
             name, type_args, ..
         } = &resolved
-            && matches!(trait_name, "Eq" | "Ord")
+            && trait_name == "Eq"
             && let Some(info) = self.variant_cases.get(name)
         {
             let param_map: IndexMap<TypeId, TypeId> = info
