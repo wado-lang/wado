@@ -320,7 +320,8 @@ pub trait Iterator {
         return IterMap { inner: *self, f };
     }
 
-    /// Reduces elements using an accumulator function, starting from an initial value.
+    /// Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
+    /// Always returns a value (unlike `reduce`, which returns None for empty iterators).
     fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, Self::Item) -> Acc) -> Acc {
         let mut acc = init;
         while let Some(item) = self.next() {
@@ -329,7 +330,7 @@ pub trait Iterator {
         return acc;
     }
 
-    /// Returns the first element matching the predicate, or None.
+    /// Returns the first element for which `pred` returns true, consuming elements up to that point.
     fn find(&mut self, pred: fn(Self::Item) -> bool) -> Option<Self::Item> {
         while let Some(item) = self.next() {
             if pred(item) {
@@ -339,7 +340,8 @@ pub trait Iterator {
         return null;
     }
 
-    /// Returns true if any element satisfies the predicate.
+    /// Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
+    /// Short-circuits: stops consuming the iterator as soon as a matching element is found.
     fn any(&mut self, pred: fn(Self::Item) -> bool) -> bool {
         while let Some(item) = self.next() {
             if pred(item) {
@@ -349,7 +351,8 @@ pub trait Iterator {
         return false;
     }
 
-    /// Returns true if all elements satisfy the predicate.
+    /// Returns true if `pred` returns true for every element (∀). True for empty iterators.
+    /// Short-circuits: stops consuming the iterator as soon as a non-matching element is found.
     fn all(&mut self, pred: fn(Self::Item) -> bool) -> bool {
         while let Some(item) = self.next() {
             if !pred(item) {
@@ -359,7 +362,7 @@ pub trait Iterator {
         return true;
     }
 
-    /// Returns the last element, or None if the iterator is empty.
+    /// Consumes the entire iterator and returns the last element, or None if empty.
     fn last(&mut self) -> Option<Self::Item> {
         let mut result: Option<Self::Item> = null;
         while let Some(item) = self.next() {
@@ -368,7 +371,7 @@ pub trait Iterator {
         return result;
     }
 
-    /// Returns the nth element (0-indexed), or None if out of range.
+    /// Returns the nth element (0-indexed), consuming elements up to and including it.
     fn nth(&mut self, n: i32) -> Option<Self::Item> {
         let mut remaining = n;
         while let Some(item) = self.next() {
@@ -380,7 +383,7 @@ pub trait Iterator {
         return null;
     }
 
-    /// Returns the index of the first element satisfying the predicate, or None.
+    /// Returns the 0-based index of the first element for which `pred` returns true, or None.
     fn position(&mut self, pred: fn(Self::Item) -> bool) -> Option<i32> {
         let mut idx = 0;
         while let Some(item) = self.next() {
@@ -405,32 +408,32 @@ pub trait Iterator {
         return null;
     }
 
-    /// Returns an iterator that only yields elements matching the predicate.
+    /// Returns an adapter that skips elements for which `pred` returns false.
     fn filter(&self, pred: fn(Self::Item) -> bool) -> IterFilter<Self> {
         return IterFilter { inner: *self, pred };
     }
 
-    /// Returns an iterator that yields (index, element) pairs.
+    /// Returns an adapter that yields `[i, element]` tuples, where `i` starts at 0.
     fn enumerate(&self) -> IterEnumerate<Self> {
         return IterEnumerate { inner: *self, count: 0 };
     }
 
-    /// Returns an iterator that yields at most n elements.
+    /// Returns an adapter that stops after yielding at most `n` elements.
     fn take(&self, n: i32) -> IterTake<Self> {
         return IterTake { inner: *self, remaining: n };
     }
 
-    /// Returns an iterator that skips the first n elements.
+    /// Returns an adapter that discards the first `n` elements before yielding the rest.
     fn skip(&self, n: i32) -> IterSkip<Self> {
         return IterSkip { inner: *self, remaining: n };
     }
 
-    /// Returns an iterator that chains this iterator with another of the same item type.
+    /// Returns an adapter that yields all elements of `self`, then all elements of `other`.
     fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J> {
         return IterChain { first: *self, second: other, first_done: false };
     }
 
-    /// Returns an iterator that pairs elements from this iterator with another.
+    /// Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
     fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J> {
         return IterZip { first: *self, second: other };
     }
@@ -534,8 +537,12 @@ impl<I: Iterator> Iterator for IterTake<I> {
         if self.remaining <= 0 {
             return null;
         }
-        self.remaining -= 1;
-        return self.inner.next();
+        if let Some(item) = self.inner.next() {
+            self.remaining -= 1;
+            return Option::Some(item);
+        }
+        self.remaining = 0;
+        return null;
     }
 }
 

@@ -128,6 +128,15 @@ test "take more than available" {
     assert result.len() == 3;
 }
 
+test "take more than available returns None idempotently" {
+    let arr: Array<i32> = [1, 2];
+    let mut iter = arr.iter().take(5);
+    assert iter.next() matches { Some(v) && v == 1 };
+    assert iter.next() matches { Some(v) && v == 2 };
+    assert iter.next() matches { None };
+    assert iter.next() matches { None };
+}
+
 test "take 0 yields empty" {
     let arr: Array<i32> = [1, 2, 3];
     let result = arr.iter().take(0).collect();

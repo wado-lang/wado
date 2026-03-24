@@ -451,14 +451,6 @@ impl ArrayIter<T> {
         return Array { repr, used: result_used };
     }
 
-    pub fn skip(&self, n: i32) -> ArrayIter<T> {
-        let new_index = i32_min(self.index + i32_max(n, 0), self.used);
-        return ArrayIter {
-            repr: self.repr,
-            used: self.used,
-            index: new_index,
-        };
-    }
 }
 
 use { Add } from "core:prelude/traits.wado";
