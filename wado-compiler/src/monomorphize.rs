@@ -942,37 +942,64 @@ impl Monomorphizer {
                 .map(|(k, v)| (k.clone(), Rc::clone(v)))
                 .collect();
 
+        // Phase 9: Unified instantiation loop
+        // Process functions and structs together until fixpoint. Function instantiation
+        // may create new GenericInstance types that require struct instantiation, which
+        // in turn may create new function instantiation sites. Processing them in a
+        // single loop eliminates the need for the separate "Phase 13" second pass.
         let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
-        while let Some(key) = self.functions.pending.pop() {
-            // Instantiate the function (needs mutable borrow)
-            let concrete = {
-                let generic_func = generic_functions.get(&key.name);
-                if let Some(gf) = generic_func {
-                    let gf_borrowed = gf.borrow();
-                    self.instantiate_function(
-                        &gf_borrowed,
+        loop {
+            let mut made_progress = false;
+
+            // Process all pending function instantiations
+            while let Some(key) = self.functions.pending.pop() {
+                let concrete = {
+                    let generic_func = generic_functions.get(&key.name);
+                    if let Some(gf) = generic_func {
+                        let gf_borrowed = gf.borrow();
+                        self.instantiate_function(
+                            &gf_borrowed,
+                            &key,
+                            &mut module.type_table.borrow_mut(),
+                        )
+                    } else {
+                        None
+                    }
+                };
+
+                if let Some(concrete) = concrete {
+                    // Collect instantiation sites from the newly created function body
+                    if let Some(body) = &concrete.body {
+                        let type_table = module.type_table.borrow();
+                        let mut collector = InstantiationCollector {
+                            mono: self,
+                            generic_functions: &scannable_generic_functions,
+                            type_table: &type_table,
+                        };
+                        collector.visit_block(body);
+                    }
+                    new_functions.push(Rc::new(RefCell::new(concrete)));
+                    made_progress = true;
+                }
+            }
+
+            // Check for new struct instantiations created by function monomorphization
+            self.collect_instantiation_sites(&module.type_table.borrow(), &valid_struct_names);
+            while let Some(key) = self.structs.pending.pop() {
+                if let Some(generic_struct) = generic_structs.get(&key.name)
+                    && let Some(concrete) = self.instantiate_struct(
+                        generic_struct,
                         &key,
                         &mut module.type_table.borrow_mut(),
                     )
-                } else {
-                    None
+                {
+                    module.structs.push(concrete);
+                    made_progress = true;
                 }
-            };
+            }
 
-            if let Some(concrete) = concrete {
-                // Collect instantiation sites from the newly created function body
-                // This handles transitive monomorphization (e.g., a generic method calling
-                // another generic method on self, like sort() -> sort_by())
-                if let Some(body) = &concrete.body {
-                    let type_table = module.type_table.borrow();
-                    let mut collector = InstantiationCollector {
-                        mono: self,
-                        generic_functions: &scannable_generic_functions,
-                        type_table: &type_table,
-                    };
-                    collector.visit_block(body);
-                }
-                new_functions.push(Rc::new(RefCell::new(concrete)));
+            if !made_progress {
+                break;
             }
         }
 
@@ -980,8 +1007,6 @@ impl Monomorphizer {
         module.functions.extend(new_functions);
 
         // Phase 11: Remove generic functions from the functions list
-        // Remove functions with type_params OR impl_type_params (unless monomorphized)
-        // Effect-only params don't count as generic (they're erased at compile time).
         module.functions.retain(|f| {
             let func = f.borrow();
             (!func.has_real_type_params() && func.impl_type_params.is_empty())
@@ -992,29 +1017,9 @@ impl Monomorphizer {
         self.rewrite_function_calls_in_module(&mut module);
 
         // Phase 12.5: Desugar comparison operators on non-primitive types in non-generic functions.
-        // (Generic functions are handled during substitute_types_in_expr, but non-generic
-        // functions with variant/struct == never go through that path.)
         self.desugar_comparisons_in_module(&mut module);
 
-        // Phase 13: Second pass of struct instantiation
-        // Function monomorphization may have created new GenericInstance types
-        // (e.g., BTreeNode<String,i32>) that weren't in the type table during Phase 2.
-        // Collect and instantiate these now.
-        self.collect_instantiation_sites(&module.type_table.borrow(), &valid_struct_names);
-        let mut second_pass_structs = Vec::new();
-        while let Some(key) = self.structs.pending.pop() {
-            if let Some(generic_struct) = generic_structs.get(&key.name)
-                && let Some(concrete) = self.instantiate_struct(
-                    generic_struct,
-                    &key,
-                    &mut module.type_table.borrow_mut(),
-                )
-            {
-                second_pass_structs.push(concrete);
-            }
-        }
-        module.structs.extend(second_pass_structs);
-        // Rewrite types again for any new struct instantiations
+        // Phase 13: Rewrite types (single pass — unified loop above ensures all structs exist)
         self.rewrite_types_in_module(&mut module);
 
         module
