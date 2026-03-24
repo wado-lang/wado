@@ -174,6 +174,12 @@ impl SubstitutionContext {
                     {
                         return resolved;
                     }
+                    // GenericInstance fallback: e.g. ArrayIter<i32>::Item -> i32
+                    if let Some(resolved) =
+                        type_table.resolve_generic_assoc_type(concrete_id, &assoc_name)
+                    {
+                        return resolved;
+                    }
                 }
                 // Fallback: return the concrete type (param substitution)
                 concrete_id
@@ -1010,6 +1016,21 @@ impl TypeTable {
         self.intern(ResolvedType::TypePack { name, index })
     }
 
+    /// Create a simple associated type projection `T::X` with no bounds or bindings.
+    /// Used in pre-pass registration of generic impl associated types.
+    pub fn make_assoc_type_projection_simple(
+        &mut self,
+        param_id: TypeId,
+        assoc_name: String,
+    ) -> TypeId {
+        self.intern(ResolvedType::AssocTypeProjection {
+            param_id,
+            assoc_name,
+            bounds: vec![],
+            assoc_type_bindings: vec![],
+        })
+    }
+
     /// Create an associated type projection: `T::X` where T is a type parameter.
     pub fn make_assoc_type_projection(
         &mut self,
@@ -1074,12 +1095,32 @@ impl TypeTable {
             } => (name, type_args),
             _ => return None,
         };
-        let def_type_id = self
+        let def_type_id = *self
             .generic_assoc_type_defs
             .get(&(base_name, assoc_name.to_string()))?;
-        match self.get(*def_type_id) {
-            ResolvedType::TypeParam { index, .. } => type_args.get(*index as usize).copied(),
-            _ => Some(*def_type_id),
+        match self.get(def_type_id).clone() {
+            ResolvedType::TypeParam { index, .. } => type_args.get(index as usize).copied(),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name: inner_assoc_name,
+                ..
+            } => {
+                // The def is `I::InnerName`. Substitute I with the concrete type arg.
+                let inner_concrete_id =
+                    if let ResolvedType::TypeParam { index, .. } = self.get(param_id).clone() {
+                        type_args.get(index as usize).copied()?
+                    } else {
+                        param_id
+                    };
+                // Recursively resolve `inner_concrete_id::inner_assoc_name`.
+                if let Some(resolved) =
+                    self.resolve_assoc_type(inner_concrete_id, &inner_assoc_name)
+                {
+                    return Some(resolved);
+                }
+                self.resolve_generic_assoc_type(inner_concrete_id, &inner_assoc_name)
+            }
+            _ => Some(def_type_id),
         }
     }
 

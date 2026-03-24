@@ -134,13 +134,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // where we temporarily bind e.g. I = StrUtf8ByteIter (concrete struct), and
             // I::Item should resolve to u8 via (StrUtf8ByteIter, "Item") → u8.
             let param_is_concrete = !self.type_table.borrow().contains_type_param(param_type_id);
-            if param_is_concrete
-                && let Some(resolved) = self
+            if param_is_concrete {
+                // First try pre-registered concrete associated type resolution.
+                if let Some(resolved) = self
                     .type_table
                     .borrow()
                     .resolve_assoc_type(param_type_id, &namespaced.name)
-            {
-                return resolved;
+                {
+                    return resolved;
+                }
+                // Fallback: resolve via generic associated type definitions.
+                // This handles GenericInstance types like ArrayIter<i32> whose Iterator impl
+                // is generic — resolve_assoc_type won't find a pre-registered entry, but
+                // resolve_generic_assoc_type can derive i32 from ("ArrayIter", "Item") → TypeParam(0).
+                if let Some(resolved) = self
+                    .type_table
+                    .borrow()
+                    .resolve_generic_assoc_type(param_type_id, &namespaced.name)
+                {
+                    return resolved;
+                }
             }
 
             // First, check if the current bounds directly specify this assoc type.

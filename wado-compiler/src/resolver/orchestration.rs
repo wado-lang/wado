@@ -454,6 +454,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             let _ = logger.error(violation);
         }
 
+        // Pre-pass: register generic associated type defs from ALL modules before any module
+        // is resolved. This ensures that when resolving module X, it can look up associated
+        // types from module Y's impl blocks even if Y hasn't been processed yet in the main
+        // second pass (e.g., user module is sorted before prelude modules).
+        Self::register_all_generic_assoc_type_defs(modules, &type_table);
+
         // Second pass: resolve each module with per-module function_return_types and imports
         for module_source in &sorted_sources {
             let module = modules.get(module_source).expect("module should exist");
@@ -1307,6 +1313,80 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 })
             }
             _ => TypeTable::UNKNOWN,
+        }
+    }
+
+    /// Pre-pass: scan all modules and register `generic_assoc_type_defs` for every
+    /// non-concrete trait impl with associated types. This runs before any module is
+    /// fully resolved so that `find_trait_method_for_type` can look up associated types
+    /// across module boundaries regardless of resolution order.
+    fn register_all_generic_assoc_type_defs(
+        modules: &IndexMap<ModuleSource, Module>,
+        type_table: &Rc<RefCell<TypeTable>>,
+    ) {
+        for module in modules.values() {
+            for item in &module.items {
+                let Item::Impl(impl_block) = item else {
+                    continue;
+                };
+                if impl_block.trait_type.is_none() || impl_block.associated_types.is_empty() {
+                    continue;
+                }
+                // Determine the struct name (base name without type args)
+                let struct_name = Self::get_type_name_static(&impl_block.ty);
+
+                // Build a mapping from type param name to index from the explicit `impl<...>` header.
+                let type_param_idx: IndexMap<String, u32> = impl_block
+                    .type_params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| (p.name.clone(), i as u32))
+                    .collect();
+
+                // Skip impls with no type params (concrete impls are handled differently)
+                if type_param_idx.is_empty() {
+                    continue;
+                }
+
+                for binding in &impl_block.associated_types {
+                    let type_param_id = match &binding.ty {
+                        // Simple case: `type Item = T` — T is a type param
+                        Type::Named(named) => {
+                            if let Some(&idx) = type_param_idx.get(&named.name) {
+                                type_table
+                                    .borrow_mut()
+                                    .make_type_param(named.name.clone(), idx)
+                            } else {
+                                // Not a type param (e.g., a concrete type) — skip
+                                continue;
+                            }
+                        }
+                        // Chained case: `type Item = I::InnerName` — I is a type param
+                        Type::NamespacedGeneric(ns) if ns.args.is_empty() => {
+                            if let Some(&idx) = type_param_idx.get(&ns.namespace) {
+                                let inner_param_id = type_table
+                                    .borrow_mut()
+                                    .make_type_param(ns.namespace.clone(), idx);
+                                type_table
+                                    .borrow_mut()
+                                    .make_assoc_type_projection_simple(
+                                        inner_param_id,
+                                        ns.name.clone(),
+                                    )
+                            } else {
+                                continue;
+                            }
+                        }
+                        _ => continue,
+                    };
+
+                    type_table.borrow_mut().register_generic_assoc_type_def(
+                        struct_name.clone(),
+                        binding.name.clone(),
+                        type_param_id,
+                    );
+                }
+            }
         }
     }
 }

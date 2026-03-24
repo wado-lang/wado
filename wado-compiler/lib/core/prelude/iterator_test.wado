@@ -179,7 +179,7 @@ test "chain with empty" {
 test "zip pairs elements" {
     let a: Array<i32> = [1, 2, 3];
     let b: Array<i32> = [10, 20, 30];
-    let mut iter = a.iter().zip::<i32>(b.iter());
+    let mut iter = a.iter().zip(b.iter());
 
     let first = iter.next();
     assert first matches { Some(pair) && pair.0 == 1 && pair.1 == 10 };
@@ -196,7 +196,7 @@ test "zip pairs elements" {
 test "zip stops at shorter" {
     let a: Array<i32> = [1, 2];
     let b: Array<i32> = [10, 20, 30, 40];
-    let result = a.iter().zip::<i32>(b.iter()).count();
+    let result = a.iter().zip(b.iter()).count();
     assert result == 2;
 }
 

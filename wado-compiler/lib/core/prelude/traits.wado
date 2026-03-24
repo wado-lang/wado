@@ -319,6 +319,121 @@ pub trait Iterator {
     fn map<U>(&self, f: fn(Self::Item) -> U) -> IterMap<Self, U> {
         return IterMap { inner: *self, f };
     }
+
+    /// Reduces elements using an accumulator function, starting from an initial value.
+    fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, Self::Item) -> Acc) -> Acc {
+        let mut acc = init;
+        while let Some(item) = self.next() {
+            acc = f(acc, item);
+        }
+        return acc;
+    }
+
+    /// Returns the first element matching the predicate, or None.
+    fn find(&mut self, pred: fn(Self::Item) -> bool) -> Option<Self::Item> {
+        while let Some(item) = self.next() {
+            if pred(item) {
+                return Option::Some(item);
+            }
+        }
+        return null;
+    }
+
+    /// Returns true if any element satisfies the predicate.
+    fn any(&mut self, pred: fn(Self::Item) -> bool) -> bool {
+        while let Some(item) = self.next() {
+            if pred(item) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Returns true if all elements satisfy the predicate.
+    fn all(&mut self, pred: fn(Self::Item) -> bool) -> bool {
+        while let Some(item) = self.next() {
+            if !pred(item) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Returns the last element, or None if the iterator is empty.
+    fn last(&mut self) -> Option<Self::Item> {
+        let mut result: Option<Self::Item> = null;
+        while let Some(item) = self.next() {
+            result = Option::Some(item);
+        }
+        return result;
+    }
+
+    /// Returns the nth element (0-indexed), or None if out of range.
+    fn nth(&mut self, n: i32) -> Option<Self::Item> {
+        let mut remaining = n;
+        while let Some(item) = self.next() {
+            if remaining <= 0 {
+                return Option::Some(item);
+            }
+            remaining -= 1;
+        }
+        return null;
+    }
+
+    /// Returns the index of the first element satisfying the predicate, or None.
+    fn position(&mut self, pred: fn(Self::Item) -> bool) -> Option<i32> {
+        let mut idx = 0;
+        while let Some(item) = self.next() {
+            if pred(item) {
+                return Option::Some(idx);
+            }
+            idx += 1;
+        }
+        return null;
+    }
+
+    /// Reduces elements to a single value without an initial accumulator.
+    /// Returns None if the iterator is empty.
+    fn reduce(&mut self, f: fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item> {
+        if let Some(first) = self.next() {
+            let mut acc = first;
+            while let Some(item) = self.next() {
+                acc = f(acc, item);
+            }
+            return Option::Some(acc);
+        }
+        return null;
+    }
+
+    /// Returns an iterator that only yields elements matching the predicate.
+    fn filter(&self, pred: fn(Self::Item) -> bool) -> IterFilter<Self> {
+        return IterFilter { inner: *self, pred };
+    }
+
+    /// Returns an iterator that yields (index, element) pairs.
+    fn enumerate(&self) -> IterEnumerate<Self> {
+        return IterEnumerate { inner: *self, count: 0 };
+    }
+
+    /// Returns an iterator that yields at most n elements.
+    fn take(&self, n: i32) -> IterTake<Self> {
+        return IterTake { inner: *self, remaining: n };
+    }
+
+    /// Returns an iterator that skips the first n elements.
+    fn skip(&self, n: i32) -> IterSkip<Self> {
+        return IterSkip { inner: *self, remaining: n };
+    }
+
+    /// Returns an iterator that chains this iterator with another of the same item type.
+    fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J> {
+        return IterChain { first: *self, second: other, first_done: false };
+    }
+
+    /// Returns an iterator that pairs elements from this iterator with another.
+    fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J> {
+        return IterZip { first: *self, second: other };
+    }
 }
 
 /// Generic map iterator adapter that wraps any Iterator.
@@ -343,6 +458,180 @@ impl<I: Iterator, U> IntoIterator for IterMap<I, U> {
     type Iter = IterMap<I, U>;
 
     fn into_iter(&self) -> IterMap<I, U> {
+        return *self;
+    }
+}
+
+/// Generic filter iterator adapter that wraps any Iterator.
+pub struct IterFilter<I: Iterator> {
+    pub inner: I,
+    pub pred: fn(I::Item) -> bool,
+}
+
+impl<I: Iterator> Iterator for IterFilter<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(item) = self.inner.next() {
+                if (self.pred)(item) {
+                    return Option::Some(item);
+                }
+            } else {
+                return null;
+            }
+        }
+    }
+}
+
+impl<I: Iterator> IntoIterator for IterFilter<I> {
+    type Item = I::Item;
+    type Iter = IterFilter<I>;
+
+    fn into_iter(&self) -> IterFilter<I> {
+        return *self;
+    }
+}
+
+/// Generic enumerate iterator adapter that yields (index, element) pairs.
+pub struct IterEnumerate<I: Iterator> {
+    pub inner: I,
+    pub count: i32,
+}
+
+impl<I: Iterator> Iterator for IterEnumerate<I> {
+    type Item = [i32, I::Item];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(item) = self.inner.next() {
+            let idx = self.count;
+            self.count += 1;
+            return Option::Some([idx, item]);
+        }
+        return null;
+    }
+}
+
+impl<I: Iterator> IntoIterator for IterEnumerate<I> {
+    type Item = [i32, I::Item];
+    type Iter = IterEnumerate<I>;
+
+    fn into_iter(&self) -> IterEnumerate<I> {
+        return *self;
+    }
+}
+
+/// Generic take iterator adapter that limits elements from any Iterator.
+pub struct IterTake<I: Iterator> {
+    pub inner: I,
+    pub remaining: i32,
+}
+
+impl<I: Iterator> Iterator for IterTake<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining <= 0 {
+            return null;
+        }
+        self.remaining -= 1;
+        return self.inner.next();
+    }
+}
+
+impl<I: Iterator> IntoIterator for IterTake<I> {
+    type Item = I::Item;
+    type Iter = IterTake<I>;
+
+    fn into_iter(&self) -> IterTake<I> {
+        return *self;
+    }
+}
+
+/// Generic skip iterator adapter that skips elements from any Iterator.
+pub struct IterSkip<I: Iterator> {
+    pub inner: I,
+    pub remaining: i32,
+}
+
+impl<I: Iterator> Iterator for IterSkip<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.remaining > 0 {
+            if let Some(_) = self.inner.next() {
+                self.remaining -= 1;
+            } else {
+                return null;
+            }
+        }
+        return self.inner.next();
+    }
+}
+
+impl<I: Iterator> IntoIterator for IterSkip<I> {
+    type Item = I::Item;
+    type Iter = IterSkip<I>;
+
+    fn into_iter(&self) -> IterSkip<I> {
+        return *self;
+    }
+}
+
+/// Generic chain iterator adapter that chains two iterators of the same item type.
+pub struct IterChain<I: Iterator, J: Iterator> {
+    pub first: I,
+    pub second: J,
+    pub first_done: bool,
+}
+
+impl<I: Iterator, J: Iterator<Item = I::Item>> Iterator for IterChain<I, J> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.first_done {
+            if let Some(item) = self.first.next() {
+                return Option::Some(item);
+            }
+            self.first_done = true;
+        }
+        return self.second.next();
+    }
+}
+
+impl<I: Iterator, J: Iterator<Item = I::Item>> IntoIterator for IterChain<I, J> {
+    type Item = I::Item;
+    type Iter = IterChain<I, J>;
+
+    fn into_iter(&self) -> IterChain<I, J> {
+        return *self;
+    }
+}
+
+/// Generic zip iterator adapter that pairs elements from two iterators.
+pub struct IterZip<I: Iterator, J: Iterator> {
+    pub first: I,
+    pub second: J,
+}
+
+impl<I: Iterator, J: Iterator> Iterator for IterZip<I, J> {
+    type Item = [I::Item, J::Item];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(a) = self.first.next() {
+            if let Some(b) = self.second.next() {
+                return Option::Some([a, b]);
+            }
+        }
+        return null;
+    }
+}
+
+impl<I: Iterator, J: Iterator> IntoIterator for IterZip<I, J> {
+    type Item = [I::Item, J::Item];
+    type Iter = IterZip<I, J>;
+
+    fn into_iter(&self) -> IterZip<I, J> {
         return *self;
     }
 }
