@@ -514,6 +514,244 @@ trait TirMutVisitor {
     }
 }
 
+/// Trait for immutable traversal of TIR trees.
+///
+/// Like `TirMutVisitor` but takes `&TirExpr`/`&TirStmt` instead of `&mut`.
+/// The visitor itself can be `&mut self` to accumulate results (e.g., collecting
+/// instantiation sites).
+trait TirRefVisitor {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        self.walk_expr(expr);
+    }
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        self.walk_stmt(stmt);
+    }
+    fn visit_block(&mut self, block: &TirBlock) {
+        self.walk_block(block);
+    }
+
+    fn walk_block(&mut self, block: &TirBlock) {
+        for stmt in &block.stmts {
+            self.visit_stmt(stmt);
+        }
+    }
+
+    fn walk_stmt(&mut self, stmt: &TirStmt) {
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } => {
+                self.visit_expr(value);
+            }
+            TirStmtKind::Expr(expr) => {
+                self.visit_expr(expr);
+            }
+            TirStmtKind::Return { value } => {
+                if let Some(expr) = value {
+                    self.visit_expr(expr);
+                }
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.visit_expr(condition);
+                self.visit_block(then_block);
+                if let Some(else_blk) = else_block {
+                    self.visit_block(else_blk);
+                }
+            }
+            TirStmtKind::Loop { body } => {
+                self.visit_block(body);
+            }
+            TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    self.visit_expr(v);
+                }
+            }
+            TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.visit_block(block);
+            }
+            TirStmtKind::IfLet {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.visit_expr(scrutinee);
+                self.visit_block(then_block);
+                if let Some(else_blk) = else_block {
+                    self.visit_block(else_blk);
+                }
+            }
+            TirStmtKind::LetDestructure { value, .. } => {
+                self.visit_expr(value);
+            }
+            TirStmtKind::TaskReturn { .. } => {}
+            TirStmtKind::VariadicForOf { iterable, body, .. } => {
+                self.visit_expr(iterable);
+                self.visit_block(body);
+            }
+        }
+    }
+
+    fn walk_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::FuncRef { .. }
+            | TirExprKind::GlobalVarGet { .. }
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.visit_expr(value);
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                self.visit_expr(left);
+                self.visit_expr(right);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            }
+            | TirExprKind::VariantTag { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+                self.visit_expr(inner);
+            }
+            TirExprKind::Assign { target, value }
+            | TirExprKind::Index {
+                expr: target,
+                index: value,
+            } => {
+                self.visit_expr(target);
+                self.visit_expr(value);
+            }
+            TirExprKind::Call { args, .. } => {
+                for arg in args {
+                    self.visit_expr(&arg.expr);
+                }
+            }
+            TirExprKind::CmRawCall { args, .. } => {
+                for arg in args {
+                    self.visit_expr(arg);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.visit_expr(receiver);
+                for arg in args {
+                    self.visit_expr(&arg.expr);
+                }
+            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                self.visit_block(block);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.visit_expr(condition);
+                self.visit_block(then_branch);
+                if let Some(else_blk) = else_branch {
+                    self.visit_block(else_blk);
+                }
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                self.visit_expr(scrutinee);
+                for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.visit_expr(guard);
+                    }
+                    self.visit_expr(&arm.body);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.visit_expr(&field.value);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    self.visit_expr(elem);
+                }
+            }
+            TirExprKind::Closure { body, .. } => {
+                self.visit_expr(body);
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload_expr) = payload {
+                    self.visit_expr(payload_expr);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.visit_expr(callee);
+                for arg in args {
+                    self.visit_expr(arg);
+                }
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.visit_expr(scrutinee);
+                for arm in arms {
+                    self.visit_block(arm);
+                }
+                self.visit_block(default);
+            }
+            TirExprKind::TemplateString { parts } => {
+                for part in parts {
+                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                        self.visit_expr(inner);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Collects function instantiation sites by traversing TIR with `TirRefVisitor`.
+///
+/// Replaces the manual recursive traversal in `collect_func_instantiation_sites_in_*`
+/// with visitor-based traversal. The visitor's `walk_expr`/`walk_stmt` handles
+/// recursion into all TIR node kinds automatically, so only Call and MethodCall
+/// need custom handling.
+struct InstantiationCollector<'a> {
+    mono: &'a mut Monomorphizer,
+    generic_functions: &'a IndexMap<String, Rc<RefCell<TirFunction>>>,
+    type_table: &'a TypeTable,
+}
+
+impl TirRefVisitor for InstantiationCollector<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        // Handle Call and MethodCall instantiation logic
+        self.mono.collect_func_instantiation_sites_in_expr(
+            expr,
+            self.generic_functions,
+            self.type_table,
+        );
+        // Recurse into all sub-expressions via walk_expr
+        self.walk_expr(expr);
+    }
+}
+
 /// Tracks struct monomorphization state
 struct StructInstState {
     /// Map from (`generic_name`, `type_args`) to mangled name
@@ -726,11 +964,13 @@ impl Monomorphizer {
                 // This handles transitive monomorphization (e.g., a generic method calling
                 // another generic method on self, like sort() -> sort_by())
                 if let Some(body) = &concrete.body {
-                    self.collect_func_instantiation_sites_in_block(
-                        body,
-                        &scannable_generic_functions,
-                        &module.type_table.borrow(),
-                    );
+                    let type_table = module.type_table.borrow();
+                    let mut collector = InstantiationCollector {
+                        mono: self,
+                        generic_functions: &scannable_generic_functions,
+                        type_table: &type_table,
+                    };
+                    collector.visit_block(body);
                 }
                 new_functions.push(Rc::new(RefCell::new(concrete)));
             }
@@ -1226,12 +1466,18 @@ impl Monomorphizer {
         }
     }
 
-    /// Collect function instantiation sites from Call/MethodCall/StaticCall expressions
+    /// Collect function instantiation sites from Call/MethodCall expressions
     fn collect_function_instantiation_sites(
         &mut self,
         module: &TirModule,
         generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     ) {
+        let type_table = module.type_table.borrow();
+        let mut collector = InstantiationCollector {
+            mono: self,
+            generic_functions,
+            type_table: &type_table,
+        };
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             // Skip generic functions - their bodies contain TypeParam references that
@@ -1243,134 +1489,13 @@ impl Monomorphizer {
                 continue;
             }
             if let Some(body) = &func.body {
-                self.collect_func_instantiation_sites_in_block(
-                    body,
-                    generic_functions,
-                    &module.type_table.borrow(),
-                );
+                collector.visit_block(body);
             }
         }
 
         // Also scan global variable initializers for function instantiation sites
         for global in &module.globals {
-            self.collect_func_instantiation_sites_in_expr(
-                &global.initializer,
-                generic_functions,
-                &module.type_table.borrow(),
-            );
-        }
-    }
-
-    fn collect_func_instantiation_sites_in_block(
-        &mut self,
-        block: &TirBlock,
-        generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
-        type_table: &TypeTable,
-    ) {
-        for stmt in &block.stmts {
-            self.collect_func_instantiation_sites_in_stmt(stmt, generic_functions, type_table);
-        }
-    }
-
-    fn collect_func_instantiation_sites_in_stmt(
-        &mut self,
-        stmt: &TirStmt,
-        generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
-        type_table: &TypeTable,
-    ) {
-        match &stmt.kind {
-            TirStmtKind::Let { value, .. } => {
-                self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
-            }
-            TirStmtKind::Expr(expr) => {
-                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
-            }
-            TirStmtKind::Return { value } => {
-                if let Some(expr) = value {
-                    self.collect_func_instantiation_sites_in_expr(
-                        expr,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    condition,
-                    generic_functions,
-                    type_table,
-                );
-                self.collect_func_instantiation_sites_in_block(
-                    then_block,
-                    generic_functions,
-                    type_table,
-                );
-                if let Some(else_blk) = else_block {
-                    self.collect_func_instantiation_sites_in_block(
-                        else_blk,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirStmtKind::Loop { body } => {
-                self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
-            }
-            TirStmtKind::Break { value, .. } => {
-                if let Some(v) = value {
-                    self.collect_func_instantiation_sites_in_expr(v, generic_functions, type_table);
-                }
-            }
-            TirStmtKind::Continue => {}
-            TirStmtKind::LabeledBlock { block, .. } => {
-                self.collect_func_instantiation_sites_in_block(
-                    block,
-                    generic_functions,
-                    type_table,
-                );
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    scrutinee,
-                    generic_functions,
-                    type_table,
-                );
-                self.collect_func_instantiation_sites_in_block(
-                    then_block,
-                    generic_functions,
-                    type_table,
-                );
-                if let Some(else_blk) = else_block {
-                    self.collect_func_instantiation_sites_in_block(
-                        else_blk,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirStmtKind::LetDestructure { value, .. } => {
-                self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
-            }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
-            TirStmtKind::VariadicForOf { iterable, body, .. } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    iterable,
-                    generic_functions,
-                    type_table,
-                );
-                self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
-            }
+            collector.visit_expr(&global.initializer);
         }
     }
 
@@ -1816,230 +1941,8 @@ impl Monomorphizer {
                     self.try_queue_function(key, mangled);
                 }
 
-                self.collect_func_instantiation_sites_in_expr(
-                    receiver,
-                    generic_functions,
-                    type_table,
-                );
-                for arg in args {
-                    self.collect_func_instantiation_sites_in_expr(
-                        &arg.expr,
-                        generic_functions,
-                        type_table,
-                    );
-                }
             }
-            TirExprKind::CmRawCall { args, .. } => {
-                for arg in args {
-                    self.collect_func_instantiation_sites_in_expr(
-                        arg,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.collect_func_instantiation_sites_in_expr(left, generic_functions, type_table);
-                self.collect_func_instantiation_sites_in_expr(right, generic_functions, type_table);
-            }
-            TirExprKind::Unary { expr: inner, .. } => {
-                self.collect_func_instantiation_sites_in_expr(inner, generic_functions, type_table);
-            }
-            TirExprKind::Block(block) => {
-                self.collect_func_instantiation_sites_in_block(
-                    block,
-                    generic_functions,
-                    type_table,
-                );
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    condition,
-                    generic_functions,
-                    type_table,
-                );
-                self.collect_func_instantiation_sites_in_block(
-                    then_branch,
-                    generic_functions,
-                    type_table,
-                );
-                if let Some(else_blk) = else_branch {
-                    self.collect_func_instantiation_sites_in_block(
-                        else_blk,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    self.collect_func_instantiation_sites_in_expr(
-                        elem,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirExprKind::Assign { target, value } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    target,
-                    generic_functions,
-                    type_table,
-                );
-                self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
-            }
-            TirExprKind::Cast { expr: inner, .. } => {
-                self.collect_func_instantiation_sites_in_expr(inner, generic_functions, type_table);
-            }
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
-                self.collect_func_instantiation_sites_in_expr(inner, generic_functions, type_table);
-            }
-            TirExprKind::Index { expr: array, index } => {
-                self.collect_func_instantiation_sites_in_expr(array, generic_functions, type_table);
-                self.collect_func_instantiation_sites_in_expr(index, generic_functions, type_table);
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    scrutinee,
-                    generic_functions,
-                    type_table,
-                );
-                for arm in arms {
-                    if let Some(guard) = &arm.guard {
-                        self.collect_func_instantiation_sites_in_expr(
-                            guard,
-                            generic_functions,
-                            type_table,
-                        );
-                    }
-                    self.collect_func_instantiation_sites_in_expr(
-                        &arm.body,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirExprKind::Closure { body, .. } => {
-                self.collect_func_instantiation_sites_in_expr(body, generic_functions, type_table);
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.collect_func_instantiation_sites_in_expr(
-                        &field.value,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    callee,
-                    generic_functions,
-                    type_table,
-                );
-                for arg in args {
-                    self.collect_func_instantiation_sites_in_expr(
-                        arg,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    functor,
-                    generic_functions,
-                    type_table,
-                );
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(payload_expr) = payload {
-                    self.collect_func_instantiation_sites_in_expr(
-                        payload_expr,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                self.collect_func_instantiation_sites_in_block(
-                    block,
-                    generic_functions,
-                    type_table,
-                );
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
-            }
-            TirExprKind::VariantTag { expr } => {
-                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
-            }
-            TirExprKind::VariantTest { expr, .. } => {
-                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
-            }
-            TirExprKind::VariantPayload { expr, .. } => {
-                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.collect_func_instantiation_sites_in_expr(
-                    scrutinee,
-                    generic_functions,
-                    type_table,
-                );
-                for arm in arms {
-                    self.collect_func_instantiation_sites_in_block(
-                        arm,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-                self.collect_func_instantiation_sites_in_block(
-                    default,
-                    generic_functions,
-                    type_table,
-                );
-            }
-            TirExprKind::TemplateString { parts } => {
-                for part in parts {
-                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                        self.collect_func_instantiation_sites_in_expr(
-                            inner,
-                            generic_functions,
-                            type_table,
-                        );
-                    }
-                }
-            }
-            // Literals and simple expressions
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => {}
+            _ => {}
         }
     }
 
