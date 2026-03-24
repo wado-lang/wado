@@ -1367,12 +1367,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 let inner_param_id = type_table
                                     .borrow_mut()
                                     .make_type_param(ns.namespace.clone(), idx);
-                                type_table
-                                    .borrow_mut()
-                                    .make_assoc_type_projection_simple(
-                                        inner_param_id,
-                                        ns.name.clone(),
-                                    )
+                                type_table.borrow_mut().make_assoc_type_projection_simple(
+                                    inner_param_id,
+                                    ns.name.clone(),
+                                )
                             } else {
                                 continue;
                             }

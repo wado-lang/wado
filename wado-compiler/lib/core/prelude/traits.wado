@@ -330,7 +330,7 @@ pub trait Iterator {
         return acc;
     }
 
-    /// Returns the first element for which `pred` returns true, consuming elements up to that point.
+    /// Returns the first element for which `pred` returns true, advancing the iterator up to that point.
     fn find(&mut self, pred: fn(Self::Item) -> bool) -> Option<Self::Item> {
         while let Some(item) = self.next() {
             if pred(item) {
@@ -341,7 +341,7 @@ pub trait Iterator {
     }
 
     /// Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
-    /// Short-circuits: stops consuming the iterator as soon as a matching element is found.
+    /// Short-circuits: stops advancing the iterator as soon as a matching element is found.
     fn any(&mut self, pred: fn(Self::Item) -> bool) -> bool {
         while let Some(item) = self.next() {
             if pred(item) {
@@ -352,7 +352,7 @@ pub trait Iterator {
     }
 
     /// Returns true if `pred` returns true for every element (∀). True for empty iterators.
-    /// Short-circuits: stops consuming the iterator as soon as a non-matching element is found.
+    /// Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
     fn all(&mut self, pred: fn(Self::Item) -> bool) -> bool {
         while let Some(item) = self.next() {
             if !pred(item) {
@@ -362,7 +362,7 @@ pub trait Iterator {
         return true;
     }
 
-    /// Consumes the entire iterator and returns the last element, or None if empty.
+    /// Advances the entire iterator and returns the last element, or None if empty.
     fn last(&mut self) -> Option<Self::Item> {
         let mut result: Option<Self::Item> = null;
         while let Some(item) = self.next() {
@@ -371,7 +371,7 @@ pub trait Iterator {
         return result;
     }
 
-    /// Returns the nth element (0-indexed), consuming elements up to and including it.
+    /// Returns the nth element (0-indexed), advancing the iterator up to and including it.
     fn nth(&mut self, n: i32) -> Option<Self::Item> {
         let mut remaining = n;
         while let Some(item) = self.next() {

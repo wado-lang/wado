@@ -849,9 +849,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Substitute type parameters using a TypeId-to-TypeId map.
     /// Unlike `substitute_type_params` (which substitutes by index), this only
-    /// replaces TypeIds that are explicitly in the map, leaving all others unchanged.
+    /// replaces `TypeIds` that are explicitly in the map, leaving all others unchanged.
     /// This is used in struct literal field type fixup to avoid incorrectly replacing
-    /// impl-scope TypeParams that share the same index as the struct's own TypeParams.
+    /// impl-scope `TypeParams` that share the same index as the struct's own `TypeParams`.
     pub(super) fn substitute_type_params_by_map(
         &mut self,
         type_id: TypeId,
@@ -903,9 +903,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if new_args == inner_args {
                     type_id
                 } else {
-                    self.type_table
-                        .borrow_mut()
-                        .make_generic_instance(name, module_source, new_args)
+                    self.type_table.borrow_mut().make_generic_instance(
+                        name,
+                        module_source,
+                        new_args,
+                    )
                 }
             }
             ResolvedType::Tuple(elems) => {
@@ -2133,8 +2135,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 fields
                     .into_iter()
                     .map(|mut field| {
-                        field.value.type_id =
-                            self.substitute_type_params_by_map(field.value.type_id, &struct_param_map);
+                        field.value.type_id = self
+                            .substitute_type_params_by_map(field.value.type_id, &struct_param_map);
                         field
                     })
                     .collect()
