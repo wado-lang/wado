@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774370543322,
+  "lastUpdate": 1774386716421,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6965,6 +6965,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9cbcd00b7546f12af57c98940e17de5ed051d2b5"
         },
         "date": 1774370543112,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "81b7c2bc1b53d241d450ab6cb64c22743290cca8",
+          "message": "Merge pull request #682 from wado-lang/claude/test-sqlite-parser-KFr00\n\nFix gale codegen bugs and add SQLite parser tests",
+          "timestamp": "2026-03-25T06:09:23+09:00",
+          "tree_id": "368579f5ead74ae60f27d5b376103f116355f6fa",
+          "url": "https://github.com/wado-lang/wado/commit/81b7c2bc1b53d241d450ab6cb64c22743290cca8"
+        },
+        "date": 1774386716253,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
