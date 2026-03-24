@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774366241550,
+  "lastUpdate": 1774367391778,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6848,6 +6848,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/15004c885caad74eea4e1a0fa96e83c57a41c449"
         },
         "date": 1774366241339,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "21a8f41fdbc63ad39bed2c6b749d7287a4f4b125",
+          "message": "Merge pull request #679 from wado-lang/claude/ref-equality-comparison-HIPB1\n\nImplement reference equality using ref.eq for identity comparison",
+          "timestamp": "2026-03-25T00:41:07+09:00",
+          "tree_id": "905ff45920b1f4e6bc377512f492128f09a44d8f",
+          "url": "https://github.com/wado-lang/wado/commit/21a8f41fdbc63ad39bed2c6b749d7287a4f4b125"
+        },
+        "date": 1774367391589,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
