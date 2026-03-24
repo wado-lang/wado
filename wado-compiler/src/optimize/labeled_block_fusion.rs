@@ -405,23 +405,27 @@ fn check_fusion_preconditions(let_stmt: &TirStmt, if_stmt: &TirStmt) -> Option<F
         return None;
     }
 
-    // --- THEN/ELSE blocks must not contain free unlabeled break/continue ---
+    // --- THEN/ELSE blocks must not contain free unlabeled break/continue
+    //     when the labeled block being fused contains a loop ---
     //
-    // Fusion clones the THEN and ELSE blocks into a new nesting position that
-    // may be deeper (e.g., inside the inner loop of an inlined iterator). An
-    // unlabeled `break;` or `continue` targets the *innermost* enclosing loop,
-    // so if the block is cloned inside an extra `loop {}`, the break/continue
-    // would target the wrong loop and produce incorrect control flow.
+    // Fusion clones THEN and ELSE into the labeled block's nesting context.
+    // An unlabeled `break;` or `continue` targets the *innermost* enclosing
+    // loop. If `lb_block` contains a loop, fusion places THEN/ELSE inside a
+    // deeper loop nesting, so an unlabeled break/continue would target the
+    // wrong loop (e.g., IterFilter's inner `loop {}` instead of the outer
+    // collect loop), producing incorrect control flow.
     //
-    // A "free" break/continue is one NOT nested inside a `loop {}` within the
-    // block itself — those are safe because they target a loop inside the block.
-    if block_has_free_unlabeled_loop_exit(then_block) {
-        return None;
-    }
-    if let Some(eb) = else_block
-        && block_has_free_unlabeled_loop_exit(eb)
-    {
-        return None;
+    // If `lb_block` has no loops (e.g., StrUtf8ByteIter::next), fusion does
+    // not add any loop nesting, so unlabeled breaks remain safe.
+    if block_contains_loop(lb_block) {
+        if block_has_free_unlabeled_loop_exit(then_block) {
+            return None;
+        }
+        if let Some(eb) = else_block
+            && block_has_free_unlabeled_loop_exit(eb)
+        {
+            return None;
+        }
     }
 
     Some(FusionInfo {
@@ -1704,6 +1708,51 @@ fn subst_variant_payload_in_expr(
             subst_variant_payload_in_expr(body, temp_local, case_index, payload_local);
         }
         _ => {}
+    }
+}
+
+/// Returns `true` if `block` contains a `Loop` statement at any nesting depth.
+///
+/// This is used to determine whether labeled_block_fusion would introduce a
+/// new loop nesting that could confuse free unlabeled `break`/`continue` in
+/// the THEN/ELSE blocks being merged.
+fn block_contains_loop(block: &TirBlock) -> bool {
+    block.stmts.iter().any(stmt_contains_loop)
+}
+
+fn stmt_contains_loop(stmt: &TirStmt) -> bool {
+    match &stmt.kind {
+        TirStmtKind::Loop { .. } => true,
+        TirStmtKind::LabeledBlock { block, .. } => block.stmts.iter().any(stmt_contains_loop),
+        TirStmtKind::If {
+            then_block,
+            else_block,
+            ..
+        }
+        | TirStmtKind::IfLet {
+            then_block,
+            else_block,
+            ..
+        } => {
+            then_block.stmts.iter().any(stmt_contains_loop)
+                || else_block
+                    .as_ref()
+                    .is_some_and(|b| b.stmts.iter().any(stmt_contains_loop))
+        }
+        TirStmtKind::Let { value, .. }
+        | TirStmtKind::LetDestructure { value, .. }
+        | TirStmtKind::Expr(value)
+        | TirStmtKind::Return { value: Some(value) } => expr_contains_loop(value),
+        _ => false,
+    }
+}
+
+fn expr_contains_loop(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            block.stmts.iter().any(stmt_contains_loop)
+        }
+        _ => false,
     }
 }
 
