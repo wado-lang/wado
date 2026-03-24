@@ -211,6 +211,10 @@ fn gen_lexer_elem(
         return;
     }
     if let RuleRef(name) = *elem {
+        if name == "EOF" {
+            out.append(`{indent}if pos < chars.len() \{ {fail_action}; \}\n`);
+            return;
+        }
         let frag = find_fragment(all_rules, &name);
         if let Some(f) = frag {
             if f.body.len() == 1 {

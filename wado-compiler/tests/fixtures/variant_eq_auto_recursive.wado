@@ -1,0 +1,48 @@
+variant Node {
+    Leaf(i32),
+    Branch(BranchData),
+}
+
+struct BranchData {
+    left: Node,
+    right: Node,
+}
+
+test "recursive variant eq" {
+    let a = Node::Branch(BranchData {
+        left: Node::Leaf(1),
+        right: Node::Leaf(2),
+    });
+    let b = Node::Branch(BranchData {
+        left: Node::Leaf(1),
+        right: Node::Leaf(2),
+    });
+    assert a == b;
+
+    let c = Node::Branch(BranchData {
+        left: Node::Leaf(1),
+        right: Node::Leaf(3),
+    });
+    assert !(a == c);
+}
+
+test "recursive variant eq nested" {
+    let a = Node::Branch(BranchData {
+        left: Node::Branch(BranchData {
+            left: Node::Leaf(10),
+            right: Node::Leaf(20),
+        }),
+        right: Node::Leaf(30),
+    });
+    let b = Node::Branch(BranchData {
+        left: Node::Branch(BranchData {
+            left: Node::Leaf(10),
+            right: Node::Leaf(20),
+        }),
+        right: Node::Leaf(30),
+    });
+    assert a == b;
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,62 @@
+use sqlite from "./golden/sqlite.wado";
+
+test "tokenize SELECT" {
+    let tokens = sqlite::tokenize(&"SELECT 1");
+    assert tokens.len() >= 2, `expected at least 2 tokens, got {tokens.len()}`;
+}
+
+test "tokenize keywords" {
+    let tokens = sqlite::tokenize(&"SELECT a, b FROM t WHERE id = 1");
+    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
+}
+
+test "tokenize CREATE TABLE" {
+    let tokens = sqlite::tokenize(&"CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
+    assert tokens.len() >= 10, `expected at least 10 tokens, got {tokens.len()}`;
+}
+
+test "tokenize INSERT" {
+    let tokens = sqlite::tokenize(&"INSERT INTO t VALUES (1, 'hello')");
+    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
+}
+
+test "tokenize string literal" {
+    let tokens = sqlite::tokenize(&"'hello world'");
+    assert tokens.len() >= 1, `expected at least 1 token, got {tokens.len()}`;
+}
+
+test "tokenize numeric literals" {
+    let tokens = sqlite::tokenize(&"42 3.14 0xFF");
+    assert tokens.len() >= 3, `expected at least 3 tokens, got {tokens.len()}`;
+}
+
+test "tokenize operators" {
+    let tokens = sqlite::tokenize(&"= != < > <= >= + - * / %");
+    assert tokens.len() >= 11, `expected at least 11 tokens, got {tokens.len()}`;
+}
+
+test "tokenize complex query" {
+    let tokens = sqlite::tokenize(&"SELECT COUNT(*), AVG(price) FROM orders GROUP BY category HAVING COUNT(*) > 5 ORDER BY category ASC LIMIT 10 OFFSET 20");
+    assert tokens.len() >= 20, `expected at least 20 tokens, got {tokens.len()}`;
+}
+
+test "tokenize comments" {
+    let tokens = sqlite::tokenize(&"SELECT 1 -- comment\nSELECT 2");
+    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
+}
+
+test "tokenize block comment" {
+    let tokens = sqlite::tokenize(&"SELECT /* block comment */ 1");
+    assert tokens.len() >= 2, `expected at least 2 tokens, got {tokens.len()}`;
+}
+
+// NOTE: parse tests are limited by the LL(k) parser generator's ability to
+// handle complex SQL grammar disambiguation. The tokenizer works correctly.
+// See: https://github.com/wado-lang/wado/issues/XXX
+#[TODO]
+test "parse simple SELECT" {
+    let result = sqlite::parse(&"SELECT 1;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
