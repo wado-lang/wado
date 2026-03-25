@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774474849593,
+  "lastUpdate": 1774478055784,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7472,6 +7472,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/496ef2fbb4bedb84034d5687661e5ec1235aecab"
         },
         "date": 1774474849380,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c25fe5ae261cad92deac398a60d813ca2c1ac008",
+          "message": "Merge pull request #696 from wado-lang/claude/contextual-of-keyword-LgLmx\n\nAdd support for 'of' as a contextual keyword",
+          "timestamp": "2026-03-26T07:31:39+09:00",
+          "tree_id": "018a816b7feda5443a8e8d67767b98c469f0afd8",
+          "url": "https://github.com/wado-lang/wado/commit/c25fe5ae261cad92deac398a60d813ca2c1ac008"
+        },
+        "date": 1774478055565,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
