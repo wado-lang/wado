@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774474772029,
+  "lastUpdate": 1774474849593,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7433,6 +7433,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fdf532ffdbad36e05a8d942352b9b0467fe3d910"
         },
         "date": 1774474771837,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "496ef2fbb4bedb84034d5687661e5ec1235aecab",
+          "message": "Merge pull request #692 from wado-lang/claude/create-wado-codegen-Fvi62\n\nAdd WadoPoet: KotlinPoet-style code generation library",
+          "timestamp": "2026-03-26T06:38:20+09:00",
+          "tree_id": "06c0983e7b27d2bd64af9829f50d75fe54ac4530",
+          "url": "https://github.com/wado-lang/wado/commit/496ef2fbb4bedb84034d5687661e5ec1235aecab"
+        },
+        "date": 1774474849380,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
