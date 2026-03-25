@@ -148,11 +148,14 @@ fn gen_parse_fn(
         }
         out.append("}\n\n");
 
+        // Emit LR suffix handler functions
+        gen_lr_suffix_helpers(out, rule, &type_name, &lr_indices, all_rules, lit_tokens);
+
         // Emit main parse function with suffix loop
         out.append(`fn {fn_name}(p: &mut Parser) -> Result<{type_name}, ParseError> \{\n`);
         out.append("    let start = p.peek().span.start;\n");
         out.append(`    let mut result = {fn_name}_atom(p)?;\n`);
-        gen_lr_suffix_loop(out, rule, &type_name, &lr_indices, all_rules, lit_tokens);
+        gen_lr_suffix_dispatch(out, rule, &type_name, &lr_indices, all_rules, lit_tokens);
         out.append(`    return Result::<{type_name}, ParseError>::Ok(result);\n`);
         out.append("}\n\n");
     } else {
@@ -971,7 +974,7 @@ fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
     return true;
 }
 
-fn gen_lr_suffix_loop(
+fn gen_lr_suffix_helpers(
     out: &mut String,
     rule: &ParserRule,
     type_name: &String,
@@ -982,6 +985,67 @@ fn gen_lr_suffix_loop(
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
 
+    // Emit suffix handler functions (one per LR alternative)
+    for let lr_idx_ref of lr_indices {
+        let lr_idx = *lr_idx_ref;
+        let alt = &rule.alternatives[lr_idx];
+        if alt.elements.len() <= 1 { continue; }
+
+        let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{lr_idx}` };
+        let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+        let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+
+        out.append(`fn {suffix_fn}(p: &mut Parser, left: {type_name}, start: i32) -> Result<{type_name}, ParseError> \{\n`);
+
+        let indent = "    ";
+        let mut name_counts: Array<[String, i32]> = [];
+        dedup_name(&to_snake_case(&rule.name), &mut name_counts);
+
+        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+            let elem = &alt.elements[ei];
+            if let RuleRef(name) = *elem {
+                if name == rule.name {
+                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
+                    out.append(`{indent}let {field_name} = {fn_name}(p)?;\n`);
+                } else {
+                    let elem_fn = `parse_{to_snake_case(&name)}`;
+                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
+                    out.append(`{indent}let {field_name} = {elem_fn}(p)?;\n`);
+                }
+            } else if let Group(_) = *elem {
+                let discard = dedup_name(&"op_tok", &mut name_counts);
+                out.append(`{indent}let {discard} = p.advance();\n`);
+            } else if let Repeat(rep) = *elem {
+                gen_repeat(out, &rep, all_rules, lit_tokens, indent, &mut name_counts);
+            } else {
+                gen_element(out, elem, all_rules, lit_tokens, indent, true, &mut name_counts);
+            }
+        }
+
+        out.append(`{indent}return Result::<{type_name}, ParseError>::Ok({type_name}::{case_name}({sname} \{\n`);
+        out.append(`{indent}    span: Span::new(start, p.last_end()),\n`);
+        let first_field = to_snake_case(&rule.name);
+        out.append(`{indent}    {first_field}: left,\n`);
+        let mut field_counts: Array<[String, i32]> = [];
+        dedup_name(&to_snake_case(&rule.name), &mut field_counts);
+        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+            gen_field_assignment(out, &alt.elements[ei], &mut field_counts, indent);
+        }
+        out.append(`{indent}\}));\n`);
+        out.append("}\n\n");
+    }
+
+}
+
+fn gen_lr_suffix_dispatch(
+    out: &mut String,
+    rule: &ParserRule,
+    type_name: &String,
+    lr_indices: &Array<i32>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+    let fn_name = `parse_{to_snake_case(&rule.name)}`;
     out.append("    loop {\n");
     out.append("        let suffix_kind = p.peek_kind();\n");
 
@@ -989,14 +1053,14 @@ fn gen_lr_suffix_loop(
     for let lr_idx_ref of lr_indices {
         let lr_idx = *lr_idx_ref;
         let alt = &rule.alternatives[lr_idx];
-        // Suffix elements are everything after the first element (the self-reference)
-        // Compute FIRST of elements[1]
+        if alt.elements.len() <= 1 { continue; }
+
         let mut suffix_first: Array<String> = [];
-        if alt.elements.len() > 1 {
-            let mut visiting: Array<String> = [];
-            suffix_first = first_of_element(&alt.elements[1], all_rules, lit_tokens, &mut visiting);
-        }
+        let mut visiting: Array<String> = [];
+        suffix_first = first_of_element(&alt.elements[1], all_rules, lit_tokens, &mut visiting);
         if suffix_first.len() == 0 { continue; }
+
+        let suffix_fn = `{fn_name}_lr_{lr_idx}`;
 
         if is_first {
             out.append("        if ");
@@ -1009,48 +1073,7 @@ fn gen_lr_suffix_loop(
             out.append(`suffix_kind == {suffix_first[j]}`);
         }
         out.append(" {\n");
-
-        // Parse suffix elements (elements[1..]) and construct result
-        let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{lr_idx}` };
-        let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
-        let indent = "            ";
-
-        // Parse each suffix element
-        let mut name_counts: Array<[String, i32]> = [];
-        // Account for first element "expr" in name counting
-        dedup_name(&to_snake_case(&rule.name), &mut name_counts);
-
-        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
-            let elem = &alt.elements[ei];
-            if let RuleRef(name) = *elem {
-                if name == rule.name {
-                    // Self-reference in suffix: call the FULL parser (not atom)
-                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
-                    out.append(`{indent}let {field_name} = {fn_name}(p)?;\n`);
-                } else {
-                    let elem_fn = `parse_{to_snake_case(&name)}`;
-                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
-                    out.append(`{indent}let {field_name} = {elem_fn}(p)?;\n`);
-                }
-            } else {
-                gen_element(out, elem, all_rules, lit_tokens, indent, true, &mut name_counts);
-            }
-        }
-
-        // Construct the variant
-        out.append(`{indent}result = {type_name}::{case_name}({sname} \{\n`);
-        out.append(`{indent}    span: Span::new(start, p.last_end()),\n`);
-        // First field is the left operand (self-reference)
-        let first_field = to_snake_case(&rule.name);
-        out.append(`{indent}    {first_field}: result,\n`);
-        // Remaining fields from suffix elements
-        let mut field_counts: Array<[String, i32]> = [];
-        dedup_name(&to_snake_case(&rule.name), &mut field_counts);
-        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
-            gen_field_assignment(out, &alt.elements[ei], &mut field_counts, indent);
-        }
-        out.append(`{indent}\});\n`);
-
+        out.append(`            result = {suffix_fn}(p, result, start)?;\n`);
         out.append("        }");
     }
 

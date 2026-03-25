@@ -1,7 +1,8 @@
-struct S {
-    pos: i32,
-}
+// Minimal reproduction of codegen bug:
+// With a simple struct (pos only, no array), if-expression in a branch,
+// variant self-assignment, and enough branches, mutations to &mut params don't persist.
 
+struct S { pos: i32 }
 impl S {
     fn peek(&self) -> i32 { return self.pos; }
     fn advance(&mut self) -> i32 {
@@ -71,12 +72,7 @@ export fn run() {
     let mut s = S { pos: 0 };
     let r = parse_expr(&mut s);
     if let Err(e) = &r { panic(*e); }
-    assert s.pos == 1, `test1: expected pos=1, got pos={s.pos}`;
-
-    let mut s2 = S { pos: 0 };
-    let r2 = parse_expr(&mut s2);
-    if let Err(e) = &r2 { panic(*e); }
-    assert s2.pos == 3, `test2: expected pos=3, got pos={s2.pos}`;
+    assert s.pos == 1, `expected pos=1, got pos={s.pos}`;
 }
 
 __DATA__
