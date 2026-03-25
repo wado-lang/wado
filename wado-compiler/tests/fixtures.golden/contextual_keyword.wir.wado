@@ -117,53 +117,87 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout {
-    let __local_4: ref Array<i32>;
+    let __local_6: ref Array<i32>;
     let arr: ref Array<i32>;
-    let __iter_6: ref "core:allocator/ArrayIter<i32>";
+    let __iter_8: ref "core:allocator/ArrayIter<i32>";
     let flags: i32;
-    let __local_8: ref String;
-    let __local_9: ref Formatter;
-    let __local_10: ref String;
-    let __local_11: ref Formatter;
+    let __iter_10: ref "core:allocator/ArrayIter<i32>";
+    let of: i32;
     let __local_12: ref String;
     let __local_13: ref Formatter;
+    let __local_14: ref String;
+    let __local_15: ref Formatter;
+    let __local_16: ref String;
+    let __local_17: ref Formatter;
+    let __local_18: ref String;
+    let __local_19: ref Formatter;
+    let __local_20: ref String;
+    let __local_21: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
-        __local_8 = String { repr: builtin::array_new<u8>(31), used: 0 };
-        String::append(__local_8, String { repr: array.new_data<u8>("flags + type = "), used: 15 });
-        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
-        i32::fmt_decimal(30, __local_9);
-        break __tmpl: __local_8;
+        __local_12 = String { repr: builtin::array_new<u8>(36), used: 0 };
+        String::append(__local_12, String { repr: array.new_data<u8>("flags + type + of = "), used: 20 });
+        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+        i32::fmt_decimal(60, __local_13);
+        break __tmpl: __local_12;
     });
     "core:cli/println"(__tmpl: block -> ref String {
-        __local_10 = String { repr: builtin::array_new<u8>(36), used: 0 };
-        String::append(__local_10, String { repr: array.new_data<u8>("test_param result = "), used: 20 });
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
-        i32::fmt_decimal(30, __local_11);
-        break __tmpl: __local_10;
+        __local_14 = String { repr: builtin::array_new<u8>(36), used: 0 };
+        String::append(__local_14, String { repr: array.new_data<u8>("test_param result = "), used: 20 });
+        __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
+        i32::fmt_decimal(60, __local_15);
+        break __tmpl: __local_14;
+    });
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_16 = String { repr: builtin::array_new<u8>(26), used: 0 };
+        String::append(__local_16, String { repr: array.new_data<u8>("item.of = "), used: 10 });
+        __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
+        i32::fmt_decimal(42, __local_17);
+        break __tmpl: __local_16;
     });
     arr = __seq_lit: block -> ref Array<i32> {
-        __local_4 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-        break __seq_lit: __local_4;
+        __local_6 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+        break __seq_lit: __local_6;
     };
-    __iter_6 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
+    __iter_8 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_6);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_8);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 flags = __sroa___pattern_temp_0_payload_0;
                 "core:cli/println"(__tmpl: block -> ref String {
-                    __local_12 = String { repr: builtin::array_new<u8>(31), used: 0 };
-                    String::append(__local_12, String { repr: array.new_data<u8>("for-of flags = "), used: 15 });
-                    __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
-                    i32::fmt_decimal(flags, __local_13);
-                    break __tmpl: __local_12;
+                    __local_18 = String { repr: builtin::array_new<u8>(31), used: 0 };
+                    String::append(__local_18, String { repr: array.new_data<u8>("for-of flags = "), used: 15 });
+                    __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
+                    i32::fmt_decimal(flags, __local_19);
+                    break __tmpl: __local_18;
                 });
             } else {
                 break b0;
             };
             continue l1;
+        };
+    };
+    __iter_10 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
+    b3: block {
+        l4: loop {
+            let __sroa___pattern_temp_1_discriminant: i32;
+            let __sroa___pattern_temp_1_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<i32>^Iterator::next(__iter_10);
+            if __sroa___pattern_temp_1_discriminant == 0 {
+                of = __sroa___pattern_temp_1_payload_0;
+                "core:cli/println"(__tmpl: block -> ref String {
+                    __local_20 = String { repr: builtin::array_new<u8>(28), used: 0 };
+                    String::append(__local_20, String { repr: array.new_data<u8>("for-of of = "), used: 12 });
+                    __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
+                    i32::fmt_decimal(of, __local_21);
+                    break __tmpl: __local_20;
+                });
+            } else {
+                break b3;
+            };
+            continue l4;
         };
     };
 }
@@ -214,13 +248,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l5: loop {
+            l8: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l5;
+                continue l8;
             };
         };
     };
@@ -300,13 +334,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l11: loop {
+            l14: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l11;
+                continue l14;
             };
         };
     };
@@ -323,14 +357,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l15: loop {
+                l18: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l15;
+                    continue l18;
                 };
             };
         };
@@ -472,13 +506,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l29: loop {
+            l32: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l29;
+                continue l32;
             };
         };
     };
@@ -492,13 +526,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l32: loop {
+            l35: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l32;
+                continue l35;
             };
         };
     };
