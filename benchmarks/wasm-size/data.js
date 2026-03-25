@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774478055784,
+  "lastUpdate": 1774483138877,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7511,6 +7511,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c25fe5ae261cad92deac398a60d813ca2c1ac008"
         },
         "date": 1774478055565,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5497d0e0cbca89159bcd0dffe555ae3be0c42cf5",
+          "message": "Merge pull request #697 from wado-lang/claude/move-desugaring-to-lower-HSREM\n\nMove comparison operator lowering to dedicated lower phase",
+          "timestamp": "2026-03-26T08:56:21+09:00",
+          "tree_id": "aef64b77a80162401beb6f8892a509d4e1746814",
+          "url": "https://github.com/wado-lang/wado/commit/5497d0e0cbca89159bcd0dffe555ae3be0c42cf5"
+        },
+        "date": 1774483138651,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
