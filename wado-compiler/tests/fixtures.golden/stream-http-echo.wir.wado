@@ -793,7 +793,7 @@ fn handle(request) {
         };
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     };
-    __iter_15 = "core:allocator/ArrayIter<Array<u8>>" { repr: chunks.repr, used: chunks.used, index: 0 };
+    __iter_15 = "core:allocator/ArrayIter<Array<u8>>" { repr: ref.as_non_null(chunks.repr), used: chunks.used, index: 0 };
     b41: block {
         l42: loop {
             __pattern_temp_5 = ArrayIter<Array<u8>>^Iterator::next(__iter_15);
@@ -943,7 +943,7 @@ fn "core:internal/cm_stream_read_u8"(handle, max) {  // from core:internal
     count = result >> 4;
     arr = "core:internal/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
-    return Array<u8> { repr: arr, used: count };
+    return Array<u8> { repr: ref.as_non_null(arr), used: count };
 }
 
 fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
@@ -974,7 +974,7 @@ fn ArrayIter<Array<u8>>^Iterator::next(self) {
     };
     item = builtin::array_get<ref Array<u8>>(self.repr, self.index);
     self.index = self.index + 1;
-    return item;
+    return ref.as_non_null(item);
 }
 
 fn Array<Array<u8>>::append(self, value) {
@@ -1016,7 +1016,7 @@ fn Array<Array<u8>>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 export fn __cm_export__handle as "handle"

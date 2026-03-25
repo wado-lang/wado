@@ -125,17 +125,17 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(61), used: 0 };
         String::append(__local_4, String { repr: array.new_data<u8>("Results: "), used: 9 });
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
         __local_24 = __local_5;
         i32::fmt_decimal(r1, __local_24);
         String::append_char(__local_4, 44);
         String::append_char(__local_4, 32);
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
         __local_29 = __local_5;
         i32::fmt_decimal(r2, __local_29);
         String::append_char(__local_4, 44);
         String::append_char(__local_4, 32);
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
         __local_34 = __local_5;
         i32::fmt_decimal(r3, __local_34);
         break __tmpl: __local_4;
@@ -149,7 +149,7 @@ fn run() with Stdout {
         String::append_char(__local_6, 108);
         String::append_char(__local_6, 58);
         String::append_char(__local_6, 32);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         i32::fmt_decimal(__sroa___sroa_h_num_n, __local_7);
         break __tmpl: __local_6;
     });
@@ -363,7 +363,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

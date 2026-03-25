@@ -428,6 +428,7 @@ fn transform_instr(
                 type_id,
                 field_name,
                 expr: inner,
+                ..
             } = lhs.as_ref()
                 && field_name == "discriminant"
                 && let Some(&(payload_case, _)) = nullable_map.get(&type_id.index())
@@ -457,6 +458,7 @@ fn transform_instr(
             type_id,
             field_name,
             expr,
+            ..
         } => {
             if field_name.starts_with("payload_")
                 && let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())

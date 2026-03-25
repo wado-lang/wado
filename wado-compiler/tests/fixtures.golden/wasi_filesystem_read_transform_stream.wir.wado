@@ -268,9 +268,9 @@ fn __cm_binding__Preopens_get_directories() {
                 __local_9 = builtin::load_i32(__elem_addr + 4);
                 __local_10 = builtin::load_i32((__elem_addr + 4) + 4);
                 __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
-                break __inline_memory_to_gc_string_1: String { repr: __local_11, used: __local_10 };
+                break __inline_memory_to_gc_string_1: String { repr: ref.as_non_null(__local_11), used: __local_10 };
             };
-            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
+            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: ref.as_non_null(__lifted_result_7) });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
             continue l12;
@@ -466,7 +466,7 @@ fn "core:internal/cm_stream_read_u8"(handle, max) {  // from core:internal
     count = result >> 4;
     arr = "core:internal/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
-    return Array<u8> { repr: arr, used: count };
+    return Array<u8> { repr: ref.as_non_null(arr), used: count };
 }
 
 fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
@@ -552,7 +552,7 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Array<u8>::append(self, value) {
@@ -594,7 +594,7 @@ fn Array<u8>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 export fn __cm_export__run as "run"

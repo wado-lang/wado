@@ -185,7 +185,7 @@ fn __test_1_assignment_precedence() {
             String::append_char(__local_44, 32);
             String::append(__local_44, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/precedence_merged.wado"), used: 51 });
             String::append_char(__local_44, 58);
-            __local_45 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_44 };
+            __local_45 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_44) };
             __local_130 = __local_45;
             i32::fmt_decimal(40, __local_130);
             String::append(__local_44, String { repr: array.new_data<u8>("
@@ -194,7 +194,7 @@ condition: h == 42
             String::append_char(__local_44, 104);
             String::append_char(__local_44, 58);
             String::append_char(__local_44, 32);
-            __local_45 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_44 };
+            __local_45 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_44) };
             __local_135 = __local_45;
             i32::fmt_decimal(__v0, __local_135);
             String::append_char(__local_44, 10);
@@ -572,7 +572,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -614,7 +614,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

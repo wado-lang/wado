@@ -213,7 +213,7 @@ fn array_index_inline_multi() with Stdout {
         };
         break __inline_Array_bool__IndexValue__index_value_21: builtin::array_get<bool>(__sroa_c_markers.repr, 1);
     };
-    count = Container<String>::count_flagged(Container<String> { items: __sroa_c_items, markers: __sroa_c_markers });
+    count = Container<String>::count_flagged(Container<String> { items: ref.as_non_null(__sroa_c_items), markers: ref.as_non_null(__sroa_c_markers) });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(59), used: 0 };
         String::append_char(__local_9, 105);
@@ -241,7 +241,7 @@ fn array_index_inline_multi() with Stdout {
         String::append_char(__local_10, 115);
         String::append_char(__local_10, 58);
         String::append_char(__local_10, 32);
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
         __local_56 = __local_11;
         Formatter::pad(__local_56, if flag0 -> ref String {
             String { repr: array.new_data<u8>("true"), used: 4 };
@@ -250,7 +250,7 @@ fn array_index_inline_multi() with Stdout {
         });
         String::append_char(__local_10, 44);
         String::append_char(__local_10, 32);
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
         __local_61 = __local_11;
         Formatter::pad(__local_61, if flag1 -> ref String {
             String { repr: array.new_data<u8>("true"), used: 4 };
@@ -268,7 +268,7 @@ fn array_index_inline_multi() with Stdout {
         String::append_char(__local_12, 116);
         String::append_char(__local_12, 58);
         String::append_char(__local_12, 32);
-        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
+        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
         i32::fmt_decimal(count, __local_13);
         break __tmpl: __local_12;
     });
@@ -341,7 +341,7 @@ fn array_index_inline_nested() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(41), used: 0 };
         String::append(__local_6, String { repr: array.new_data<u8>("sum (excluding deleted): "), used: 25 });
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         i32::fmt_decimal(sum, __local_7);
         break __tmpl: __local_6;
     });
@@ -608,7 +608,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -704,7 +704,7 @@ fn Array<String>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Array<i32>::append(self, value) {
@@ -746,7 +746,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Container<String>::count_flagged(self) {
@@ -820,7 +820,7 @@ fn Array<bool>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Formatter::write_char_n(self, c, n) {

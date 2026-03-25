@@ -147,8 +147,8 @@ fn __test_0_struct_eq_with_same_ref_field() {
     let __local_7: ref Formatter;
     let __local_12: ref Formatter;
     inner = Inner { value: 42 };
-    c1 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: inner };
-    c2 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: inner };
+    c1 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: ref.as_non_null(inner) };
+    c2 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: ref.as_non_null(inner) };
     __v0 = c1;
     __v1 = c2;
     __cond = Container^Eq::eq(__v0, __v1);
@@ -163,7 +163,7 @@ fn __test_0_struct_eq_with_same_ref_field() {
             String::append_char(__local_6, 32);
             String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
             String::append_char(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             __local_12 = __local_7;
             i32::fmt_decimal(15, __local_12);
             String::append(__local_6, String { repr: array.new_data<u8>("
@@ -173,14 +173,14 @@ condition: c1 == c2
             String::append_char(__local_6, 49);
             String::append_char(__local_6, 58);
             String::append_char(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             Container^Inspect::inspect(__v0, __local_7);
             String::append_char(__local_6, 10);
             String::append_char(__local_6, 99);
             String::append_char(__local_6, 50);
             String::append_char(__local_6, 58);
             String::append_char(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             Container^Inspect::inspect(__v1, __local_7);
             String::append_char(__local_6, 10);
             break __tmpl: __local_6;
@@ -202,8 +202,8 @@ fn __test_1_struct_neq_with_different_ref_field() {
     let __local_13: ref Formatter;
     inner1 = Inner { value: 42 };
     inner2 = Inner { value: 42 };
-    c1 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: inner1 };
-    c2 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: inner2 };
+    c1 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: ref.as_non_null(inner1) };
+    c2 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: ref.as_non_null(inner2) };
     __v0 = c1;
     __v1 = c2;
     __cond = Container^Eq::eq(__v0, __v1) == 0;
@@ -218,7 +218,7 @@ fn __test_1_struct_neq_with_different_ref_field() {
             String::append_char(__local_7, 32);
             String::append(__local_7, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
             String::append_char(__local_7, 58);
-            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
             __local_13 = __local_8;
             i32::fmt_decimal(24, __local_13);
             String::append(__local_7, String { repr: array.new_data<u8>("
@@ -228,14 +228,14 @@ condition: c1 != c2
             String::append_char(__local_7, 49);
             String::append_char(__local_7, 58);
             String::append_char(__local_7, 32);
-            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
             Container^Inspect::inspect(__v0, __local_8);
             String::append_char(__local_7, 10);
             String::append_char(__local_7, 99);
             String::append_char(__local_7, 50);
             String::append_char(__local_7, 58);
             String::append_char(__local_7, 32);
-            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
             Container^Inspect::inspect(__v1, __local_8);
             String::append_char(__local_7, 10);
             break __tmpl: __local_7;
@@ -255,8 +255,8 @@ fn __test_2_struct_neq_with_different_name_same_ref() {
     let __local_7: ref Formatter;
     let __local_12: ref Formatter;
     inner = Inner { value: 42 };
-    c1 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: inner };
-    c2 = Container { name: String { repr: array.new_data<u8>("b"), used: 1 }, data: inner };
+    c1 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: ref.as_non_null(inner) };
+    c2 = Container { name: String { repr: array.new_data<u8>("b"), used: 1 }, data: ref.as_non_null(inner) };
     __v0 = c1;
     __v1 = c2;
     __cond = Container^Eq::eq(__v0, __v1) == 0;
@@ -271,7 +271,7 @@ fn __test_2_struct_neq_with_different_name_same_ref() {
             String::append_char(__local_6, 32);
             String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
             String::append_char(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             __local_12 = __local_7;
             i32::fmt_decimal(31, __local_12);
             String::append(__local_6, String { repr: array.new_data<u8>("
@@ -281,14 +281,14 @@ condition: c1 != c2
             String::append_char(__local_6, 49);
             String::append_char(__local_6, 58);
             String::append_char(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             Container^Inspect::inspect(__v0, __local_7);
             String::append_char(__local_6, 10);
             String::append_char(__local_6, 99);
             String::append_char(__local_6, 50);
             String::append_char(__local_6, 58);
             String::append_char(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             Container^Inspect::inspect(__v1, __local_7);
             String::append_char(__local_6, 10);
             break __tmpl: __local_6;
@@ -308,8 +308,8 @@ fn __test_3_struct_with_mut_ref_field() {
     let __local_7: ref Formatter;
     let __local_12: ref Formatter;
     inner = Inner { value: 42 };
-    c1 = Container { name: String { repr: array.new_data<u8>("x"), used: 1 }, data: inner };
-    c2 = Container { name: String { repr: array.new_data<u8>("x"), used: 1 }, data: inner };
+    c1 = Container { name: String { repr: array.new_data<u8>("x"), used: 1 }, data: ref.as_non_null(inner) };
+    c2 = Container { name: String { repr: array.new_data<u8>("x"), used: 1 }, data: ref.as_non_null(inner) };
     __v0 = c1;
     __v1 = c2;
     __cond = Container^Eq::eq(__v0, __v1);
@@ -324,7 +324,7 @@ fn __test_3_struct_with_mut_ref_field() {
             String::append_char(__local_6, 32);
             String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
             String::append_char(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             __local_12 = __local_7;
             i32::fmt_decimal(38, __local_12);
             String::append(__local_6, String { repr: array.new_data<u8>("
@@ -334,14 +334,14 @@ condition: c1 == c2
             String::append_char(__local_6, 49);
             String::append_char(__local_6, 58);
             String::append_char(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             Container^Inspect::inspect(__v0, __local_7);
             String::append_char(__local_6, 10);
             String::append_char(__local_6, 99);
             String::append_char(__local_6, 50);
             String::append_char(__local_6, 58);
             String::append_char(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             Container^Inspect::inspect(__v1, __local_7);
             String::append_char(__local_6, 10);
             break __tmpl: __local_6;
@@ -572,7 +572,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -869,7 +869,7 @@ fn String^Inspect::inspect(self, f) {
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };

@@ -802,7 +802,7 @@ fn check_uses_are_variant_access(
     ctx: VariantAccessCtx,
 ) -> bool {
     match instr {
-        WirInstr::LocalGet { name } if name == local_name => {
+        WirInstr::LocalGet { name, .. } if name == local_name => {
             matches!(ctx, VariantAccessCtx::InsideRefTestOrCast)
         }
         WirInstr::LocalSet { name, value } if name == local_name => {
@@ -1100,7 +1100,7 @@ fn all_uses_are_struct_get(instrs: &[WirInstr], local_name: &str) -> bool {
 /// `inside_struct_get` is true when we're already inside a `StructGet { expr }`.
 fn check_uses_are_struct_get(instr: &WirInstr, local_name: &str, inside_struct_get: bool) -> bool {
     match instr {
-        WirInstr::LocalGet { name } if name == local_name => {
+        WirInstr::LocalGet { name, .. } if name == local_name => {
             // Only valid if we're inside a StructGet
             inside_struct_get
         }
@@ -2004,28 +2004,34 @@ fn replace_struct_gets(
         && let WirInstr::StructGet {
             field_name,
             expr: inner_expr,
+            result_ty,
             ..
         } = expr.as_ref()
-        && let WirInstr::LocalGet { name: temp_name } = inner_expr.as_ref()
+        && let WirInstr::LocalGet { name: temp_name, .. } = inner_expr.as_ref()
         && let Some(field_map) = replacements.get(temp_name.as_str())
         && let Some(fresh_local) = field_map.get(field_name.as_str())
     {
         *instr = WirInstr::LocalGet {
             name: fresh_local.clone(),
+            result_ty: result_ty.clone(),
         };
         return;
     }
 
     // Check if THIS instruction is a StructGet that should be replaced
     if let WirInstr::StructGet {
-        field_name, expr, ..
+        field_name,
+        expr,
+        result_ty,
+        ..
     } = instr
-        && let WirInstr::LocalGet { name: temp_name } = expr.as_ref()
+        && let WirInstr::LocalGet { name: temp_name, .. } = expr.as_ref()
         && let Some(field_map) = replacements.get(temp_name.as_str())
         && let Some(fresh_local) = field_map.get(field_name.as_str())
     {
         *instr = WirInstr::LocalGet {
             name: fresh_local.clone(),
+            result_ty: result_ty.clone(),
         };
         return;
     }
@@ -2036,9 +2042,14 @@ fn replace_struct_gets(
 
 /// Produce a `LocalGet` for an SROA local, wrapping with `RefAsNonNull` if the local
 /// holds a nullable ref type (variant SROA payload locals use nullable types for padding).
-fn sroa_local_get(local_name: &str, ref_locals: &crate::hashmap::IndexSet<String>) -> WirInstr {
+fn sroa_local_get(
+    local_name: &str,
+    ref_locals: &crate::hashmap::IndexSet<String>,
+    result_ty: crate::wir::WirType,
+) -> WirInstr {
     let get = WirInstr::LocalGet {
         name: local_name.to_string(),
+        result_ty,
     };
     if ref_locals.contains(local_name) {
         WirInstr::RefAsNonNull(Box::new(get))
@@ -2063,7 +2074,7 @@ fn collect_refcast_aliases(
                 expr: rc_expr,
                 ..
             } = value.as_ref()
-            && let WirInstr::LocalGet { name: temp_name } = rc_expr.as_ref()
+            && let WirInstr::LocalGet { name: temp_name, .. } = rc_expr.as_ref()
             && variant_replacements.contains_key(temp_name.as_str())
         {
             aliases.insert(name.clone(), (temp_name.clone(), type_id.index()));
@@ -2110,6 +2121,7 @@ fn replace_variant_accesses(
         && let WirInstr::StructGet {
             field_name,
             expr: sg_expr,
+            result_ty,
             ..
         } = expr.as_ref()
         && let WirInstr::RefCast {
@@ -2117,25 +2129,26 @@ fn replace_variant_accesses(
             expr: rc_expr,
             ..
         } = sg_expr.as_ref()
-        && let WirInstr::LocalGet { name: temp_name } = rc_expr.as_ref()
+        && let WirInstr::LocalGet { name: temp_name, .. } = rc_expr.as_ref()
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
     {
         let key = (cast_type_id.index(), field_name.clone());
         if let Some(local_name) = vr.field_to_local.get(&key) {
-            *instr = sroa_local_get(local_name, &vr.ref_locals);
+            *instr = sroa_local_get(local_name, &vr.ref_locals, result_ty.clone());
             return;
         }
     }
 
     // Pattern 1: RefTest { type_id, expr: LocalGet(temp) }
     if let WirInstr::RefTest { type_id, expr, .. } = instr
-        && let WirInstr::LocalGet { name: temp_name } = expr.as_ref()
+        && let WirInstr::LocalGet { name: temp_name, .. } = expr.as_ref()
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
         && let Some(&disc_val) = vr.case_disc_values.get(&type_id.index())
     {
         *instr = WirInstr::I32Eq(
             Box::new(WirInstr::LocalGet {
                 name: vr.disc_local.clone(),
+                result_ty: crate::wir::WirType::I32,
             }),
             Box::new(WirInstr::I32Const(disc_val)),
         );
@@ -2146,6 +2159,7 @@ fn replace_variant_accesses(
     if let WirInstr::StructGet {
         field_name,
         expr: sg_expr,
+        result_ty,
         ..
     } = instr
         && let WirInstr::RefCast {
@@ -2153,12 +2167,12 @@ fn replace_variant_accesses(
             expr: rc_expr,
             ..
         } = sg_expr.as_ref()
-        && let WirInstr::LocalGet { name: temp_name } = rc_expr.as_ref()
+        && let WirInstr::LocalGet { name: temp_name, .. } = rc_expr.as_ref()
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
     {
         let key = (cast_type_id.index(), field_name.clone());
         if let Some(local_name) = vr.field_to_local.get(&key) {
-            *instr = sroa_local_get(local_name, &vr.ref_locals);
+            *instr = sroa_local_get(local_name, &vr.ref_locals, result_ty.clone());
             return;
         }
     }
@@ -2168,15 +2182,16 @@ fn replace_variant_accesses(
         && let WirInstr::StructGet {
             field_name,
             expr: sg_expr,
+            result_ty,
             ..
         } = expr.as_ref()
-        && let WirInstr::LocalGet { name: alias_name } = sg_expr.as_ref()
+        && let WirInstr::LocalGet { name: alias_name, .. } = sg_expr.as_ref()
         && let Some((temp_name, cast_type_idx)) = refcast_aliases.get(alias_name.as_str())
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
     {
         let key = (*cast_type_idx, field_name.clone());
         if let Some(local_name) = vr.field_to_local.get(&key) {
-            *instr = sroa_local_get(local_name, &vr.ref_locals);
+            *instr = sroa_local_get(local_name, &vr.ref_locals, result_ty.clone());
             return;
         }
     }
@@ -2185,15 +2200,16 @@ fn replace_variant_accesses(
     if let WirInstr::StructGet {
         field_name,
         expr: sg_expr,
+        result_ty,
         ..
     } = instr
-        && let WirInstr::LocalGet { name: alias_name } = sg_expr.as_ref()
+        && let WirInstr::LocalGet { name: alias_name, .. } = sg_expr.as_ref()
         && let Some((temp_name, cast_type_idx)) = refcast_aliases.get(alias_name.as_str())
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
     {
         let key = (*cast_type_idx, field_name.clone());
         if let Some(local_name) = vr.field_to_local.get(&key) {
-            *instr = sroa_local_get(local_name, &vr.ref_locals);
+            *instr = sroa_local_get(local_name, &vr.ref_locals, result_ty.clone());
             return;
         }
     }

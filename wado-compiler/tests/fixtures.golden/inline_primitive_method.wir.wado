@@ -193,15 +193,15 @@ fn run() with Stdout {
     back = builtin::f64_reinterpret_i64(bits);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(50), used: 0 };
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         __local_10 = __local_4;
         f64::fmt_into(x, __local_10);
         String::append_char(__local_3, 32);
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         __local_13 = __local_4;
         i64::fmt_decimal(bits, __local_13);
         String::append_char(__local_3, 32);
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         __local_18 = __local_4;
         f64::fmt_into(back, __local_18);
         break __tmpl: __local_3;
@@ -1272,7 +1272,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn i64::fmt_decimal(self, f) {
@@ -1497,7 +1497,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

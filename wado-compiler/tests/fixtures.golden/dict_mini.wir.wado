@@ -209,7 +209,7 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(30), used: 0 };
         String::append(__local_7, String { repr: array.new_data<u8>("has 'target': "), used: 14 });
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         __local_27 = "core:internal/Box<bool>" { value: MiniDict<String,String>::has(dict.entries, String { repr: array.new_data<u8>("target"), used: 6 }) };
         Formatter::pad(__local_8, if __local_27.value -> ref String {
             String { repr: array.new_data<u8>("true"), used: 4 };
@@ -221,7 +221,7 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(31), used: 0 };
         String::append(__local_9, String { repr: array.new_data<u8>("has 'version': "), used: 15 });
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
         __local_33 = "core:internal/Box<bool>" { value: MiniDict<String,String>::has(dict.entries, String { repr: array.new_data<u8>("version"), used: 7 }) };
         Formatter::pad(__local_10, if __local_33.value -> ref String {
             String { repr: array.new_data<u8>("true"), used: 4 };
@@ -238,7 +238,7 @@ fn run() with Stdout {
         String::append_char(__local_11, 101);
         String::append_char(__local_11, 58);
         String::append_char(__local_11, 32);
-        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
+        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
         __local_39 = "core:internal/Box<i32>" { value: __inline_Array_Tuple_String_String____len_0: block -> i32 {
             __local_44 = dict.entries;
             break __inline_Array_Tuple_String_String____len_0: __local_44.used;
@@ -460,7 +460,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -587,7 +587,7 @@ fn Array<Tuple<String,String>>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn MiniDict<String,String>::has(self, key) {
@@ -641,10 +641,10 @@ fn MiniDict<String,String>::get(self, key) {
                     __local_5 = i;
                     break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_5);
                 }.0, key) {
-                    return __inline_Array_Tuple_String_String___IndexValue__index_value_2: block -> ref "tuple/[String, String]" {
+                    return ref.as_non_null(__inline_Array_Tuple_String_String___IndexValue__index_value_2: block -> ref "tuple/[String, String]" {
                         __local_7 = i;
                         break __inline_Array_Tuple_String_String___IndexValue__index_value_2: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_7);
-                    }.1;
+                    }.1);
                 };
                 i = i + 1;
                 continue l43;
@@ -677,7 +677,7 @@ fn MiniDict<String,String>::set(self, key, value) {
                     break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_12, __local_6);
                 }.0, key) {
                     index = i;
-                    value_9 = "tuple/[String, String]" { 0: key, 1: value };
+                    value_9 = "tuple/[String, String]" { 0: ref.as_non_null(key), 1: ref.as_non_null(value) };
                     builtin::array_set<ref "tuple/[String, String]">(_licm_repr_12, index, value_9);
                     return;
                 };
@@ -686,7 +686,7 @@ fn MiniDict<String,String>::set(self, key, value) {
             };
         };
     };
-    Array<Tuple<String,String>>::append(self, "tuple/[String, String]" { 0: key, 1: value });
+    Array<Tuple<String,String>>::append(self, "tuple/[String, String]" { 0: ref.as_non_null(key), 1: ref.as_non_null(value) });
 }
 
 fn Formatter::write_char_n(self, c, n) {

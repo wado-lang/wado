@@ -252,7 +252,7 @@ fn maybe_read(r) {
             String::append_char(__local_2, 109);
             String::append_char(__local_2, 101);
             String::append_char(__local_2, 40);
-            __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
+            __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
             i32::fmt_decimal(v, __local_3);
             String::append_char(__local_2, 41);
             break __tmpl: __local_2;
@@ -272,7 +272,7 @@ fn read_and_format(r) {
         String::append_char(__local_1, 117);
         String::append_char(__local_1, 101);
         String::append_char(__local_1, 61);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(r, __local_2);
         break __tmpl: __local_1;
     };
@@ -289,7 +289,7 @@ fn ref_primitive_basic() with Stdout {
     a = "core:internal/Box<i32>" { value: 10 };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         __local_7 = "core:internal/Box<i32>" { value: a.value };
         i32::fmt_decimal(__local_7.value, __local_2);
         break __tmpl: __local_1;
@@ -298,7 +298,7 @@ fn ref_primitive_basic() with Stdout {
     x.value = x.value + 1;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(a.value, __local_4);
         break __tmpl: __local_3;
     });
@@ -309,7 +309,7 @@ fn ref_primitive_read() with Stdout {
     let __local_2: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(42, __local_2);
         break __tmpl: __local_1;
     });
@@ -334,14 +334,14 @@ fn ref_primitive_semantic() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(25), used: 0 };
         String::append(__local_2, String { repr: array.new_data<u8>("original="), used: 9 });
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         i32::fmt_decimal(result, __local_3);
         break __tmpl: __local_2;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(25), used: 0 };
         String::append(__local_4, String { repr: array.new_data<u8>("modified="), used: 9 });
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
         i32::fmt_decimal(a.value, __local_5);
         break __tmpl: __local_4;
     });
@@ -377,7 +377,7 @@ fn ref_primitive_types() with Stdout {
         String::append_char(__local_3, 52);
         String::append_char(__local_3, 58);
         String::append_char(__local_3, 32);
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         __local_17 = "core:internal/Box<i64>" { value: a.value };
         i64::fmt_decimal(__local_17.value, __local_4);
         break __tmpl: __local_3;
@@ -391,7 +391,7 @@ fn ref_primitive_types() with Stdout {
         String::append_char(__local_5, 52);
         String::append_char(__local_5, 58);
         String::append_char(__local_5, 32);
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i64::fmt_decimal(a.value, __local_6);
         break __tmpl: __local_5;
     });
@@ -403,7 +403,7 @@ fn ref_primitive_types() with Stdout {
         String::append_char(__local_7, 52);
         String::append_char(__local_7, 58);
         String::append_char(__local_7, 32);
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         __local_32 = "core:internal/Box<f64>" { value: b.value };
         f64::fmt_into(__local_32.value, __local_8);
         break __tmpl: __local_7;
@@ -417,7 +417,7 @@ fn ref_primitive_types() with Stdout {
         String::append_char(__local_9, 52);
         String::append_char(__local_9, 58);
         String::append_char(__local_9, 32);
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
         f64::fmt_into(b.value, __local_10);
         break __tmpl: __local_9;
     });
@@ -430,7 +430,7 @@ fn ref_primitive_types() with Stdout {
         String::append_char(__local_11, 108);
         String::append_char(__local_11, 58);
         String::append_char(__local_11, 32);
-        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
+        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
         __local_43 = "core:internal/Box<bool>" { value: c.value };
         Formatter::pad(__local_12, if __local_43.value -> ref String {
             String { repr: array.new_data<u8>("true"), used: 4 };
@@ -449,7 +449,7 @@ fn ref_primitive_types() with Stdout {
         String::append_char(__local_13, 108);
         String::append_char(__local_13, 58);
         String::append_char(__local_13, 32);
-        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
+        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
         Formatter::pad(__local_14, if c.value -> ref String {
             String { repr: array.new_data<u8>("true"), used: 4 };
         } else {
@@ -470,22 +470,22 @@ fn ref_deref_assign_struct() with Stdout {
     let __local_24: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(33), used: 0 };
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         __local_8 = __local_2;
         i32::fmt_decimal(10, __local_8);
         String::append_char(__local_1, 44);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         __local_13 = __local_2;
         i32::fmt_decimal(20, __local_13);
         break __tmpl: __local_1;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(33), used: 0 };
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         __local_19 = __local_4;
         i32::fmt_decimal(0, __local_19);
         String::append_char(__local_3, 44);
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         __local_24 = __local_4;
         i32::fmt_decimal(0, __local_24);
         break __tmpl: __local_3;
@@ -522,7 +522,7 @@ fn ref_deref_reassign() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(26), used: 0 };
         String::append(__local_5, String { repr: array.new_data<u8>("modified: "), used: 10 });
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i32::fmt_decimal(original.value, __local_6);
         break __tmpl: __local_5;
     });
@@ -531,7 +531,7 @@ fn ref_deref_reassign() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(26), used: 0 };
         String::append(__local_7, String { repr: array.new_data<u8>("original: "), used: 10 });
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         i32::fmt_decimal(original.value, __local_8);
         break __tmpl: __local_7;
     });
@@ -543,7 +543,7 @@ fn ref_deref_reassign() with Stdout {
         String::append_char(__local_9, 121);
         String::append_char(__local_9, 58);
         String::append_char(__local_9, 32);
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
         i32::fmt_decimal(__sroa_val2_value, __local_10);
         break __tmpl: __local_9;
     });
@@ -566,7 +566,7 @@ fn ref_alias_mut() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(26), used: 0 };
         String::append(__local_3, String { repr: array.new_data<u8>("after r1: "), used: 10 });
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(x.value, __local_4);
         break __tmpl: __local_3;
     });
@@ -574,7 +574,7 @@ fn ref_alias_mut() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(26), used: 0 };
         String::append(__local_5, String { repr: array.new_data<u8>("after r2: "), used: 10 });
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i32::fmt_decimal(x.value, __local_6);
         break __tmpl: __local_5;
     });
@@ -588,7 +588,7 @@ fn ref_alias_mut() with Stdout {
         String::append_char(__local_7, 108);
         String::append_char(__local_7, 58);
         String::append_char(__local_7, 32);
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         i32::fmt_decimal(x.value, __local_8);
         break __tmpl: __local_7;
     });
@@ -620,12 +620,12 @@ fn ref_swap_test() with Stdout {
         String::append_char(__local_2, 101);
         String::append_char(__local_2, 58);
         String::append_char(__local_2, 32);
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         __local_9 = __local_3;
         i32::fmt_decimal(x.value, __local_9);
         String::append_char(__local_2, 44);
         String::append_char(__local_2, 32);
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         __local_14 = __local_3;
         i32::fmt_decimal(y.value, __local_14);
         break __tmpl: __local_2;
@@ -644,12 +644,12 @@ fn ref_swap_test() with Stdout {
         String::append_char(__local_4, 114);
         String::append_char(__local_4, 58);
         String::append_char(__local_4, 32);
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
         __local_23 = __local_5;
         i32::fmt_decimal(x.value, __local_23);
         String::append_char(__local_4, 44);
         String::append_char(__local_4, 32);
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
         __local_28 = __local_5;
         i32::fmt_decimal(y.value, __local_28);
         break __tmpl: __local_4;
@@ -674,14 +674,14 @@ fn ref_reassign_test() with Stdout {
     r = a;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
         i32::fmt_decimal(r.value, __local_5);
         break __tmpl: __local_4;
     });
     r = b;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         i32::fmt_decimal(r.value, __local_7);
         break __tmpl: __local_6;
     });
@@ -691,13 +691,13 @@ fn ref_reassign_test() with Stdout {
     mr.value = 200;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_8 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
+        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
         i32::fmt_decimal(a.value, __local_9);
         break __tmpl: __local_8;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_10 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
         i32::fmt_decimal(b.value, __local_11);
         break __tmpl: __local_10;
     });
@@ -718,7 +718,7 @@ fn ref_tuple_basic_test() with Stdout {
         String::append_char(__local_3, 101);
         String::append_char(__local_3, 58);
         String::append_char(__local_3, 32);
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(1, __local_4);
         break __tmpl: __local_3;
     });
@@ -731,7 +731,7 @@ fn ref_tuple_basic_test() with Stdout {
         String::append_char(__local_5, 114);
         String::append_char(__local_5, 58);
         String::append_char(__local_5, 32);
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i32::fmt_decimal(100, __local_6);
         break __tmpl: __local_5;
     });
@@ -756,7 +756,7 @@ fn ref_return_test() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(__sroa_first_value, __local_4);
         break __tmpl: __local_3;
     });
@@ -773,7 +773,7 @@ fn ref_return_local() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(r.value, __local_2);
         break __tmpl: __local_1;
     });
@@ -805,7 +805,7 @@ fn run() with Stdout {
     greeting = String { repr: array.new_data<u8>("hello"), used: 5 };
     "core:cli/println"(greeting);
     __deref_val_2 = String { repr: array.new_data<u8>("goodbye"), used: 7 };
-    greeting.repr = __deref_val_2.repr;
+    greeting.repr = ref.as_non_null(__deref_val_2.repr);
     greeting.used = 7;
     "core:cli/println"(greeting);
     ref_deref_assign_struct();
@@ -1897,7 +1897,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -2142,7 +2142,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -2251,7 +2251,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Formatter::write_char_n(self, c, n) {

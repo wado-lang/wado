@@ -525,7 +525,7 @@ fn handle(request) {
         break __seq_lit: __local_1;
     };
     entries = __seq_lit: block -> ref Array<Tuple<String,Array<u8>>> {
-        __local_3 = Array<Tuple<String,Array<u8>>> { repr: array.new_fixed<ref "tuple/[String, Array<u8>]">("tuple/[String, Array<u8>]" { 0: String { repr: array.new_data<u8>("x-one"), used: 5 }, 1: name_bytes }), used: 1 };
+        __local_3 = Array<Tuple<String,Array<u8>>> { repr: array.new_fixed<ref "tuple/[String, Array<u8>]">("tuple/[String, Array<u8>]" { 0: String { repr: array.new_data<u8>("x-one"), used: 5 }, 1: ref.as_non_null(name_bytes) }), used: 1 };
         break __seq_lit: __local_3;
     };
     result = __cm_binding__Fields_from_list(entries);
@@ -548,14 +548,14 @@ fn handle(request) {
                 String::append_char(__local_14, 32);
                 String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields-from-list.wado"), used: 55 });
                 String::append_char(__local_14, 58);
-                __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
+                __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
                 __local_185 = __local_15;
                 i32::fmt_decimal(15, __local_185);
                 String::append(__local_14, String { repr: array.new_data<u8>("
 condition: fields.has(\"x-one\" as FieldName)
 "), used: 45 });
                 String::append(__local_14, String { repr: array.new_data<u8>("fields.has(\"x-one\" as FieldName): "), used: 34 });
-                __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
+                __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
                 __local_190 = __local_15;
                 Formatter::pad(__local_190, if __v0 -> ref String {
                     String { repr: array.new_data<u8>("true"), used: 4 };
@@ -971,7 +971,7 @@ fn __cm_binding__Fields_from_list(entries) {
         } else {
             __vresult = "wasi:http/types.wado/HeaderError" { 2 };
         };
-        __result_val = Result<Fields,HeaderError>::Err { discriminant: 1, payload_0: __vresult };
+        __result_val = Result<Fields,HeaderError>::Err { discriminant: 1, payload_0: ref.as_non_null(__vresult) };
     };
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __result_val;
@@ -1216,7 +1216,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -1312,7 +1312,7 @@ fn Array<Tuple<String,Array<u8>>>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Array<u8>::append(self, value) {
@@ -1354,7 +1354,7 @@ fn Array<u8>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Formatter::write_char_n(self, c, n) {

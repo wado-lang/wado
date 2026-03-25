@@ -519,14 +519,14 @@ fn handle(request) {
             String::append_char(__local_12, 32);
             String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-request-headers.wado"), used: 54 });
             String::append_char(__local_12, 58);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
             __local_172 = __local_13;
             i32::fmt_decimal(11, __local_172);
             String::append(__local_12, String { repr: array.new_data<u8>("
 condition: req_headers.has(\"x-custom\" as FieldName)
 "), used: 53 });
             String::append(__local_12, String { repr: array.new_data<u8>("req_headers.has(\"x-custom\" as FieldName): "), used: 42 });
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
             __local_177 = __local_13;
             Formatter::pad(__local_177, if __v0_2 -> ref String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
@@ -557,14 +557,14 @@ condition: req_headers.has(\"x-custom\" as FieldName)
             String::append_char(__local_14, 32);
             String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-request-headers.wado"), used: 54 });
             String::append_char(__local_14, 58);
-            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
+            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
             __local_184 = __local_15;
             i32::fmt_decimal(16, __local_184);
             String::append(__local_14, String { repr: array.new_data<u8>("
 condition: values.len() == 1
 "), used: 30 });
             String::append(__local_14, String { repr: array.new_data<u8>("values.len(): "), used: 14 });
-            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
+            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
             __local_189 = __local_15;
             i32::fmt_decimal(__v0_5, __local_189);
             String::append_char(__local_14, 10);
@@ -1204,7 +1204,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -1300,7 +1300,7 @@ fn Array<Array<u8>>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Array<u8>::append(self, value) {
@@ -1342,7 +1342,7 @@ fn Array<u8>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Formatter::write_char_n(self, c, n) {

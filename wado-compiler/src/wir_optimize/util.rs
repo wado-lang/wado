@@ -52,7 +52,7 @@ fn collect_ref_funcs_instr(instr: &WirInstr, pinned: &mut IndexSet<u32>) {
 
 /// Collect all local names referenced by `LocalGet` in an expression tree.
 pub(super) fn collect_local_gets_deep(instr: &WirInstr, names: &mut IndexSet<String>) {
-    if let WirInstr::LocalGet { name } = instr {
+    if let WirInstr::LocalGet { name, .. } = instr {
         names.insert(name.clone());
     }
     instr.for_each_child(&mut |child| {

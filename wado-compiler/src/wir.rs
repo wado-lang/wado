@@ -958,6 +958,7 @@ pub enum WirInstr {
     /// `local.get` by name.
     LocalGet {
         name: String,
+        result_ty: WirType,
     },
     /// `local.set` by name.
     LocalSet {
@@ -974,6 +975,7 @@ pub enum WirInstr {
     /// `global.get` by name.
     GlobalGet {
         name: WirName,
+        result_ty: WirType,
     },
     /// `global.set` by name.
     GlobalSet {
@@ -1376,6 +1378,7 @@ pub enum WirInstr {
         type_id: WirTypeId,
         field_name: String,
         expr: Box<WirInstr>,
+        result_ty: WirType,
     },
     /// `struct.set` with type ID and field name (field index resolved by emitter).
     StructSet {
@@ -1409,16 +1412,19 @@ pub enum WirInstr {
         type_id: WirTypeId,
         array: Box<WirInstr>,
         index: Box<WirInstr>,
+        result_ty: WirType,
     },
     ArrayGetS {
         type_id: WirTypeId,
         array: Box<WirInstr>,
         index: Box<WirInstr>,
+        result_ty: WirType,
     },
     ArrayGetU {
         type_id: WirTypeId,
         array: Box<WirInstr>,
         index: Box<WirInstr>,
+        result_ty: WirType,
     },
     ArraySet {
         type_id: WirTypeId,
@@ -1693,7 +1699,12 @@ impl WirInstr {
     }
 
     /// Returns true if this instruction is guaranteed to produce a non-null
-    /// reference. Used to skip redundant `RefAsNonNull` wrappers.
+    /// reference at the Wasm level. Used to skip redundant `RefAsNonNull` wrappers.
+    ///
+    /// NOTE: `LocalGet`, `GlobalGet`, `StructGet`, and `ArrayGet` are excluded even when
+    /// their `result_ty` is non-null, because the codegen may emit nullable Wasm types
+    /// for these (e.g., locals are declared nullable for Wasm defaultability). The WIR
+    /// `RefAsNonNull(...)` wrapper is the canonical way to request the codegen to narrow.
     pub fn is_nonnull_result(&self) -> bool {
         matches!(
             self,

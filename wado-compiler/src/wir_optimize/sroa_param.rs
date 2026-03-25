@@ -184,6 +184,7 @@ pub(super) fn sroa_single_field_parameters(module: &mut WirModule) {
             .insert(param_name, *struct_type_idx);
     }
 
+    let types = std::mem::take(&mut module.types);
     for (i, func) in module.functions.iter_mut().enumerate() {
         let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
         let scalar_param_structs = func_scalar_param_struct
@@ -198,10 +199,12 @@ pub(super) fn sroa_single_field_parameters(module: &mut WirModule) {
                     &sroa_params,
                     &param_struct_info,
                     &scalar_param_structs,
+                    &types,
                 );
             }
         }
     }
+    module.types = types;
 }
 
 /// Check that every use of `param_name` in the body is a valid single-field SROA use.
@@ -245,7 +248,7 @@ fn single_field_param_use_valid_instr(
 ) -> bool {
     match instr {
         // LocalGet of the param: only valid inside StructGet(field) or as call arg
-        WirInstr::LocalGet { name } if name == param_name => {
+        WirInstr::LocalGet { name, .. } if name == param_name => {
             matches!(ctx, SingleFieldCheckCtx::InsideStructGetField)
         }
         // StructGet with the expected field name: mark context and check inner
@@ -262,7 +265,7 @@ fn single_field_param_use_valid_instr(
         // Non-LocalGet args are validated recursively.
         WirInstr::Call { func_id, args } => {
             for (ai, arg) in args.iter().enumerate() {
-                if let WirInstr::LocalGet { name } = arg
+                if let WirInstr::LocalGet { name, .. } = arg
                     && name == param_name
                 {
                     // Bare param reference at a call position — only valid if SROA'd.
@@ -363,13 +366,17 @@ fn single_field_param_use_valid_instr(
 fn rewrite_single_field_param_reads(instr: &mut WirInstr, param_name: &str, expected_field: &str) {
     // Check StructGet(LocalGet(param), field) pattern
     if let WirInstr::StructGet {
-        field_name, expr, ..
+        field_name,
+        expr,
+        result_ty,
+        ..
     } = instr
         && field_name == expected_field
-        && matches!(expr.as_ref(), WirInstr::LocalGet { name } if name == param_name)
+        && matches!(expr.as_ref(), WirInstr::LocalGet { name, .. } if name == param_name)
     {
         *instr = WirInstr::LocalGet {
             name: param_name.to_string(),
+            result_ty: result_ty.clone(),
         };
         return;
     }
@@ -391,6 +398,7 @@ fn rewrite_single_field_args_at_call_sites(
     sroa_params: &crate::hashmap::IndexMap<u32, IndexSet<usize>>,
     param_struct_info: &crate::hashmap::IndexMap<(u32, usize), (WirTypeId, String)>,
     scalar_param_structs: &crate::hashmap::IndexMap<String, u32>,
+    types: &[crate::wir::WirTypeDef],
 ) {
     // Recurse first (bottom-up)
     instr.for_each_boxed_child_mut(&mut |child| {
@@ -399,6 +407,7 @@ fn rewrite_single_field_args_at_call_sites(
             sroa_params,
             param_struct_info,
             scalar_param_structs,
+            types,
         );
     });
 
@@ -420,7 +429,7 @@ fn rewrite_single_field_args_at_call_sites(
             // Unwrap StructNew: skip struct allocation entirely.
             let inner = std::mem::replace(&mut fields[0], WirInstr::Nop);
             *arg = inner;
-        } else if let WirInstr::LocalGet { name } = arg
+        } else if let WirInstr::LocalGet { name, .. } = arg
             && let Some(&caller_struct_type) = scalar_param_structs.get(name.as_str())
         {
             // This arg is a scalar param (SROA'd in the caller). Check if the callee
@@ -437,11 +446,13 @@ fn rewrite_single_field_args_at_call_sites(
             } else {
                 // Different struct type — the caller's scalar type IS the callee's
                 // wrapper struct. Extract the inner field.
+                let result_ty = lookup_struct_field_type(types, callee_struct_type_id, field_name);
                 let old_arg = std::mem::replace(arg, WirInstr::Nop);
                 *arg = WirInstr::StructGet {
                     type_id: callee_struct_type_id.clone(),
                     field_name: field_name.clone(),
                     expr: Box::new(old_arg),
+                    result_ty,
                 };
             }
         } else {
@@ -451,12 +462,27 @@ fn rewrite_single_field_args_at_call_sites(
             else {
                 continue;
             };
+            let result_ty = lookup_struct_field_type(types, struct_type_id, field_name);
             let old_arg = std::mem::replace(arg, WirInstr::Nop);
             *arg = WirInstr::StructGet {
                 type_id: struct_type_id.clone(),
                 field_name: field_name.clone(),
                 expr: Box::new(old_arg),
+                result_ty,
             };
         }
     }
+}
+
+fn lookup_struct_field_type(
+    types: &[crate::wir::WirTypeDef],
+    struct_type_id: &WirTypeId,
+    field_name: &str,
+) -> crate::wir::WirType {
+    if let Some(crate::wir::WirTypeDef::Struct(st)) = types.get(struct_type_id.index() as usize) {
+        if let Some(f) = st.fields.iter().find(|f| f.name == field_name) {
+            return f.ty.clone();
+        }
+    }
+    crate::wir::WirType::I32
 }

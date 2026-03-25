@@ -179,7 +179,7 @@ fn __test_0_generic_static_method_on_generic_type() {
     let __local_16: ref Formatter;
     b = __inline_WrapBox_i32___wrap_other_String__2: block -> ref WrapBox<String> {
         __local_11 = String { repr: array.new_data<u8>("hello"), used: 5 };
-        break __inline_WrapBox_i32___wrap_other_String__2: WrapBox<String> { value: __local_11 };
+        break __inline_WrapBox_i32___wrap_other_String__2: WrapBox<String> { value: ref.as_non_null(__local_11) };
     };
     __v0 = b.value;
     __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("hello"), used: 5 });
@@ -194,14 +194,14 @@ fn __test_0_generic_static_method_on_generic_type() {
             String::append_char(__local_6, 32);
             String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/static_2.wado"), used: 42 });
             String::append_char(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             __local_16 = __local_7;
             i32::fmt_decimal(100, __local_16);
             String::append(__local_6, String { repr: array.new_data<u8>("
 condition: b.get() == \"hello\"
 "), used: 31 });
             String::append(__local_6, String { repr: array.new_data<u8>("b.get(): "), used: 9 });
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             String^Inspect::inspect(__v0, __local_7);
             String::append_char(__local_6, 10);
             break __tmpl: __local_6;
@@ -220,7 +220,7 @@ fn __test_1_generic_static_method_called_from_generic_function() {
     let __local_17: ref Formatter;
     w = __inline_make_wrapper_String__2: block -> ref Wrapper<String> {
         __local_11 = String { repr: array.new_data<u8>("hello"), used: 5 };
-        break __inline_make_wrapper_String__2: Wrapper<String> { value: __local_11 };
+        break __inline_make_wrapper_String__2: Wrapper<String> { value: ref.as_non_null(__local_11) };
     };
     __v0 = w.value;
     __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("hello"), used: 5 });
@@ -235,14 +235,14 @@ fn __test_1_generic_static_method_called_from_generic_function() {
             String::append_char(__local_6, 32);
             String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/static_2.wado"), used: 42 });
             String::append_char(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             __local_17 = __local_7;
             i32::fmt_decimal(108, __local_17);
             String::append(__local_6, String { repr: array.new_data<u8>("
 condition: w.get() == \"hello\"
 "), used: 31 });
             String::append(__local_6, String { repr: array.new_data<u8>("w.get(): "), used: 9 });
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             String^Inspect::inspect(__v0, __local_7);
             String::append_char(__local_6, 10);
             break __tmpl: __local_6;
@@ -276,7 +276,7 @@ fn __test_2_both_type_params_from_outer_generic_context() {
             String::append_char(__local_6, 32);
             String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/static_2.wado"), used: 42 });
             String::append_char(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             __local_16 = __local_7;
             i32::fmt_decimal(116, __local_16);
             String::append(__local_6, String { repr: array.new_data<u8>("
@@ -290,7 +290,7 @@ condition: result == \"test\"
             String::append_char(__local_6, 116);
             String::append_char(__local_6, 58);
             String::append_char(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             String^Inspect::inspect(__v0, __local_7);
             String::append_char(__local_6, 10);
             break __tmpl: __local_6;
@@ -358,7 +358,7 @@ fn __test_3_literal_coercion_with_generic_static_method() {
             String::append_char(__local_15, 32);
             String::append(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/static_2.wado"), used: 42 });
             String::append_char(__local_15, 58);
-            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
+            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
             __local_49 = __local_16;
             i32::fmt_decimal(128, __local_49);
             String::append(__local_15, String { repr: array.new_data<u8>("
@@ -369,7 +369,7 @@ condition: sum == 30 as i64
             String::append_char(__local_15, 109);
             String::append_char(__local_15, 58);
             String::append_char(__local_15, 32);
-            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
+            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
             __local_54 = __local_16;
             i64::fmt_decimal(sum, __local_54);
             String::append_char(__local_15, 10);
@@ -397,14 +397,14 @@ condition: sum == 30 as i64
             String::append_char(__local_17, 32);
             String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/static_2.wado"), used: 42 });
             String::append_char(__local_17, 58);
-            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
             __local_71 = __local_18;
             i32::fmt_decimal(131, __local_71);
             String::append(__local_17, String { repr: array.new_data<u8>("
 condition: arr2.len() == 3
 "), used: 28 });
             String::append(__local_17, String { repr: array.new_data<u8>("arr2.len(): "), used: 12 });
-            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
             __local_76 = __local_18;
             i32::fmt_decimal(__v0_9, __local_76);
             String::append_char(__local_17, 10);
@@ -431,14 +431,14 @@ condition: arr2.len() == 3
             String::append_char(__local_19, 32);
             String::append(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/static_2.wado"), used: 42 });
             String::append_char(__local_19, 58);
-            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
+            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_19) };
             __local_84 = __local_20;
             i32::fmt_decimal(132, __local_84);
             String::append(__local_19, String { repr: array.new_data<u8>("
 condition: arr2[0] == 100 as i64
 "), used: 34 });
             String::append(__local_19, String { repr: array.new_data<u8>("arr2[0]: "), used: 9 });
-            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
+            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_19) };
             __local_89 = __local_20;
             i64::fmt_decimal(__v0_11, __local_89);
             String::append_char(__local_19, 10);
@@ -490,14 +490,14 @@ fn __test_4_nested_generic_types_with_static_methods() {
             String::append_char(__local_13, 32);
             String::append(__local_13, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/static_2.wado"), used: 42 });
             String::append_char(__local_13, 58);
-            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
+            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
             __local_35 = __local_14;
             i32::fmt_decimal(139, __local_35);
             String::append(__local_13, String { repr: array.new_data<u8>("
 condition: inner.len() == 3
 "), used: 29 });
             String::append(__local_13, String { repr: array.new_data<u8>("inner.len(): "), used: 13 });
-            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
+            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
             __local_40 = __local_14;
             i32::fmt_decimal(__v0_4, __local_40);
             String::append_char(__local_13, 10);
@@ -524,14 +524,14 @@ condition: inner.len() == 3
             String::append_char(__local_15, 32);
             String::append(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/static_2.wado"), used: 42 });
             String::append_char(__local_15, 58);
-            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
+            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
             __local_48 = __local_16;
             i32::fmt_decimal(140, __local_48);
             String::append(__local_15, String { repr: array.new_data<u8>("
 condition: inner[0] == 1
 "), used: 26 });
             String::append(__local_15, String { repr: array.new_data<u8>("inner[0]: "), used: 10 });
-            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
+            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
             __local_53 = __local_16;
             i32::fmt_decimal(__v0_6, __local_53);
             String::append_char(__local_15, 10);
@@ -554,14 +554,14 @@ condition: inner[0] == 1
             String::append_char(__local_17, 32);
             String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/static_2.wado"), used: 42 });
             String::append_char(__local_17, 58);
-            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
             __local_63 = __local_18;
             i32::fmt_decimal(145, __local_63);
             String::append(__local_17, String { repr: array.new_data<u8>("
 condition: unwrapped.get() == 42
 "), used: 34 });
             String::append(__local_17, String { repr: array.new_data<u8>("unwrapped.get(): "), used: 17 });
-            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
             __local_68 = __local_18;
             i32::fmt_decimal(__v0_11, __local_68);
             String::append_char(__local_17, 10);
@@ -596,7 +596,7 @@ fn __test_5_turbofish_on_non_generic_struct() {
             String::append_char(__local_6, 32);
             String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/static_2.wado"), used: 42 });
             String::append_char(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             __local_15 = __local_7;
             i32::fmt_decimal(150, __local_15);
             String::append(__local_6, String { repr: array.new_data<u8>("
@@ -605,7 +605,7 @@ condition: s == \"hello\"
             String::append_char(__local_6, 115);
             String::append_char(__local_6, 58);
             String::append_char(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             String^Inspect::inspect(__v0, __local_7);
             String::append_char(__local_6, 10);
             break __tmpl: __local_6;
@@ -892,7 +892,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -1063,7 +1063,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Array<i64>::append(self, value) {
@@ -1105,7 +1105,7 @@ fn Array<i64>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -1219,7 +1219,7 @@ fn String^Inspect::inspect(self, f) {
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };

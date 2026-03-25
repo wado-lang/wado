@@ -202,12 +202,12 @@ fn destruct_basic() with Stdout {
     y = 20;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_8 = String { repr: builtin::array_new<u8>(34), used: 0 };
-        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
+        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
         __local_23 = __local_9;
         i32::fmt_decimal(x, __local_23);
         String::append_char(__local_8, 44);
         String::append_char(__local_8, 32);
-        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
+        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
         __local_28 = __local_9;
         i32::fmt_decimal(y, __local_28);
         break __tmpl: __local_8;
@@ -216,12 +216,12 @@ fn destruct_basic() with Stdout {
     b = 20;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_10 = String { repr: builtin::array_new<u8>(34), used: 0 };
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
         __local_34 = __local_11;
         i32::fmt_decimal(a, __local_34);
         String::append_char(__local_10, 44);
         String::append_char(__local_10, 32);
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
         __local_39 = __local_11;
         i32::fmt_decimal(b, __local_39);
         break __tmpl: __local_10;
@@ -229,7 +229,7 @@ fn destruct_basic() with Stdout {
     x2 = 10;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_12 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
+        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
         i32::fmt_decimal(x2, __local_13);
         break __tmpl: __local_12;
     });
@@ -239,12 +239,12 @@ fn destruct_basic() with Stdout {
     my = my + 2;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_14 = String { repr: builtin::array_new<u8>(34), used: 0 };
-        __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
+        __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
         __local_51 = __local_15;
         i32::fmt_decimal(mx, __local_51);
         String::append_char(__local_14, 44);
         String::append_char(__local_14, 32);
-        __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
+        __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
         __local_56 = __local_15;
         i32::fmt_decimal(my, __local_56);
         break __tmpl: __local_14;
@@ -272,7 +272,7 @@ fn destruct_for_of() with Stdout {
         __local_0 = Array<SDPoint> { repr: array.new_fixed<ref SDPoint>(SDPoint { x: 1, y: 2 }, SDPoint { x: 3, y: 4 }, SDPoint { x: 5, y: 6 }), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<SDPoint>" { repr: points.repr, used: 3, index: 0 };
+    __iter_2 = "core:allocator/ArrayIter<SDPoint>" { repr: ref.as_non_null(points.repr), used: 3, index: 0 };
     b0: block {
         l1: loop {
             __pattern_temp_0 = ArrayIter<SDPoint>^Iterator::next(__iter_2);
@@ -282,7 +282,7 @@ fn destruct_for_of() with Stdout {
                 y = __pattern_temp_1.y;
                 "core:cli/println"(__tmpl: block -> ref String {
                     __local_8 = String { repr: builtin::array_new<u8>(16), used: 0 };
-                    __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
+                    __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
                     i32::fmt_decimal(x + y, __local_9);
                     break __tmpl: __local_8;
                 });
@@ -292,7 +292,7 @@ fn destruct_for_of() with Stdout {
             continue l1;
         };
     };
-    __iter_5 = "core:allocator/ArrayIter<SDPoint>" { repr: points.repr, used: 3, index: 0 };
+    __iter_5 = "core:allocator/ArrayIter<SDPoint>" { repr: ref.as_non_null(points.repr), used: 3, index: 0 };
     b3: block {
         l4: loop {
             __pattern_temp_2 = ArrayIter<SDPoint>^Iterator::next(__iter_5);
@@ -302,7 +302,7 @@ fn destruct_for_of() with Stdout {
                 b = __pattern_temp_3.y;
                 "core:cli/println"(__tmpl: block -> ref String {
                     __local_10 = String { repr: builtin::array_new<u8>(16), used: 0 };
-                    __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
+                    __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
                     i32::fmt_decimal(a * b, __local_11);
                     break __tmpl: __local_10;
                 });
@@ -334,12 +334,12 @@ fn destruct_if_let() with Stdout {
     y_2 = 15;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(34), used: 0 };
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
         __local_22 = __local_10;
         i32::fmt_decimal(x_1, __local_22);
         String::append_char(__local_9, 44);
         String::append_char(__local_9, 32);
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
         __local_27 = __local_10;
         i32::fmt_decimal(y_2, __local_27);
         break __tmpl: __local_9;
@@ -348,7 +348,7 @@ fn destruct_if_let() with Stdout {
     y_4 = 15;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
+        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
         i32::fmt_decimal(x_3 + y_4, __local_12);
         break __tmpl: __local_11;
     });
@@ -358,7 +358,7 @@ fn destruct_if_let() with Stdout {
     b = 15;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_13 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
+        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
         i32::fmt_decimal(a * b, __local_14);
         break __tmpl: __local_13;
     });
@@ -391,22 +391,22 @@ fn destruct_nested() with Stdout {
     y2 = __pattern_temp_2.y;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(70), used: 0 };
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         __local_18 = __local_7;
         i32::fmt_decimal(x1, __local_18);
         String::append_char(__local_6, 44);
         String::append_char(__local_6, 32);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         __local_23 = __local_7;
         i32::fmt_decimal(y1, __local_23);
         String::append_char(__local_6, 44);
         String::append_char(__local_6, 32);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         __local_28 = __local_7;
         i32::fmt_decimal(x2, __local_28);
         String::append_char(__local_6, 44);
         String::append_char(__local_6, 32);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         __local_33 = __local_7;
         i32::fmt_decimal(y2, __local_33);
         break __tmpl: __local_6;
@@ -415,7 +415,7 @@ fn destruct_nested() with Stdout {
     x = __pattern_temp_4.x;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_8 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
+        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
         i32::fmt_decimal(x, __local_9);
         break __tmpl: __local_8;
     });
@@ -445,12 +445,12 @@ fn destruct_rename() with Stdout {
     vertical = 20;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(34), used: 0 };
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
         __local_22 = __local_10;
         i32::fmt_decimal(horizontal, __local_22);
         String::append_char(__local_9, 44);
         String::append_char(__local_9, 32);
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
         __local_27 = __local_10;
         i32::fmt_decimal(vertical, __local_27);
         break __tmpl: __local_9;
@@ -459,12 +459,12 @@ fn destruct_rename() with Stdout {
     vertical2 = 20;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(34), used: 0 };
-        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
+        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
         __local_33 = __local_12;
         i32::fmt_decimal(x, __local_33);
         String::append_char(__local_11, 44);
         String::append_char(__local_11, 32);
-        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
+        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
         __local_38 = __local_12;
         i32::fmt_decimal(vertical2, __local_38);
         break __tmpl: __local_11;
@@ -475,12 +475,12 @@ fn destruct_rename() with Stdout {
     b = 20;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_13 = String { repr: builtin::array_new<u8>(34), used: 0 };
-        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
+        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
         __local_44 = __local_14;
         i32::fmt_decimal(a, __local_44);
         String::append_char(__local_13, 44);
         String::append_char(__local_13, 32);
-        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
+        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
         __local_49 = __local_14;
         i32::fmt_decimal(b, __local_49);
         break __tmpl: __local_13;
@@ -503,7 +503,7 @@ fn destruct_wildcard() with Stdout {
     drop(20);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         i32::fmt_decimal(x, __local_7);
         break __tmpl: __local_6;
     });
@@ -511,7 +511,7 @@ fn destruct_wildcard() with Stdout {
     y = 20;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_8 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
+        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
         i32::fmt_decimal(y, __local_9);
         break __tmpl: __local_8;
     });
@@ -525,7 +525,7 @@ fn destruct_wildcard() with Stdout {
     drop(person.email);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_10 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
         i32::fmt_decimal(age, __local_11);
         break __tmpl: __local_10;
     });
@@ -615,7 +615,7 @@ fn destruct_match() with Stdout {
                 String::append_char(__local_15, 108);
                 String::append_char(__local_15, 58);
                 String::append_char(__local_15, 32);
-                __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
+                __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
                 i32::fmt_decimal(__local_10, __local_16);
                 break __tmpl: __local_15;
             };
@@ -624,13 +624,13 @@ fn destruct_match() with Stdout {
             __local_13 = __match_scrut_2.y;
             __tmpl: block -> ref String {
                 __local_17 = String { repr: builtin::array_new<u8>(34), used: 0 };
-                __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+                __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
                 __local_27 = "core:internal/Box<i32>" { value: __local_12 };
                 __local_28 = __local_18;
                 i32::fmt_decimal(__local_27.value, __local_28);
                 String::append_char(__local_17, 44);
                 String::append_char(__local_17, 32);
-                __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+                __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
                 __local_32 = "core:internal/Box<i32>" { value: __local_13 };
                 __local_33 = __local_18;
                 i32::fmt_decimal(__local_32.value, __local_33);
@@ -1066,7 +1066,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -1161,7 +1161,7 @@ fn ArrayIter<SDPoint>^Iterator::next(self) {
     };
     item = builtin::array_get<ref SDPoint>(self.repr, self.index);
     self.index = self.index + 1;
-    return item;
+    return ref.as_non_null(item);
 }
 
 fn Array<SDPoint>::append(self, value) {
@@ -1203,7 +1203,7 @@ fn Array<SDPoint>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Formatter::write_char_n(self, c, n) {

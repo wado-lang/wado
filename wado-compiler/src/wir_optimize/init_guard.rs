@@ -121,7 +121,7 @@ fn count_global_uses_in_instr(
 
     // For GlobalGet/GlobalSet at any depth, count as "other use".
     match instr {
-        WirInstr::GlobalGet { name } => {
+        WirInstr::GlobalGet { name, .. } => {
             if let Some(&idx) = global_idx_map.get(name.fq.as_str()) {
                 other_use_counts[idx] += 1;
             }
@@ -231,7 +231,7 @@ fn is_trivial_init_block(instr: &WirInstr) -> Option<&str> {
     else {
         return None;
     };
-    let WirInstr::GlobalGet { name: guard_name } = condition.as_ref() else {
+    let WirInstr::GlobalGet { name: guard_name, .. } = condition.as_ref() else {
         return None;
     };
     if then_body.len() != 1 {

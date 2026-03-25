@@ -144,6 +144,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             let has_result = !result_wirs.is_empty();
 
             // Get canonical func type
+            let user_params_clone = user_params.clone();
             let (fn_type_id, _) =
                 ctx.get_or_create_canonical_closure_type(user_params, result_wirs);
 
@@ -173,6 +174,10 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                         nullable: false,
                         expr: Box::new(WirInstr::LocalGet {
                             name: env_local.clone(),
+                            result_ty: WirType::AbstractRef {
+                                heap_type: crate::wir::WirAbstractHeapType::Struct,
+                                nullable: true,
+                            },
                         }),
                     }),
                 },
@@ -180,10 +185,12 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
 
             let mut call_args = vec![WirInstr::LocalGet {
                 name: typed_env_local,
+                result_ty: functor_wir_type.clone(),
             }];
             for i in 0..user_param_count {
                 call_args.push(WirInstr::LocalGet {
                     name: format!("__p{i}"),
+                    result_ty: user_params_clone[i].clone(),
                 });
             }
 
@@ -326,6 +333,54 @@ impl FunctionTranslator<'_, '_> {
         } else {
             format!("__local_{index}")
         }
+    }
+
+    /// Build a `LocalGet` with the WIR type resolved from a TIR local index.
+    fn local_get(&self, index: u32) -> WirInstr {
+        let name = self.local_name(index);
+        let result_ty = self.local_wir_type(index);
+        WirInstr::LocalGet { name, result_ty }
+    }
+
+    /// Resolve the WIR type of a TIR local variable by index.
+    fn local_wir_type(&self, index: u32) -> WirType {
+        let param_count = self.tir_func.params.len();
+        if (index as usize) < param_count {
+            let type_id = self.tir_func.params[index as usize].type_id;
+            self.wir_type(type_id)
+        } else if !self.tir_func.local_types.is_empty() {
+            let local_idx = index as usize - param_count;
+            if let Some(&type_id) = self.tir_func.local_types.get(local_idx) {
+                self.wir_type(type_id)
+            } else {
+                WirType::I32
+            }
+        } else {
+            WirType::I32
+        }
+    }
+
+    /// Shorthand for `self.ctx.type_id_to_wir_type(self.type_table, type_id)`.
+    fn wir_type(&self, type_id: TypeId) -> WirType {
+        self.ctx.type_id_to_wir_type(self.type_table, type_id)
+    }
+
+    /// Look up the WIR type of a struct field.
+    fn struct_field_wir_type(&self, struct_type_id: &WirTypeId, field_name: &str) -> WirType {
+        if let Some(WirTypeDef::Struct(st)) = self.ctx.types.get(struct_type_id.index() as usize) {
+            if let Some(f) = st.fields.iter().find(|f| f.name == field_name) {
+                return f.ty.clone();
+            }
+        }
+        WirType::I32
+    }
+
+    /// Look up the element WIR type of an array type.
+    fn array_element_wir_type(&self, array_type_id: &WirTypeId) -> WirType {
+        if let Some(WirTypeDef::Array(at)) = self.ctx.types.get(array_type_id.index() as usize) {
+            return at.element_type.clone();
+        }
+        WirType::I32
     }
 
     /// Build a `StructNew` instruction, wrapping each field value with `RefAsNonNull`
@@ -1228,9 +1283,7 @@ impl FunctionTranslator<'_, '_> {
                 if expr.type_id == TypeTable::UNIT {
                     WirInstr::Nop
                 } else {
-                    WirInstr::LocalGet {
-                        name: self.local_name(*index),
-                    }
+                    self.local_get(*index)
                 }
             }
             TirExprKind::FuncRef {
@@ -1260,6 +1313,7 @@ impl FunctionTranslator<'_, '_> {
                         display: name.clone(),
                         fq: global_name,
                     },
+                    result_ty: self.wir_type(expr.type_id),
                 }
             }
             TirExprKind::GlobalVarSet {
@@ -1479,10 +1533,12 @@ impl FunctionTranslator<'_, '_> {
                     .ctx
                     .type_id_to_wir_type(self.type_table, receiver.type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
+                    let result_ty = self.struct_field_wir_type(&type_id, field_name);
                     WirInstr::StructGet {
                         type_id,
                         field_name: field_name.clone(),
                         expr: Box::new(recv),
+                        result_ty,
                     }
                 } else {
                     WirInstr::Unreachable
@@ -1682,6 +1738,7 @@ impl FunctionTranslator<'_, '_> {
                         type_id,
                         field_name: "discriminant".to_string(),
                         expr: Box::new(val),
+                        result_ty: WirType::I32,
                     }
                 } else {
                     WirInstr::I32Const(0)
@@ -2645,6 +2702,7 @@ impl FunctionTranslator<'_, '_> {
                         type_id: type_id.clone(),
                         array: Box::new(arr),
                         index: Box::new(idx),
+                        result_ty: WirType::I32,
                     })
             }
             "builtin::array_set_u8" => {
@@ -2669,9 +2727,10 @@ impl FunctionTranslator<'_, '_> {
                     .type_id_to_wir_type(self.type_table, args[0].expr.type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayGet {
-                        type_id,
+                        type_id: type_id.clone(),
                         array: Box::new(arr),
                         index: Box::new(idx),
+                        result_ty: self.array_element_wir_type(&type_id),
                     })
                 } else {
                     None
@@ -4316,9 +4375,9 @@ impl FunctionTranslator<'_, '_> {
             name: temp.clone(),
             value: Box::new(call),
         };
-        let get_low = WirInstr::I32WrapI64(Box::new(WirInstr::LocalGet { name: temp.clone() }));
+        let get_low = WirInstr::I32WrapI64(Box::new(WirInstr::LocalGet { name: temp.clone(), result_ty: WirType::I64 }));
         let get_high = WirInstr::I32WrapI64(Box::new(WirInstr::I64ShrU(
-            Box::new(WirInstr::LocalGet { name: temp }),
+            Box::new(WirInstr::LocalGet { name: temp, result_ty: WirType::I64 }),
             Box::new(WirInstr::I64Const(32)),
         )));
 
@@ -4425,9 +4484,11 @@ impl FunctionTranslator<'_, '_> {
                 args: vec![
                     WirInstr::LocalGet {
                         name: handle_name.clone(),
+                        result_ty: WirType::I32,
                     },
                     WirInstr::LocalGet {
                         name: ptr_name.clone(),
+                        result_ty: WirType::I32,
                     },
                 ],
             }),
@@ -4438,6 +4499,7 @@ impl FunctionTranslator<'_, '_> {
             condition: Box::new(WirInstr::I32Eq(
                 Box::new(WirInstr::LocalGet {
                     name: result_name.clone(),
+                    result_ty: WirType::I32,
                 }),
                 Box::new(WirInstr::I32Const(-1)),
             )),
@@ -4461,9 +4523,10 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::Call {
                         func_id: w_join_id,
                         args: vec![
-                            WirInstr::LocalGet { name: handle_name },
+                            WirInstr::LocalGet { name: handle_name, result_ty: WirType::I32 },
                             WirInstr::LocalGet {
                                 name: result_name.clone(),
+                                result_ty: WirType::I32,
                             },
                         ],
                     },
@@ -4486,8 +4549,9 @@ impl FunctionTranslator<'_, '_> {
                         args: vec![
                             WirInstr::LocalGet {
                                 name: result_name.clone(),
+                                result_ty: WirType::I32,
                             },
-                            WirInstr::LocalGet { name: evt.clone() },
+                            WirInstr::LocalGet { name: evt.clone(), result_ty: WirType::I32 },
                         ],
                     })),
                     // result = i32.load(evt_ptr + 4) — the payload contains the ReturnCode
@@ -4496,14 +4560,14 @@ impl FunctionTranslator<'_, '_> {
                         value: Box::new(WirInstr::I32Load {
                             offset: 4,
                             align: 2,
-                            addr: Box::new(WirInstr::LocalGet { name: evt.clone() }),
+                            addr: Box::new(WirInstr::LocalGet { name: evt.clone(), result_ty: WirType::I32 }),
                         }),
                     },
                     // Free event buffer
                     WirInstr::Drop(Box::new(WirInstr::Call {
                         func_id: realloc_id.clone(),
                         args: vec![
-                            WirInstr::LocalGet { name: evt },
+                            WirInstr::LocalGet { name: evt, result_ty: WirType::I32 },
                             WirInstr::I32Const(8),
                             WirInstr::I32Const(4),
                             WirInstr::I32Const(0),
@@ -4543,10 +4607,10 @@ impl FunctionTranslator<'_, '_> {
             name: option_result_name.clone(),
             value: Box::new(WirInstr::If {
                 condition: Box::new(WirInstr::I32Eqz(Box::new(WirInstr::I32And(
-                    Box::new(WirInstr::LocalGet { name: result_name }),
+                    Box::new(WirInstr::LocalGet { name: result_name, result_ty: WirType::I32 }),
                     Box::new(WirInstr::I32Const(0xF)),
                 )))),
-                result: Some(option_wir_type),
+                result: Some(option_wir_type.clone()),
                 then_body: vec![some_variant],
                 else_body: Some(vec![none_variant]),
             }),
@@ -4558,6 +4622,7 @@ impl FunctionTranslator<'_, '_> {
             args: vec![
                 WirInstr::LocalGet {
                     name: ptr_name.clone(),
+                    result_ty: WirType::I32,
                 },
                 WirInstr::I32Const(BUF_SIZE),
                 WirInstr::I32Const(BUF_ALIGN),
@@ -4567,6 +4632,7 @@ impl FunctionTranslator<'_, '_> {
 
         instrs.push(WirInstr::LocalGet {
             name: option_result_name,
+            result_ty: option_wir_type,
         });
 
         WirInstr::Seq(instrs)
@@ -4627,6 +4693,7 @@ impl FunctionTranslator<'_, '_> {
         };
         let ptr = || WirInstr::LocalGet {
             name: ptr_name.to_string(),
+            result_ty: WirType::I32,
         };
         let instr = match prim {
             PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => WirInstr::I32Load8U {
@@ -4671,6 +4738,7 @@ impl FunctionTranslator<'_, '_> {
     ) -> WirInstr {
         let ptr = || WirInstr::LocalGet {
             name: ptr_name.to_string(),
+            result_ty: WirType::I32,
         };
 
         // Read result discriminant at offset 0
@@ -4827,6 +4895,7 @@ impl FunctionTranslator<'_, '_> {
         // Store value at ptr
         let ptr = || WirInstr::LocalGet {
             name: ptr_name.clone(),
+            result_ty: WirType::I32,
         };
         let store_instr = match prim {
             PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => WirInstr::I32Store8 {
@@ -4863,7 +4932,7 @@ impl FunctionTranslator<'_, '_> {
         // until the reader copies the data on the same thread.
         seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
             func_id: future_write_id,
-            args: vec![handle, WirInstr::LocalGet { name: ptr_name }],
+            args: vec![handle, WirInstr::LocalGet { name: ptr_name, result_ty: WirType::I32 }],
         })));
 
         // NOTE: We intentionally do NOT free the buffer here. When the canonical
@@ -4892,6 +4961,7 @@ impl FunctionTranslator<'_, '_> {
             condition: Box::new(WirInstr::I32Eq(
                 Box::new(WirInstr::LocalGet {
                     name: result_name.to_string(),
+                    result_ty: WirType::I32,
                 }),
                 Box::new(WirInstr::I32Const(-1)),
             )),
@@ -4913,9 +4983,11 @@ impl FunctionTranslator<'_, '_> {
                     args: vec![
                         WirInstr::LocalGet {
                             name: handle_name.to_string(),
+                            result_ty: WirType::I32,
                         },
                         WirInstr::LocalGet {
                             name: result_name.to_string(),
+                            result_ty: WirType::I32,
                         },
                     ],
                 },
@@ -4936,9 +5008,11 @@ impl FunctionTranslator<'_, '_> {
                     args: vec![
                         WirInstr::LocalGet {
                             name: result_name.to_string(),
+                            result_ty: WirType::I32,
                         },
                         WirInstr::LocalGet {
                             name: evt_name.to_string(),
+                            result_ty: WirType::I32,
                         },
                     ],
                 })),
@@ -4947,6 +5021,7 @@ impl FunctionTranslator<'_, '_> {
                     args: vec![
                         WirInstr::LocalGet {
                             name: evt_name.to_string(),
+                            result_ty: WirType::I32,
                         },
                         WirInstr::I32Const(8),
                         WirInstr::I32Const(4),
@@ -5049,6 +5124,7 @@ impl FunctionTranslator<'_, '_> {
                 align: 3,
                 addr: Box::new(WirInstr::LocalGet {
                     name: ptr_name.clone(),
+                    result_ty: WirType::I32,
                 }),
                 value: Box::new(WirInstr::I64Const(0)),
             });
@@ -5062,9 +5138,11 @@ impl FunctionTranslator<'_, '_> {
                 args: vec![
                     WirInstr::LocalGet {
                         name: handle_name.clone(),
+                        result_ty: WirType::I32,
                     },
                     WirInstr::LocalGet {
                         name: ptr_name.clone(),
+                        result_ty: WirType::I32,
                     },
                 ],
             }),
@@ -5085,7 +5163,7 @@ impl FunctionTranslator<'_, '_> {
         seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
             func_id: realloc_id,
             args: vec![
-                WirInstr::LocalGet { name: ptr_name },
+                WirInstr::LocalGet { name: ptr_name, result_ty: WirType::I32 },
                 WirInstr::I32Const(BUF_SIZE),
                 WirInstr::I32Const(BUF_ALIGN),
                 WirInstr::I32Const(0),
@@ -5146,10 +5224,12 @@ impl FunctionTranslator<'_, '_> {
         };
 
         // StructGet field "repr" (field 0) to get raw array
+        let repr_result_ty = self.struct_field_wir_type(&array_struct_type, "repr");
         let raw_arr = WirInstr::StructGet {
             type_id: array_struct_type,
             field_name: "repr".to_string(),
             expr: Box::new(arr),
+            result_ty: repr_result_ty,
         };
 
         // Determine appropriate array get instruction based on element type
@@ -5164,6 +5244,7 @@ impl FunctionTranslator<'_, '_> {
                 | ResolvedType::Variant { .. }
         );
 
+        let elem_result_ty = self.array_element_wir_type(&raw_type);
         let get_instr = if matches!(
             elem_resolved,
             ResolvedType::Primitive(PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::Bool)
@@ -5172,6 +5253,7 @@ impl FunctionTranslator<'_, '_> {
                 type_id: raw_type,
                 array: Box::new(raw_arr),
                 index: Box::new(idx),
+                result_ty: elem_result_ty,
             }
         } else if matches!(
             elem_resolved,
@@ -5181,12 +5263,14 @@ impl FunctionTranslator<'_, '_> {
                 type_id: raw_type,
                 array: Box::new(raw_arr),
                 index: Box::new(idx),
+                result_ty: elem_result_ty,
             }
         } else {
             WirInstr::ArrayGet {
                 type_id: raw_type,
                 array: Box::new(raw_arr),
                 index: Box::new(idx),
+                result_ty: elem_result_ty,
             }
         };
 
@@ -5234,10 +5318,12 @@ impl FunctionTranslator<'_, '_> {
                 return WirInstr::Drop(Box::new(val));
             };
 
+            let repr_result_ty = self.struct_field_wir_type(&array_struct_type, "repr");
             let raw_arr = WirInstr::StructGet {
                 type_id: array_struct_type,
                 field_name: "repr".to_string(),
                 expr: Box::new(arr),
+                result_ty: repr_result_ty,
             };
 
             WirInstr::ArraySet {
@@ -5431,14 +5517,18 @@ impl FunctionTranslator<'_, '_> {
                     for (i, sub_pattern) in patterns.iter().enumerate() {
                         if let TirPattern::Binding { local_index, .. } = sub_pattern {
                             let local_name = self.local_name(*local_index);
+                            let field_name_str = format!("{i}");
+                            let field_result_ty = self.struct_field_wir_type(type_id, &field_name_str);
                             instrs.push(WirInstr::LocalSet {
                                 name: local_name,
                                 value: Box::new(WirInstr::StructGet {
                                     type_id: type_id.clone(),
-                                    field_name: format!("{i}"),
+                                    field_name: field_name_str,
                                     expr: Box::new(WirInstr::LocalGet {
                                         name: temp_name.clone(),
+                                        result_ty: wir_type.clone(),
                                     }),
+                                    result_ty: field_result_ty,
                                 }),
                             });
                         }
@@ -5655,6 +5745,7 @@ impl FunctionTranslator<'_, '_> {
             TirPattern::Literal(lit) => {
                 let scrut_get = WirInstr::LocalGet {
                     name: scrut_local.to_string(),
+                    result_ty: self.wir_type(scrut_type),
                 };
                 self.translate_literal_pattern_condition(lit, scrut_get, scrut_type)
             }
@@ -5662,6 +5753,7 @@ impl FunctionTranslator<'_, '_> {
                 // Enum: compare i32 discriminant
                 let scrut_get = WirInstr::LocalGet {
                     name: scrut_local.to_string(),
+                    result_ty: self.wir_type(scrut_type),
                 };
                 WirInstr::I32Eq(
                     Box::new(scrut_get),
@@ -5677,6 +5769,7 @@ impl FunctionTranslator<'_, '_> {
                 // or discriminant comparison for unit cases
                 let scrut_get = WirInstr::LocalGet {
                     name: scrut_local.to_string(),
+                    result_ty: self.wir_type(scrut_type),
                 };
 
                 // Look up variant type info to find the case WirTypeId
@@ -5722,6 +5815,7 @@ impl FunctionTranslator<'_, '_> {
                                             type_id,
                                             field_name: "discriminant".to_string(),
                                             expr: Box::new(scrut_get),
+                                            result_ty: WirType::I32,
                                         }),
                                         Box::new(WirInstr::I32Const(case.index as i32)),
                                     )
@@ -5747,6 +5841,7 @@ impl FunctionTranslator<'_, '_> {
                                                 type_id,
                                                 field_name: "discriminant".to_string(),
                                                 expr: Box::new(scrut_get),
+                                                result_ty: WirType::I32,
                                             }),
                                             Box::new(WirInstr::I32Const(case.index as i32)),
                                         )
@@ -5843,6 +5938,7 @@ impl FunctionTranslator<'_, '_> {
                     name: self.local_name(*local_index),
                     value: Box::new(WirInstr::LocalGet {
                         name: scrut_local.to_string(),
+                        result_ty: self.wir_type(scrut_type),
                     }),
                 });
             }
@@ -5903,17 +5999,25 @@ impl FunctionTranslator<'_, '_> {
                             nullable: false,
                             expr: Box::new(WirInstr::LocalGet {
                                 name: scrut_local.to_string(),
+                                result_ty: self.wir_type(scrut_type),
                             }),
                         }),
                     });
                     // Extract each payload binding via struct.get from the cast local
                     for (i, binding) in bindings.iter().enumerate() {
+                        let payload_field_name = format!("payload_{i}");
+                        let payload_result_ty = self.struct_field_wir_type(&case_type_id, &payload_field_name);
                         let payload_get = WirInstr::StructGet {
                             type_id: case_type_id.clone(),
-                            field_name: format!("payload_{i}"),
+                            field_name: payload_field_name,
                             expr: Box::new(WirInstr::LocalGet {
                                 name: cast_local.clone(),
+                                result_ty: WirType::Ref {
+                                    type_id: case_type_id.clone(),
+                                    nullable: false,
+                                },
                             }),
+                            result_ty: payload_result_ty,
                         };
                         if let TirPattern::Binding {
                             local_index,
@@ -5981,14 +6085,21 @@ impl FunctionTranslator<'_, '_> {
                                 });
                                 for (j, sub) in sub_patterns.iter().enumerate() {
                                     if let TirPattern::Binding { local_index, .. } = sub {
+                                        let tuple_field_name = format!("{j}");
+                                        let tuple_field_ty = self.struct_field_wir_type(&tuple_type_id, &tuple_field_name);
                                         instrs.push(WirInstr::LocalSet {
                                             name: self.local_name(*local_index),
                                             value: Box::new(WirInstr::StructGet {
                                                 type_id: tuple_type_id.clone(),
-                                                field_name: format!("{j}"),
+                                                field_name: tuple_field_name,
                                                 expr: Box::new(WirInstr::LocalGet {
                                                     name: tuple_local.clone(),
+                                                    result_ty: WirType::Ref {
+                                                        type_id: tuple_type_id.clone(),
+                                                        nullable: false,
+                                                    },
                                                 }),
+                                                result_ty: tuple_field_ty,
                                             }),
                                         });
                                     }
@@ -6012,6 +6123,7 @@ impl FunctionTranslator<'_, '_> {
                                     name: self.local_name(*local_index),
                                     value: Box::new(WirInstr::LocalGet {
                                         name: scrut_local.to_string(),
+                                        result_ty: self.wir_type(scrut_type),
                                     }),
                                 });
                             }
@@ -6024,7 +6136,7 @@ impl FunctionTranslator<'_, '_> {
             }
             TirPattern::Tuple(sub_patterns) => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
-                if let WirType::Ref { type_id, .. } = wir_type {
+                if let WirType::Ref { ref type_id, .. } = wir_type {
                     let element_types =
                         if let ResolvedType::Tuple(elements) = self.type_table.get(scrut_type) {
                             elements.clone()
@@ -6032,12 +6144,16 @@ impl FunctionTranslator<'_, '_> {
                             vec![]
                         };
                     for (i, sub_pattern) in sub_patterns.iter().enumerate() {
+                        let field_name_str = format!("{i}");
+                        let field_result_ty = self.struct_field_wir_type(&type_id, &field_name_str);
                         let field_get = WirInstr::StructGet {
                             type_id: type_id.clone(),
-                            field_name: format!("{i}"),
+                            field_name: field_name_str,
                             expr: Box::new(WirInstr::LocalGet {
                                 name: scrut_local.to_string(),
+                                result_ty: wir_type.clone(),
                             }),
+                            result_ty: field_result_ty,
                         };
                         match sub_pattern {
                             TirPattern::Binding { local_index, .. } => {
@@ -6077,14 +6193,17 @@ impl FunctionTranslator<'_, '_> {
             TirPattern::Struct { fields, .. } => {
                 // Emit field bindings for struct patterns in match arms
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
-                if let WirType::Ref { type_id, .. } = wir_type {
+                if let WirType::Ref { ref type_id, .. } = wir_type {
                     for field in fields {
+                        let field_result_ty = self.struct_field_wir_type(&type_id, &field.field_name);
                         let field_get = WirInstr::StructGet {
                             type_id: type_id.clone(),
                             field_name: field.field_name.clone(),
                             expr: Box::new(WirInstr::LocalGet {
                                 name: scrut_local.to_string(),
+                                result_ty: wir_type.clone(),
                             }),
+                            result_ty: field_result_ty,
                         };
                         match &field.pattern {
                             TirPattern::Binding { local_index, .. } => {
@@ -6337,6 +6456,7 @@ impl FunctionTranslator<'_, '_> {
                             type_id,
                             field_name: "discriminant".to_string(),
                             expr: Box::new(val),
+                            result_ty: WirType::I32,
                         }),
                         Box::new(WirInstr::I32Const(case_index as i32)),
                     );
@@ -6362,6 +6482,7 @@ impl FunctionTranslator<'_, '_> {
                             type_id,
                             field_name: "discriminant".to_string(),
                             expr: Box::new(val),
+                            result_ty: WirType::I32,
                         }),
                         Box::new(WirInstr::I32Const(case_index as i32)),
                     );
@@ -6387,6 +6508,7 @@ impl FunctionTranslator<'_, '_> {
                     type_id,
                     field_name: "discriminant".to_string(),
                     expr: Box::new(val),
+                    result_ty: WirType::I32,
                 }),
                 Box::new(WirInstr::I32Const(case_index as i32)),
             )
@@ -6440,10 +6562,12 @@ impl FunctionTranslator<'_, '_> {
                         nullable: false,
                         expr: Box::new(val),
                     };
+                    let payload_result_ty = self.struct_field_wir_type(case_type_id, "payload_0");
                     return WirInstr::StructGet {
                         type_id: case_type_id.clone(),
                         field_name: "payload_0".to_string(),
                         expr: Box::new(cast),
+                        result_ty: payload_result_ty,
                     };
                 }
             }
@@ -6505,7 +6629,7 @@ impl FunctionTranslator<'_, '_> {
         let mut stmts = vec![
             WirInstr::DeclareLocal {
                 name: temp_name.clone(),
-                ty: callee_ref_type,
+                ty: callee_ref_type.clone(),
             },
             WirInstr::LocalSet {
                 name: temp_name.clone(),
@@ -6518,12 +6642,15 @@ impl FunctionTranslator<'_, '_> {
         ];
 
         // Build args: env, then user args
+        let env_result_ty = self.struct_field_wir_type(&closure_struct_type_id, "env");
         let env_arg = WirInstr::StructGet {
             type_id: closure_struct_type_id.clone(),
             field_name: "env".to_string(),
             expr: Box::new(WirInstr::LocalGet {
                 name: temp_name.clone(),
+                result_ty: callee_ref_type.clone(),
             }),
+            result_ty: env_result_ty,
         };
 
         let mut call_args = vec![env_arg];
@@ -6533,10 +6660,12 @@ impl FunctionTranslator<'_, '_> {
         }
 
         // func_ref = struct.get $closure "func"
+        let func_result_ty = self.struct_field_wir_type(&closure_struct_type_id, "func");
         let func_ref = WirInstr::StructGet {
             type_id: closure_struct_type_id,
             field_name: "func".to_string(),
-            expr: Box::new(WirInstr::LocalGet { name: temp_name }),
+            expr: Box::new(WirInstr::LocalGet { name: temp_name, result_ty: callee_ref_type }),
+            result_ty: func_result_ty,
         };
 
         let call_ref = WirInstr::CallRef {

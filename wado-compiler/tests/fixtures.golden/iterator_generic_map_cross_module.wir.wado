@@ -168,7 +168,7 @@ fn run() {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
     };
-    iter = "./sub/iterator_generic_map_lib.wado/GenericMapIter<ArrayIter<i32>,i32>" { inner: "./sub/iterator_generic_map_lib.wado/ArrayIter<i32>" { repr: arr.repr, used: 3, index: 0 }, f: "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado/__closure_wrapper_0") } };
+    iter = "./sub/iterator_generic_map_lib.wado/GenericMapIter<ArrayIter<i32>,i32>" { inner: "./sub/iterator_generic_map_lib.wado/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 }, f: "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado/__closure_wrapper_0") } };
     a = GenericMapIter<ArrayIter<i32>,i32>^Iterator::next(iter);
     let __match_scrut_0: ref Option<i32>;
     __match_scrut_0 = a;
@@ -192,7 +192,7 @@ fn run() {
             String::append_char(__local_11, 32);
             String::append(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado"), used: 67 });
             String::append_char(__local_11, 58);
-            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
+            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
             i32::fmt_decimal(8, __local_12);
             String::append(__local_11, String { repr: array.new_data<u8>("
 condition: a matches { Some(10) }
@@ -224,7 +224,7 @@ condition: a matches { Some(10) }
             String::append_char(__local_13, 32);
             String::append(__local_13, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado"), used: 67 });
             String::append_char(__local_13, 58);
-            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
+            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
             i32::fmt_decimal(10, __local_14);
             String::append(__local_13, String { repr: array.new_data<u8>("
 condition: b matches { Some(20) }
@@ -256,7 +256,7 @@ condition: b matches { Some(20) }
             String::append_char(__local_15, 32);
             String::append(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado"), used: 67 });
             String::append_char(__local_15, 58);
-            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
+            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
             i32::fmt_decimal(12, __local_16);
             String::append(__local_15, String { repr: array.new_data<u8>("
 condition: c matches { Some(30) }
@@ -286,7 +286,7 @@ condition: c matches { Some(30) }
             String::append_char(__local_17, 32);
             String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado"), used: 67 });
             String::append_char(__local_17, 58);
-            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
             i32::fmt_decimal(14, __local_18);
             String::append(__local_17, String { repr: array.new_data<u8>("
 condition: d matches { None }
@@ -504,7 +504,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -626,7 +626,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn __Closure_0::__call(self, x) {

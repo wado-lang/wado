@@ -1369,7 +1369,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1575,7 +1575,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -1653,7 +1653,7 @@ fn JsonSerializer^Serializer::serialize_i32(self, v) {
     self_4 = self;
     s = __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         i32::fmt_decimal(v, __local_3);
         break __tmpl: __local_2;
     };
@@ -1669,7 +1669,7 @@ fn JsonSerializer^Serializer::serialize_f64(self, v) {
     self_4 = self;
     s = __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
         f64::fmt_into(v, __local_3);
         break __tmpl: __local_2;
     };
@@ -1749,7 +1749,7 @@ fn Array<String>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn User^Serialize::serialize<JsonSerializer>(self, s) {
@@ -1763,7 +1763,7 @@ fn User^Serialize::serialize<JsonSerializer>(self, s) {
         self_8 = s;
         s_9 = String { repr: array.new_data<u8>("{"), used: 1 };
         String::append(self_8.buf, s_9);
-        __fused_payload_13 = JsonStructSerializer { w: s, count: 0 };
+        __fused_payload_13 = JsonStructSerializer { w: ref.as_non_null(s), count: 0 };
         st = __fused_payload_13;
         drop(JsonStructSerializer^SerializeStruct::field<String>(st, String { repr: array.new_data<u8>("name"), used: 4 }, self.name));
         drop(JsonStructSerializer^SerializeStruct::field<i32>(st, String { repr: array.new_data<u8>("age"), used: 3 }, self.age));
@@ -1803,9 +1803,9 @@ fn JsonStructSerializer^SerializeStruct::field<Array<String>>(self, name, value)
         break __tmpl: __local_4;
     };
     String::append(self_7.buf, s_8);
-    ser = JsonSerializer { w: self.w };
+    ser = JsonSerializer { w: ref.as_non_null(self.w) };
     drop(Array<String>^Serialize::serialize<JsonSerializer>(value, ser.w));
-    self.w = ser.w;
+    self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
 }
@@ -1825,11 +1825,11 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
         self_11 = s;
         s_12 = String { repr: array.new_data<u8>("["), used: 1 };
         String::append(self_11.buf, s_12);
-        __fused_payload_17 = JsonSeqSerializer { w: s, count: 0 };
+        __fused_payload_17 = JsonSeqSerializer { w: ref.as_non_null(s), count: 0 };
         seq = __fused_payload_17;
         __iter_4 = __inline_Array_String__IntoIterator__into_iter_3: block -> ref ArrayIter<String> {
             __local_13 = self;
-            break __inline_Array_String__IntoIterator__into_iter_3: ArrayIter<String> { repr: __local_13.repr, used: __local_13.used, index: 0 };
+            break __inline_Array_String__IntoIterator__into_iter_3: ArrayIter<String> { repr: ref.as_non_null(__local_13.repr), used: __local_13.used, index: 0 };
         };
         b159: block {
             l160: loop {
@@ -1863,9 +1863,9 @@ fn JsonSeqSerializer^SerializeSeq::element<String>(self, value) {
         s = String { repr: array.new_data<u8>(","), used: 1 };
         String::append(self_3.buf, s);
     };
-    ser = JsonSerializer { w: self.w };
+    ser = JsonSerializer { w: ref.as_non_null(self.w) };
     drop(JsonSerializer^Serializer::serialize_string(ser.w, value));
-    self.w = ser.w;
+    self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
 }
@@ -1877,7 +1877,7 @@ fn ArrayIter<String>^Iterator::next(self) {
     };
     item = builtin::array_get<ref String>(self.repr, self.index);
     self.index = self.index + 1;
-    return item;
+    return ref.as_non_null(item);
 }
 
 fn JsonStructSerializer^SerializeStruct::field<Option<Point>>(self, name, value) {
@@ -1907,7 +1907,7 @@ fn JsonStructSerializer^SerializeStruct::field<Option<Point>>(self, name, value)
         break __tmpl: __local_4;
     };
     String::append(self_7.buf, s_8);
-    ser = JsonSerializer { w: self.w };
+    ser = JsonSerializer { w: ref.as_non_null(self.w) };
     drop(__inline_Option_Point__Serialize__serialize_JsonSerializer__3: block -> ref null SerializeError {
         __local_11 = ser;
         __local_13 = value_copy Option<Point>(value);
@@ -1923,7 +1923,7 @@ fn JsonStructSerializer^SerializeStruct::field<Option<Point>>(self, name, value)
         };
         break __inline_Option_Point__Serialize__serialize_JsonSerializer__3;
     });
-    self.w = ser.w;
+    self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
 }
@@ -1939,7 +1939,7 @@ fn Point^Serialize::serialize<JsonSerializer>(self, s) {
         self_8 = s;
         s_9 = String { repr: array.new_data<u8>("{"), used: 1 };
         String::append(self_8.buf, s_9);
-        __fused_payload_13 = JsonStructSerializer { w: s, count: 0 };
+        __fused_payload_13 = JsonStructSerializer { w: ref.as_non_null(s), count: 0 };
         st = __fused_payload_13;
         drop(JsonStructSerializer^SerializeStruct::field<f64>(st, String { repr: array.new_data<u8>("x"), used: 1 }, self.x));
         drop(JsonStructSerializer^SerializeStruct::field<f64>(st, String { repr: array.new_data<u8>("y"), used: 1 }, self.y));
@@ -1976,9 +1976,9 @@ fn JsonStructSerializer^SerializeStruct::field<f64>(self, name, value) {
         break __tmpl: __local_4;
     };
     String::append(self_7.buf, s_8);
-    ser = JsonSerializer { w: self.w };
+    ser = JsonSerializer { w: ref.as_non_null(self.w) };
     drop(JsonSerializer^Serializer::serialize_f64(ser.w, value));
-    self.w = ser.w;
+    self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
 }
@@ -2005,9 +2005,9 @@ fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
         break __tmpl: __local_4;
     };
     String::append(self_7.buf, s_8);
-    ser = JsonSerializer { w: self.w };
+    ser = JsonSerializer { w: ref.as_non_null(self.w) };
     drop(JsonSerializer^Serializer::serialize_bool(ser.w, value));
-    self.w = ser.w;
+    self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
 }
@@ -2034,9 +2034,9 @@ fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
         break __tmpl: __local_4;
     };
     String::append(self_7.buf, s_8);
-    ser = JsonSerializer { w: self.w };
+    ser = JsonSerializer { w: ref.as_non_null(self.w) };
     drop(JsonSerializer^Serializer::serialize_i32(ser.w, value));
-    self.w = ser.w;
+    self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
 }
@@ -2063,9 +2063,9 @@ fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
         break __tmpl: __local_4;
     };
     String::append(self_7.buf, s_8);
-    ser = JsonSerializer { w: self.w };
+    ser = JsonSerializer { w: ref.as_non_null(self.w) };
     drop(JsonSerializer^Serializer::serialize_string(ser.w, value));
-    self.w = ser.w;
+    self.w = ref.as_non_null(ser.w);
     self.count = self.count + 1;
     return ref.null none;
 }

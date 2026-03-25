@@ -101,28 +101,28 @@ fn run() with Stdout {
     s6 = Shape::Rectangle { discriminant: 1, payload_0: 3 };
     s7 = Shape { 2 };
     s8 = Shape { 2 };
-    if Shape^Eq::eq(s1, s2) {
+    if Shape^Eq::eq(ref.as_non_null(s1), ref.as_non_null(s2)) {
         "core:cli/println"(String { repr: array.new_data<u8>("circle == circle"), used: 16 });
     };
-    if Shape^Eq::eq(s1, s3) == 0 {
+    if Shape^Eq::eq(ref.as_non_null(s1), ref.as_non_null(s3)) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("circle(3.14) != circle(2.0)"), used: 27 });
     };
-    if Shape^Eq::eq(s1, s4) == 0 {
+    if Shape^Eq::eq(ref.as_non_null(s1), ref.as_non_null(s4)) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("circle != rectangle"), used: 19 });
     };
-    if Shape^Eq::eq(s4, s5) {
+    if Shape^Eq::eq(ref.as_non_null(s4), ref.as_non_null(s5)) {
         "core:cli/println"(String { repr: array.new_data<u8>("rect == rect"), used: 12 });
     };
-    if Shape^Eq::eq(s4, s6) == 0 {
+    if Shape^Eq::eq(ref.as_non_null(s4), ref.as_non_null(s6)) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("rect(1) != rect(3)"), used: 18 });
     };
-    if Shape^Eq::eq(s7, s8) {
+    if Shape^Eq::eq(ref.as_non_null(s7), ref.as_non_null(s8)) {
         "core:cli/println"(String { repr: array.new_data<u8>("point == point"), used: 14 });
     };
-    if Shape^Eq::eq(s7, s1) == 0 {
+    if Shape^Eq::eq(ref.as_non_null(s7), ref.as_non_null(s1)) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("point != circle"), used: 15 });
     };
-    if Shape^Eq::eq(s1, s3) == 0 {
+    if Shape^Eq::eq(ref.as_non_null(s1), ref.as_non_null(s3)) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("!= works"), used: 8 });
     };
 }

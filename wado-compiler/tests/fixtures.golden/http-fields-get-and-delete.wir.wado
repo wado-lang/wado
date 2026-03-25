@@ -554,14 +554,14 @@ fn handle(request) {
             String::append_char(__local_17, 32);
             String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields-get-and-delete.wado"), used: 60 });
             String::append_char(__local_17, 58);
-            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
             __local_185 = __local_18;
             i32::fmt_decimal(11, __local_185);
             String::append(__local_17, String { repr: array.new_data<u8>("
 condition: fields.has(\"x-temp\" as FieldName)
 "), used: 46 });
             String::append(__local_17, String { repr: array.new_data<u8>("fields.has(\"x-temp\" as FieldName): "), used: 35 });
-            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
             __local_190 = __local_18;
             Formatter::pad(__local_190, if __v0_4 -> ref String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
@@ -594,14 +594,14 @@ condition: fields.has(\"x-temp\" as FieldName)
                 String::append_char(__local_19, 32);
                 String::append(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields-get-and-delete.wado"), used: 60 });
                 String::append_char(__local_19, 58);
-                __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
+                __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_19) };
                 __local_197 = __local_20;
                 i32::fmt_decimal(16, __local_197);
                 String::append(__local_19, String { repr: array.new_data<u8>("
 condition: values.len() == 1
 "), used: 30 });
                 String::append(__local_19, String { repr: array.new_data<u8>("values.len(): "), used: 14 });
-                __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
+                __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_19) };
                 __local_202 = __local_20;
                 i32::fmt_decimal(__v0_8, __local_202);
                 String::append_char(__local_19, 10);
@@ -631,14 +631,14 @@ condition: values.len() == 1
             String::append_char(__local_21, 32);
             String::append(__local_21, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields-get-and-delete.wado"), used: 60 });
             String::append_char(__local_21, 58);
-            __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
+            __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_21) };
             __local_208 = __local_22;
             i32::fmt_decimal(22, __local_208);
             String::append(__local_21, String { repr: array.new_data<u8>("
 condition: !fields.has(\"x-temp\" as FieldName)
 "), used: 47 });
             String::append(__local_21, String { repr: array.new_data<u8>("fields.has(\"x-temp\" as FieldName): "), used: 35 });
-            __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
+            __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_21) };
             __local_213 = __local_22;
             Formatter::pad(__local_213, if __v0_10 -> ref String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
@@ -1019,7 +1019,7 @@ fn __cm_binding__Fields_append(self, name, value) {
         } else {
             __vresult = "wasi:http/types.wado/HeaderError" { 2 };
         };
-        __result_val = __vresult;
+        __result_val = ref.as_non_null(__vresult);
     };
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __result_val;
@@ -1090,7 +1090,7 @@ fn __cm_binding__Fields_get_and_delete(self, name) {
         if __count_7 > 0 {
             drop("mem/realloc"(__base_6, __count_7 * 8, 4, 0));
         };
-        __result_val = Result<Array<Array<u8>>,HeaderError>::Ok { discriminant: 0, payload_0: __result_8 };
+        __result_val = Result<Array<Array<u8>>,HeaderError>::Ok { discriminant: 0, payload_0: ref.as_non_null(__result_8) };
     } else {
         __vdisc = builtin::load_u8(__outptr + 4);
         __vresult = ref.null none;
@@ -1101,7 +1101,7 @@ fn __cm_binding__Fields_get_and_delete(self, name) {
         } else {
             __vresult = "wasi:http/types.wado/HeaderError" { 2 };
         };
-        __result_val = Result<Array<Array<u8>>,HeaderError>::Err { discriminant: 1, payload_0: __vresult };
+        __result_val = Result<Array<Array<u8>>,HeaderError>::Err { discriminant: 1, payload_0: ref.as_non_null(__vresult) };
     };
     drop("mem/realloc"(__outptr, 12, 4, 0));
     return __result_val;
@@ -1336,7 +1336,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -1432,7 +1432,7 @@ fn Array<Array<u8>>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Array<u8>::append(self, value) {
@@ -1474,7 +1474,7 @@ fn Array<u8>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Formatter::write_char_n(self, c, n) {

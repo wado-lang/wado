@@ -187,7 +187,7 @@ fn run() with Stdout {
     key = String { repr: array.new_data<u8>("hello"), used: 5 };
     value = "./sub/cross_module_treemap_variant_helper.wado/Value::Str" { discriminant: 0, payload_0: String { repr: array.new_data<u8>("world"), used: 5 } };
     TreeMap<String,Value>::insert(map, key, value);
-    "core:cli/println"("./sub/cross_module_treemap_variant_helper.wado/stringify"("./sub/cross_module_treemap_variant_helper.wado/Value::Obj" { discriminant: 1, payload_0: map }));
+    "core:cli/println"("./sub/cross_module_treemap_variant_helper.wado/stringify"("./sub/cross_module_treemap_variant_helper.wado/Value::Obj" { discriminant: 1, payload_0: ref.as_non_null(map) }));
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -261,7 +261,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {  // from ./su
                         String::append(__local_10, String { repr: array.new_data<u8>("\""), used: 1 });
                         String::append(__local_10, __local_6);
                         String::append(__local_10, String { repr: array.new_data<u8>("\":"), used: 2 });
-                        String::append(__local_10, "./sub/cross_module_treemap_variant_helper.wado/stringify"(__local_12.1));
+                        String::append(__local_10, "./sub/cross_module_treemap_variant_helper.wado/stringify"(ref.as_non_null(__local_12.1)));
                         break __tmpl: __local_10;
                     };
                     __local_5 = __local_5 + 1;
@@ -433,7 +433,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String
     };
     item = builtin::array_get<ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>">(self.repr, self.index);
     self.index = self.index + 1;
-    return item;
+    return ref.as_non_null(item);
 }
 
 fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entries"(self) {  // from ./sub/cross_module_treemap_variant_helper.wado
@@ -449,7 +449,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entrie
     };
     __iter_3 = __inline_Array_TreeMapEntry_String_Value___IntoIterator__into_iter_3: block -> ref "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>" {
         __local_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_Value___IntoIterator__into_iter_3: "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>" { repr: __local_9.repr, used: __local_9.used, index: 0 };
+        break __inline_Array_TreeMapEntry_String_Value___IntoIterator__into_iter_3: "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
     b15: block {
         l16: loop {
@@ -457,7 +457,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entrie
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = value_copy "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
-                    "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::append"(result, "tuple/[String, Value]" { 0: entry.key, 1: entry.value });
+                    "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::append"(result, "tuple/[String, Value]" { 0: ref.as_non_null(entry.key), 1: ref.as_non_null(entry.value) });
                 };
             } else {
                 break b15;
@@ -507,7 +507,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::g
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::grow(self, min_capacity) {
@@ -529,7 +529,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::append(self, other) {
@@ -636,14 +636,14 @@ fn TreeMap<String,Value>::insert(self, key, value) {
                 unreachable;
             };
             break __inline_Array_TreeMapEntry_String_Value___IndexValue__index_value_0: builtin::array_get<ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>">(__local_6.repr, existing_index);
-        }.value = value;
+        }.value = ref.as_non_null(value);
         return;
     };
     new_index = __inline_Array_TreeMapEntry_String_Value____len_1: block -> i32 {
         __local_8 = self.entries;
         break __inline_Array_TreeMapEntry_String_Value____len_1: __local_8.used;
     };
-    entry = "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>" { key: key, value: value, deleted: 0 };
+    entry = "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>" { key: ref.as_non_null(key), value: ref.as_non_null(value), deleted: 0 };
     Array<TreeMapEntry<String,Value>>::append(self.entries, entry);
     self.root = TreeMap<String,Value>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
@@ -657,18 +657,18 @@ fn TreeMap<String,Value>::insert_node(self, node, key, index) {
         n = ref.as_non_null(node);
         if String^Eq::eq(key, n.key) {
             n.index = index;
-            return n;
+            return ref.as_non_null(n);
         };
         if String^Ord::cmp(key, n.key) == 0 {
             n.left = TreeMap<String,Value>::insert_node(self, n.left, key, index);
         } else {
             n.right = TreeMap<String,Value>::insert_node(self, n.right, key, index);
         };
-        after_skew = TreeMap<String,Value>::skew(self, n);
+        after_skew = TreeMap<String,Value>::skew(self, ref.as_non_null(n));
         return TreeMap<String,Value>::split(self, after_skew);
     };
-    new_node = "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
-    return new_node;
+    new_node = "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>" { key: ref.as_non_null(key), index: index, level: 1, left: ref.null none, right: ref.null none };
+    return ref.as_non_null(new_node);
 }
 
 fn TreeMap<String,Value>::split(self, node) {
@@ -689,11 +689,11 @@ fn TreeMap<String,Value>::split(self, node) {
                     n.right = right.left;
                     right.left = n;
                     right.level = right.level + 1;
-                    return right;
+                    return ref.as_non_null(right);
                 };
             };
         };
-        return n;
+        return ref.as_non_null(n);
     };
     return ref.null none;
 }
@@ -710,10 +710,10 @@ fn TreeMap<String,Value>::skew(self, node) {
             if left.level == n.level {
                 n.left = left.right;
                 left.right = n;
-                return left;
+                return ref.as_non_null(left);
             };
         };
-        return n;
+        return ref.as_non_null(n);
     };
     return ref.null none;
 }
@@ -757,7 +757,7 @@ fn Array<TreeMapEntry<String,Value>>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn TreeMap<String,Value>::find_index(self, key) {

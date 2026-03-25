@@ -112,13 +112,13 @@ fn run() with Stdout {
     let __local_29: ref "./sub/wasm_name_conflict_closure_mod.wado/__Closure_1";
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(20, __local_2);
         break __tmpl: __local_1;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(__inline_apply_double_10: block -> i32 {
             __local_21 = "./sub/wasm_name_conflict_closure_mod.wado/__Closure_0" {  };
             break __inline_apply_double_10: 10;
@@ -127,7 +127,7 @@ fn run() with Stdout {
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i32::fmt_decimal(__inline_apply_triple_15: block -> i32 {
             __local_29 = "./sub/wasm_name_conflict_closure_mod.wado/__Closure_1" {  };
             break __inline_apply_triple_15: 15;
@@ -344,7 +344,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

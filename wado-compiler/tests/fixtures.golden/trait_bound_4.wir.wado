@@ -424,7 +424,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -489,12 +489,12 @@ fn Point^Describe::describe(self) {
     return __tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(36), used: 0 };
         String::append_char(__local_1, 40);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         __local_6 = __local_2;
         i32::fmt_decimal(self.x, __local_6);
         String::append_char(__local_1, 44);
         String::append_char(__local_1, 32);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         __local_11 = __local_2;
         i32::fmt_decimal(self.y, __local_11);
         String::append_char(__local_1, 41);
@@ -511,7 +511,7 @@ fn i32^Describe::describe(self) {
         String::append_char(__local_1, 110);
         String::append_char(__local_1, 116);
         String::append_char(__local_1, 58);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(self, __local_2);
         break __tmpl: __local_1;
     };
@@ -625,7 +625,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Array<Array<i32>>::append(self, value) {
@@ -667,7 +667,7 @@ fn Array<Array<i32>>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Formatter::write_char_n(self, c, n) {

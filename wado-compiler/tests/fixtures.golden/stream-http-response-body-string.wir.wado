@@ -293,7 +293,7 @@ fn string_to_bytes(s) {
         __local_1 = Array<u8> { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    __iter_3 = StrCharIter { repr: s.repr, used: s.used, byte_index: 0 };
+    __iter_3 = StrCharIter { repr: ref.as_non_null(s.repr), used: s.used, byte_index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -966,7 +966,7 @@ fn Array<u8>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 export fn __cm_export__handle as "handle"

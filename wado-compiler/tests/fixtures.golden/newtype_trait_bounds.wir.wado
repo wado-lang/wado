@@ -119,7 +119,7 @@ fn run() with Stdout {
         String::append_char(__local_7, 110);
         String::append_char(__local_7, 58);
         String::append_char(__local_7, 32);
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         i32::fmt_decimal(min_score, __local_8);
         break __tmpl: __local_7;
     });
@@ -130,7 +130,7 @@ fn run() with Stdout {
         String::append_char(__local_9, 120);
         String::append_char(__local_9, 58);
         String::append_char(__local_9, 32);
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
         i32::fmt_decimal(200, __local_10);
         break __tmpl: __local_9;
     });
@@ -141,7 +141,7 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(25), used: 0 };
         String::append(__local_11, String { repr: array.new_data<u8>("earlier: "), used: 9 });
-        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
+        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
         u64::fmt_decimal(earlier, __local_12);
         break __tmpl: __local_11;
     });
@@ -444,7 +444,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

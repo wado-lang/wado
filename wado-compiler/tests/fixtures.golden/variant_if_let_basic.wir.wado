@@ -180,7 +180,7 @@ fn run() with Stdout {
         "core:cli/println"(__tmpl: block -> ref String {
             __local_4 = String { repr: builtin::array_new<u8>(35), used: 0 };
             String::append(__local_4, String { repr: array.new_data<u8>("Circle with radius "), used: 19 });
-            __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+            __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
             f64::fmt_into(r_1, __local_5);
             break __tmpl: __local_4;
         });
@@ -193,7 +193,7 @@ fn run() with Stdout {
         "core:cli/println"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(35), used: 0 };
             String::append(__local_6, String { repr: array.new_data<u8>("Circle with radius "), used: 19 });
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             f64::fmt_into(r_3, __local_7);
             break __tmpl: __local_6;
         });
@@ -1220,7 +1220,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn f64::fmt_into(self, f) {
@@ -1406,7 +1406,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::append_byte_filled(self, byte, n) {

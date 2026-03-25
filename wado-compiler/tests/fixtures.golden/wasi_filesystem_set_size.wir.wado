@@ -290,7 +290,7 @@ fn read_all(file) {
             if __sroa_chunk_used == 0 {
                 break b0;
             };
-            __iter_6 = "core:allocator/ArrayIter<u8>" { repr: __sroa_chunk_repr, used: __sroa_chunk_used, index: 0 };
+            __iter_6 = "core:allocator/ArrayIter<u8>" { repr: ref.as_non_null(__sroa_chunk_repr), used: __sroa_chunk_used, index: 0 };
             b3: block {
                 l4: loop {
                     let __sroa___pattern_temp_1_discriminant: i32;
@@ -369,7 +369,7 @@ fn run() with Stdout, Stderr, Preopens {
                 "core:cli/eprintln"(__tmpl: block -> ref String {
                     __local_18 = String { repr: builtin::array_new<u8>(55), used: 0 };
                     String::append(__local_18, String { repr: array.new_data<u8>("set_size: initial size is "), used: 26 });
-                    __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
+                    __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
                     u64::fmt_decimal(sz_8, __local_19);
                     String::append(__local_18, String { repr: array.new_data<u8>(", expected 10"), used: 13 });
                     break __tmpl: __local_18;
@@ -393,7 +393,7 @@ fn run() with Stdout, Stderr, Preopens {
                 "core:cli/eprintln"(__tmpl: block -> ref String {
                     __local_20 = String { repr: builtin::array_new<u8>(56), used: 0 };
                     String::append(__local_20, String { repr: array.new_data<u8>("set_size: truncated size is "), used: 28 });
-                    __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
+                    __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
                     u64::fmt_decimal(sz_12, __local_21);
                     String::append(__local_20, String { repr: array.new_data<u8>(", expected 5"), used: 12 });
                     break __tmpl: __local_20;
@@ -457,7 +457,7 @@ fn run() with Stdout, Stderr, Preopens {
             "core:cli/eprintln"(__tmpl: block -> ref String {
                 __local_22 = String { repr: builtin::array_new<u8>(60), used: 0 };
                 String::append(__local_22, String { repr: array.new_data<u8>("set_size: truncated content unexpected, len="), used: 44 });
-                __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
+                __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_22) };
                 i32::fmt_decimal(content.used, __local_23);
                 break __tmpl: __local_22;
             });
@@ -478,7 +478,7 @@ fn run() with Stdout, Stderr, Preopens {
                 "core:cli/eprintln"(__tmpl: block -> ref String {
                     __local_24 = String { repr: builtin::array_new<u8>(55), used: 0 };
                     String::append(__local_24, String { repr: array.new_data<u8>("set_size: extended size is "), used: 27 });
-                    __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
+                    __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_24) };
                     u64::fmt_decimal(sz_17, __local_25);
                     String::append(__local_24, String { repr: array.new_data<u8>(", expected 8"), used: 12 });
                     break __tmpl: __local_24;
@@ -551,9 +551,9 @@ fn __cm_binding__Preopens_get_directories() {
                 __local_9 = builtin::load_i32(__elem_addr + 4);
                 __local_10 = builtin::load_i32((__elem_addr + 4) + 4);
                 __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
-                break __inline_memory_to_gc_string_1: String { repr: __local_11, used: __local_10 };
+                break __inline_memory_to_gc_string_1: String { repr: ref.as_non_null(__local_11), used: __local_10 };
             };
-            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
+            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: ref.as_non_null(__lifted_result_7) });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
             continue l29;
@@ -653,7 +653,7 @@ fn __cm_binding__Descriptor_stat(self) {
             __lifted_result_11 = builtin::load_i64(((__async_outptr + 8) + 24) + 8);
             __lifted_result_12 = builtin::load_i32((((__async_outptr + 8) + 24) + 8) + 8);
             __struct_result_13 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_11, nanoseconds: __lifted_result_12 };
-            __option_result_10 = __struct_result_13;
+            __option_result_10 = ref.as_non_null(__struct_result_13);
         };
         __disc_14 = builtin::load_u8((__async_outptr + 8) + 48);
         __option_result_15 = ref.null none;
@@ -661,7 +661,7 @@ fn __cm_binding__Descriptor_stat(self) {
             __lifted_result_16 = builtin::load_i64(((__async_outptr + 8) + 48) + 8);
             __lifted_result_17 = builtin::load_i32((((__async_outptr + 8) + 48) + 8) + 8);
             __struct_result_18 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_16, nanoseconds: __lifted_result_17 };
-            __option_result_15 = __struct_result_18;
+            __option_result_15 = ref.as_non_null(__struct_result_18);
         };
         __disc_19 = builtin::load_u8((__async_outptr + 8) + 72);
         __option_result_20 = ref.null none;
@@ -669,10 +669,10 @@ fn __cm_binding__Descriptor_stat(self) {
             __lifted_result_21 = builtin::load_i64(((__async_outptr + 8) + 72) + 8);
             __lifted_result_22 = builtin::load_i32((((__async_outptr + 8) + 72) + 8) + 8);
             __struct_result_23 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_21, nanoseconds: __lifted_result_22 };
-            __option_result_20 = __struct_result_23;
+            __option_result_20 = ref.as_non_null(__struct_result_23);
         };
         __struct_result_24 = "wasi:filesystem/types.wado/DescriptorStat" { type: __eresult, link_count: __lifted_result_7, size: __lifted_result_8, data_access_timestamp: __option_result_10, data_modification_timestamp: __option_result_15, status_change_timestamp: __option_result_20 };
-        __result_val = Result<DescriptorStat,ErrorCode>::Ok { discriminant: 0, payload_0: __struct_result_24 };
+        __result_val = Result<DescriptorStat,ErrorCode>::Ok { discriminant: 0, payload_0: ref.as_non_null(__struct_result_24) };
     } else {
         __result_val = Result<DescriptorStat,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_u8(__async_outptr + 8) };
     };
@@ -905,7 +905,7 @@ fn "core:internal/cm_stream_read_u8"(handle, max) {  // from core:internal
     count = result >> 4;
     arr = "core:internal/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
-    return arr; count;
+    return ref.as_non_null(arr); count;
 }
 
 fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
@@ -1127,7 +1127,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -1223,7 +1223,7 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn Array<u8>::append(self, value) {
@@ -1265,7 +1265,7 @@ fn Array<u8>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn ArrayIter<u8>^Iterator::next(self) {

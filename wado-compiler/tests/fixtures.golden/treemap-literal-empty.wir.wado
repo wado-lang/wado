@@ -172,14 +172,14 @@ fn run() with Stdout {
             String::append_char(__local_6, 32);
             String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-empty.wado"), used: 55 });
             String::append_char(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             __local_18 = __local_7;
             i32::fmt_decimal(8, __local_18);
             String::append(__local_6, String { repr: array.new_data<u8>("
 condition: m.len() == 0
 "), used: 25 });
             String::append(__local_6, String { repr: array.new_data<u8>("m.len(): "), used: 9 });
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             __local_23 = __local_7;
             i32::fmt_decimal(__v0_2, __local_23);
             String::append_char(__local_6, 10);
@@ -201,14 +201,14 @@ condition: m.len() == 0
             String::append_char(__local_8, 32);
             String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-empty.wado"), used: 55 });
             String::append_char(__local_8, 58);
-            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
             __local_30 = __local_9;
             i32::fmt_decimal(9, __local_30);
             String::append(__local_8, String { repr: array.new_data<u8>("
 condition: m.is_empty()
 "), used: 25 });
             String::append(__local_8, String { repr: array.new_data<u8>("m.is_empty(): "), used: 14 });
-            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
             __local_35 = __local_9;
             Formatter::pad(__local_35, if __v0_4 -> ref String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
@@ -466,7 +466,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

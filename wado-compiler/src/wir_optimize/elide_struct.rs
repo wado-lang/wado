@@ -156,7 +156,7 @@ fn count_struct_get_field_uses(instr: &WirInstr, local_name: &str, field_name: &
         expr,
         ..
     } = instr
-        && let WirInstr::LocalGet { name: n } = expr.as_ref()
+        && let WirInstr::LocalGet { name: n, .. } = expr.as_ref()
         && n == local_name
         && f == field_name
     {
@@ -178,7 +178,7 @@ fn substitute_multi_field_struct_get(
     if let WirInstr::StructGet {
         field_name, expr, ..
     } = instr
-        && let WirInstr::LocalGet { name: n } = expr.as_ref()
+        && let WirInstr::LocalGet { name: n, .. } = expr.as_ref()
         && n == local_name
         && let Some(value) = field_map.get(field_name)
     {
@@ -269,7 +269,7 @@ fn count_local_defs(instr: &WirInstr, name: &str) -> usize {
 /// Count `StructGet(LocalGet(name), _)` occurrences at any depth.
 fn count_struct_get_uses(instr: &WirInstr, name: &str) -> usize {
     if let WirInstr::StructGet { expr, .. } = instr
-        && let WirInstr::LocalGet { name: n } = expr.as_ref()
+        && let WirInstr::LocalGet { name: n, .. } = expr.as_ref()
         && n == name
     {
         return 1;
@@ -287,9 +287,9 @@ fn count_struct_get_uses(instr: &WirInstr, name: &str) -> usize {
 fn local_used_only_via_struct_get(instr: &WirInstr, name: &str) -> bool {
     match instr {
         // Bare LocalGet of our name — invalid.
-        WirInstr::LocalGet { name: n } => n != name,
+        WirInstr::LocalGet { name: n, .. } => n != name,
         // StructGet whose expr IS exactly LocalGet(name) — valid; don't recurse into expr.
-        WirInstr::StructGet { expr, .. } if matches!(expr.as_ref(), WirInstr::LocalGet { name: n } if n == name) => {
+        WirInstr::StructGet { expr, .. } if matches!(expr.as_ref(), WirInstr::LocalGet { name: n, .. } if n == name) => {
             true
         }
         // All other nodes: check children.
@@ -312,7 +312,7 @@ fn inner_refs_any_candidate(
     candidates: &IndexSet<String>,
     exclude: &str,
 ) -> bool {
-    if let WirInstr::LocalGet { name } = instr {
+    if let WirInstr::LocalGet { name, .. } = instr {
         candidates.contains(name) && name != exclude
     } else {
         let mut found = false;
@@ -328,7 +328,7 @@ fn inner_refs_any_candidate(
 /// Replace every `StructGet(LocalGet(name), _)` in the tree with a clone of `value`.
 fn substitute_struct_get_local(instr: &mut WirInstr, name: &str, value: &WirInstr) {
     if let WirInstr::StructGet { expr, .. } = instr
-        && let WirInstr::LocalGet { name: n } = expr.as_ref()
+        && let WirInstr::LocalGet { name: n, .. } = expr.as_ref()
         && n == name
     {
         *instr = value.clone();

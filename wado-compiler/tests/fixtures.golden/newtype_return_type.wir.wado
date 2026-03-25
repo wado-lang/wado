@@ -129,12 +129,12 @@ fn run() with Stdout {
         String::append_char(__local_5, 58);
         String::append_char(__local_5, 32);
         String::append_char(__local_5, 40);
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         __local_14 = __local_6;
         i32::fmt_decimal(__sroa_loc2_x, __local_14);
         String::append_char(__local_5, 44);
         String::append_char(__local_5, 32);
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         __local_19 = __local_6;
         i32::fmt_decimal(__sroa_loc2_y, __local_19);
         String::append_char(__local_5, 41);
@@ -145,12 +145,12 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(44), used: 0 };
         String::append(__local_7, String { repr: array.new_data<u8>("offset: ("), used: 9 });
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         __local_28 = __local_8;
         i32::fmt_decimal(__sroa_loc4_x, __local_28);
         String::append_char(__local_7, 44);
         String::append_char(__local_7, 32);
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
         __local_33 = __local_8;
         i32::fmt_decimal(__sroa_loc4_y, __local_33);
         String::append_char(__local_7, 41);
@@ -366,7 +366,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

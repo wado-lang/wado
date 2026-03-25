@@ -116,7 +116,7 @@ fn run() with Stdout, Stderr {
         String::append_char(__local_6, 32);
         String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/assert_fail_intermediate.wado"), used: 58 });
         String::append_char(__local_6, 58);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         __local_12 = __local_7;
         i32::fmt_decimal(6, __local_12);
         String::append(__local_6, String { repr: array.new_data<u8>("
@@ -125,14 +125,14 @@ condition: x + y > 10
         String::append_char(__local_6, 120);
         String::append_char(__local_6, 58);
         String::append_char(__local_6, 32);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         __local_17 = __local_7;
         i32::fmt_decimal(3, __local_17);
         String::append_char(__local_6, 10);
         String::append_char(__local_6, 121);
         String::append_char(__local_6, 58);
         String::append_char(__local_6, 32);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         __local_22 = __local_7;
         i32::fmt_decimal(4, __local_22);
         String::append_char(__local_6, 10);
@@ -143,7 +143,7 @@ condition: x + y > 10
         String::append_char(__local_6, 121);
         String::append_char(__local_6, 58);
         String::append_char(__local_6, 32);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
         __local_27 = __local_7;
         i32::fmt_decimal(7, __local_27);
         String::append_char(__local_6, 10);
@@ -359,7 +359,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

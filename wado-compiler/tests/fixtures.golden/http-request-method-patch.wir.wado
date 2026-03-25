@@ -504,7 +504,7 @@ fn handle(request) {
             String::append_char(__local_8, 32);
             String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-request-method-patch.wado"), used: 59 });
             String::append_char(__local_8, 58);
-            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
             i32::fmt_decimal(8, __local_9);
             String::append(__local_8, String { repr: array.new_data<u8>("
 condition: method matches { Patch }
@@ -880,7 +880,7 @@ fn __cm_binding__Request_get_method(self) {
             __local_4 = builtin::load_i32(__outptr + 4);
             __local_5 = builtin::load_i32((__outptr + 4) + 4);
             __local_6 = "core:internal/memory_to_gc_array"(__local_4, __local_5);
-            break __inline_memory_to_gc_string_0: String { repr: __local_6, used: __local_5 };
+            break __inline_memory_to_gc_string_0: String { repr: ref.as_non_null(__local_6), used: __local_5 };
         }) };
     };
     drop("mem/realloc"(__outptr, 12, 4, 0));
@@ -1140,7 +1140,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

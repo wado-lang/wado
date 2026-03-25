@@ -131,7 +131,7 @@ fn run() with Stdout, Stderr {
             String::append_char(__local_5, 32);
             String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/assert_inspect_mut_ref.wado"), used: 56 });
             String::append_char(__local_5, 58);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
             __local_11 = __local_6;
             i32::fmt_decimal(7, __local_11);
             String::append(__local_5, String { repr: array.new_data<u8>("
@@ -141,7 +141,7 @@ condition: *mr == 99
             String::append_char(__local_5, 114);
             String::append_char(__local_5, 58);
             String::append_char(__local_5, 32);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
             __local_15 = __v0;
             __local_16 = __local_6;
             __local_19 = String { repr: array.new_data<u8>("&mut "), used: 5 };
@@ -154,7 +154,7 @@ condition: *mr == 99
             String::append_char(__local_5, 114);
             String::append_char(__local_5, 58);
             String::append_char(__local_5, 32);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
             __local_26 = __local_6;
             i32::fmt_decimal(__v1, __local_26);
             String::append_char(__local_5, 10);
@@ -371,7 +371,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

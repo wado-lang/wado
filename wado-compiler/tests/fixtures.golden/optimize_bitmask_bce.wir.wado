@@ -121,7 +121,7 @@ fn run() {
     arr = __inline_Array_i32___filled_2: block -> ref Array<i32> {
         __local_11 = builtin::array_new<i32>(32768);
         builtin::array_fill<i32>(__local_11, 0, -1, 32768);
-        break __inline_Array_i32___filled_2: Array<i32> { repr: __local_11, used: 32768 };
+        break __inline_Array_i32___filled_2: Array<i32> { repr: ref.as_non_null(__local_11), used: 32768 };
     };
     sum = 0;
     __for_0: block {
@@ -156,7 +156,7 @@ fn run() {
             String::append_char(__local_6, 32);
             String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/optimize_bitmask_bce.wado"), used: 54 });
             String::append_char(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             __local_20 = __local_7;
             i32::fmt_decimal(10, __local_20);
             String::append(__local_6, String { repr: array.new_data<u8>("
@@ -167,7 +167,7 @@ condition: sum == -100
             String::append_char(__local_6, 109);
             String::append_char(__local_6, 58);
             String::append_char(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
             __local_25 = __local_7;
             i32::fmt_decimal(__v0, __local_25);
             String::append_char(__local_6, 10);
@@ -384,7 +384,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

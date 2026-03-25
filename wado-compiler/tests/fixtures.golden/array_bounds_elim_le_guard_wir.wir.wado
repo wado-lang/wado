@@ -118,7 +118,7 @@ fn sum_le(limit) {
         __local_4 = limit + 1;
         __local_6 = builtin::array_new<i32>(__local_4);
         builtin::array_fill<i32>(__local_6, 0, 1, __local_4);
-        break __inline_Array_i32___filled_0: Array<i32> { repr: __local_6, used: __local_4 };
+        break __inline_Array_i32___filled_0: Array<i32> { repr: ref.as_non_null(__local_6), used: __local_4 };
     };
     sum = 0;
     __for_0: block {
@@ -146,7 +146,7 @@ fn run() with Stdout {
     let __local_1: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_0 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_1 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
+        __local_1 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_0) };
         i32::fmt_decimal(sum_le(5), __local_1);
         break __tmpl: __local_0;
     });
@@ -360,7 +360,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

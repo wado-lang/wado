@@ -113,7 +113,7 @@ fn run() with Stdout {
     p = Point { x: 1, y: 2 };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
         i32::fmt_decimal(__inline_modify_copy_5: block -> i32 {
             __local_10 = p;
             __local_11 = value_copy Point(__local_10);
@@ -124,7 +124,7 @@ fn run() with Stdout {
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
         i32::fmt_decimal(p.x, __local_4);
         break __tmpl: __local_3;
     });
@@ -338,7 +338,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {

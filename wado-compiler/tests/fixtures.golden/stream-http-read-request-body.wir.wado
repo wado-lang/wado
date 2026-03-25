@@ -918,7 +918,7 @@ fn "core:internal/cm_stream_read_u8"(handle, max) {  // from core:internal
     count = result >> 4;
     arr = "core:internal/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
-    return arr; count;
+    return ref.as_non_null(arr); count;
 }
 
 fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
@@ -981,7 +981,7 @@ fn Array<u8>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 export fn __cm_export__handle as "handle"

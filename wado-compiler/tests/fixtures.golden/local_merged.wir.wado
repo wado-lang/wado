@@ -233,7 +233,7 @@ fn __test_5_let_and_let_mut() {
             String::append_char(__local_8, 32);
             String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/local_merged.wado"), used: 46 });
             String::append_char(__local_8, 58);
-            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
             __local_17 = __local_9;
             i32::fmt_decimal(40, __local_17);
             String::append(__local_8, String { repr: array.new_data<u8>("
@@ -244,7 +244,7 @@ condition: msg == \"Hello from let!\"
             String::append_char(__local_8, 103);
             String::append_char(__local_8, 58);
             String::append_char(__local_8, 32);
-            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
             String^Inspect::inspect(__v0_1, __local_9);
             String::append_char(__local_8, 10);
             break __tmpl: __local_8;
@@ -265,7 +265,7 @@ condition: msg == \"Hello from let!\"
             String::append_char(__local_10, 32);
             String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/local_merged.wado"), used: 46 });
             String::append_char(__local_10, 58);
-            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
             __local_24 = __local_11;
             i32::fmt_decimal(42, __local_24);
             String::append(__local_10, String { repr: array.new_data<u8>("
@@ -277,7 +277,7 @@ condition: msg2 == \"First message\"
             String::append_char(__local_10, 50);
             String::append_char(__local_10, 58);
             String::append_char(__local_10, 32);
-            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
             String^Inspect::inspect(__v0_4, __local_11);
             String::append_char(__local_10, 10);
             break __tmpl: __local_10;
@@ -298,7 +298,7 @@ condition: msg2 == \"First message\"
             String::append_char(__local_12, 32);
             String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/local_merged.wado"), used: 46 });
             String::append_char(__local_12, 58);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
             __local_31 = __local_13;
             i32::fmt_decimal(44, __local_31);
             String::append(__local_12, String { repr: array.new_data<u8>("
@@ -310,7 +310,7 @@ condition: msg2 == \"Second message\"
             String::append_char(__local_12, 50);
             String::append_char(__local_12, 58);
             String::append_char(__local_12, 32);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
             String^Inspect::inspect(__v0_6, __local_13);
             String::append_char(__local_12, 10);
             break __tmpl: __local_12;
@@ -584,7 +584,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -626,7 +626,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -869,7 +869,7 @@ fn String^Inspect::inspect(self, f) {
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };

@@ -639,7 +639,7 @@ fn match_exhaustive() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         i32::fmt_decimal(val, __local_6);
         break __tmpl: __local_5;
     });
@@ -741,7 +741,7 @@ fn match_variant_tuple_payload() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(32), used: 0 };
         String::append(__local_5, String { repr: array.new_data<u8>("Rectangle area: "), used: 16 });
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
         f64::fmt_into(area, __local_6);
         break __tmpl: __local_5;
     });
@@ -1841,7 +1841,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -2047,7 +2047,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_reserve_uninit(self, n) {
