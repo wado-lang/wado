@@ -130,7 +130,3 @@ Simpler rule but loses protection against accidental unrelated shadowing — the
 ### Keep Current Behavior (No Same-Scope Shadowing)
 
 Safe but forces `mut` or naming proliferation for common transformation patterns.
-
-### Require an Explicit Keyword
-
-A syntax like `let shadow x = x + 1` makes intent explicit but adds syntactic overhead for a pattern that is already self-documenting (the RHS references the LHS).
