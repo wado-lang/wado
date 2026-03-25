@@ -14,11 +14,25 @@ use crate::logger::{Bail, Logger};
 use crate::name::ModuleSource;
 use crate::tir::{
     CallArg, EffectRef, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirModule, TirStmt, TirStmtKind, TirTemplatePart, TypeTable,
+    TirModule, TirStmt, TirStmtKind, TirTemplatePart, TypeId, TypeTable,
 };
 use crate::token::Span;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+/// Lightweight signature extracted from `TirFunction` for effect checking.
+/// Avoids cloning the entire function body.
+struct EffectSignature {
+    effects: Vec<EffectRef>,
+    params: Vec<EffectParam>,
+    is_method: bool,
+}
+
+/// Minimal parameter info needed for effect resolution.
+struct EffectParam {
+    name: String,
+    type_id: TypeId,
+}
 
 /// Error from effect checking
 #[derive(Debug, Clone)]
@@ -139,11 +153,53 @@ struct EffectChecker<'a, H: CompilerHost> {
     type_table: Option<Rc<RefCell<TypeTable>>>,
     /// What this checker is checking
     mode: CheckMode,
+    /// Pre-built index: (`module_source`, `func_name`) -> `EffectSignature`
+    func_index: IndexMap<(ModuleSource, String), EffectSignature>,
 }
 
 impl<'a, H: CompilerHost> EffectChecker<'a, H> {
     fn new(modules: &'a IndexMap<ModuleSource, TirModule>, logger: &'a Logger<'a, H>) -> Self {
         let type_table = modules.values().next().map(|m| Rc::clone(&m.type_table));
+        let mut func_index = IndexMap::default();
+        for (module_source, module) in modules {
+            for func_rc in &module.functions {
+                let func = func_rc.borrow();
+                func_index.insert(
+                    (module_source.clone(), func.name.clone()),
+                    EffectSignature {
+                        effects: func.effects.clone(),
+                        params: func
+                            .params
+                            .iter()
+                            .map(|p| EffectParam {
+                                name: p.name.clone(),
+                                type_id: p.type_id,
+                            })
+                            .collect(),
+                        is_method: func.is_method(),
+                    },
+                );
+            }
+            for impl_block in &module.impls {
+                for method in &impl_block.methods {
+                    func_index.insert(
+                        (module_source.clone(), method.name.clone()),
+                        EffectSignature {
+                            effects: method.effects.clone(),
+                            params: method
+                                .params
+                                .iter()
+                                .map(|p| EffectParam {
+                                    name: p.name.clone(),
+                                    type_id: p.type_id,
+                                })
+                                .collect(),
+                            is_method: method.is_method(),
+                        },
+                    );
+                }
+            }
+        }
         Self {
             modules,
             logger,
@@ -152,6 +208,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             current_ref_params: IndexSet::default(),
             type_table,
             mode: CheckMode::EffectsOnly,
+            func_index,
         }
     }
 
@@ -602,25 +659,23 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         }
 
         // Look at the callee's parameter types and actual argument types
-        if let Some(callee_func) = self.find_function(func_ref)
+        if let Some(sig) = self.find_effect_signature(func_ref)
             && let Some(tt) = &self.type_table
         {
             let tt = tt.borrow();
             // For method calls, args doesn't include the receiver (self), but params does.
             // Skip the self parameter when the function is a method.
-            let params_iter: Box<dyn Iterator<Item = _>> = if callee_func.is_method()
-                && !callee_func.params.is_empty()
-                && callee_func.params[0].name == "self"
-            {
-                Box::new(callee_func.params.iter().skip(1))
-            } else {
-                Box::new(callee_func.params.iter())
-            };
+            let params_iter: Box<dyn Iterator<Item = _>> =
+                if sig.is_method && !sig.params.is_empty() && sig.params[0].name == "self" {
+                    Box::new(sig.params.iter().skip(1))
+                } else {
+                    Box::new(sig.params.iter())
+                };
             for (param, arg) in params_iter.zip(args.iter()) {
                 if let ResolvedType::Function {
                     effects: formal_effects,
                     ..
-                } = tt.get(param.type_id).clone()
+                } = tt.get(param.type_id)
                 {
                     let has_effect_params = formal_effects
                         .iter()
@@ -632,13 +687,13 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     if let ResolvedType::Function {
                         effects: actual_effects,
                         ..
-                    } = tt.get(arg.expr.type_id).clone()
+                    } = tt.get(arg.expr.type_id)
                     {
-                        for formal_effect in &formal_effects {
+                        for formal_effect in formal_effects {
                             if let EffectRef::Param { name } = formal_effect
                                 && let Some(concrete_set) = effect_param_concrete.get_mut(name)
                             {
-                                for actual in &actual_effects {
+                                for actual in actual_effects {
                                     concrete_set.insert(actual.clone());
                                 }
                             }
@@ -669,30 +724,18 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
 
     /// Get the effects for a function
     fn get_function_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
-        if let Some(func) = self.find_function(func_ref) {
-            func.effects
+        let key = (func_ref.module_source.clone(), func_ref.name.clone());
+        if let Some(sig) = self.func_index.get(&key) {
+            sig.effects.clone()
         } else {
             Vec::new()
         }
     }
 
-    /// Find a function by reference
-    fn find_function(&self, func_ref: &FunctionRef) -> Option<TirFunction> {
-        let module = self.modules.get(&func_ref.module_source)?;
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            if func.name == func_ref.name {
-                return Some(func.clone());
-            }
-        }
-        for impl_block in &module.impls {
-            for method in &impl_block.methods {
-                if method.name == func_ref.name {
-                    return Some(method.clone());
-                }
-            }
-        }
-        None
+    /// Find the effect signature for a function by reference (O(1) lookup)
+    fn find_effect_signature(&self, func_ref: &FunctionRef) -> Option<&EffectSignature> {
+        let key = (func_ref.module_source.clone(), func_ref.name.clone());
+        self.func_index.get(&key)
     }
 }
 

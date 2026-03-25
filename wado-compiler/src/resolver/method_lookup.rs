@@ -318,6 +318,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> Option<MethodInfo> {
         // First, get the base (non-reference) type for method lookup
         let base_type_id = self.get_base_type(receiver_type);
+
+        // Check cache
+        let cache_key = (base_type_id, method_name.to_string());
+        if let Some(cached) = self.method_info_cache.get(&cache_key) {
+            return cached.clone();
+        }
+
+        let result = self.lookup_method_info_uncached(base_type_id, method_name);
+        self.method_info_cache.insert(cache_key, result.clone());
+        result
+    }
+
+    fn lookup_method_info_uncached(
+        &mut self,
+        base_type_id: TypeId,
+        method_name: &str,
+    ) -> Option<MethodInfo> {
         let base_type = self.type_table.borrow().get(base_type_id).clone();
 
         // Get the struct name, module source, and type args from the base type
