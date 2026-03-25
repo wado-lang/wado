@@ -7,8 +7,9 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
-    FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TypeId,
+    FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirTemplatePart, TypeId,
     TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
@@ -549,6 +550,52 @@ impl Monomorphizer {
                         &generic_func.impl_type_params,
                     );
                     self.try_queue_function(key, mangled);
+                }
+            }
+            // Comparison operators on non-primitive types will be lowered to
+            // Eq::eq / Ord::cmp method calls in the lower phase. Pre-collect the
+            // trait method instantiation sites so transitive monomorphization
+            // creates the needed concrete functions.
+            TirExprKind::Binary { op, left, .. }
+                if matches!(
+                    op,
+                    TirBinaryOp::Eq
+                        | TirBinaryOp::NotEq
+                        | TirBinaryOp::Lt
+                        | TirBinaryOp::Gt
+                        | TirBinaryOp::LtEq
+                        | TirBinaryOp::GtEq
+                ) =>
+            {
+                if let Some((base_struct, impl_type_args)) =
+                    self.get_struct_info_from_type(left.type_id, type_table)
+                    && !impl_type_args.is_empty()
+                {
+                    let (trait_name, method_name) = if matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
+                        ("Eq", "eq")
+                    } else {
+                        ("Ord", "cmp")
+                    };
+                    let generic_method_name =
+                        MethodName::format_local(&base_struct, Some(trait_name), method_name);
+                    if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
+                        let generic_func = generic_func_rc.borrow();
+                        if impl_type_args.len() >= generic_func.impl_type_params.len() {
+                            let method_info = generic_func.method_info.clone();
+                            let key = InstantiationKey {
+                                name: generic_method_name,
+                                impl_type_args: impl_type_args.clone(),
+                                method_type_args: vec![],
+                                method_info,
+                            };
+                            let mangled = self.method_instantiation_name(
+                                &key,
+                                type_table,
+                                impl_type_args.len(),
+                            );
+                            self.try_queue_function(key, mangled);
+                        }
+                    }
                 }
             }
             _ => {}
@@ -1177,7 +1224,7 @@ impl Monomorphizer {
                     );
                 }
             }
-            TirExprKind::Binary { op, left, right } => {
+            TirExprKind::Binary { op: _, left, right } => {
                 self.substitute_types_in_expr(
                     left,
                     substitution,
@@ -1192,14 +1239,6 @@ impl Monomorphizer {
                     local_count,
                     local_types,
                 );
-
-                // Check if this is a comparison operator on a struct type
-                // If so, desugar to trait method call
-                if let Some(new_kind) =
-                    self.try_desugar_comparison(expr.span, *op, left, right, type_table)
-                {
-                    expr.kind = new_kind;
-                }
             }
             TirExprKind::Unary { expr: inner, .. } => {
                 self.substitute_types_in_expr(

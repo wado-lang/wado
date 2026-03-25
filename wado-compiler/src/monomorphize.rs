@@ -474,8 +474,10 @@ impl Monomorphizer {
         // Phase 12: Rewrite function calls to use monomorphized names
         self.rewrite_function_calls_in_module(&mut module);
 
-        // Phase 12.5: Desugar comparison operators on non-primitive types in non-generic functions.
-        self.desugar_comparisons_in_module(&mut module);
+        // Store trait_method_locations in module for the lower phase's comparison desugaring.
+        module
+            .trait_method_locations
+            .clone_from(&self.functions.trait_method_locations);
 
         // Phase 13: Rewrite types (single pass — unified loop above ensures all structs exist)
         self.rewrite_types_in_module(&mut module);
