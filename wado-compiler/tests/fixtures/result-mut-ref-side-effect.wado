@@ -1,0 +1,83 @@
+struct S {
+    pos: i32,
+}
+
+impl S {
+    fn peek(&self) -> i32 { return self.pos; }
+    fn advance(&mut self) -> i32 {
+        let v = self.pos;
+        self.pos += 1;
+        return v;
+    }
+    fn expect(&mut self, kind: i32) -> Result<i32, String> {
+        self.pos += 1;
+        return Result::<i32, String>::Ok(kind);
+    }
+}
+
+variant V { A(i32), B(VB) }
+struct VB { left: V, right: V }
+
+fn parse_atom(p: &mut S) -> Result<V, String> {
+    let tok = p.advance();
+    return Result::<V, String>::Ok(V::A(tok));
+}
+
+fn parse_expr(p: &mut S) -> Result<V, String> {
+    let start = p.peek();
+    let mut result = parse_atom(p)?;
+    loop {
+        let kind = p.peek();
+        if kind == 10 {
+            let tok = p.advance();
+            let right = parse_expr(p)?;
+            result = V::B(VB { left: result, right });
+        } else if kind == 20 {
+            let tok = p.advance();
+            let right = parse_expr(p)?;
+            result = V::B(VB { left: result, right });
+        } else if kind == 30 {
+            let tok = p.advance();
+            let right = parse_expr(p)?;
+            result = V::B(VB { left: result, right });
+        } else if kind == 40 {
+            let tok = p.advance();
+            let right = parse_expr(p)?;
+            result = V::B(VB { left: result, right });
+        } else if kind == 50 {
+            let tok = p.advance();
+            let right = parse_expr(p)?;
+            result = V::B(VB { left: result, right });
+        } else if kind == 60 {
+            let tok = p.advance();
+            let right = parse_expr(p)?;
+            result = V::B(VB { left: result, right });
+        } else if kind == 70 {
+            let opt: Option<i32> = if p.peek() == 71 {
+                let v = p.expect(71)?;
+                Option::<i32>::Some(v)
+            } else { null };
+            let tok = p.advance();
+            let right = parse_expr(p)?;
+            result = V::B(VB { left: result, right });
+        } else {
+            break;
+        }
+    }
+    return Result::<V, String>::Ok(result);
+}
+
+export fn run() {
+    let mut s = S { pos: 0 };
+    let r = parse_expr(&mut s);
+    if let Err(e) = &r { panic(*e); }
+    assert s.pos == 1, `test1: expected pos=1, got pos={s.pos}`;
+
+    let mut s2 = S { pos: 0 };
+    let r2 = parse_expr(&mut s2);
+    if let Err(e) = &r2 { panic(*e); }
+    assert s2.pos == 3, `test2: expected pos=3, got pos={s2.pos}`;
+}
+
+__DATA__
+{"stdout": ""}
