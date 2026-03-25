@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{mangle_generic_name, LocalMethodName, MethodName};
+use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
     FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TypeId,
@@ -757,46 +757,133 @@ impl Monomorphizer {
         match &mut stmt.kind {
             TirStmtKind::Let { value, type_id, .. } => {
                 *type_id = self.substitute_type(*type_id, substitution, type_table);
-                self.substitute_types_in_expr(value, substitution, type_table, local_count, local_types);
+                self.substitute_types_in_expr(
+                    value,
+                    substitution,
+                    type_table,
+                    local_count,
+                    local_types,
+                );
             }
             TirStmtKind::Expr(expr) => {
-                self.substitute_types_in_expr(expr, substitution, type_table, local_count, local_types);
+                self.substitute_types_in_expr(
+                    expr,
+                    substitution,
+                    type_table,
+                    local_count,
+                    local_types,
+                );
             }
             TirStmtKind::Return { value } => {
                 if let Some(expr) = value {
-                    self.substitute_types_in_expr(expr, substitution, type_table, local_count, local_types);
+                    self.substitute_types_in_expr(
+                        expr,
+                        substitution,
+                        type_table,
+                        local_count,
+                        local_types,
+                    );
                 }
             }
-            TirStmtKind::If { condition, then_block, else_block } => {
-                self.substitute_types_in_expr(condition, substitution, type_table, local_count, local_types);
-                self.substitute_types_in_block(then_block, substitution, type_table, local_count, local_types);
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.substitute_types_in_expr(
+                    condition,
+                    substitution,
+                    type_table,
+                    local_count,
+                    local_types,
+                );
+                self.substitute_types_in_block(
+                    then_block,
+                    substitution,
+                    type_table,
+                    local_count,
+                    local_types,
+                );
                 if let Some(else_blk) = else_block {
-                    self.substitute_types_in_block(else_blk, substitution, type_table, local_count, local_types);
+                    self.substitute_types_in_block(
+                        else_blk,
+                        substitution,
+                        type_table,
+                        local_count,
+                        local_types,
+                    );
                 }
             }
             TirStmtKind::Loop { body } => {
-                self.substitute_types_in_block(body, substitution, type_table, local_count, local_types);
+                self.substitute_types_in_block(
+                    body,
+                    substitution,
+                    type_table,
+                    local_count,
+                    local_types,
+                );
             }
             TirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
-                    self.substitute_types_in_expr(v, substitution, type_table, local_count, local_types);
+                    self.substitute_types_in_expr(
+                        v,
+                        substitution,
+                        type_table,
+                        local_count,
+                        local_types,
+                    );
                 }
             }
             TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
-                self.substitute_types_in_block(block, substitution, type_table, local_count, local_types);
+                self.substitute_types_in_block(
+                    block,
+                    substitution,
+                    type_table,
+                    local_count,
+                    local_types,
+                );
             }
-            TirStmtKind::IfLet { scrutinee, pattern, then_block, else_block } => {
-                self.substitute_types_in_expr(scrutinee, substitution, type_table, local_count, local_types);
+            TirStmtKind::IfLet {
+                scrutinee,
+                pattern,
+                then_block,
+                else_block,
+            } => {
+                self.substitute_types_in_expr(
+                    scrutinee,
+                    substitution,
+                    type_table,
+                    local_count,
+                    local_types,
+                );
                 self.substitute_types_in_pattern(pattern, substitution, type_table);
-                self.substitute_types_in_block(then_block, substitution, type_table, local_count, local_types);
+                self.substitute_types_in_block(
+                    then_block,
+                    substitution,
+                    type_table,
+                    local_count,
+                    local_types,
+                );
                 if let Some(else_blk) = else_block {
-                    self.substitute_types_in_block(else_blk, substitution, type_table, local_count, local_types);
+                    self.substitute_types_in_block(
+                        else_blk,
+                        substitution,
+                        type_table,
+                        local_count,
+                        local_types,
+                    );
                 }
             }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.substitute_types_in_pattern(pattern, substitution, type_table);
-                self.substitute_types_in_expr(value, substitution, type_table, local_count, local_types);
+                self.substitute_types_in_expr(
+                    value,
+                    substitution,
+                    type_table,
+                    local_count,
+                    local_types,
+                );
             }
             TirStmtKind::TaskReturn { .. } => {
                 unreachable!("TaskReturn should be eliminated by synthesis before this phase")

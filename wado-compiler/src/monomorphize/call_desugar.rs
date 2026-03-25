@@ -13,8 +13,8 @@ use crate::tir::{
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 
-use super::state::Monomorphizer;
 use super::generic_function_key;
+use super::state::Monomorphizer;
 
 impl Monomorphizer {
     /// Rewrite function calls in all functions to use monomorphized names

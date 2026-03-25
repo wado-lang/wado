@@ -1,7 +1,7 @@
 //! Monomorphizer state: instantiation tracking and name generation.
 
 use crate::hashmap::IndexMap;
-use crate::name::{mangle_generic_name, MethodName, ModuleSource};
+use crate::name::{MethodName, ModuleSource, mangle_generic_name};
 use crate::tir::{InstantiationKey, ResolvedType, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state

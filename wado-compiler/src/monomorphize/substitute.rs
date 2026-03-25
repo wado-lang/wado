@@ -1,7 +1,7 @@
 //! Type substitution and type rewriting for monomorphization.
 //!
 //! Contains `substitute_type` (replacing type params with concrete types),
-//! `rewrite_type_id` (rewriting GenericInstance to concrete struct types),
+//! `rewrite_type_id` (rewriting `GenericInstance` to concrete struct types),
 //! and `rewrite_types_in_module` (applying rewrites across a module).
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -392,7 +392,7 @@ impl Monomorphizer {
     }
 }
 
-/// Rewrites `GenericInstance` type_ids throughout a TIR tree to use concrete struct types.
+/// Rewrites `GenericInstance` `type_ids` throughout a TIR tree to use concrete struct types.
 /// Used by `rewrite_types_in_module`.
 pub(super) struct TypeRewriter<'a> {
     pub mono: &'a Monomorphizer,
@@ -438,14 +438,21 @@ impl TirMutVisitor for TypeRewriter<'_> {
             let original_type_id = *struct_type;
             let new_type_id = self.rewrite_type_id(original_type_id);
             *struct_type = new_type_id;
-            if let Some(mangled_name) = self.mono.structs.type_to_mangled_name.get(&original_type_id) {
+            if let Some(mangled_name) = self
+                .mono
+                .structs
+                .type_to_mangled_name
+                .get(&original_type_id)
+            {
                 struct_name.clone_from(mangled_name);
             } else {
                 match self.type_table.get(new_type_id) {
                     ResolvedType::Struct { name, .. } => {
                         struct_name.clone_from(name);
                     }
-                    ResolvedType::GenericInstance { name, type_args, .. } => {
+                    ResolvedType::GenericInstance {
+                        name, type_args, ..
+                    } => {
                         let type_names: Vec<String> = type_args
                             .iter()
                             .map(|&arg| self.type_table.mangle_type_name(arg))
