@@ -15,6 +15,15 @@ use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 /// All methods return `true` if any changes were made.
 /// Default implementations walk children recursively.
 pub(crate) trait TirVisitor {
+    /// Visit a statement. Override to add statement-level transformation logic.
+    /// Call `walk_stmt(self, stmt)` to recurse into children.
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool
+    where
+        Self: Sized,
+    {
+        walk_stmt(self, stmt)
+    }
+
     /// Visit an expression. Override to add custom transformation logic.
     /// Call `walk_expr(self, expr)` to recurse into children.
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool
@@ -38,13 +47,13 @@ pub(crate) trait TirVisitor {
 pub(crate) fn walk_block(visitor: &mut impl TirVisitor, block: &mut TirBlock) -> bool {
     let mut changed = false;
     for stmt in &mut block.stmts {
-        changed |= walk_stmt(visitor, stmt);
+        changed |= visitor.visit_stmt(stmt);
     }
     changed
 }
 
 /// Walk a statement's children.
-fn walk_stmt(visitor: &mut impl TirVisitor, stmt: &mut TirStmt) -> bool {
+pub(crate) fn walk_stmt(visitor: &mut impl TirVisitor, stmt: &mut TirStmt) -> bool {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             visitor.visit_expr(value)

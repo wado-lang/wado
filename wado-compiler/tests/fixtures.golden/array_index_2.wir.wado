@@ -155,7 +155,6 @@ import fn subtask-drop from "wasi/subtask-drop";
 fn array_index_inline_multi() with Stdout {
     let __local_0: ref Array<bool>;
     let __local_1: ref Array<String>;
-    let c: ref Container<String>;
     let item0: ref String;
     let item1: ref String;
     let item2: ref String;
@@ -167,61 +166,54 @@ fn array_index_inline_multi() with Stdout {
     let __local_11: ref Formatter;
     let __local_12: ref String;
     let __local_13: ref Formatter;
-    let __local_34: ref Array<String>;
-    let __local_38: ref Array<String>;
-    let __local_42: ref Array<String>;
-    let __local_46: ref Array<bool>;
-    let __local_50: ref Array<bool>;
     let __local_56: ref Formatter;
     let __local_61: ref Formatter;
-    c = Container<String> { items: ref.as_non_null(__seq_lit: block -> ref Array<String> {
+    let __sroa_c_items: ref Array<String>;
+    let __sroa_c_markers: ref Array<bool>;
+    __sroa_c_items = __seq_lit: block -> ref Array<String> {
         __local_1 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("apple"), used: 5 }, String { repr: array.new_data<u8>("banana"), used: 6 }, String { repr: array.new_data<u8>("cherry"), used: 6 }), used: 3 };
         break __seq_lit: __local_1;
-    }), markers: ref.as_non_null(__seq_lit: block -> ref Array<bool> {
+    };
+    __sroa_c_markers = __seq_lit: block -> ref Array<bool> {
         __local_0 = Array<bool> { repr: array.new_fixed<bool>(1, 0, 1), used: 3 };
         break __seq_lit: __local_0;
-    }) };
+    };
     item0 = __inline_Array_String__IndexValue__index_value_13: block -> ref String {
-        __local_34 = c.items;
-        if 0 >= __local_34.used {
+        if 0 >= __sroa_c_items.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_String__IndexValue__index_value_13: builtin::array_get<ref String>(__local_34.repr, 0);
+        break __inline_Array_String__IndexValue__index_value_13: builtin::array_get<ref String>(__sroa_c_items.repr, 0);
     };
     item1 = __inline_Array_String__IndexValue__index_value_15: block -> ref String {
-        __local_38 = c.items;
-        if 1 >= __local_38.used {
+        if 1 >= __sroa_c_items.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_String__IndexValue__index_value_15: builtin::array_get<ref String>(__local_38.repr, 1);
+        break __inline_Array_String__IndexValue__index_value_15: builtin::array_get<ref String>(__sroa_c_items.repr, 1);
     };
     item2 = __inline_Array_String__IndexValue__index_value_17: block -> ref String {
-        __local_42 = c.items;
-        if 2 >= __local_42.used {
+        if 2 >= __sroa_c_items.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_String__IndexValue__index_value_17: builtin::array_get<ref String>(__local_42.repr, 2);
+        break __inline_Array_String__IndexValue__index_value_17: builtin::array_get<ref String>(__sroa_c_items.repr, 2);
     };
     flag0 = __inline_Array_bool__IndexValue__index_value_19: block -> bool {
-        __local_46 = c.markers;
-        if 0 >= __local_46.used {
+        if 0 >= __sroa_c_markers.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_bool__IndexValue__index_value_19: builtin::array_get<bool>(__local_46.repr, 0);
+        break __inline_Array_bool__IndexValue__index_value_19: builtin::array_get<bool>(__sroa_c_markers.repr, 0);
     };
     flag1 = __inline_Array_bool__IndexValue__index_value_21: block -> bool {
-        __local_50 = c.markers;
-        if 1 >= __local_50.used {
+        if 1 >= __sroa_c_markers.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_bool__IndexValue__index_value_21: builtin::array_get<bool>(__local_50.repr, 1);
+        break __inline_Array_bool__IndexValue__index_value_21: builtin::array_get<bool>(__sroa_c_markers.repr, 1);
     };
-    count = Container<String>::count_flagged(c);
+    count = Container<String>::count_flagged(Container<String> { items: ref.as_non_null(__sroa_c_items), markers: ref.as_non_null(__sroa_c_markers) });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(59), used: 0 };
         String::append_char(__local_9, 105);

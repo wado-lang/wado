@@ -25,10 +25,6 @@ struct Article {
     mut content: ref String,
 }
 
-struct Item {
-    mut name: ref String,
-}
-
 array array<i32> (mut i32);
 
 struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
@@ -154,15 +150,15 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn trait_default_calls_default() with Stdout {
-    let item: ref Item;
     let __local_3: ref String;
-    item = Item { name: String { repr: array.new_data<u8>("Widget"), used: 6 } };
-    "core:cli/println"(item.name);
-    "core:cli/println"(Item^Describable::short_desc(item.name));
+    let __sroa_item_name: ref String;
+    __sroa_item_name = String { repr: array.new_data<u8>("Widget"), used: 6 };
+    "core:cli/println"(__sroa_item_name);
+    "core:cli/println"(Item^Describable::short_desc(ref.as_non_null(__sroa_item_name)));
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(29), used: 0 };
         String::append(__local_3, String { repr: array.new_data<u8>("Description: "), used: 13 });
-        String::append(__local_3, Item^Describable::short_desc(item.name));
+        String::append(__local_3, Item^Describable::short_desc(ref.as_non_null(__sroa_item_name)));
         break __tmpl: __local_3;
     });
 }

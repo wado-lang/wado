@@ -243,7 +243,22 @@ fn collect_escaping_in_stmt(stmt: &TirStmt, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_stmt(s, escaping);
             }
         }
-        _ => {}
+        TirStmtKind::Return { value: None } | TirStmtKind::Continue => {}
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                collect_local_refs(v, escaping);
+                collect_escaping_in_expr(v, escaping);
+            }
+        }
+        TirStmtKind::LetDestructure { value, .. } => {
+            collect_escaping_in_expr(value, escaping);
+        }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+        }
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 
@@ -332,7 +347,80 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_stmt(s, escaping);
             }
         }
-        _ => {}
+        TirExprKind::Match { expr: inner, arms } => {
+            collect_escaping_in_expr(inner, escaping);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_escaping_in_expr(guard, escaping);
+                }
+                collect_escaping_in_expr(&arm.body, escaping);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_escaping_in_expr(scrutinee, escaping);
+            for arm in arms {
+                for s in &arm.stmts {
+                    collect_escaping_in_stmt(s, escaping);
+                }
+            }
+            for s in &default.stmts {
+                collect_escaping_in_stmt(s, escaping);
+            }
+        }
+        TirExprKind::Closure { body, captures, .. } => {
+            // Closure captures: the captured variables escape
+            for capture in captures {
+                escaping.insert(capture.outer_index);
+            }
+            collect_escaping_in_expr(body, escaping);
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                collect_local_refs(arg, escaping);
+                collect_escaping_in_expr(arg, escaping);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                collect_escaping_in_expr(elem, escaping);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                collect_escaping_in_expr(p, escaping);
+            }
+        }
+        TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+            collect_escaping_in_expr(inner, escaping);
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            collect_escaping_in_expr(value, escaping);
+        }
+        // Leaf nodes
+        TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 

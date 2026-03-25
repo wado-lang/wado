@@ -12,6 +12,7 @@
 //! and inclusive `<=` guard patterns.
 
 use crate::hashmap::IndexMap;
+use crate::optimize::visitor::{TirVisitor, walk_expr, walk_stmt};
 use crate::project::Project;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
@@ -86,7 +87,7 @@ fn process_block(block: &mut TirBlock, defs: &mut DefMap) -> bool {
     for stmt in &mut block.stmts {
         record_def_from_stmt(stmt, defs);
         record_defs_from_nested(stmt, defs);
-        changed |= eliminate_bitmask_bounded(stmt, defs);
+        changed |= BitmaskEliminator { defs }.visit_stmt(stmt);
         changed |= process_stmt(stmt, defs);
     }
     changed
@@ -142,14 +143,19 @@ fn process_loop(body: &mut TirBlock, defs: &mut DefMap) -> bool {
 
     if let Some(guard) = &guard {
         // Eliminate implied conditions in the loop body (skip the guard itself)
+        let mut condition_elim = ConditionEliminator {
+            guard,
+            dom_guards: vec![],
+            defs: &loop_defs,
+        };
         for stmt in body.stmts.iter_mut().skip(1) {
-            changed |= eliminate_in_stmt(stmt, guard, &[], &loop_defs);
+            changed |= condition_elim.visit_stmt(stmt);
         }
     }
 
     // Eliminate bitmask-bounded checks in the loop body
     for stmt in &mut body.stmts {
-        changed |= eliminate_bitmask_bounded(stmt, &loop_defs);
+        changed |= BitmaskEliminator { defs: &loop_defs }.visit_stmt(stmt);
     }
 
     // Recurse into nested loops
@@ -411,7 +417,18 @@ fn record_defs_from_nested(stmt: &TirStmt, defs: &mut DefMap) {
         } => {
             record_defs_from_expr(expr, defs);
         }
-        _ => {}
+        TirStmtKind::LetDestructure { value, .. } => {
+            record_defs_from_expr(value, defs);
+        }
+        // Loop bodies have their own scope handled via process_loop.
+        // Remaining kinds (Return/Break with None, Continue, TaskReturn, VariadicForOf)
+        // carry no expressions with nested definitions.
+        TirStmtKind::Loop { .. }
+        | TirStmtKind::Return { value: None }
+        | TirStmtKind::Break { value: None, .. }
+        | TirStmtKind::Continue
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::VariadicForOf { .. } => {}
     }
 }
 
@@ -439,7 +456,14 @@ fn record_defs_from_expr(expr: &TirExpr, defs: &mut DefMap) {
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::GlobalVarSet { value: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner, .. } => {
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
             record_defs_from_expr(inner, defs);
         }
         TirExprKind::If {
@@ -459,9 +483,44 @@ fn record_defs_from_expr(expr: &TirExpr, defs: &mut DefMap) {
                 }
             }
         }
+        TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } => {
+            record_defs_from_expr(scrutinee, defs);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    record_defs_from_expr(guard, defs);
+                }
+                record_defs_from_expr(&arm.body, defs);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            record_defs_from_expr(scrutinee, defs);
+            for arm in arms {
+                for s in &arm.stmts {
+                    record_def_from_stmt(s, defs);
+                    record_defs_from_nested(s, defs);
+                }
+            }
+            for s in &default.stmts {
+                record_def_from_stmt(s, defs);
+                record_defs_from_nested(s, defs);
+            }
+        }
         TirExprKind::Call { args, .. } => {
             for arg in args {
                 record_defs_from_expr(&arg.expr, defs);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                record_defs_from_expr(arg, defs);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
@@ -470,354 +529,160 @@ fn record_defs_from_expr(expr: &TirExpr, defs: &mut DefMap) {
                 record_defs_from_expr(&arg.expr, defs);
             }
         }
+        TirExprKind::IndirectCall { callee, args } => {
+            record_defs_from_expr(callee, defs);
+            for arg in args {
+                record_defs_from_expr(arg, defs);
+            }
+        }
         TirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
                 record_defs_from_expr(&f.value, defs);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::CmRawCall { args: elements, .. } => {
+        TirExprKind::TupleLiteral { elements } => {
             for e in elements {
                 record_defs_from_expr(e, defs);
             }
         }
-        TirExprKind::VariantConstruct {
-            payload: Some(inner),
-            ..
-        } => {
-            record_defs_from_expr(inner, defs);
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(inner) = payload {
+                record_defs_from_expr(inner, defs);
+            }
         }
-        _ => {}
+        // Defs inside closures are scoped to the closure body — don't record in outer scope.
+        TirExprKind::Closure { .. } => {}
+        // Leaf nodes carry no sub-expressions with definitions.
+        TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
 /// Eliminate implied-false conditions within a statement.
-fn eliminate_in_stmt(
-    stmt: &mut TirStmt,
-    guard: &LoopGuard,
-    dom_guards: &[DominatingGuard],
-    defs: &DefMap,
-) -> bool {
-    // Check if this stmt itself is a bounds check pattern
-    if let TirStmtKind::If {
-        condition,
-        then_block,
-        else_block: None,
-    } = &mut stmt.kind
-        && is_panic_block(then_block)
-        && is_implied_false_by_any(condition, guard, dom_guards, defs)
-    {
-        *condition = TirExpr {
-            kind: TirExprKind::BoolLiteral(false),
-            type_id: condition.type_id,
-            span: condition.span,
-        };
-        return true;
-    }
+/// TIR visitor that eliminates loop-guard-implied false bounds checks.
+///
+/// When a loop guard proves `i < bound`, inner conditions `i >= bound` are
+/// replaced with `false`. Dominating if-conditions are also tracked to extend
+/// the elimination into their then-blocks.
+struct ConditionEliminator<'a> {
+    guard: &'a LoopGuard,
+    dom_guards: Vec<DominatingGuard>,
+    defs: &'a DefMap,
+}
 
-    // Recurse into sub-structures
-    match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => eliminate_in_expr(value, guard, dom_guards, defs),
-        TirStmtKind::Expr(expr) => eliminate_in_expr(expr, guard, dom_guards, defs),
-        TirStmtKind::Return { value: Some(expr) }
-        | TirStmtKind::Break {
-            value: Some(expr), ..
-        } => eliminate_in_expr(expr, guard, dom_guards, defs),
-        TirStmtKind::If {
+impl TirVisitor for ConditionEliminator<'_> {
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
+        // Check if this statement is a bounds check that can be eliminated.
+        if let TirStmtKind::If {
+            condition,
+            then_block,
+            else_block: None,
+        } = &mut stmt.kind
+            && is_panic_block(then_block)
+            && is_implied_false_by_any(condition, self.guard, &self.dom_guards, self.defs)
+        {
+            let type_id = condition.type_id;
+            let span = condition.span;
+            *condition = TirExpr {
+                kind: TirExprKind::BoolLiteral(false),
+                type_id,
+                span,
+            };
+            return true;
+        }
+
+        // For If stmts: extract a dominating guard from the condition to extend
+        // elimination into the then-block.
+        if let TirStmtKind::If {
             condition,
             then_block,
             else_block,
-        } => {
-            let mut changed = eliminate_in_expr(condition, guard, dom_guards, defs);
-            // If condition is `(var + offset) < bound`, create a dominating guard
-            // for the then-block to eliminate bounds checks on var+k for k <= offset.
-            let dom = extract_dominating_guard(condition, defs);
+        } = &mut stmt.kind
+        {
+            let mut changed = self.visit_expr(condition);
+            let dom = extract_dominating_guard(condition, self.defs);
+            let saved = self.dom_guards.clone();
             if let Some(dg) = dom {
-                let mut extended = dom_guards.to_vec();
-                extended.push(dg);
-                changed |= eliminate_in_block(then_block, guard, &extended, defs);
-            } else {
-                changed |= eliminate_in_block(then_block, guard, dom_guards, defs);
+                self.dom_guards.push(dg);
             }
+            changed |= self.visit_block(then_block);
+            self.dom_guards = saved;
             if let Some(eb) = else_block {
-                changed |= eliminate_in_block(eb, guard, dom_guards, defs);
+                changed |= self.visit_block(eb);
             }
-            changed
+            return changed;
         }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            eliminate_in_block(block, guard, dom_guards, defs)
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            let mut changed = eliminate_in_expr(scrutinee, guard, dom_guards, defs);
-            changed |= eliminate_in_block(then_block, guard, dom_guards, defs);
-            if let Some(eb) = else_block {
-                changed |= eliminate_in_block(eb, guard, dom_guards, defs);
-            }
-            changed
-        }
-        _ => false,
-    }
-}
 
-fn eliminate_in_block(
-    block: &mut TirBlock,
-    guard: &LoopGuard,
-    dom_guards: &[DominatingGuard],
-    defs: &DefMap,
-) -> bool {
-    let mut changed = false;
-    for stmt in &mut block.stmts {
-        changed |= eliminate_in_stmt(stmt, guard, dom_guards, defs);
+        walk_stmt(self, stmt)
     }
-    changed
-}
 
-fn eliminate_in_expr(
-    expr: &mut TirExpr,
-    guard: &LoopGuard,
-    dom_guards: &[DominatingGuard],
-    defs: &DefMap,
-) -> bool {
-    match &mut expr.kind {
-        TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
-            eliminate_in_block(block, guard, dom_guards, defs)
-        }
-        TirExprKind::Binary { left, right, .. }
-        | TirExprKind::Assign {
-            target: left,
-            value: right,
-        }
-        | TirExprKind::Index {
-            expr: left,
-            index: right,
-        } => {
-            let mut c = eliminate_in_expr(left, guard, dom_guards, defs);
-            c |= eliminate_in_expr(right, guard, dom_guards, defs);
-            c
-        }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::GlobalVarSet { value: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner, .. } => {
-            eliminate_in_expr(inner, guard, dom_guards, defs)
-        }
-        TirExprKind::If {
+    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+        // For If exprs: extract a dominating guard and propagate into then-branch.
+        if let TirExprKind::If {
             condition,
             then_branch,
             else_branch,
-        } => {
-            let mut c = eliminate_in_expr(condition, guard, dom_guards, defs);
-            let dom = extract_dominating_guard(condition, defs);
+        } = &mut expr.kind
+        {
+            let mut changed = self.visit_expr(condition);
+            let dom = extract_dominating_guard(condition, self.defs);
+            let saved = self.dom_guards.clone();
             if let Some(dg) = dom {
-                let mut extended = dom_guards.to_vec();
-                extended.push(dg);
-                c |= eliminate_in_block(then_branch, guard, &extended, defs);
-            } else {
-                c |= eliminate_in_block(then_branch, guard, dom_guards, defs);
+                self.dom_guards.push(dg);
             }
+            changed |= self.visit_block(then_branch);
+            self.dom_guards = saved;
             if let Some(eb) = else_branch {
-                c |= eliminate_in_block(eb, guard, dom_guards, defs);
+                changed |= self.visit_block(eb);
             }
-            c
+            return changed;
         }
-        TirExprKind::Call { args, .. } => {
-            let mut c = false;
-            for arg in args {
-                c |= eliminate_in_expr(&mut arg.expr, guard, dom_guards, defs);
-            }
-            c
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            let mut c = eliminate_in_expr(receiver, guard, dom_guards, defs);
-            for arg in args {
-                c |= eliminate_in_expr(&mut arg.expr, guard, dom_guards, defs);
-            }
-            c
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            let mut c = false;
-            for f in fields {
-                c |= eliminate_in_expr(&mut f.value, guard, dom_guards, defs);
-            }
-            c
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            let mut c = false;
-            for e in elements {
-                c |= eliminate_in_expr(e, guard, dom_guards, defs);
-            }
-            c
-        }
-        TirExprKind::VariantConstruct {
-            payload: Some(inner),
-            ..
-        } => eliminate_in_expr(inner, guard, dom_guards, defs),
-        _ => false,
+        walk_expr(self, expr)
     }
 }
 
-/// Eliminate bounds checks where the index is masked by a bitmask and the bound
-/// exceeds the mask's maximum value.
+/// TIR visitor that eliminates bitmask-bounded false bounds checks.
 ///
 /// Pattern: `if (x & MASK) >= BOUND { panic(...) }` where `BOUND > MASK >= 0`
-/// Since `(x & MASK)` is always in `[0, MASK]`, `(x & MASK) >= BOUND` is always false.
-fn eliminate_bitmask_bounded(stmt: &mut TirStmt, defs: &DefMap) -> bool {
-    if let TirStmtKind::If {
-        condition,
-        then_block,
-        else_block: None,
-    } = &mut stmt.kind
-        && is_panic_block(then_block)
-        && is_bitmask_bounded(condition, defs)
-    {
-        *condition = TirExpr {
-            kind: TirExprKind::BoolLiteral(false),
-            type_id: condition.type_id,
-            span: condition.span,
-        };
-        return true;
-    }
-
-    // Recurse into sub-structures
-    match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => eliminate_bitmask_in_expr(value, defs),
-        TirStmtKind::Expr(expr) => eliminate_bitmask_in_expr(expr, defs),
-        TirStmtKind::Return { value: Some(expr) }
-        | TirStmtKind::Break {
-            value: Some(expr), ..
-        } => eliminate_bitmask_in_expr(expr, defs),
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            let mut changed = eliminate_bitmask_in_expr(condition, defs);
-            for s in &mut then_block.stmts {
-                changed |= eliminate_bitmask_bounded(s, defs);
-            }
-            if let Some(eb) = else_block {
-                for s in &mut eb.stmts {
-                    changed |= eliminate_bitmask_bounded(s, defs);
-                }
-            }
-            changed
-        }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            let mut changed = false;
-            for s in &mut block.stmts {
-                changed |= eliminate_bitmask_bounded(s, defs);
-            }
-            changed
-        }
-        TirStmtKind::Loop { body } => {
-            let mut changed = false;
-            for s in &mut body.stmts {
-                changed |= eliminate_bitmask_bounded(s, defs);
-            }
-            changed
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            let mut changed = eliminate_bitmask_in_expr(scrutinee, defs);
-            for s in &mut then_block.stmts {
-                changed |= eliminate_bitmask_bounded(s, defs);
-            }
-            if let Some(eb) = else_block {
-                for s in &mut eb.stmts {
-                    changed |= eliminate_bitmask_bounded(s, defs);
-                }
-            }
-            changed
-        }
-        _ => false,
-    }
+/// Since `(x & MASK)` is always in `[0, MASK]`, the condition is always false.
+struct BitmaskEliminator<'a> {
+    defs: &'a DefMap,
 }
 
-fn eliminate_bitmask_in_expr(expr: &mut TirExpr, defs: &DefMap) -> bool {
-    match &mut expr.kind {
-        TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
-            let mut changed = false;
-            for s in &mut block.stmts {
-                changed |= eliminate_bitmask_bounded(s, defs);
-            }
-            changed
-        }
-        TirExprKind::Binary { left, right, .. }
-        | TirExprKind::Assign {
-            target: left,
-            value: right,
-        }
-        | TirExprKind::Index {
-            expr: left,
-            index: right,
-        } => {
-            let mut c = eliminate_bitmask_in_expr(left, defs);
-            c |= eliminate_bitmask_in_expr(right, defs);
-            c
-        }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::GlobalVarSet { value: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner, .. } => eliminate_bitmask_in_expr(inner, defs),
-        TirExprKind::If {
+impl TirVisitor for BitmaskEliminator<'_> {
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
+        if let TirStmtKind::If {
             condition,
-            then_branch,
-            else_branch,
-        } => {
-            let mut c = eliminate_bitmask_in_expr(condition, defs);
-            for s in &mut then_branch.stmts {
-                c |= eliminate_bitmask_bounded(s, defs);
-            }
-            if let Some(eb) = else_branch {
-                for s in &mut eb.stmts {
-                    c |= eliminate_bitmask_bounded(s, defs);
-                }
-            }
-            c
+            then_block,
+            else_block: None,
+        } = &mut stmt.kind
+            && is_panic_block(then_block)
+            && is_bitmask_bounded(condition, self.defs)
+        {
+            let type_id = condition.type_id;
+            let span = condition.span;
+            *condition = TirExpr {
+                kind: TirExprKind::BoolLiteral(false),
+                type_id,
+                span,
+            };
+            return true;
         }
-        TirExprKind::Call { args, .. } => {
-            let mut c = false;
-            for arg in args {
-                c |= eliminate_bitmask_in_expr(&mut arg.expr, defs);
-            }
-            c
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            let mut c = eliminate_bitmask_in_expr(receiver, defs);
-            for arg in args {
-                c |= eliminate_bitmask_in_expr(&mut arg.expr, defs);
-            }
-            c
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            let mut c = false;
-            for f in fields {
-                c |= eliminate_bitmask_in_expr(&mut f.value, defs);
-            }
-            c
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            let mut c = false;
-            for e in elements {
-                c |= eliminate_bitmask_in_expr(e, defs);
-            }
-            c
-        }
-        TirExprKind::VariantConstruct {
-            payload: Some(inner),
-            ..
-        } => eliminate_bitmask_in_expr(inner, defs),
-        _ => false,
+        walk_stmt(self, stmt)
     }
 }
 
