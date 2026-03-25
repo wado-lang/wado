@@ -28,7 +28,7 @@ use crate::tir::TirModule;
 
 use boxing::BoxLowerer;
 use closure::ClosureLowerer;
-use comparison::lower_comparisons;
+use comparison::lower_comparison_operators;
 use globals::{generate_initialize_modules, lower_global_initializers};
 use pattern::lower_patterns;
 use string::StringCollector;
@@ -56,7 +56,7 @@ fn lower_pre_boxing(
     global_variant_map: &IndexMap<String, Vec<(String, u32)>>,
 ) {
     // Phase 0: Lower comparison operators on non-primitive types to trait method calls
-    lower_comparisons(module);
+    lower_comparison_operators(module);
 
     // Phase 1: Lower i128/u128 match patterns to if-else chains
     lower_wide_int_match_patterns(module);

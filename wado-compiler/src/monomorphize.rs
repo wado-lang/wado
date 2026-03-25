@@ -10,7 +10,7 @@
 //! 3. Generate concrete struct and function definitions
 //! 4. Rewrite types and function calls to use monomorphized names
 
-mod call_desugar;
+mod call_rewrite;
 mod func_inst;
 mod state;
 mod struct_inst;

@@ -16,7 +16,7 @@ use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 
 /// Lower comparison operators in all functions of a module.
-pub fn lower_comparisons(module: &mut TirModule) {
+pub fn lower_comparison_operators(module: &mut TirModule) {
     let type_table_rc = module.type_table.clone();
     let trait_method_locations = std::mem::take(&mut module.trait_method_locations);
     let module_source = module.module_source.clone();
