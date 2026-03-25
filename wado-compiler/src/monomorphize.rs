@@ -731,7 +731,7 @@ trait TirRefVisitor {
 ///
 /// Replaces the manual recursive traversal in `collect_func_instantiation_sites_in_*`
 /// with visitor-based traversal. The visitor's `walk_expr`/`walk_stmt` handles
-/// recursion into all TIR node kinds automatically, so only Call and MethodCall
+/// recursion into all TIR node kinds automatically, so only Call and `MethodCall`
 /// need custom handling.
 struct InstantiationCollector<'a> {
     mono: &'a mut Monomorphizer,
@@ -815,7 +815,9 @@ impl Monomorphizer {
         self.structs
             .instantiated
             .insert(key.clone(), mangled_name.clone());
-        self.structs.mangled_to_key.insert(mangled_name, key.clone());
+        self.structs
+            .mangled_to_key
+            .insert(mangled_name, key.clone());
         self.structs.pending.push(key);
         true
     }
@@ -1945,7 +1947,6 @@ impl Monomorphizer {
                     );
                     self.try_queue_function(key, mangled);
                 }
-
             }
             _ => {}
         }
@@ -3732,8 +3733,7 @@ impl Monomorphizer {
         let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
             // Use the (already-substituted) receiver type to find the concrete name.
             let mut inner = receiver_type_id;
-            while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                type_table.get(inner).clone()
+            while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) = type_table.get(inner).clone()
             {
                 inner = t;
             }
