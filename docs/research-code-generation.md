@@ -90,7 +90,7 @@ In priority order:
 
 ### How It Works
 
-Write code that *looks like* the target language, with interpolation points for dynamic
+Write code that _looks like_ the target language, with interpolation points for dynamic
 values. A macro transforms the quasi-quoted code into an internal representation at compile
 time.
 
@@ -138,12 +138,12 @@ let output = tokens.to_file_string()?;
 
 ### Assessment for Wado
 
-| Aspect | Rating | Notes |
-|---|---|---|
-| Ergonomics | Excellent | Generator code looks like the output |
-| Performance | Good | Compile-time macro expansion; runtime is string concatenation |
-| Type safety | Structural | Prevents gross structural errors, not semantic ones |
-| Applicability | Limited | Both `quote` and `genco` are Rust proc macros — **cannot be used in Wado code** (package-gale is written in Wado). Could work for Rust-side tools like wado-from-wit |
+| Aspect        | Rating     | Notes                                                                                                                                                                |
+| ------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ergonomics    | Excellent  | Generator code looks like the output                                                                                                                                 |
+| Performance   | Good       | Compile-time macro expansion; runtime is string concatenation                                                                                                        |
+| Type safety   | Structural | Prevents gross structural errors, not semantic ones                                                                                                                  |
+| Applicability | Limited    | Both `quote` and `genco` are Rust proc macros — **cannot be used in Wado code** (package-gale is written in Wado). Could work for Rust-side tools like wado-from-wit |
 
 **Key limitation:** Quasi-quoting requires a macro system. Wado intentionally has no macros.
 A Wado quasi-quoting solution would need to be a language feature (unlikely) or a
@@ -176,6 +176,7 @@ TypeSpec lexer = TypeSpec.classBuilder("Lexer")
 ```
 
 Core abstractions:
+
 - **TypeSpec** — class, interface, enum, annotation
 - **MethodSpec / FunSpec** — methods and functions
 - **FieldSpec / PropertySpec** — fields and properties
@@ -183,12 +184,14 @@ Core abstractions:
 - **CodeBlock** — method body content (string-based with format specifiers)
 
 Format specifiers in CodeBlock:
+
 - `$T` — type reference (auto-imports)
 - `$N` — name reference (links to another spec)
 - `$S` — string literal (auto-quoted)
 - `$L` — raw literal
 
 Control flow helpers:
+
 ```java
 code.beginControlFlow("if (x > 0)")
     .addStatement("return x")
@@ -219,12 +222,12 @@ scope.new_struct("Lexer")
 
 ### Assessment for Wado
 
-| Aspect | Rating | Notes |
-|---|---|---|
-| Ergonomics | Good | Builder chains are readable; method bodies are still string-based |
-| Performance | Good | Minimal allocation if builders use pre-allocated buffers |
-| Type safety | Partial | Declarations are type-safe; bodies are not |
-| Applicability | **High** | Can be implemented as a Wado library with no language changes |
+| Aspect        | Rating   | Notes                                                             |
+| ------------- | -------- | ----------------------------------------------------------------- |
+| Ergonomics    | Good     | Builder chains are readable; method bodies are still string-based |
+| Performance   | Good     | Minimal allocation if builders use pre-allocated buffers          |
+| Type safety   | Partial  | Declarations are type-safe; bodies are not                        |
+| Applicability | **High** | Can be implemented as a Wado library with no language changes     |
 
 **Key advantage:** A builder API is just a library — it can be written in Wado and used by
 package-gale without any compiler changes.
@@ -312,12 +315,12 @@ Prettier for JavaScript).
 
 ### Assessment for Wado
 
-| Aspect | Rating | Notes |
-|---|---|---|
-| Ergonomics | Poor to Medium | Raw AST construction is very verbose; builders/DSLs help |
-| Performance | Good | Single-pass formatting; no string re-parsing |
-| Type safety | Excellent | Syntactically invalid code is unrepresentable |
-| Applicability | **High** | Can be implemented as a Wado library |
+| Aspect        | Rating         | Notes                                                    |
+| ------------- | -------------- | -------------------------------------------------------- |
+| Ergonomics    | Poor to Medium | Raw AST construction is very verbose; builders/DSLs help |
+| Performance   | Good           | Single-pass formatting; no string re-parsing             |
+| Type safety   | Excellent      | Syntactically invalid code is unrepresentable            |
+| Applicability | **High**       | Can be implemented as a Wado library                     |
 
 **Key advantage:** Guarantees valid output. Decouples structure from formatting.
 
@@ -344,20 +347,20 @@ struct {{ name }} {
 
 ### Variants
 
-| Library | Compile-time? | Performance | Features |
-|---|---|---|---|
-| **Askama** | Yes (Jinja-like) | ~330us/render | Type-checked at build time |
-| **Tera** | No (Jinja2-like) | ~860us/render | Macros, inheritance, hot-reload |
-| **Handlebars** | No (logic-less) | ~3.7ms/render | Minimal logic, very stable |
+| Library        | Compile-time?    | Performance   | Features                        |
+| -------------- | ---------------- | ------------- | ------------------------------- |
+| **Askama**     | Yes (Jinja-like) | ~330us/render | Type-checked at build time      |
+| **Tera**       | No (Jinja2-like) | ~860us/render | Macros, inheritance, hot-reload |
+| **Handlebars** | No (logic-less)  | ~3.7ms/render | Minimal logic, very stable      |
 
 ### Assessment for Wado
 
-| Aspect | Rating | Notes |
-|---|---|---|
-| Ergonomics | Excellent (simple cases) | Template looks like output |
-| Performance | Good to Excellent | Depends on compile-time vs runtime |
-| Type safety | None | Can produce invalid code |
-| Applicability | **Low** | Wado has no template engine; would need to build one. Templates also struggle with complex conditional generation (like LL(k) lookahead) |
+| Aspect        | Rating                   | Notes                                                                                                                                    |
+| ------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Ergonomics    | Excellent (simple cases) | Template looks like output                                                                                                               |
+| Performance   | Good to Excellent        | Depends on compile-time vs runtime                                                                                                       |
+| Type safety   | None                     | Can produce invalid code                                                                                                                 |
+| Applicability | **Low**                  | Wado has no template engine; would need to build one. Templates also struggle with complex conditional generation (like LL(k) lookahead) |
 
 **Key limitation:** Templates work well for repetitive, structurally uniform code.
 Package-gale's generation logic is heavily conditional and recursive — it would fight
@@ -432,11 +435,11 @@ Compare with the current code (20 lines of `out.append()` with manual `\n` and s
 
 ### Assessment for Wado
 
-| Aspect | Rating | Notes |
-|---|---|---|
-| Ergonomics | Good | Much cleaner than raw string appending |
-| Performance | Excellent | Minimal overhead over raw string building |
-| Type safety | None | Still string-based |
+| Aspect        | Rating        | Notes                                                      |
+| ------------- | ------------- | ---------------------------------------------------------- |
+| Ergonomics    | Good          | Much cleaner than raw string appending                     |
+| Performance   | Excellent     | Minimal overhead over raw string building                  |
+| Type safety   | None          | Still string-based                                         |
 | Applicability | **Excellent** | Pure library; zero language changes; incremental migration |
 
 ---
@@ -476,25 +479,25 @@ w.block(`if pos >= chars.len() {`, &mut || {
 
 ### Assessment
 
-| Aspect | Rating | Notes |
-|---|---|---|
-| Ergonomics | Very Good | Best of both worlds |
-| Performance | Excellent | Builders are zero-cost wrappers over the writer |
-| Type safety | Partial | Declarations are validated; bodies are strings |
-| Applicability | **Excellent** | Pure library; composable; incremental adoption |
+| Aspect        | Rating        | Notes                                           |
+| ------------- | ------------- | ----------------------------------------------- |
+| Ergonomics    | Very Good     | Best of both worlds                             |
+| Performance   | Excellent     | Builders are zero-cost wrappers over the writer |
+| Type safety   | Partial       | Declarations are validated; bodies are strings  |
+| Applicability | **Excellent** | Pure library; composable; incremental adoption  |
 
 ---
 
 ## Comparative Summary
 
-| Approach | Ergonomics | Perf | Type Safety | Wado Feasibility | Effort |
-|---|---|---|---|---|---|
-| **Quasi-Quoting** | Excellent | Good | Structural | Impossible (no macros) | N/A |
-| **Full AST + Pretty-Print** | Poor | Good | Excellent | Possible | Very High |
-| **Template Engine** | Good (simple) | Good | None | Possible but poor fit | High |
-| **Builder API** | Good | Good | Partial | Excellent | Medium |
-| **Indent-Aware Writer** | Good | Excellent | None | Excellent | Low |
-| **Hybrid Builder + Writer** | Very Good | Excellent | Partial | Excellent | Medium |
+| Approach                    | Ergonomics    | Perf      | Type Safety | Wado Feasibility       | Effort    |
+| --------------------------- | ------------- | --------- | ----------- | ---------------------- | --------- |
+| **Quasi-Quoting**           | Excellent     | Good      | Structural  | Impossible (no macros) | N/A       |
+| **Full AST + Pretty-Print** | Poor          | Good      | Excellent   | Possible               | Very High |
+| **Template Engine**         | Good (simple) | Good      | None        | Possible but poor fit  | High      |
+| **Builder API**             | Good          | Good      | Partial     | Excellent              | Medium    |
+| **Indent-Aware Writer**     | Good          | Excellent | None        | Excellent              | Low       |
+| **Hybrid Builder + Writer** | Very Good     | Excellent | Partial     | Excellent              | Medium    |
 
 ---
 
@@ -601,6 +604,7 @@ fn gen_if_check(w: &mut CodeWriter, ...) {
 ```
 
 Key improvements:
+
 1. **No `\n` or indent threading** — the writer handles both automatically
 2. **No brace escaping** — `begin`/`end` manage structural braces
 3. **No counter threading** — `next_id()` is on the writer
