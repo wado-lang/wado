@@ -12,7 +12,7 @@
 //! and inclusive `<=` guard patterns.
 
 use crate::hashmap::IndexMap;
-use crate::optimize::visitor::{walk_expr, walk_stmt, TirVisitor};
+use crate::optimize::visitor::{TirVisitor, walk_expr, walk_stmt};
 use crate::project::Project;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
@@ -457,7 +457,9 @@ fn record_defs_from_expr(expr: &TirExpr, defs: &mut DefMap) {
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::GlobalVarSet { value: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TypePackExpansion { call_expr: inner, .. }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
@@ -481,7 +483,10 @@ fn record_defs_from_expr(expr: &TirExpr, defs: &mut DefMap) {
                 }
             }
         }
-        TirExprKind::Match { expr: scrutinee, arms } => {
+        TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } => {
             record_defs_from_expr(scrutinee, defs);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
@@ -602,7 +607,12 @@ impl TirVisitor for ConditionEliminator<'_> {
 
         // For If stmts: extract a dominating guard from the condition to extend
         // elimination into the then-block.
-        if let TirStmtKind::If { condition, then_block, else_block } = &mut stmt.kind {
+        if let TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } = &mut stmt.kind
+        {
             let mut changed = self.visit_expr(condition);
             let dom = extract_dominating_guard(condition, self.defs);
             let saved = self.dom_guards.clone();
@@ -622,7 +632,12 @@ impl TirVisitor for ConditionEliminator<'_> {
 
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         // For If exprs: extract a dominating guard and propagate into then-branch.
-        if let TirExprKind::If { condition, then_branch, else_branch } = &mut expr.kind {
+        if let TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } = &mut expr.kind
+        {
             let mut changed = self.visit_expr(condition);
             let dom = extract_dominating_guard(condition, self.defs);
             let saved = self.dom_guards.clone();

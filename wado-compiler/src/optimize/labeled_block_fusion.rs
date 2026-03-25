@@ -272,9 +272,9 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec
         }
         TirExprKind::GlobalVarSet { value, .. } => fuse_in_expr(value, local_count, local_types),
         TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
-            fuse_in_expr(inner, local_count, local_types)
-        }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => fuse_in_expr(inner, local_count, local_types),
         TirExprKind::Switch {
             scrutinee,
             arms,
@@ -761,9 +761,9 @@ fn count_local_uses_in_expr(expr: &TirExpr, local_idx: u32) -> usize {
         }
         TirExprKind::Closure { body, .. } => count_local_uses_in_expr(body, local_idx),
         TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
-            count_local_uses_in_expr(inner, local_idx)
-        }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => count_local_uses_in_expr(inner, local_idx),
         // Leaf nodes
         TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
@@ -947,9 +947,9 @@ fn count_variant_payload_uses_in_expr(expr: &TirExpr, local_idx: u32, case_index
             count_variant_payload_uses_in_expr(body, local_idx, case_index)
         }
         TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
-            count_variant_payload_uses_in_expr(inner, local_idx, case_index)
-        }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => count_variant_payload_uses_in_expr(inner, local_idx, case_index),
         // Leaf nodes
         TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
@@ -1808,7 +1808,9 @@ fn subst_variant_payload_in_expr(
             subst_variant_payload_in_expr(body, temp_local, case_index, payload_local);
         }
         TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
             subst_variant_payload_in_expr(inner, temp_local, case_index, payload_local);
         }
         // Leaf nodes carry no sub-expressions to substitute into.
