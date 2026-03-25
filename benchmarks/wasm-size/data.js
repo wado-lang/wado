@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774397909258,
+  "lastUpdate": 1774398642592,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7199,6 +7199,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d1ccddba06d0ce2727e58454904bbbf039ee7bf9"
         },
         "date": 1774397909169,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0b4382f1af44a572f414ae64b0d151c1efe56e51",
+          "message": "Merge pull request #687 from wado-lang/claude/refactor-monomorph-design-DBj4w\n\nrefactor(monomorphize): improve maintainability and reduce bug surface",
+          "timestamp": "2026-03-25T09:28:13+09:00",
+          "tree_id": "461c8fbb65138e7db335b39ce00e6d3dab0b5b31",
+          "url": "https://github.com/wado-lang/wado/commit/0b4382f1af44a572f414ae64b0d151c1efe56e51"
+        },
+        "date": 1774398642400,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
