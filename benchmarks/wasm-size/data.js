@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774398642592,
+  "lastUpdate": 1774428855421,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7238,6 +7238,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0b4382f1af44a572f414ae64b0d151c1efe56e51"
         },
         "date": 1774398642400,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3424c6a028691fd31365ea5bbb694ff490513088",
+          "message": "Merge pull request #689 from wado-lang/claude/debug-sqlite-parser-5gjH2\n\nfix: enable SQLite parser with backtracking and channel(HIDDEN) support",
+          "timestamp": "2026-03-25T17:51:47+09:00",
+          "tree_id": "75b42d680fbbee988b815c92620f50a26392f2c1",
+          "url": "https://github.com/wado-lang/wado/commit/3424c6a028691fd31365ea5bbb694ff490513088"
+        },
+        "date": 1774428855257,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
