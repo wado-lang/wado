@@ -2007,7 +2007,9 @@ fn replace_struct_gets(
             result_ty,
             ..
         } = expr.as_ref()
-        && let WirInstr::LocalGet { name: temp_name, .. } = inner_expr.as_ref()
+        && let WirInstr::LocalGet {
+            name: temp_name, ..
+        } = inner_expr.as_ref()
         && let Some(field_map) = replacements.get(temp_name.as_str())
         && let Some(fresh_local) = field_map.get(field_name.as_str())
     {
@@ -2025,7 +2027,9 @@ fn replace_struct_gets(
         result_ty,
         ..
     } = instr
-        && let WirInstr::LocalGet { name: temp_name, .. } = expr.as_ref()
+        && let WirInstr::LocalGet {
+            name: temp_name, ..
+        } = expr.as_ref()
         && let Some(field_map) = replacements.get(temp_name.as_str())
         && let Some(fresh_local) = field_map.get(field_name.as_str())
     {
@@ -2074,7 +2078,9 @@ fn collect_refcast_aliases(
                 expr: rc_expr,
                 ..
             } = value.as_ref()
-            && let WirInstr::LocalGet { name: temp_name, .. } = rc_expr.as_ref()
+            && let WirInstr::LocalGet {
+                name: temp_name, ..
+            } = rc_expr.as_ref()
             && variant_replacements.contains_key(temp_name.as_str())
         {
             aliases.insert(name.clone(), (temp_name.clone(), type_id.index()));
@@ -2129,7 +2135,9 @@ fn replace_variant_accesses(
             expr: rc_expr,
             ..
         } = sg_expr.as_ref()
-        && let WirInstr::LocalGet { name: temp_name, .. } = rc_expr.as_ref()
+        && let WirInstr::LocalGet {
+            name: temp_name, ..
+        } = rc_expr.as_ref()
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
     {
         let key = (cast_type_id.index(), field_name.clone());
@@ -2141,7 +2149,9 @@ fn replace_variant_accesses(
 
     // Pattern 1: RefTest { type_id, expr: LocalGet(temp) }
     if let WirInstr::RefTest { type_id, expr, .. } = instr
-        && let WirInstr::LocalGet { name: temp_name, .. } = expr.as_ref()
+        && let WirInstr::LocalGet {
+            name: temp_name, ..
+        } = expr.as_ref()
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
         && let Some(&disc_val) = vr.case_disc_values.get(&type_id.index())
     {
@@ -2167,7 +2177,9 @@ fn replace_variant_accesses(
             expr: rc_expr,
             ..
         } = sg_expr.as_ref()
-        && let WirInstr::LocalGet { name: temp_name, .. } = rc_expr.as_ref()
+        && let WirInstr::LocalGet {
+            name: temp_name, ..
+        } = rc_expr.as_ref()
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
     {
         let key = (cast_type_id.index(), field_name.clone());
@@ -2185,7 +2197,9 @@ fn replace_variant_accesses(
             result_ty,
             ..
         } = expr.as_ref()
-        && let WirInstr::LocalGet { name: alias_name, .. } = sg_expr.as_ref()
+        && let WirInstr::LocalGet {
+            name: alias_name, ..
+        } = sg_expr.as_ref()
         && let Some((temp_name, cast_type_idx)) = refcast_aliases.get(alias_name.as_str())
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
     {
@@ -2203,7 +2217,9 @@ fn replace_variant_accesses(
         result_ty,
         ..
     } = instr
-        && let WirInstr::LocalGet { name: alias_name, .. } = sg_expr.as_ref()
+        && let WirInstr::LocalGet {
+            name: alias_name, ..
+        } = sg_expr.as_ref()
         && let Some((temp_name, cast_type_idx)) = refcast_aliases.get(alias_name.as_str())
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
     {

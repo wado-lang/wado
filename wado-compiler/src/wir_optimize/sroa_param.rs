@@ -479,10 +479,10 @@ fn lookup_struct_field_type(
     struct_type_id: &WirTypeId,
     field_name: &str,
 ) -> crate::wir::WirType {
-    if let Some(crate::wir::WirTypeDef::Struct(st)) = types.get(struct_type_id.index() as usize) {
-        if let Some(f) = st.fields.iter().find(|f| f.name == field_name) {
-            return f.ty.clone();
-        }
+    if let Some(crate::wir::WirTypeDef::Struct(st)) = types.get(struct_type_id.index() as usize)
+        && let Some(f) = st.fields.iter().find(|f| f.name == field_name)
+    {
+        return f.ty.clone();
     }
     crate::wir::WirType::I32
 }

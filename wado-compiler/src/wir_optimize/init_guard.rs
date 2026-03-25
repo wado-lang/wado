@@ -231,7 +231,10 @@ fn is_trivial_init_block(instr: &WirInstr) -> Option<&str> {
     else {
         return None;
     };
-    let WirInstr::GlobalGet { name: guard_name, .. } = condition.as_ref() else {
+    let WirInstr::GlobalGet {
+        name: guard_name, ..
+    } = condition.as_ref()
+    else {
         return None;
     };
     if then_body.len() != 1 {
