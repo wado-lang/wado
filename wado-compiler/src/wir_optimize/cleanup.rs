@@ -195,7 +195,7 @@ fn cleanup_instr(instr: &mut WirInstr, nonnull_locals: &IndexSet<String>, types:
         }
         _ => {
             instr.for_each_boxed_child_mut(&mut |child| {
-                cleanup_instr(child, nonnull_locals, types)
+                cleanup_instr(child, nonnull_locals, types);
             });
         }
     }
@@ -216,7 +216,9 @@ fn cleanup_instr(instr: &mut WirInstr, nonnull_locals: &IndexSet<String>, types:
 /// Returns true if `instr` is a `StructGet` whose field is declared as a non-null ref type.
 fn is_nonnull_struct_get(instr: &WirInstr, types: &[WirTypeDef]) -> bool {
     if let WirInstr::StructGet {
-        type_id, field_name, ..
+        type_id,
+        field_name,
+        ..
     } = instr
         && let Some(WirTypeDef::Struct(st)) = types.get(type_id.index() as usize)
     {
