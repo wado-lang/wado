@@ -1,31 +1,45 @@
-// Test contextual keywords (flags, type) used as identifiers
+// Test contextual keywords (flags, type, of) used as identifiers
 // These are only keywords at declaration start, allowed as identifiers elsewhere
 
 use { println, Stdout } from "core:cli";
 
-fn test_param(flags: i32, type: i32) -> i32 {
-    return flags + type;
+fn test_param(flags: i32, type: i32, of: i32) -> i32 {
+    return flags + type + of;
+}
+
+struct Item {
+    of: i32,
 }
 
 export fn run() with Stdout {
     // Test as local variable names
     let flags = 10;
     let type = 20;
+    let of = 30;
 
     // Test in expressions
-    let sum = flags + type;
-    println(`flags + type = {sum}`);
+    let sum = flags + type + of;
+    println(`flags + type + of = {sum}`);
 
     // Test as function parameters
-    let result = test_param(flags, type);
+    let result = test_param(flags, type, of);
     println(`test_param result = {result}`);
+
+    // Test as struct field
+    let item = Item { of: 42 };
+    println(`item.of = {item.of}`);
 
     // Test in for-of binding
     let arr: Array<i32> = [1, 2, 3];
     for let flags of arr {
         println(`for-of flags = {flags}`);
     }
+
+    // Test 'of' as for-of binding variable
+    for let of of arr {
+        println(`for-of of = {of}`);
+    }
 }
 
 __DATA__
-{"stdout": "flags + type = 30\ntest_param result = 30\nfor-of flags = 1\nfor-of flags = 2\nfor-of flags = 3\n"}
+{"stdout": "flags + type + of = 60\ntest_param result = 60\nitem.of = 42\nfor-of flags = 1\nfor-of flags = 2\nfor-of flags = 3\nfor-of of = 1\nfor-of of = 2\nfor-of of = 3\n"}
