@@ -498,40 +498,124 @@ w.block(`if pos >= chars.len() {`, &mut || {
 
 ---
 
-## Recommendations
+## Decision: Indentation-Aware Writer (CodeWriter)
 
-### Short-Term: Indentation-Aware Writer Library
+After evaluating all approaches against Wado's constraints, we chose the
+**indentation-aware writer** as the primary approach:
 
-**Effort: Low. Impact: High.**
+- **package-gale is written in Wado** — Rust-only tools (quote, genco, prettyplease) are
+  not applicable. The Wado ecosystem should not depend on Rust for code generation.
+- **Wado has no macros** — quasi-quoting approaches are ruled out by language design.
+- **Declaration builders add little value** for package-gale's current patterns. Declarations
+  are generated linearly (all fields known upfront), so a writer with `begin`/`end` is
+  equally readable. Builders can be added later if the writer proves insufficient.
+- **No language extension needed** — the brace-escape problem is mostly solved by `begin`/`end`
+  managing structural braces, with template strings reserved for lines with variable
+  interpolation. The remaining edge case (inline braces + interpolation on the same line)
+  is rare enough to tolerate `\{`/`\}` escaping.
 
-Create a `CodeWriter` utility (as described in Approach 5) and migrate package-gale to use
-it. This eliminates the three biggest pain points immediately:
+### CodeWriter API Design
 
-1. No more manual `\n` and indent string threading
-2. No more counter threading (`next_id()` on the writer)
-3. `block()` helper eliminates brace-matching bugs
+The writer lives in package-gale initially, and may be extracted to a shared library if
+other Wado code generation tools emerge.
 
-This can be done incrementally — one function at a time — with no breaking changes.
+```wado
+struct CodeWriter {
+    buf: String,
+    indent: i32,
+    fresh_line: bool,
+    next_id_counter: i32,
+}
 
-### Medium-Term: Declaration Builders
+impl CodeWriter {
+    fn new() -> CodeWriter { ... }
 
-**Effort: Medium. Impact: Medium.**
+    // Core output
+    fn write(&mut self, text: &String) { ... }   // write text, auto-indent at line starts
+    fn line(&mut self, text: &String) { ... }     // write a full line
+    fn blank(&mut self) { ... }                   // emit a blank line
 
-Add builder types for Wado declarations (struct, variant, enum, flags, function signature,
-global). These compose with the `CodeWriter` to handle the `gen_cst_types` and
-`gen_token_kind` parts of package-gale, which are currently verbose but structurally
-regular.
+    // Block structure — begin appends " {" and indents; end emits "}" and dedents.
+    // This eliminates brace escaping for block-level braces (the 90% case).
+    fn begin(&mut self, opener: &String) { ... }  // e.g. begin("struct Foo")
+    fn end(&mut self) { ... }                     // emits "}"
 
-### Long-Term: Wadler-Style Pretty-Printer
+    // Manual indent control (for cases that don't fit begin/end)
+    fn indent(&mut self) { self.indent += 1; }
+    fn dedent(&mut self) { self.indent -= 1; }
 
-**Effort: High. Impact: High (for the ecosystem).**
+    // Unique ID generation (replaces manual counter threading)
+    fn next_id(&mut self) -> i32 { ... }
 
-If the Wado ecosystem grows to have many code generation tools (formatter, LSP refactoring,
-macro-like source transforms), a proper `Doc`-based pretty-printing library becomes
-worthwhile. The Wadler algebra (`text`, `line`, `nest`, `group`, `<>`) is simple enough to
-implement in Wado and provides optimal line-wrapping behavior.
+    fn to_string(&self) -> String { ... }         // asserts indent == 0
+}
+```
 
-This would also benefit `wado format` if it doesn't already use such an approach.
+### Before/After Comparison
+
+Current package-gale code (manual string appending):
+
+```wado
+fn gen_lexer_struct(out: &mut String) {
+    out.append("struct Lexer {\n");
+    out.append("    chars: Array<char>,\n");
+    out.append("    pos: i32,\n");
+    out.append("}\n\n");
+    out.append("impl Lexer {\n");
+    out.append("    fn new(input: &String) -> Lexer {\n");
+    out.append("        return Lexer { chars: input.chars().collect(), pos: 0 };\n");
+    out.append("    }\n\n");
+    // ...
+}
+
+fn gen_if_check(out: &mut String, indent: &String, ctr: &mut i32, ...) {
+    let inner = `{indent}    `;
+    *ctr += 1;
+    out.append(`{indent}if pos >= chars.len() \{ {fail_action}; \}\n`);
+}
+```
+
+With CodeWriter:
+
+```wado
+fn gen_lexer_struct(w: &mut CodeWriter) {
+    w.begin("struct Lexer");
+    w.line("chars: Array<char>,");
+    w.line("pos: i32,");
+    w.end();
+    w.blank();
+    w.begin("impl Lexer");
+    w.begin("fn new(input: &String) -> Lexer");
+    w.line("return Lexer { chars: input.chars().collect(), pos: 0 };");
+    w.end();
+    // ...
+    w.end();
+}
+
+fn gen_if_check(w: &mut CodeWriter, ...) {
+    let id = w.next_id();
+    w.begin("if pos >= chars.len()");
+    w.line(`{fail_action};`);
+    w.end();
+}
+```
+
+Key improvements:
+1. **No `\n` or indent threading** — the writer handles both automatically
+2. **No brace escaping** — `begin`/`end` manage structural braces
+3. **No counter threading** — `next_id()` is on the writer
+4. **Incremental migration** — functions can be migrated one at a time
+
+### Future Extensions
+
+If the declaration parts of package-gale remain noisy after migrating to CodeWriter,
+**declaration builders** (JavaPoet-style) can be layered on top. These would compose with
+the writer rather than replace it.
+
+If the Wado ecosystem grows to need many code generation tools (formatter, LSP refactoring,
+source transforms), a **Wadler-style pretty-printer** (`Doc` algebra with `text`, `line`,
+`nest`, `group`) can be built as a separate library. This provides optimal line-wrapping
+but is significantly more effort to implement.
 
 ### Not Recommended
 
@@ -540,6 +624,8 @@ This would also benefit `wado format` if it doesn't already use such an approach
 - **Template engine:** Poor fit for package-gale's deeply recursive, conditional generation
   logic. Would require building a template engine from scratch.
 - **Quasi-quoting:** Requires macros, which Wado intentionally does not support.
+- **Language extension for brace escaping:** The remaining edge cases are too rare to
+  justify a new syntax (raw template strings, alternate interpolation delimiters, etc.).
 
 ---
 
