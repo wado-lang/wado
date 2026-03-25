@@ -115,6 +115,34 @@ name123
 
 Identifiers are case-sensitive.
 
+### Contextual Keywords
+
+The following keywords are **contextual** — they act as keywords only in specific syntactic positions and can be used as variable names, field names, and function parameters elsewhere:
+
+| Keyword | Keyword context               | Identifier elsewhere                  |
+| ------- | ----------------------------- | ------------------------------------- |
+| `flags` | `flags` declaration           | Variable, field, parameter            |
+| `type`  | `type` declaration            | Variable, field, parameter            |
+| `of`    | `for let <pattern> of <expr>` | Variable, field, parameter            |
+| `from`  | `use { ... } from "..."`      | Variable, field, parameter, type name |
+| `test`  | `test "name" { ... }` block   | Variable, field, parameter            |
+
+```wado
+// 'of' as a variable name
+let of = 42;
+println(`{of}`);
+
+// 'of' as a struct field
+struct Item { of: i32 }
+let item = Item { of: 10 };
+
+// 'of' as a for-of binding
+let arr: Array<i32> = [1, 2, 3];
+for let of of arr {
+    println(`{of}`);
+}
+```
+
 ### Statements and Expressions
 
 - `expr;` makes a statement. A semicolon is required for every statement including the last one.
