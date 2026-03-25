@@ -393,3 +393,80 @@ impl GlobalSpec {
         w.line(`{vis}global {mutability}{self.name}: {self.type_str} = {self.initializer};`);
     }
 }
+
+pub struct TraitSpec {
+    name: String,
+    associated_types: Array<String>,
+    methods: Array<FnSpec>,
+    is_pub: bool,
+}
+
+impl TraitSpec {
+    pub fn new(name: &String) -> TraitSpec {
+        return TraitSpec {
+            name: *name,
+            associated_types: [],
+            methods: [],
+            is_pub: false,
+        };
+    }
+
+    pub fn set_pub(&mut self) -> &mut TraitSpec with stores[self] {
+        self.is_pub = true;
+        return self;
+    }
+
+    pub fn add_associated_type(&mut self, name: &String) -> &mut TraitSpec with stores[self] {
+        self.associated_types.append(*name);
+        return self;
+    }
+
+    pub fn add_method(&mut self, method: FnSpec) -> &mut TraitSpec with stores[self] {
+        self.methods.append(method);
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        let prefix = if self.is_pub { "pub " } else { "" };
+        w.begin(`{prefix}trait {self.name}`);
+        for let assoc of &self.associated_types {
+            w.line(`type {*assoc};`);
+        }
+        if self.associated_types.len() > 0 && self.methods.len() > 0 {
+            w.blank();
+        }
+        for let mut i = 0; i < self.methods.len(); i += 1 {
+            if i > 0 {
+                w.blank();
+            }
+            w.line(`{self.methods[i].signature()};`);
+        }
+        w.end();
+    }
+}
+
+pub struct ImplSpec {
+    type_name: String,
+    trait_name: Option<String>,
+}
+
+impl ImplSpec {
+    pub fn new(type_name: &String) -> ImplSpec {
+        return ImplSpec { type_name: *type_name, trait_name: null };
+    }
+
+    pub fn new_trait(trait_name: &String, type_name: &String) -> ImplSpec {
+        return ImplSpec {
+            type_name: *type_name,
+            trait_name: Option::<String>::Some(*trait_name),
+        };
+    }
+
+    pub fn emit_begin(&self, w: &mut CodeWriter) {
+        if let Some(t) = &self.trait_name {
+            w.begin(`impl {*t} for {self.type_name}`);
+        } else {
+            w.begin(`impl {self.type_name}`);
+        }
+    }
+}

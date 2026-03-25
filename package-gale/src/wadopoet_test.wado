@@ -1,6 +1,6 @@
 use {
     CodeWriter, FieldSpec, StructSpec, VariantSpec, EnumSpec,
-    ParamSpec, FnSpec, GlobalSpec,
+    ParamSpec, FnSpec, GlobalSpec, TraitSpec, ImplSpec,
 } from "./wadopoet.wado";
 
 // ---------------------------------------------------------------------------
@@ -342,5 +342,134 @@ test "chaining builder methods" {
     let mut w = CodeWriter::new();
     s.emit(&mut w);
     let expected = "pub struct Pair {\n    pub first: i32,\n    pub second: i32,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+// ---------------------------------------------------------------------------
+// TraitSpec tests
+// ---------------------------------------------------------------------------
+
+test "TraitSpec simple" {
+    let mut t = TraitSpec::new("Greet");
+    t.set_pub();
+    let mut m = FnSpec::new("greet");
+    m.set_receiver("&self");
+    m.set_return_type("String");
+    t.add_method(m);
+
+    let mut w = CodeWriter::new();
+    t.emit(&mut w);
+    let expected = "pub trait Greet {\n    fn greet(&self) -> String;\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "TraitSpec with associated type" {
+    let mut t = TraitSpec::new("Container");
+    t.add_associated_type("Item");
+    let mut m = FnSpec::new("get");
+    m.set_receiver("&self");
+    m.set_return_type("Self::Item");
+    t.add_method(m);
+
+    let mut w = CodeWriter::new();
+    t.emit(&mut w);
+    let expected = "trait Container {\n    type Item;\n\n    fn get(&self) -> Self::Item;\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "TraitSpec multiple methods" {
+    let mut t = TraitSpec::new("ReadWrite");
+    let mut m1 = FnSpec::new("read");
+    m1.set_receiver("&self");
+    m1.set_return_type("String");
+    t.add_method(m1);
+    let mut m2 = FnSpec::new("write");
+    m2.set_receiver("&mut self");
+    m2.add_param("data", "&String");
+    t.add_method(m2);
+
+    let mut w = CodeWriter::new();
+    t.emit(&mut w);
+    let expected = "trait ReadWrite {\n    fn read(&self) -> String;\n\n    fn write(&mut self, data: &String);\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "TraitSpec with multiple associated types" {
+    let mut t = TraitSpec::new("Map");
+    t.add_associated_type("Key");
+    t.add_associated_type("Value");
+
+    let mut w = CodeWriter::new();
+    t.emit(&mut w);
+    let expected = "trait Map {\n    type Key;\n    type Value;\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+// ---------------------------------------------------------------------------
+// ImplSpec tests
+// ---------------------------------------------------------------------------
+
+test "ImplSpec basic" {
+    let mut w = CodeWriter::new();
+    let i = ImplSpec::new("Point");
+    i.emit_begin(&mut w);
+    let mut f = FnSpec::new("origin");
+    f.set_return_type("Point");
+    f.emit_begin(&mut w);
+    w.line("return Point { x: 0, y: 0 };");
+    w.end();
+    w.end();
+    let expected = "impl Point {\n    fn origin() -> Point {\n        return Point { x: 0, y: 0 };\n    }\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "ImplSpec trait impl" {
+    let mut w = CodeWriter::new();
+    let i = ImplSpec::new_trait("Eq", "Point");
+    i.emit_begin(&mut w);
+    let mut f = FnSpec::new("eq");
+    f.set_receiver("&self");
+    f.add_param("other", "&Self");
+    f.set_return_type("bool");
+    f.emit_begin(&mut w);
+    w.line("return self.x == other.x && self.y == other.y;");
+    w.end();
+    w.end();
+    let expected = "impl Eq for Point {\n    fn eq(&self, other: &Self) -> bool {\n        return self.x == other.x && self.y == other.y;\n    }\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "full trait + impl composition" {
+    let mut w = CodeWriter::new();
+
+    // trait
+    let mut t = TraitSpec::new("Summary");
+    t.set_pub();
+    let mut m = FnSpec::new("title");
+    m.set_receiver("&self");
+    m.set_return_type("String");
+    t.add_method(m);
+    t.emit(&mut w);
+    w.blank();
+
+    // struct
+    let mut s = StructSpec::new("Article");
+    s.set_pub();
+    s.add_pub_field("name", "String");
+    s.emit(&mut w);
+    w.blank();
+
+    // impl trait for struct
+    let i = ImplSpec::new_trait("Summary", "Article");
+    i.emit_begin(&mut w);
+    let mut f = FnSpec::new("title");
+    f.set_receiver("&self");
+    f.set_return_type("String");
+    f.emit_begin(&mut w);
+    w.line("return self.name;");
+    w.end();
+    w.end();
+
+    let expected = "pub trait Summary {\n    fn title(&self) -> String;\n}\n\npub struct Article {\n    pub name: String,\n}\n\nimpl Summary for Article {\n    fn title(&self) -> String {\n        return self.name;\n    }\n}\n";
     assert w.to_string() == expected, `got: {w.to_string()}`;
 }
