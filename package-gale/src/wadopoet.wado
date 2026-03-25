@@ -257,6 +257,37 @@ impl EnumSpec {
     }
 }
 
+pub struct FlagsSpec {
+    pub name: String,
+    members: Array<String>,
+    is_pub: bool,
+}
+
+impl FlagsSpec {
+    pub fn new(name: &String) -> FlagsSpec {
+        return FlagsSpec { name: *name, members: [], is_pub: false };
+    }
+
+    pub fn set_pub(&mut self) -> &mut FlagsSpec with stores[self] {
+        self.is_pub = true;
+        return self;
+    }
+
+    pub fn add_member(&mut self, name: &String) -> &mut FlagsSpec with stores[self] {
+        self.members.append(*name);
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        let prefix = if self.is_pub { "pub " } else { "" };
+        w.begin(`{prefix}flags {self.name}`);
+        for let member of &self.members {
+            w.line(`{*member},`);
+        }
+        w.end();
+    }
+}
+
 pub struct ParamSpec {
     pub name: String,
     pub type_str: String,

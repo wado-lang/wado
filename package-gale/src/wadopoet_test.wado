@@ -1,5 +1,5 @@
 use {
-    CodeWriter, FieldSpec, StructSpec, VariantSpec, EnumSpec,
+    CodeWriter, FieldSpec, StructSpec, VariantSpec, EnumSpec, FlagsSpec,
     ParamSpec, FnSpec, GlobalSpec, TraitSpec, ImplSpec,
 } from "./wadopoet.wado";
 
@@ -150,6 +150,34 @@ test "StructSpec with FieldSpec" {
     let mut w = CodeWriter::new();
     s.emit(&mut w);
     assert w.to_string() == "struct Foo {\n    pub x: f64,\n}\n";
+}
+
+// ---------------------------------------------------------------------------
+// FlagsSpec tests
+// ---------------------------------------------------------------------------
+
+test "FlagsSpec basic" {
+    let mut f = FlagsSpec::new("Perms");
+    f.set_pub();
+    f.add_member("Read");
+    f.add_member("Write");
+    f.add_member("Execute");
+
+    let mut w = CodeWriter::new();
+    f.emit(&mut w);
+    let expected = "pub flags Perms {\n    Read,\n    Write,\n    Execute,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "FlagsSpec private" {
+    let mut f = FlagsSpec::new("Mode");
+    f.add_member("A");
+    f.add_member("B");
+
+    let mut w = CodeWriter::new();
+    f.emit(&mut w);
+    let expected = "flags Mode {\n    A,\n    B,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
 }
 
 // ---------------------------------------------------------------------------
