@@ -217,8 +217,11 @@ impl G4Parser {
                 skip = true;
             } else if action_tok.text == "channel" {
                 self.expect(G4Token::LParen)?;
-                self.advance();
+                let channel_name = self.advance();
                 self.expect(G4Token::RParen)?;
+                if channel_name.text == "HIDDEN" {
+                    skip = true;
+                }
             }
         }
 

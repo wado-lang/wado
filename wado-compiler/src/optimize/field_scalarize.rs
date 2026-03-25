@@ -651,8 +651,34 @@ fn collect_param_field_usage_in_expr(
         | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::Match { expr, arms } => {
+            collect_param_field_usage_in_expr(
+                expr,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_param_field_usage_in_expr(
+                        guard,
+                        struct_params,
+                        field_sets,
+                        conservative_params,
+                        type_table,
+                    );
+                }
+                collect_param_field_usage_in_expr(
+                    &arm.body,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
     }
 }
 
@@ -1254,8 +1280,16 @@ fn count_field_accesses_in_expr(
         | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::Match { expr, arms } => {
+            count_field_accesses_in_expr(expr, counts, false, type_table);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    count_field_accesses_in_expr(guard, counts, false, type_table);
+                }
+                count_field_accesses_in_expr(&arm.body, counts, false, type_table);
+            }
+        }
         TirExprKind::TemplateString { .. } => {}
     }
 }
@@ -1632,6 +1666,11 @@ fn compute_sync_fields_in_expr(
                 compute_sync_fields_in_expr(arg, candidates, type_table, cache, result);
             }
         }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                compute_sync_fields_in_expr(arg, candidates, type_table, cache, result);
+            }
+        }
         TirExprKind::Binary { left, right, .. } => {
             compute_sync_fields_in_expr(left, candidates, type_table, cache, result);
             compute_sync_fields_in_expr(right, candidates, type_table, cache, result);
@@ -1708,7 +1747,52 @@ fn compute_sync_fields_in_expr(
                 compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
             }
         }
-        _ => {}
+        TirExprKind::Match { expr, arms } => {
+            compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    compute_sync_fields_in_expr(guard, candidates, type_table, cache, result);
+                }
+                compute_sync_fields_in_expr(&arm.body, candidates, type_table, cache, result);
+            }
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
+                    compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
+                }
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            compute_sync_fields_in_expr(body, candidates, type_table, cache, result);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                compute_sync_fields_in_expr(p, candidates, type_table, cache, result);
+            }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            compute_sync_fields_in_expr(functor, candidates, type_table, cache, result);
+        }
+        TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. }
+        | TirExprKind::GlobalVarSet { value: expr, .. } => {
+            compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
+        }
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -2073,6 +2157,34 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
             replace_in_expr(target, candidates);
             replace_in_expr(value, candidates);
         }
-        _ => {}
+        TirExprKind::Match { expr, arms } => {
+            replace_in_expr(expr, candidates);
+            for arm in arms {
+                if let Some(guard) = &mut arm.guard {
+                    replace_in_expr(guard, candidates);
+                }
+                replace_in_expr(&mut arm.body, candidates);
+            }
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
+                    replace_in_expr(expr, candidates);
+                }
+            }
+        }
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }

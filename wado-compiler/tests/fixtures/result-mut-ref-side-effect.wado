@@ -1,0 +1,271 @@
+struct Span { start: i32, end: i32 }
+impl Span {
+    fn new(start: i32, end: i32) -> Span { return Span { start, end }; }
+}
+struct Token { kind: i32, text: String, span: Span }
+
+struct ParseError { message: String, span: Span, expected: Array<String> }
+impl ParseError {
+    fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
+        return ParseError { message, span, expected };
+    }
+}
+
+struct Parser { tokens: Array<Token>, pos: i32 }
+impl Parser {
+    fn peek_kind(&self) -> i32 { return self.tokens[self.pos].kind; }
+    fn peek(&self) -> &Token { return &self.tokens[self.pos]; }
+    fn last_end(&self) -> i32 {
+        if self.pos == 0 { return 0; }
+        return self.tokens[self.pos - 1].span.end;
+    }
+    fn advance(&mut self) -> Token {
+        let tok = self.tokens[self.pos];
+        self.pos += 1;
+        return tok;
+    }
+    fn expect(&mut self, kind: i32, name: String) -> Result<Token, ParseError> {
+        if self.tokens[self.pos].kind == kind {
+            return Result::<Token, ParseError>::Ok(self.advance());
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+}
+
+struct P0 { span: Span, tok: Token }
+struct P4 { span: Span, expr: E, tok: Token, expr2: E }
+struct P5 { span: Span, expr: E, expr2: E }
+struct P6 { span: Span, expr: E, expr2: E }
+struct P7 { span: Span, expr: E, expr2: E }
+struct P8 { span: Span, expr: E, expr2: E }
+struct P9 { span: Span, expr: E, expr2: E }
+struct P10 { span: Span, expr: E, opt: Option<Token>, tok: Token }
+struct P11 { span: Span, expr: E, tok: Token, expr2: E }
+struct P12 { span: Span, expr: E, tok: Token, expr2: E }
+struct P16 { span: Span, expr: E, tok: Token, name: Token }
+struct P17 { span: Span, expr: E, opt: Option<Token>, expr2: E }
+struct P18 { span: Span, expr: E }
+struct P19 { span: Span, expr: E, tok: Token, opt: Option<Token>, expr2: E }
+struct P20 { span: Span, expr: E, opt: Option<Token>, tok: Token, expr2: E, tok2: Token, expr3: E }
+
+variant E {
+    Lit(P0),
+    Alt4(P4), Alt5(P5), Alt6(P6), Alt7(P7), Alt8(P8), Alt9(P9),
+    Alt10(P10), Alt11(P11), Alt12(P12),
+    Alt16(P16), Alt17(P17), Alt18(P18), Alt19(P19), Alt20(P20),
+}
+
+fn parse_atom(p: &mut Parser) -> Result<E, ParseError> {
+    let tok = p.advance();
+    return Result::<E, ParseError>::Ok(E::Lit(P0 { span: tok.span, tok }));
+}
+
+fn parse_name(p: &mut Parser) -> Result<Token, ParseError> {
+    return Result::<Token, ParseError>::Ok(p.advance());
+}
+
+fn parse_expr(p: &mut Parser) -> Result<E, ParseError> {
+    let start = p.peek().span.start;
+    let mut result = parse_atom(p)?;
+    loop {
+        let suffix_kind = p.peek_kind();
+        if suffix_kind == 4 {
+            let tok = p.expect(4, "'||'")?;
+            let expr2 = parse_expr(p)?;
+            result = E::Alt4(P4 { span: Span::new(start, p.last_end()), expr: result, tok, expr2 });
+        } else if suffix_kind == 51 || suffix_kind == 52 || suffix_kind == 53 {
+            let grp_kind = p.peek_kind();
+            if grp_kind == 51 {
+                let tok = p.expect(51, "'*'")?;
+            } else if grp_kind == 52 {
+                let tok = p.expect(52, "'/'")?;
+            } else if grp_kind == 53 {
+                let tok = p.expect(53, "'%'")?;
+            }
+            let expr2 = parse_expr(p)?;
+            result = E::Alt5(P5 { span: Span::new(start, p.last_end()), expr: result, expr2 });
+        } else if suffix_kind == 61 || suffix_kind == 62 {
+            let grp_kind = p.peek_kind();
+            if grp_kind == 61 {
+                let tok = p.expect(61, "'+'")?;
+            } else if grp_kind == 62 {
+                let tok = p.expect(62, "'-'")?;
+            }
+            let expr2 = parse_expr(p)?;
+            result = E::Alt6(P6 { span: Span::new(start, p.last_end()), expr: result, expr2 });
+        } else if suffix_kind == 71 || suffix_kind == 72 || suffix_kind == 73 || suffix_kind == 74 {
+            let grp_kind = p.peek_kind();
+            if grp_kind == 71 {
+                let tok = p.expect(71, "'<<'")?;
+            } else if grp_kind == 72 {
+                let tok = p.expect(72, "'>>'")?;
+            } else if grp_kind == 73 {
+                let tok = p.expect(73, "'&'")?;
+            } else if grp_kind == 74 {
+                let tok = p.expect(74, "'|'")?;
+            }
+            let expr2 = parse_expr(p)?;
+            result = E::Alt7(P7 { span: Span::new(start, p.last_end()), expr: result, expr2 });
+        } else if suffix_kind == 81 || suffix_kind == 82 || suffix_kind == 83 || suffix_kind == 84 {
+            let grp_kind = p.peek_kind();
+            if grp_kind == 81 {
+                let tok = p.expect(81, "'<'")?;
+            } else if grp_kind == 82 {
+                let tok = p.expect(82, "'<='")?;
+            } else if grp_kind == 83 {
+                let tok = p.expect(83, "'>'")?;
+            } else if grp_kind == 84 {
+                let tok = p.expect(84, "'>='")?;
+            }
+            let expr2 = parse_expr(p)?;
+            result = E::Alt8(P8 { span: Span::new(start, p.last_end()), expr: result, expr2 });
+        } else if suffix_kind == 91 || suffix_kind == 92 || suffix_kind == 93 || suffix_kind == 94 {
+            let grp_kind = p.peek_kind();
+            if grp_kind == 91 {
+                let tok = p.expect(91, "'='")?;
+            } else if grp_kind == 92 {
+                let tok = p.expect(92, "'=='")?;
+            } else if grp_kind == 93 {
+                let tok = p.expect(93, "'!='")?;
+            } else if grp_kind == 94 {
+                let tok = p.expect(94, "'<>'")?;
+            }
+            let expr2 = parse_expr(p)?;
+            result = E::Alt9(P9 { span: Span::new(start, p.last_end()), expr: result, expr2 });
+        } else if suffix_kind == 10 {
+            let k_not: Option<Token> = if p.peek_kind() == 10 {
+                let k_not = p.expect(10, "NOT")?;
+                Option::<Token>::Some(k_not)
+            } else { null };
+            let tok = p.expect(110, "IN")?;
+            // Simplified backtracking pattern from original
+            let inner_kind = p.peek_kind();
+            if inner_kind == 120 {
+                let saved_pos = p.pos;
+                let mut bt_done = false;
+                if !bt_done {
+                    let r = parse_expr(p);
+                    if let Err(_) = r {
+                        p.pos = saved_pos;
+                    } else {
+                        bt_done = true;
+                    }
+                }
+                if !bt_done {
+                    let tok = parse_expr(p)?;
+                    while p.peek_kind() == 130 {
+                        let comma = p.expect(130, "','")?;
+                        let tok2 = parse_expr(p)?;
+                    }
+                }
+                let close = p.expect(121, "')'")?;
+            } else {
+                // table name path
+                let saved_pos = p.pos;
+                opt_bt: {
+                    let r1 = parse_name(p);
+                    if let Err(_) = r1 { p.pos = saved_pos; break opt_bt; }
+                    let r2 = p.expect(140, "'.'");
+                    if let Err(_) = r2 { p.pos = saved_pos; break opt_bt; }
+                }
+                let name = parse_name(p)?;
+            }
+            result = E::Alt10(P10 { span: Span::new(start, p.last_end()), expr: result, opt: k_not, tok });
+        } else if suffix_kind == 111 {
+            let tok = p.expect(111, "AND")?;
+            let expr2 = parse_expr(p)?;
+            result = E::Alt11(P11 { span: Span::new(start, p.last_end()), expr: result, tok, expr2 });
+        } else if suffix_kind == 112 {
+            let tok = p.expect(112, "OR")?;
+            let expr2 = parse_expr(p)?;
+            result = E::Alt12(P12 { span: Span::new(start, p.last_end()), expr: result, tok, expr2 });
+        } else if suffix_kind == 116 {
+            let tok = p.expect(116, "COLLATE")?;
+            let name = p.advance();
+            result = E::Alt16(P16 { span: Span::new(start, p.last_end()), expr: result, tok, name });
+        } else if suffix_kind == 17 {
+            let k_not: Option<Token> = if p.peek_kind() == 17 {
+                let k_not = p.expect(17, "NOT")?;
+                Option::<Token>::Some(k_not)
+            } else { null };
+            let grp_kind = p.peek_kind();
+            if grp_kind == 171 {
+                let tok = p.expect(171, "LIKE")?;
+            } else if grp_kind == 172 {
+                let tok = p.expect(172, "GLOB")?;
+            } else if grp_kind == 173 {
+                let tok = p.expect(173, "REGEXP")?;
+            } else if grp_kind == 174 {
+                let tok = p.expect(174, "MATCH")?;
+            }
+            let expr2 = parse_expr(p)?;
+            if p.peek_kind() == 175 {
+                let saved_pos = p.pos;
+                opt_bt: {
+                    let r1 = p.expect(175, "ESCAPE");
+                    if let Err(_) = r1 { p.pos = saved_pos; break opt_bt; }
+                    let r2 = parse_expr(p);
+                    if let Err(_) = r2 { p.pos = saved_pos; break opt_bt; }
+                }
+            }
+            result = E::Alt17(P17 { span: Span::new(start, p.last_end()), expr: result, opt: k_not, expr2 });
+        } else if suffix_kind == 181 || suffix_kind == 182 || suffix_kind == 183 {
+            let grp_kind = p.peek_kind();
+            if grp_kind == 181 {
+                let tok = p.expect(181, "ISNULL")?;
+            } else if grp_kind == 182 {
+                let tok = p.expect(182, "NOTNULL")?;
+            } else if grp_kind == 183 {
+                let tok = p.expect(183, "NOT")?;
+                let tok2 = p.expect(184, "NULL")?;
+            }
+            result = E::Alt18(P18 { span: Span::new(start, p.last_end()), expr: result });
+        } else if suffix_kind == 19 {
+            let tok = p.expect(19, "IS")?;
+            let k_not: Option<Token> = if p.peek_kind() == 191 {
+                let k_not = p.expect(191, "NOT")?;
+                Option::<Token>::Some(k_not)
+            } else { null };
+            let expr2 = parse_expr(p)?;
+            result = E::Alt19(P19 { span: Span::new(start, p.last_end()), expr: result, tok, opt: k_not, expr2 });
+        } else if suffix_kind == 20 {
+            let k_not: Option<Token> = if p.peek_kind() == 20 {
+                let k_not = p.expect(20, "NOT")?;
+                Option::<Token>::Some(k_not)
+            } else { null };
+            let tok = p.expect(200, "BETWEEN")?;
+            let expr2 = parse_expr(p)?;
+            let tok2 = p.expect(201, "AND")?;
+            let expr3 = parse_expr(p)?;
+            result = E::Alt20(P20 { span: Span::new(start, p.last_end()), expr: result, opt: k_not, tok, expr2, tok2, expr3 });
+        } else {
+            break;
+        }
+    }
+    return Result::<E, ParseError>::Ok(result);
+}
+
+fn make_tok(kind: i32, text: String, pos: i32) -> Token {
+    return Token { kind, text, span: Span { start: pos, end: pos + text.len() as i32 } };
+}
+
+export fn run() {
+    let tokens: Array<Token> = [
+        make_tok(1, "1", 0),
+        make_tok(61, "+", 2),
+        make_tok(1, "2", 4),
+        make_tok(-1, "", 5),
+    ];
+    let mut p = Parser { tokens, pos: 0 };
+    let r = parse_expr(&mut p);
+    if let Err(e) = &r { panic(`parse failed: {e.message}`); }
+    assert p.pos == 3, `expected pos=3, got pos={p.pos}`;
+}
+
+__DATA__
+{"stdout": ""}
