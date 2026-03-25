@@ -6052,9 +6052,9 @@ fn parse_parse(p: &mut Parser) -> Result<ParseNode, ParseError> {
     while p.peek_kind() == TK_LIT_SEMI || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_UNEXPECTED_CHAR {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LIT_SEMI || grp_kind == TK_K_EXPLAIN || grp_kind == TK_K_ALTER || grp_kind == TK_K_ANALYZE || grp_kind == TK_K_ATTACH || grp_kind == TK_K_BEGIN || grp_kind == TK_K_COMMIT || grp_kind == TK_K_END || grp_kind == TK_K_WITH || grp_kind == TK_K_SELECT || grp_kind == TK_K_VALUES || grp_kind == TK_K_CREATE || grp_kind == TK_K_DELETE || grp_kind == TK_K_DETACH || grp_kind == TK_K_DROP || grp_kind == TK_K_INSERT || grp_kind == TK_K_REPLACE || grp_kind == TK_K_PRAGMA || grp_kind == TK_K_REINDEX || grp_kind == TK_K_RELEASE || grp_kind == TK_K_ROLLBACK || grp_kind == TK_K_SAVEPOINT || grp_kind == TK_K_UPDATE || grp_kind == TK_K_VACUUM {
-            parse_sql_stmt_list(p)?;
+            let tok = parse_sql_stmt_list(p)?;
         } else if grp_kind == TK_UNEXPECTED_CHAR {
-            parse_error(p)?;
+            let tok = parse_error(p)?;
         }
     }
     let eof = p.expect(TK_EOF, "EOF")?;
@@ -6088,7 +6088,7 @@ fn parse_sql_stmt_list(p: &mut Parser) -> Result<SqlStmtListNode, ParseError> {
             let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
             semicolon_list.append(semicolon);
         }
-        parse_sql_stmt(p)?;
+        let tok = parse_sql_stmt(p)?;
     }
     let mut semicolon_list_2: Array<Token> = [];
     while p.peek_kind() == TK_LIT_SEMI {
@@ -6123,15 +6123,15 @@ fn parse_sql_stmt(p: &mut Parser) -> Result<SqlStmtNode, ParseError> {
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_ALTER {
-        parse_alter_table_stmt(p)?;
+        let tok = parse_alter_table_stmt(p)?;
     } else if grp_kind == TK_K_ANALYZE {
-        parse_analyze_stmt(p)?;
+        let tok = parse_analyze_stmt(p)?;
     } else if grp_kind == TK_K_ATTACH {
-        parse_attach_stmt(p)?;
+        let tok = parse_attach_stmt(p)?;
     } else if grp_kind == TK_K_BEGIN {
-        parse_begin_stmt(p)?;
+        let tok = parse_begin_stmt(p)?;
     } else if grp_kind == TK_K_COMMIT || grp_kind == TK_K_END {
-        parse_commit_stmt(p)?;
+        let tok = parse_commit_stmt(p)?;
     } else if grp_kind == TK_K_WITH || grp_kind == TK_K_SELECT || grp_kind == TK_K_VALUES || grp_kind == TK_K_DELETE || grp_kind == TK_K_INSERT || grp_kind == TK_K_REPLACE || grp_kind == TK_K_UPDATE {
         let saved_pos = p.pos;
         let mut bt_done = false;
@@ -6200,7 +6200,7 @@ fn parse_sql_stmt(p: &mut Parser) -> Result<SqlStmtNode, ParseError> {
             }
         }
         if !bt_done {
-            parse_update_stmt_limited(p)?;
+            let tok = parse_update_stmt_limited(p)?;
         }
     } else if grp_kind == TK_K_CREATE {
         let saved_pos_2 = p.pos;
@@ -6238,10 +6238,10 @@ fn parse_sql_stmt(p: &mut Parser) -> Result<SqlStmtNode, ParseError> {
             }
         }
         if !bt_done_2 {
-            parse_create_virtual_table_stmt(p)?;
+            let tok = parse_create_virtual_table_stmt(p)?;
         }
     } else if grp_kind == TK_K_DETACH {
-        parse_detach_stmt(p)?;
+        let tok = parse_detach_stmt(p)?;
     } else if grp_kind == TK_K_DROP {
         let saved_pos_3 = p.pos;
         let mut bt_done_3 = false;
@@ -6270,20 +6270,20 @@ fn parse_sql_stmt(p: &mut Parser) -> Result<SqlStmtNode, ParseError> {
             }
         }
         if !bt_done_3 {
-            parse_drop_view_stmt(p)?;
+            let tok = parse_drop_view_stmt(p)?;
         }
     } else if grp_kind == TK_K_PRAGMA {
-        parse_pragma_stmt(p)?;
+        let tok = parse_pragma_stmt(p)?;
     } else if grp_kind == TK_K_REINDEX {
-        parse_reindex_stmt(p)?;
+        let tok = parse_reindex_stmt(p)?;
     } else if grp_kind == TK_K_RELEASE {
-        parse_release_stmt(p)?;
+        let tok = parse_release_stmt(p)?;
     } else if grp_kind == TK_K_ROLLBACK {
-        parse_rollback_stmt(p)?;
+        let tok = parse_rollback_stmt(p)?;
     } else if grp_kind == TK_K_SAVEPOINT {
-        parse_savepoint_stmt(p)?;
+        let tok = parse_savepoint_stmt(p)?;
     } else if grp_kind == TK_K_VACUUM {
-        parse_vacuum_stmt(p)?;
+        let tok = parse_vacuum_stmt(p)?;
     }
     return Result::<SqlStmtNode, ParseError>::Ok(SqlStmtNode {
         span: Span::new(start, p.last_end()),
@@ -6306,16 +6306,16 @@ fn parse_alter_table_stmt(p: &mut Parser) -> Result<AlterTableStmtNode, ParseErr
     let table_name = parse_table_name(p)?;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_RENAME {
-        p.expect(TK_K_RENAME, "K_RENAME")?;
-        p.expect(TK_K_TO, "K_TO")?;
-        parse_new_table_name(p)?;
+        let tok = p.expect(TK_K_RENAME, "K_RENAME")?;
+        let tok_2 = p.expect(TK_K_TO, "K_TO")?;
+        let tok_3 = parse_new_table_name(p)?;
     } else if grp_kind == TK_K_ADD {
-        p.expect(TK_K_ADD, "K_ADD")?;
+        let tok = p.expect(TK_K_ADD, "K_ADD")?;
         let k_column: Option<Token> = if p.peek_kind() == TK_K_COLUMN {
             let k_column = p.expect(TK_K_COLUMN, "K_COLUMN")?;
             Option::<Token>::Some(k_column)
         } else { null };
-        parse_column_def(p)?;
+        let tok_2 = parse_column_def(p)?;
     }
     return Result::<AlterTableStmtNode, ParseError>::Ok(AlterTableStmtNode {
         span: Span::new(start, p.last_end()),
@@ -6352,9 +6352,9 @@ fn parse_analyze_stmt(p: &mut Parser) -> Result<AnalyzeStmtNode, ParseError> {
                     }
                 }
                 if !bt_done {
-                    parse_database_name(p)?;
-                    p.expect(TK_LIT_DOT, "'.'")?;
-                    parse_table_or_index_name(p)?;
+                    let tok = parse_database_name(p)?;
+                    let tok_2 = p.expect(TK_LIT_DOT, "'.'")?;
+                    let tok_3 = parse_table_or_index_name(p)?;
                 }
             }
         }
@@ -6393,11 +6393,11 @@ fn parse_begin_stmt(p: &mut Parser) -> Result<BeginStmtNode, ParseError> {
         opt_bt: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_DEFERRED {
-                p.expect(TK_K_DEFERRED, "K_DEFERRED")?;
+                let tok = p.expect(TK_K_DEFERRED, "K_DEFERRED")?;
             } else if grp_kind == TK_K_IMMEDIATE {
-                p.expect(TK_K_IMMEDIATE, "K_IMMEDIATE")?;
+                let tok = p.expect(TK_K_IMMEDIATE, "K_IMMEDIATE")?;
             } else if grp_kind == TK_K_EXCLUSIVE {
-                p.expect(TK_K_EXCLUSIVE, "K_EXCLUSIVE")?;
+                let tok = p.expect(TK_K_EXCLUSIVE, "K_EXCLUSIVE")?;
             }
         }
     }
@@ -6422,9 +6422,9 @@ fn parse_commit_stmt(p: &mut Parser) -> Result<CommitStmtNode, ParseError> {
     let start = p.peek().span.start;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_COMMIT {
-        p.expect(TK_K_COMMIT, "K_COMMIT")?;
+        let tok = p.expect(TK_K_COMMIT, "K_COMMIT")?;
     } else if grp_kind == TK_K_END {
-        p.expect(TK_K_END, "K_END")?;
+        let tok = p.expect(TK_K_END, "K_END")?;
     }
     if p.peek_kind() == TK_K_TRANSACTION {
         let opt_saved = p.pos;
@@ -6451,31 +6451,31 @@ fn parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, 
     let select_core = parse_select_core(p)?;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_UNION {
-        p.expect(TK_K_UNION, "K_UNION")?;
+        let tok = p.expect(TK_K_UNION, "K_UNION")?;
         let k_all: Option<Token> = if p.peek_kind() == TK_K_ALL {
             let k_all = p.expect(TK_K_ALL, "K_ALL")?;
             Option::<Token>::Some(k_all)
         } else { null };
     } else if grp_kind == TK_K_INTERSECT {
-        p.expect(TK_K_INTERSECT, "K_INTERSECT")?;
+        let tok = p.expect(TK_K_INTERSECT, "K_INTERSECT")?;
     } else if grp_kind == TK_K_EXCEPT {
-        p.expect(TK_K_EXCEPT, "K_EXCEPT")?;
+        let tok = p.expect(TK_K_EXCEPT, "K_EXCEPT")?;
     }
-    parse_select_core(p)?;
+    let tok = parse_select_core(p)?;
     while p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_EXCEPT {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_UNION {
-            p.expect(TK_K_UNION, "K_UNION")?;
+            let tok = p.expect(TK_K_UNION, "K_UNION")?;
             let k_all: Option<Token> = if p.peek_kind() == TK_K_ALL {
                 let k_all = p.expect(TK_K_ALL, "K_ALL")?;
                 Option::<Token>::Some(k_all)
             } else { null };
         } else if grp_kind == TK_K_INTERSECT {
-            p.expect(TK_K_INTERSECT, "K_INTERSECT")?;
+            let tok = p.expect(TK_K_INTERSECT, "K_INTERSECT")?;
         } else if grp_kind == TK_K_EXCEPT {
-            p.expect(TK_K_EXCEPT, "K_EXCEPT")?;
+            let tok = p.expect(TK_K_EXCEPT, "K_EXCEPT")?;
         }
-        parse_select_core(p)?;
+        let tok = parse_select_core(p)?;
     }
     if p.peek_kind() == TK_K_ORDER {
         let opt_saved = p.pos;
@@ -6487,8 +6487,8 @@ fn parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, 
             let opt_r_3 = parse_ordering_term(p);
             if let Err(_) = opt_r_3 { p.pos = opt_saved; break opt_bt; }
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_ordering_term(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_ordering_term(p)?;
             }
         }
     }
@@ -6504,9 +6504,9 @@ fn parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, 
                 opt_bt_3: {
                     let grp_kind_2 = p.peek_kind();
                     if grp_kind_2 == TK_K_OFFSET {
-                        p.expect(TK_K_OFFSET, "K_OFFSET")?;
+                        let tok = p.expect(TK_K_OFFSET, "K_OFFSET")?;
                     } else if grp_kind_2 == TK_LIT_COMMA {
-                        p.expect(TK_LIT_COMMA, "','")?;
+                        let tok = p.expect(TK_LIT_COMMA, "','")?;
                     }
                     let opt_r_6 = parse_expr(p);
                     if let Err(_) = opt_r_6 { p.pos = opt_saved_3; break opt_bt_3; }
@@ -6555,8 +6555,8 @@ fn parse_create_index_stmt(p: &mut Parser) -> Result<CreateIndexStmtNode, ParseE
     let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
     let indexed_column = parse_indexed_column(p)?;
     while p.peek_kind() == TK_LIT_COMMA {
-        p.expect(TK_LIT_COMMA, "','")?;
-        parse_indexed_column(p)?;
+        let tok = p.expect(TK_LIT_COMMA, "','")?;
+        let tok_2 = parse_indexed_column(p)?;
     }
     let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
     if p.peek_kind() == TK_K_WHERE {
@@ -6590,9 +6590,9 @@ fn parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseE
         opt_bt: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_TEMP {
-                p.expect(TK_K_TEMP, "K_TEMP")?;
+                let tok = p.expect(TK_K_TEMP, "K_TEMP")?;
             } else if grp_kind == TK_K_TEMPORARY {
-                p.expect(TK_K_TEMPORARY, "K_TEMPORARY")?;
+                let tok = p.expect(TK_K_TEMPORARY, "K_TEMPORARY")?;
             }
         }
     }
@@ -6620,17 +6620,17 @@ fn parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseE
     let table_name = parse_table_name(p)?;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_LPAREN {
-        p.expect(TK_LIT_LPAREN, "'('")?;
-        parse_column_def(p)?;
+        let tok = p.expect(TK_LIT_LPAREN, "'('")?;
+        let tok_2 = parse_column_def(p)?;
         while p.peek_kind() == TK_LIT_COMMA {
-            p.expect(TK_LIT_COMMA, "','")?;
-            parse_column_def(p)?;
+            let tok = p.expect(TK_LIT_COMMA, "','")?;
+            let tok_2 = parse_column_def(p)?;
         }
         while p.peek_kind() == TK_LIT_COMMA {
-            p.expect(TK_LIT_COMMA, "','")?;
-            parse_table_constraint(p)?;
+            let tok = p.expect(TK_LIT_COMMA, "','")?;
+            let tok_2 = parse_table_constraint(p)?;
         }
-        p.expect(TK_LIT_RPAREN, "')'")?;
+        let tok_3 = p.expect(TK_LIT_RPAREN, "')'")?;
         if p.peek_kind() == TK_K_WITHOUT {
             let opt_saved = p.pos;
             opt_bt: {
@@ -6641,8 +6641,8 @@ fn parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseE
             }
         }
     } else if grp_kind == TK_K_AS {
-        p.expect(TK_K_AS, "K_AS")?;
-        parse_select_stmt(p)?;
+        let tok = p.expect(TK_K_AS, "K_AS")?;
+        let tok_2 = parse_select_stmt(p)?;
     }
     return Result::<CreateTableStmtNode, ParseError>::Ok(CreateTableStmtNode {
         span: Span::new(start, p.last_end()),
@@ -6660,9 +6660,9 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
         opt_bt: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_TEMP {
-                p.expect(TK_K_TEMP, "K_TEMP")?;
+                let tok = p.expect(TK_K_TEMP, "K_TEMP")?;
             } else if grp_kind == TK_K_TEMPORARY {
-                p.expect(TK_K_TEMPORARY, "K_TEMPORARY")?;
+                let tok = p.expect(TK_K_TEMPORARY, "K_TEMPORARY")?;
             }
         }
     }
@@ -6693,22 +6693,22 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
         opt_bt_4: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_BEFORE {
-                p.expect(TK_K_BEFORE, "K_BEFORE")?;
+                let tok = p.expect(TK_K_BEFORE, "K_BEFORE")?;
             } else if grp_kind == TK_K_AFTER {
-                p.expect(TK_K_AFTER, "K_AFTER")?;
+                let tok = p.expect(TK_K_AFTER, "K_AFTER")?;
             } else if grp_kind == TK_K_INSTEAD {
-                p.expect(TK_K_INSTEAD, "K_INSTEAD")?;
-                p.expect(TK_K_OF, "K_OF")?;
+                let tok = p.expect(TK_K_INSTEAD, "K_INSTEAD")?;
+                let tok_2 = p.expect(TK_K_OF, "K_OF")?;
             }
         }
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_DELETE {
-        p.expect(TK_K_DELETE, "K_DELETE")?;
+        let tok = p.expect(TK_K_DELETE, "K_DELETE")?;
     } else if grp_kind == TK_K_INSERT {
-        p.expect(TK_K_INSERT, "K_INSERT")?;
+        let tok = p.expect(TK_K_INSERT, "K_INSERT")?;
     } else if grp_kind == TK_K_UPDATE {
-        p.expect(TK_K_UPDATE, "K_UPDATE")?;
+        let tok = p.expect(TK_K_UPDATE, "K_UPDATE")?;
         if p.peek_kind() == TK_K_OF {
             let opt_saved = p.pos;
             opt_bt: {
@@ -6717,8 +6717,8 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
                 let opt_r_2 = parse_column_name(p);
                 if let Err(_) = opt_r_2 { p.pos = opt_saved; break opt_bt; }
                 while p.peek_kind() == TK_LIT_COMMA {
-                    p.expect(TK_LIT_COMMA, "','")?;
-                    parse_column_name(p)?;
+                    let tok = p.expect(TK_LIT_COMMA, "','")?;
+                    let tok_2 = parse_column_name(p)?;
                 }
             }
         }
@@ -6784,10 +6784,10 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
             }
         }
         if !bt_done {
-            parse_select_stmt(p)?;
+            let tok = parse_select_stmt(p)?;
         }
     }
-    p.expect(TK_LIT_SEMI, "';'")?;
+    let tok = p.expect(TK_LIT_SEMI, "';'")?;
     while p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_VALUES {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_WITH || grp_kind == TK_K_UPDATE || grp_kind == TK_K_INSERT || grp_kind == TK_K_REPLACE || grp_kind == TK_K_DELETE || grp_kind == TK_K_SELECT || grp_kind == TK_K_VALUES {
@@ -6818,10 +6818,10 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
                 }
             }
             if !bt_done {
-                parse_select_stmt(p)?;
+                let tok = parse_select_stmt(p)?;
             }
         }
-        p.expect(TK_LIT_SEMI, "';'")?;
+        let tok = p.expect(TK_LIT_SEMI, "';'")?;
     }
     let k_end = p.expect(TK_K_END, "K_END")?;
     return Result::<CreateTriggerStmtNode, ParseError>::Ok(CreateTriggerStmtNode {
@@ -6844,9 +6844,9 @@ fn parse_create_view_stmt(p: &mut Parser) -> Result<CreateViewStmtNode, ParseErr
         opt_bt: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_TEMP {
-                p.expect(TK_K_TEMP, "K_TEMP")?;
+                let tok = p.expect(TK_K_TEMP, "K_TEMP")?;
             } else if grp_kind == TK_K_TEMPORARY {
-                p.expect(TK_K_TEMPORARY, "K_TEMPORARY")?;
+                let tok = p.expect(TK_K_TEMPORARY, "K_TEMPORARY")?;
             }
         }
     }
@@ -6920,8 +6920,8 @@ fn parse_create_virtual_table_stmt(p: &mut Parser) -> Result<CreateVirtualTableS
             let opt_r_7 = parse_module_argument(p);
             if let Err(_) = opt_r_7 { p.pos = opt_saved_3; break opt_bt_3; }
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_module_argument(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_module_argument(p)?;
             }
             let opt_r_8 = p.expect(TK_LIT_RPAREN, "')'");
             if let Err(_) = opt_r_8 { p.pos = opt_saved_3; break opt_bt_3; }
@@ -6996,8 +6996,8 @@ fn parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, Pa
                     let opt_r_5 = parse_ordering_term(p);
                     if let Err(_) = opt_r_5 { p.pos = opt_saved_3; break opt_bt_3; }
                     while p.peek_kind() == TK_LIT_COMMA {
-                        p.expect(TK_LIT_COMMA, "','")?;
-                        parse_ordering_term(p)?;
+                        let tok = p.expect(TK_LIT_COMMA, "','")?;
+                        let tok_2 = parse_ordering_term(p)?;
                     }
                 }
             }
@@ -7010,9 +7010,9 @@ fn parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, Pa
                 opt_bt_4: {
                     let grp_kind = p.peek_kind();
                     if grp_kind == TK_K_OFFSET {
-                        p.expect(TK_K_OFFSET, "K_OFFSET")?;
+                        let tok = p.expect(TK_K_OFFSET, "K_OFFSET")?;
                     } else if grp_kind == TK_LIT_COMMA {
-                        p.expect(TK_LIT_COMMA, "','")?;
+                        let tok = p.expect(TK_LIT_COMMA, "','")?;
                     }
                     let opt_r_8 = parse_expr(p);
                     if let Err(_) = opt_r_8 { p.pos = opt_saved_4; break opt_bt_4; }
@@ -7177,8 +7177,8 @@ fn parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode, 
     } else { null };
     let select_core = parse_select_core(p)?;
     while p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_EXCEPT {
-        parse_compound_operator(p)?;
-        parse_select_core(p)?;
+        let tok = parse_compound_operator(p)?;
+        let tok_2 = parse_select_core(p)?;
     }
     if p.peek_kind() == TK_K_ORDER {
         let opt_saved = p.pos;
@@ -7190,8 +7190,8 @@ fn parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode, 
             let opt_r_3 = parse_ordering_term(p);
             if let Err(_) = opt_r_3 { p.pos = opt_saved; break opt_bt; }
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_ordering_term(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_ordering_term(p)?;
             }
         }
     }
@@ -7207,9 +7207,9 @@ fn parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode, 
                 opt_bt_3: {
                     let grp_kind = p.peek_kind();
                     if grp_kind == TK_K_OFFSET {
-                        p.expect(TK_K_OFFSET, "K_OFFSET")?;
+                        let tok = p.expect(TK_K_OFFSET, "K_OFFSET")?;
                     } else if grp_kind == TK_LIT_COMMA {
-                        p.expect(TK_LIT_COMMA, "','")?;
+                        let tok = p.expect(TK_LIT_COMMA, "','")?;
                     }
                     let opt_r_6 = parse_expr(p);
                     if let Err(_) = opt_r_6 { p.pos = opt_saved_3; break opt_bt_3; }
@@ -7235,40 +7235,40 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
         let saved_pos = p.pos;
         let mut bt_done = false;
         if !bt_done {
-            p.expect(TK_K_INSERT, "K_INSERT")?;
+            let tok = p.expect(TK_K_INSERT, "K_INSERT")?;
             bt_done = true;
         }
         if !bt_done {
-            p.expect(TK_K_INSERT, "K_INSERT")?;
-            p.expect(TK_K_OR, "K_OR")?;
-            p.expect(TK_K_REPLACE, "K_REPLACE")?;
+            let tok = p.expect(TK_K_INSERT, "K_INSERT")?;
+            let tok_2 = p.expect(TK_K_OR, "K_OR")?;
+            let tok_3 = p.expect(TK_K_REPLACE, "K_REPLACE")?;
             bt_done = true;
         }
         if !bt_done {
-            p.expect(TK_K_INSERT, "K_INSERT")?;
-            p.expect(TK_K_OR, "K_OR")?;
-            p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
+            let tok = p.expect(TK_K_INSERT, "K_INSERT")?;
+            let tok_2 = p.expect(TK_K_OR, "K_OR")?;
+            let tok_3 = p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
             bt_done = true;
         }
         if !bt_done {
-            p.expect(TK_K_INSERT, "K_INSERT")?;
-            p.expect(TK_K_OR, "K_OR")?;
-            p.expect(TK_K_ABORT, "K_ABORT")?;
+            let tok = p.expect(TK_K_INSERT, "K_INSERT")?;
+            let tok_2 = p.expect(TK_K_OR, "K_OR")?;
+            let tok_3 = p.expect(TK_K_ABORT, "K_ABORT")?;
             bt_done = true;
         }
         if !bt_done {
-            p.expect(TK_K_INSERT, "K_INSERT")?;
-            p.expect(TK_K_OR, "K_OR")?;
-            p.expect(TK_K_FAIL, "K_FAIL")?;
+            let tok = p.expect(TK_K_INSERT, "K_INSERT")?;
+            let tok_2 = p.expect(TK_K_OR, "K_OR")?;
+            let tok_3 = p.expect(TK_K_FAIL, "K_FAIL")?;
             bt_done = true;
         }
         if !bt_done {
-            p.expect(TK_K_INSERT, "K_INSERT")?;
-            p.expect(TK_K_OR, "K_OR")?;
-            p.expect(TK_K_IGNORE, "K_IGNORE")?;
+            let tok = p.expect(TK_K_INSERT, "K_INSERT")?;
+            let tok_2 = p.expect(TK_K_OR, "K_OR")?;
+            let tok_3 = p.expect(TK_K_IGNORE, "K_IGNORE")?;
         }
     } else if grp_kind == TK_K_REPLACE {
-        p.expect(TK_K_REPLACE, "K_REPLACE")?;
+        let tok = p.expect(TK_K_REPLACE, "K_REPLACE")?;
     }
     let k_into = p.expect(TK_K_INTO, "K_INTO")?;
     if p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
@@ -7289,8 +7289,8 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
             let opt_r_4 = parse_column_name(p);
             if let Err(_) = opt_r_4 { p.pos = opt_saved_2; break opt_bt_2; }
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_column_name(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_column_name(p)?;
             }
             let opt_r_5 = p.expect(TK_LIT_RPAREN, "')'");
             if let Err(_) = opt_r_5 { p.pos = opt_saved_2; break opt_bt_2; }
@@ -7301,32 +7301,32 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
         let saved_pos_2 = p.pos;
         let mut bt_done_2 = false;
         if !bt_done_2 {
-            p.expect(TK_K_VALUES, "K_VALUES")?;
-            p.expect(TK_LIT_LPAREN, "'('")?;
-            parse_expr(p)?;
+            let tok = p.expect(TK_K_VALUES, "K_VALUES")?;
+            let tok_2 = p.expect(TK_LIT_LPAREN, "'('")?;
+            let tok_3 = parse_expr(p)?;
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_expr(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_expr(p)?;
             }
-            p.expect(TK_LIT_RPAREN, "')'")?;
+            let tok_4 = p.expect(TK_LIT_RPAREN, "')'")?;
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                p.expect(TK_LIT_LPAREN, "'('")?;
-                parse_expr(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = p.expect(TK_LIT_LPAREN, "'('")?;
+                let tok_3 = parse_expr(p)?;
                 while p.peek_kind() == TK_LIT_COMMA {
-                    p.expect(TK_LIT_COMMA, "','")?;
-                    parse_expr(p)?;
+                    let tok = p.expect(TK_LIT_COMMA, "','")?;
+                    let tok_2 = parse_expr(p)?;
                 }
-                p.expect(TK_LIT_RPAREN, "')'")?;
+                let tok_4 = p.expect(TK_LIT_RPAREN, "')'")?;
             }
             bt_done_2 = true;
         }
         if !bt_done_2 {
-            parse_select_stmt(p)?;
+            let tok = parse_select_stmt(p)?;
         }
     } else if grp_kind_2 == TK_K_DEFAULT {
-        p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
-        p.expect(TK_K_VALUES, "K_VALUES")?;
+        let tok = p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
+        let tok_2 = p.expect(TK_K_VALUES, "K_VALUES")?;
     }
     return Result::<InsertStmtNode, ParseError>::Ok(InsertStmtNode {
         span: Span::new(start, p.last_end()),
@@ -7354,12 +7354,12 @@ fn parse_pragma_stmt(p: &mut Parser) -> Result<PragmaStmtNode, ParseError> {
         opt_bt_2: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_LIT_EQ {
-                p.expect(TK_LIT_EQ, "'='")?;
-                parse_pragma_value(p)?;
+                let tok = p.expect(TK_LIT_EQ, "'='")?;
+                let tok_2 = parse_pragma_value(p)?;
             } else if grp_kind == TK_LIT_LPAREN {
-                p.expect(TK_LIT_LPAREN, "'('")?;
-                parse_pragma_value(p)?;
-                p.expect(TK_LIT_RPAREN, "')'")?;
+                let tok = p.expect(TK_LIT_LPAREN, "'('")?;
+                let tok_2 = parse_pragma_value(p)?;
+                let tok_3 = p.expect(TK_LIT_RPAREN, "')'")?;
             }
         }
     }
@@ -7411,7 +7411,7 @@ fn parse_reindex_stmt(p: &mut Parser) -> Result<ReindexStmtNode, ParseError> {
                             }
                         }
                         if !bt_done {
-                            parse_index_name(p)?;
+                            let tok = parse_index_name(p)?;
                         }
                     }
                 }
@@ -7501,8 +7501,8 @@ fn parse_simple_select_stmt(p: &mut Parser) -> Result<SimpleSelectStmtNode, Pars
             let opt_r_3 = parse_ordering_term(p);
             if let Err(_) = opt_r_3 { p.pos = opt_saved; break opt_bt; }
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_ordering_term(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_ordering_term(p)?;
             }
         }
     }
@@ -7518,9 +7518,9 @@ fn parse_simple_select_stmt(p: &mut Parser) -> Result<SimpleSelectStmtNode, Pars
                 opt_bt_3: {
                     let grp_kind = p.peek_kind();
                     if grp_kind == TK_K_OFFSET {
-                        p.expect(TK_K_OFFSET, "K_OFFSET")?;
+                        let tok = p.expect(TK_K_OFFSET, "K_OFFSET")?;
                     } else if grp_kind == TK_LIT_COMMA {
-                        p.expect(TK_LIT_COMMA, "','")?;
+                        let tok = p.expect(TK_LIT_COMMA, "','")?;
                     }
                     let opt_r_6 = parse_expr(p);
                     if let Err(_) = opt_r_6 { p.pos = opt_saved_3; break opt_bt_3; }
@@ -7543,8 +7543,8 @@ fn parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
     } else { null };
     let select_or_values = parse_select_or_values(p)?;
     while p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_EXCEPT {
-        parse_compound_operator(p)?;
-        parse_select_or_values(p)?;
+        let tok = parse_compound_operator(p)?;
+        let tok_2 = parse_select_or_values(p)?;
     }
     if p.peek_kind() == TK_K_ORDER {
         let opt_saved = p.pos;
@@ -7556,8 +7556,8 @@ fn parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
             let opt_r_3 = parse_ordering_term(p);
             if let Err(_) = opt_r_3 { p.pos = opt_saved; break opt_bt; }
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_ordering_term(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_ordering_term(p)?;
             }
         }
     }
@@ -7573,9 +7573,9 @@ fn parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
                 opt_bt_3: {
                     let grp_kind = p.peek_kind();
                     if grp_kind == TK_K_OFFSET {
-                        p.expect(TK_K_OFFSET, "K_OFFSET")?;
+                        let tok = p.expect(TK_K_OFFSET, "K_OFFSET")?;
                     } else if grp_kind == TK_LIT_COMMA {
-                        p.expect(TK_LIT_COMMA, "','")?;
+                        let tok = p.expect(TK_LIT_COMMA, "','")?;
                     }
                     let opt_r_6 = parse_expr(p);
                     if let Err(_) = opt_r_6 { p.pos = opt_saved_3; break opt_bt_3; }
@@ -7600,16 +7600,16 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
             opt_bt: {
                 let grp_kind = p.peek_kind();
                 if grp_kind == TK_K_DISTINCT {
-                    p.expect(TK_K_DISTINCT, "K_DISTINCT")?;
+                    let tok = p.expect(TK_K_DISTINCT, "K_DISTINCT")?;
                 } else if grp_kind == TK_K_ALL {
-                    p.expect(TK_K_ALL, "K_ALL")?;
+                    let tok = p.expect(TK_K_ALL, "K_ALL")?;
                 }
             }
         }
         let result_column = parse_result_column(p)?;
         while p.peek_kind() == TK_LIT_COMMA {
-            p.expect(TK_LIT_COMMA, "','")?;
-            parse_result_column(p)?;
+            let tok = p.expect(TK_LIT_COMMA, "','")?;
+            let tok_2 = parse_result_column(p)?;
         }
         if p.peek_kind() == TK_K_FROM {
             let opt_saved_2 = p.pos;
@@ -7621,15 +7621,15 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                     let saved_pos = p.pos;
                     let mut bt_done = false;
                     if !bt_done {
-                        parse_table_or_subquery(p)?;
+                        let tok = parse_table_or_subquery(p)?;
                         while p.peek_kind() == TK_LIT_COMMA {
-                            p.expect(TK_LIT_COMMA, "','")?;
-                            parse_table_or_subquery(p)?;
+                            let tok = p.expect(TK_LIT_COMMA, "','")?;
+                            let tok_2 = parse_table_or_subquery(p)?;
                         }
                         bt_done = true;
                     }
                     if !bt_done {
-                        parse_join_clause(p)?;
+                        let tok = parse_join_clause(p)?;
                     }
                 }
             }
@@ -7653,8 +7653,8 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                 let opt_r_6 = parse_expr(p);
                 if let Err(_) = opt_r_6 { p.pos = opt_saved_4; break opt_bt_4; }
                 while p.peek_kind() == TK_LIT_COMMA {
-                    p.expect(TK_LIT_COMMA, "','")?;
-                    parse_expr(p)?;
+                    let tok = p.expect(TK_LIT_COMMA, "','")?;
+                    let tok_2 = parse_expr(p)?;
                 }
                 if p.peek_kind() == TK_K_HAVING {
                     let opt_saved_5 = p.pos;
@@ -7678,19 +7678,19 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
         let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
         let expr = parse_expr(p)?;
         while p.peek_kind() == TK_LIT_COMMA {
-            p.expect(TK_LIT_COMMA, "','")?;
-            parse_expr(p)?;
+            let tok = p.expect(TK_LIT_COMMA, "','")?;
+            let tok_2 = parse_expr(p)?;
         }
         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
         while p.peek_kind() == TK_LIT_COMMA {
-            p.expect(TK_LIT_COMMA, "','")?;
-            p.expect(TK_LIT_LPAREN, "'('")?;
-            parse_expr(p)?;
+            let tok = p.expect(TK_LIT_COMMA, "','")?;
+            let tok_2 = p.expect(TK_LIT_LPAREN, "'('")?;
+            let tok_3 = parse_expr(p)?;
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_expr(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_expr(p)?;
             }
-            p.expect(TK_LIT_RPAREN, "')'")?;
+            let tok_4 = p.expect(TK_LIT_RPAREN, "')'")?;
         }
         return Result::<SelectOrValuesNode, ParseError>::Ok(SelectOrValuesNode::Alt1(SelectOrValuesAlt1 {
             span: Span::new(start, p.last_end()),
@@ -7722,28 +7722,28 @@ fn parse_update_stmt(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
                 let saved_pos = p.pos;
                 let mut bt_done = false;
                 if !bt_done {
-                    p.expect(TK_K_OR, "K_OR")?;
-                    p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
+                    let tok = p.expect(TK_K_OR, "K_OR")?;
+                    let tok_2 = p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
                     bt_done = true;
                 }
                 if !bt_done {
-                    p.expect(TK_K_OR, "K_OR")?;
-                    p.expect(TK_K_ABORT, "K_ABORT")?;
+                    let tok = p.expect(TK_K_OR, "K_OR")?;
+                    let tok_2 = p.expect(TK_K_ABORT, "K_ABORT")?;
                     bt_done = true;
                 }
                 if !bt_done {
-                    p.expect(TK_K_OR, "K_OR")?;
-                    p.expect(TK_K_REPLACE, "K_REPLACE")?;
+                    let tok = p.expect(TK_K_OR, "K_OR")?;
+                    let tok_2 = p.expect(TK_K_REPLACE, "K_REPLACE")?;
                     bt_done = true;
                 }
                 if !bt_done {
-                    p.expect(TK_K_OR, "K_OR")?;
-                    p.expect(TK_K_FAIL, "K_FAIL")?;
+                    let tok = p.expect(TK_K_OR, "K_OR")?;
+                    let tok_2 = p.expect(TK_K_FAIL, "K_FAIL")?;
                     bt_done = true;
                 }
                 if !bt_done {
-                    p.expect(TK_K_OR, "K_OR")?;
-                    p.expect(TK_K_IGNORE, "K_IGNORE")?;
+                    let tok = p.expect(TK_K_OR, "K_OR")?;
+                    let tok_2 = p.expect(TK_K_IGNORE, "K_IGNORE")?;
                 }
             }
         }
@@ -7754,10 +7754,10 @@ fn parse_update_stmt(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
     let eq = p.expect(TK_LIT_EQ, "'='")?;
     let expr = parse_expr(p)?;
     while p.peek_kind() == TK_LIT_COMMA {
-        p.expect(TK_LIT_COMMA, "','")?;
-        parse_column_name(p)?;
-        p.expect(TK_LIT_EQ, "'='")?;
-        parse_expr(p)?;
+        let tok = p.expect(TK_LIT_COMMA, "','")?;
+        let tok_2 = parse_column_name(p)?;
+        let tok_3 = p.expect(TK_LIT_EQ, "'='")?;
+        let tok_4 = parse_expr(p)?;
     }
     if p.peek_kind() == TK_K_WHERE {
         let opt_saved_2 = p.pos;
@@ -7795,28 +7795,28 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
                 let saved_pos = p.pos;
                 let mut bt_done = false;
                 if !bt_done {
-                    p.expect(TK_K_OR, "K_OR")?;
-                    p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
+                    let tok = p.expect(TK_K_OR, "K_OR")?;
+                    let tok_2 = p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
                     bt_done = true;
                 }
                 if !bt_done {
-                    p.expect(TK_K_OR, "K_OR")?;
-                    p.expect(TK_K_ABORT, "K_ABORT")?;
+                    let tok = p.expect(TK_K_OR, "K_OR")?;
+                    let tok_2 = p.expect(TK_K_ABORT, "K_ABORT")?;
                     bt_done = true;
                 }
                 if !bt_done {
-                    p.expect(TK_K_OR, "K_OR")?;
-                    p.expect(TK_K_REPLACE, "K_REPLACE")?;
+                    let tok = p.expect(TK_K_OR, "K_OR")?;
+                    let tok_2 = p.expect(TK_K_REPLACE, "K_REPLACE")?;
                     bt_done = true;
                 }
                 if !bt_done {
-                    p.expect(TK_K_OR, "K_OR")?;
-                    p.expect(TK_K_FAIL, "K_FAIL")?;
+                    let tok = p.expect(TK_K_OR, "K_OR")?;
+                    let tok_2 = p.expect(TK_K_FAIL, "K_FAIL")?;
                     bt_done = true;
                 }
                 if !bt_done {
-                    p.expect(TK_K_OR, "K_OR")?;
-                    p.expect(TK_K_IGNORE, "K_IGNORE")?;
+                    let tok = p.expect(TK_K_OR, "K_OR")?;
+                    let tok_2 = p.expect(TK_K_IGNORE, "K_IGNORE")?;
                 }
             }
         }
@@ -7827,10 +7827,10 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
     let eq = p.expect(TK_LIT_EQ, "'='")?;
     let expr = parse_expr(p)?;
     while p.peek_kind() == TK_LIT_COMMA {
-        p.expect(TK_LIT_COMMA, "','")?;
-        parse_column_name(p)?;
-        p.expect(TK_LIT_EQ, "'='")?;
-        parse_expr(p)?;
+        let tok = p.expect(TK_LIT_COMMA, "','")?;
+        let tok_2 = parse_column_name(p)?;
+        let tok_3 = p.expect(TK_LIT_EQ, "'='")?;
+        let tok_4 = parse_expr(p)?;
     }
     if p.peek_kind() == TK_K_WHERE {
         let opt_saved_2 = p.pos;
@@ -7854,8 +7854,8 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
                     let opt_r_5 = parse_ordering_term(p);
                     if let Err(_) = opt_r_5 { p.pos = opt_saved_4; break opt_bt_4; }
                     while p.peek_kind() == TK_LIT_COMMA {
-                        p.expect(TK_LIT_COMMA, "','")?;
-                        parse_ordering_term(p)?;
+                        let tok = p.expect(TK_LIT_COMMA, "','")?;
+                        let tok_2 = parse_ordering_term(p)?;
                     }
                 }
             }
@@ -7868,9 +7868,9 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
                 opt_bt_5: {
                     let grp_kind = p.peek_kind();
                     if grp_kind == TK_K_OFFSET {
-                        p.expect(TK_K_OFFSET, "K_OFFSET")?;
+                        let tok = p.expect(TK_K_OFFSET, "K_OFFSET")?;
                     } else if grp_kind == TK_LIT_COMMA {
-                        p.expect(TK_LIT_COMMA, "','")?;
+                        let tok = p.expect(TK_LIT_COMMA, "','")?;
                     }
                     let opt_r_8 = parse_expr(p);
                     if let Err(_) = opt_r_8 { p.pos = opt_saved_5; break opt_bt_5; }
@@ -7935,17 +7935,17 @@ fn parse_type_name(p: &mut Parser) -> Result<TypeNameNode, ParseError> {
                 let saved_pos = p.pos;
                 let mut bt_done = false;
                 if !bt_done {
-                    p.expect(TK_LIT_LPAREN, "'('")?;
-                    parse_signed_number(p)?;
-                    p.expect(TK_LIT_RPAREN, "')'")?;
+                    let tok = p.expect(TK_LIT_LPAREN, "'('")?;
+                    let tok_2 = parse_signed_number(p)?;
+                    let tok_3 = p.expect(TK_LIT_RPAREN, "')'")?;
                     bt_done = true;
                 }
                 if !bt_done {
-                    p.expect(TK_LIT_LPAREN, "'('")?;
-                    parse_signed_number(p)?;
-                    p.expect(TK_LIT_COMMA, "','")?;
-                    parse_signed_number(p)?;
-                    p.expect(TK_LIT_RPAREN, "')'")?;
+                    let tok = p.expect(TK_LIT_LPAREN, "'('")?;
+                    let tok_2 = parse_signed_number(p)?;
+                    let tok_3 = p.expect(TK_LIT_COMMA, "','")?;
+                    let tok_4 = parse_signed_number(p)?;
+                    let tok_5 = p.expect(TK_LIT_RPAREN, "')'")?;
                 }
             }
         }
@@ -7969,20 +7969,20 @@ fn parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, Parse
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_PRIMARY {
-        p.expect(TK_K_PRIMARY, "K_PRIMARY")?;
-        p.expect(TK_K_KEY, "K_KEY")?;
+        let tok = p.expect(TK_K_PRIMARY, "K_PRIMARY")?;
+        let tok_2 = p.expect(TK_K_KEY, "K_KEY")?;
         if p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_DESC {
             let opt_saved = p.pos;
             opt_bt: {
                 let grp_kind = p.peek_kind();
                 if grp_kind == TK_K_ASC {
-                    p.expect(TK_K_ASC, "K_ASC")?;
+                    let tok = p.expect(TK_K_ASC, "K_ASC")?;
                 } else if grp_kind == TK_K_DESC {
-                    p.expect(TK_K_DESC, "K_DESC")?;
+                    let tok = p.expect(TK_K_DESC, "K_DESC")?;
                 }
             }
         }
-        parse_conflict_clause(p)?;
+        let tok_3 = parse_conflict_clause(p)?;
         let k_autoincrement: Option<Token> = if p.peek_kind() == TK_K_AUTOINCREMENT {
             let k_autoincrement = p.expect(TK_K_AUTOINCREMENT, "K_AUTOINCREMENT")?;
             Option::<Token>::Some(k_autoincrement)
@@ -7992,18 +7992,18 @@ fn parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, Parse
             let k_not = p.expect(TK_K_NOT, "K_NOT")?;
             Option::<Token>::Some(k_not)
         } else { null };
-        p.expect(TK_K_NULL, "K_NULL")?;
-        parse_conflict_clause(p)?;
+        let tok = p.expect(TK_K_NULL, "K_NULL")?;
+        let tok_2 = parse_conflict_clause(p)?;
     } else if grp_kind == TK_K_UNIQUE {
-        p.expect(TK_K_UNIQUE, "K_UNIQUE")?;
-        parse_conflict_clause(p)?;
+        let tok = p.expect(TK_K_UNIQUE, "K_UNIQUE")?;
+        let tok_2 = parse_conflict_clause(p)?;
     } else if grp_kind == TK_K_CHECK {
-        p.expect(TK_K_CHECK, "K_CHECK")?;
-        p.expect(TK_LIT_LPAREN, "'('")?;
-        parse_expr(p)?;
-        p.expect(TK_LIT_RPAREN, "')'")?;
+        let tok = p.expect(TK_K_CHECK, "K_CHECK")?;
+        let tok_2 = p.expect(TK_LIT_LPAREN, "'('")?;
+        let tok_3 = parse_expr(p)?;
+        let tok_4 = p.expect(TK_LIT_RPAREN, "')'")?;
     } else if grp_kind == TK_K_DEFAULT {
-        p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
+        let tok = p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LIT_PLUS || grp_kind == TK_LIT_MINUS || grp_kind == TK_NUMERIC_LITERAL || grp_kind == TK_STRING_LITERAL || grp_kind == TK_BLOB_LITERAL || grp_kind == TK_K_NULL || grp_kind == TK_K_CURRENT_TIME || grp_kind == TK_K_CURRENT_DATE || grp_kind == TK_K_CURRENT_TIMESTAMP {
             let saved_pos = p.pos;
@@ -8017,18 +8017,18 @@ fn parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, Parse
                 }
             }
             if !bt_done {
-                parse_literal_value(p)?;
+                let tok = parse_literal_value(p)?;
             }
         } else if grp_kind == TK_LIT_LPAREN {
-            p.expect(TK_LIT_LPAREN, "'('")?;
-            parse_expr(p)?;
-            p.expect(TK_LIT_RPAREN, "')'")?;
+            let tok = p.expect(TK_LIT_LPAREN, "'('")?;
+            let tok_2 = parse_expr(p)?;
+            let tok_3 = p.expect(TK_LIT_RPAREN, "')'")?;
         }
     } else if grp_kind == TK_K_COLLATE {
-        p.expect(TK_K_COLLATE, "K_COLLATE")?;
-        parse_collation_name(p)?;
+        let tok = p.expect(TK_K_COLLATE, "K_COLLATE")?;
+        let tok_2 = parse_collation_name(p)?;
     } else if grp_kind == TK_K_REFERENCES {
-        parse_foreign_key_clause(p)?;
+        let tok = parse_foreign_key_clause(p)?;
     }
     return Result::<ColumnConstraintNode, ParseError>::Ok(ColumnConstraintNode {
         span: Span::new(start, p.last_end()),
@@ -8046,21 +8046,96 @@ fn parse_conflict_clause(p: &mut Parser) -> Result<ConflictClauseNode, ParseErro
             if let Err(_) = opt_r_2 { p.pos = opt_saved; break opt_bt; }
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_ROLLBACK {
-                p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
+                let tok = p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
             } else if grp_kind == TK_K_ABORT {
-                p.expect(TK_K_ABORT, "K_ABORT")?;
+                let tok = p.expect(TK_K_ABORT, "K_ABORT")?;
             } else if grp_kind == TK_K_FAIL {
-                p.expect(TK_K_FAIL, "K_FAIL")?;
+                let tok = p.expect(TK_K_FAIL, "K_FAIL")?;
             } else if grp_kind == TK_K_IGNORE {
-                p.expect(TK_K_IGNORE, "K_IGNORE")?;
+                let tok = p.expect(TK_K_IGNORE, "K_IGNORE")?;
             } else if grp_kind == TK_K_REPLACE {
-                p.expect(TK_K_REPLACE, "K_REPLACE")?;
+                let tok = p.expect(TK_K_REPLACE, "K_REPLACE")?;
             }
         }
     }
     return Result::<ConflictClauseNode, ParseError>::Ok(ConflictClauseNode {
         span: Span::new(start, p.last_end()),
     });
+}
+
+fn parse_expr_bt_15(p: &mut Parser) -> Result<ExprNode, ParseError> {
+    let start = p.peek().span.start;
+    let k_cast = p.expect(TK_K_CAST, "K_CAST")?;
+    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    let expr = parse_expr(p)?;
+    let k_as = p.expect(TK_K_AS, "K_AS")?;
+    let type_name = parse_type_name(p)?;
+    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt15(ExprAlt15 {
+        span: Span::new(start, p.last_end()),
+        k_cast,
+        lparen,
+        expr,
+        k_as,
+        type_name,
+        rparen,
+    }));
+}
+
+fn parse_expr_bt_14(p: &mut Parser) -> Result<ExprNode, ParseError> {
+    let start = p.peek().span.start;
+    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    let expr = parse_expr(p)?;
+    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt14(ExprAlt14 {
+        span: Span::new(start, p.last_end()),
+        lparen,
+        expr,
+        rparen,
+    }));
+}
+
+fn parse_expr_bt_3(p: &mut Parser) -> Result<ExprNode, ParseError> {
+    let start = p.peek().span.start;
+    let unary_operator = parse_unary_operator(p)?;
+    let expr = parse_expr(p)?;
+    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt3(ExprAlt3 {
+        span: Span::new(start, p.last_end()),
+        unary_operator,
+        expr,
+    }));
+}
+
+fn parse_expr_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
+    let start = p.peek().span.start;
+    let function_name = parse_function_name(p)?;
+    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    if p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_NUMERIC_LITERAL || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_BLOB_LITERAL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_BIND_PARAMETER || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_LIT_LPAREN || p.peek_kind() == TK_LIT_MINUS || p.peek_kind() == TK_LIT_PLUS || p.peek_kind() == TK_LIT_TILDE || p.peek_kind() == TK_LIT_STAR {
+        let opt_saved = p.pos;
+        opt_bt: {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_K_DISTINCT || grp_kind == TK_NUMERIC_LITERAL || grp_kind == TK_STRING_LITERAL || grp_kind == TK_BLOB_LITERAL || grp_kind == TK_K_NULL || grp_kind == TK_K_CURRENT_TIME || grp_kind == TK_K_CURRENT_DATE || grp_kind == TK_K_CURRENT_TIMESTAMP || grp_kind == TK_BIND_PARAMETER || grp_kind == TK_IDENTIFIER || grp_kind == TK_K_ABORT || grp_kind == TK_K_ACTION || grp_kind == TK_K_ADD || grp_kind == TK_K_AFTER || grp_kind == TK_K_ALL || grp_kind == TK_K_ALTER || grp_kind == TK_K_ANALYZE || grp_kind == TK_K_AND || grp_kind == TK_K_AS || grp_kind == TK_K_ASC || grp_kind == TK_K_ATTACH || grp_kind == TK_K_AUTOINCREMENT || grp_kind == TK_K_BEFORE || grp_kind == TK_K_BEGIN || grp_kind == TK_K_BETWEEN || grp_kind == TK_K_BY || grp_kind == TK_K_CASCADE || grp_kind == TK_K_CASE || grp_kind == TK_K_CAST || grp_kind == TK_K_CHECK || grp_kind == TK_K_COLLATE || grp_kind == TK_K_COLUMN || grp_kind == TK_K_COMMIT || grp_kind == TK_K_CONFLICT || grp_kind == TK_K_CONSTRAINT || grp_kind == TK_K_CREATE || grp_kind == TK_K_CROSS || grp_kind == TK_K_DATABASE || grp_kind == TK_K_DEFAULT || grp_kind == TK_K_DEFERRABLE || grp_kind == TK_K_DEFERRED || grp_kind == TK_K_DELETE || grp_kind == TK_K_DESC || grp_kind == TK_K_DETACH || grp_kind == TK_K_DROP || grp_kind == TK_K_EACH || grp_kind == TK_K_ELSE || grp_kind == TK_K_END || grp_kind == TK_K_ESCAPE || grp_kind == TK_K_EXCEPT || grp_kind == TK_K_EXCLUSIVE || grp_kind == TK_K_EXISTS || grp_kind == TK_K_EXPLAIN || grp_kind == TK_K_FAIL || grp_kind == TK_K_FOR || grp_kind == TK_K_FOREIGN || grp_kind == TK_K_FROM || grp_kind == TK_K_FULL || grp_kind == TK_K_GLOB || grp_kind == TK_K_GROUP || grp_kind == TK_K_HAVING || grp_kind == TK_K_IF || grp_kind == TK_K_IGNORE || grp_kind == TK_K_IMMEDIATE || grp_kind == TK_K_IN || grp_kind == TK_K_INDEX || grp_kind == TK_K_INDEXED || grp_kind == TK_K_INITIALLY || grp_kind == TK_K_INNER || grp_kind == TK_K_INSERT || grp_kind == TK_K_INSTEAD || grp_kind == TK_K_INTERSECT || grp_kind == TK_K_INTO || grp_kind == TK_K_IS || grp_kind == TK_K_ISNULL || grp_kind == TK_K_JOIN || grp_kind == TK_K_KEY || grp_kind == TK_K_LEFT || grp_kind == TK_K_LIKE || grp_kind == TK_K_LIMIT || grp_kind == TK_K_MATCH || grp_kind == TK_K_NATURAL || grp_kind == TK_K_NO || grp_kind == TK_K_NOT || grp_kind == TK_K_NOTNULL || grp_kind == TK_K_OF || grp_kind == TK_K_OFFSET || grp_kind == TK_K_ON || grp_kind == TK_K_OR || grp_kind == TK_K_ORDER || grp_kind == TK_K_OUTER || grp_kind == TK_K_PLAN || grp_kind == TK_K_PRAGMA || grp_kind == TK_K_PRIMARY || grp_kind == TK_K_QUERY || grp_kind == TK_K_RAISE || grp_kind == TK_K_RECURSIVE || grp_kind == TK_K_REFERENCES || grp_kind == TK_K_REGEXP || grp_kind == TK_K_REINDEX || grp_kind == TK_K_RELEASE || grp_kind == TK_K_RENAME || grp_kind == TK_K_REPLACE || grp_kind == TK_K_RESTRICT || grp_kind == TK_K_RIGHT || grp_kind == TK_K_ROLLBACK || grp_kind == TK_K_ROW || grp_kind == TK_K_SAVEPOINT || grp_kind == TK_K_SELECT || grp_kind == TK_K_SET || grp_kind == TK_K_TABLE || grp_kind == TK_K_TEMP || grp_kind == TK_K_TEMPORARY || grp_kind == TK_K_THEN || grp_kind == TK_K_TO || grp_kind == TK_K_TRANSACTION || grp_kind == TK_K_TRIGGER || grp_kind == TK_K_UNION || grp_kind == TK_K_UNIQUE || grp_kind == TK_K_UPDATE || grp_kind == TK_K_USING || grp_kind == TK_K_VACUUM || grp_kind == TK_K_VALUES || grp_kind == TK_K_VIEW || grp_kind == TK_K_VIRTUAL || grp_kind == TK_K_WHEN || grp_kind == TK_K_WHERE || grp_kind == TK_K_WITH || grp_kind == TK_K_WITHOUT || grp_kind == TK_LIT_LPAREN || grp_kind == TK_LIT_MINUS || grp_kind == TK_LIT_PLUS || grp_kind == TK_LIT_TILDE {
+                let k_distinct: Option<Token> = if p.peek_kind() == TK_K_DISTINCT {
+                    let k_distinct = p.expect(TK_K_DISTINCT, "K_DISTINCT")?;
+                    Option::<Token>::Some(k_distinct)
+                } else { null };
+                let tok = parse_expr(p)?;
+                while p.peek_kind() == TK_LIT_COMMA {
+                    let tok = p.expect(TK_LIT_COMMA, "','")?;
+                    let tok_2 = parse_expr(p)?;
+                }
+            } else if grp_kind == TK_LIT_STAR {
+                let tok = p.expect(TK_LIT_STAR, "'*'")?;
+            }
+        }
+    }
+    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt13(ExprAlt13 {
+        span: Span::new(start, p.last_end()),
+        function_name,
+        lparen,
+        rparen,
+    }));
 }
 
 fn parse_expr_bt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
@@ -8099,81 +8174,6 @@ fn parse_expr_bt_2(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn parse_expr_bt_3(p: &mut Parser) -> Result<ExprNode, ParseError> {
-    let start = p.peek().span.start;
-    let unary_operator = parse_unary_operator(p)?;
-    let expr = parse_expr(p)?;
-    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt3(ExprAlt3 {
-        span: Span::new(start, p.last_end()),
-        unary_operator,
-        expr,
-    }));
-}
-
-fn parse_expr_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
-    let start = p.peek().span.start;
-    let function_name = parse_function_name(p)?;
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
-    if p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_NUMERIC_LITERAL || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_BLOB_LITERAL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_BIND_PARAMETER || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_LIT_LPAREN || p.peek_kind() == TK_LIT_MINUS || p.peek_kind() == TK_LIT_PLUS || p.peek_kind() == TK_LIT_TILDE || p.peek_kind() == TK_LIT_STAR {
-        let opt_saved = p.pos;
-        opt_bt: {
-            let grp_kind = p.peek_kind();
-            if grp_kind == TK_K_DISTINCT || grp_kind == TK_NUMERIC_LITERAL || grp_kind == TK_STRING_LITERAL || grp_kind == TK_BLOB_LITERAL || grp_kind == TK_K_NULL || grp_kind == TK_K_CURRENT_TIME || grp_kind == TK_K_CURRENT_DATE || grp_kind == TK_K_CURRENT_TIMESTAMP || grp_kind == TK_BIND_PARAMETER || grp_kind == TK_IDENTIFIER || grp_kind == TK_K_ABORT || grp_kind == TK_K_ACTION || grp_kind == TK_K_ADD || grp_kind == TK_K_AFTER || grp_kind == TK_K_ALL || grp_kind == TK_K_ALTER || grp_kind == TK_K_ANALYZE || grp_kind == TK_K_AND || grp_kind == TK_K_AS || grp_kind == TK_K_ASC || grp_kind == TK_K_ATTACH || grp_kind == TK_K_AUTOINCREMENT || grp_kind == TK_K_BEFORE || grp_kind == TK_K_BEGIN || grp_kind == TK_K_BETWEEN || grp_kind == TK_K_BY || grp_kind == TK_K_CASCADE || grp_kind == TK_K_CASE || grp_kind == TK_K_CAST || grp_kind == TK_K_CHECK || grp_kind == TK_K_COLLATE || grp_kind == TK_K_COLUMN || grp_kind == TK_K_COMMIT || grp_kind == TK_K_CONFLICT || grp_kind == TK_K_CONSTRAINT || grp_kind == TK_K_CREATE || grp_kind == TK_K_CROSS || grp_kind == TK_K_DATABASE || grp_kind == TK_K_DEFAULT || grp_kind == TK_K_DEFERRABLE || grp_kind == TK_K_DEFERRED || grp_kind == TK_K_DELETE || grp_kind == TK_K_DESC || grp_kind == TK_K_DETACH || grp_kind == TK_K_DROP || grp_kind == TK_K_EACH || grp_kind == TK_K_ELSE || grp_kind == TK_K_END || grp_kind == TK_K_ESCAPE || grp_kind == TK_K_EXCEPT || grp_kind == TK_K_EXCLUSIVE || grp_kind == TK_K_EXISTS || grp_kind == TK_K_EXPLAIN || grp_kind == TK_K_FAIL || grp_kind == TK_K_FOR || grp_kind == TK_K_FOREIGN || grp_kind == TK_K_FROM || grp_kind == TK_K_FULL || grp_kind == TK_K_GLOB || grp_kind == TK_K_GROUP || grp_kind == TK_K_HAVING || grp_kind == TK_K_IF || grp_kind == TK_K_IGNORE || grp_kind == TK_K_IMMEDIATE || grp_kind == TK_K_IN || grp_kind == TK_K_INDEX || grp_kind == TK_K_INDEXED || grp_kind == TK_K_INITIALLY || grp_kind == TK_K_INNER || grp_kind == TK_K_INSERT || grp_kind == TK_K_INSTEAD || grp_kind == TK_K_INTERSECT || grp_kind == TK_K_INTO || grp_kind == TK_K_IS || grp_kind == TK_K_ISNULL || grp_kind == TK_K_JOIN || grp_kind == TK_K_KEY || grp_kind == TK_K_LEFT || grp_kind == TK_K_LIKE || grp_kind == TK_K_LIMIT || grp_kind == TK_K_MATCH || grp_kind == TK_K_NATURAL || grp_kind == TK_K_NO || grp_kind == TK_K_NOT || grp_kind == TK_K_NOTNULL || grp_kind == TK_K_OF || grp_kind == TK_K_OFFSET || grp_kind == TK_K_ON || grp_kind == TK_K_OR || grp_kind == TK_K_ORDER || grp_kind == TK_K_OUTER || grp_kind == TK_K_PLAN || grp_kind == TK_K_PRAGMA || grp_kind == TK_K_PRIMARY || grp_kind == TK_K_QUERY || grp_kind == TK_K_RAISE || grp_kind == TK_K_RECURSIVE || grp_kind == TK_K_REFERENCES || grp_kind == TK_K_REGEXP || grp_kind == TK_K_REINDEX || grp_kind == TK_K_RELEASE || grp_kind == TK_K_RENAME || grp_kind == TK_K_REPLACE || grp_kind == TK_K_RESTRICT || grp_kind == TK_K_RIGHT || grp_kind == TK_K_ROLLBACK || grp_kind == TK_K_ROW || grp_kind == TK_K_SAVEPOINT || grp_kind == TK_K_SELECT || grp_kind == TK_K_SET || grp_kind == TK_K_TABLE || grp_kind == TK_K_TEMP || grp_kind == TK_K_TEMPORARY || grp_kind == TK_K_THEN || grp_kind == TK_K_TO || grp_kind == TK_K_TRANSACTION || grp_kind == TK_K_TRIGGER || grp_kind == TK_K_UNION || grp_kind == TK_K_UNIQUE || grp_kind == TK_K_UPDATE || grp_kind == TK_K_USING || grp_kind == TK_K_VACUUM || grp_kind == TK_K_VALUES || grp_kind == TK_K_VIEW || grp_kind == TK_K_VIRTUAL || grp_kind == TK_K_WHEN || grp_kind == TK_K_WHERE || grp_kind == TK_K_WITH || grp_kind == TK_K_WITHOUT || grp_kind == TK_LIT_LPAREN || grp_kind == TK_LIT_MINUS || grp_kind == TK_LIT_PLUS || grp_kind == TK_LIT_TILDE {
-                let k_distinct: Option<Token> = if p.peek_kind() == TK_K_DISTINCT {
-                    let k_distinct = p.expect(TK_K_DISTINCT, "K_DISTINCT")?;
-                    Option::<Token>::Some(k_distinct)
-                } else { null };
-                parse_expr(p)?;
-                while p.peek_kind() == TK_LIT_COMMA {
-                    p.expect(TK_LIT_COMMA, "','")?;
-                    parse_expr(p)?;
-                }
-            } else if grp_kind == TK_LIT_STAR {
-                p.expect(TK_LIT_STAR, "'*'")?;
-            }
-        }
-    }
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
-    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt13(ExprAlt13 {
-        span: Span::new(start, p.last_end()),
-        function_name,
-        lparen,
-        rparen,
-    }));
-}
-
-fn parse_expr_bt_14(p: &mut Parser) -> Result<ExprNode, ParseError> {
-    let start = p.peek().span.start;
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
-    let expr = parse_expr(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
-    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt14(ExprAlt14 {
-        span: Span::new(start, p.last_end()),
-        lparen,
-        expr,
-        rparen,
-    }));
-}
-
-fn parse_expr_bt_15(p: &mut Parser) -> Result<ExprNode, ParseError> {
-    let start = p.peek().span.start;
-    let k_cast = p.expect(TK_K_CAST, "K_CAST")?;
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
-    let expr = parse_expr(p)?;
-    let k_as = p.expect(TK_K_AS, "K_AS")?;
-    let type_name = parse_type_name(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
-    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt15(ExprAlt15 {
-        span: Span::new(start, p.last_end()),
-        k_cast,
-        lparen,
-        expr,
-        k_as,
-        type_name,
-        rparen,
-    }));
-}
-
 fn parse_expr_bt_21(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     if p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_EXISTS {
@@ -8208,15 +8208,15 @@ fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
         let expr = parse_expr(p)?;
         Option::<ExprNode>::Some(expr)
     } else { null };
-    p.expect(TK_K_WHEN, "K_WHEN")?;
-    parse_expr(p)?;
-    p.expect(TK_K_THEN, "K_THEN")?;
-    parse_expr(p)?;
+    let tok = p.expect(TK_K_WHEN, "K_WHEN")?;
+    let tok_2 = parse_expr(p)?;
+    let tok_3 = p.expect(TK_K_THEN, "K_THEN")?;
+    let tok_4 = parse_expr(p)?;
     while p.peek_kind() == TK_K_WHEN {
-        p.expect(TK_K_WHEN, "K_WHEN")?;
-        parse_expr(p)?;
-        p.expect(TK_K_THEN, "K_THEN")?;
-        parse_expr(p)?;
+        let tok = p.expect(TK_K_WHEN, "K_WHEN")?;
+        let tok_2 = parse_expr(p)?;
+        let tok_3 = p.expect(TK_K_THEN, "K_THEN")?;
+        let tok_4 = parse_expr(p)?;
     }
     if p.peek_kind() == TK_K_ELSE {
         let opt_saved = p.pos;
@@ -8245,22 +8245,22 @@ fn parse_expr_bt_23(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind == TK_NUMERIC_LITERAL || kind == TK_STRING_LITERAL || kind == TK_BLOB_LITERAL || kind == TK_K_NULL || kind == TK_K_CURRENT_TIME || kind == TK_K_CURRENT_DATE || kind == TK_K_CURRENT_TIMESTAMP || kind == TK_IDENTIFIER || kind == TK_K_ABORT || kind == TK_K_ACTION || kind == TK_K_ADD || kind == TK_K_AFTER || kind == TK_K_ALL || kind == TK_K_ALTER || kind == TK_K_ANALYZE || kind == TK_K_AND || kind == TK_K_AS || kind == TK_K_ASC || kind == TK_K_ATTACH || kind == TK_K_AUTOINCREMENT || kind == TK_K_BEFORE || kind == TK_K_BEGIN || kind == TK_K_BETWEEN || kind == TK_K_BY || kind == TK_K_CASCADE || kind == TK_K_CASE || kind == TK_K_CAST || kind == TK_K_CHECK || kind == TK_K_COLLATE || kind == TK_K_COLUMN || kind == TK_K_COMMIT || kind == TK_K_CONFLICT || kind == TK_K_CONSTRAINT || kind == TK_K_CREATE || kind == TK_K_CROSS || kind == TK_K_DATABASE || kind == TK_K_DEFAULT || kind == TK_K_DEFERRABLE || kind == TK_K_DEFERRED || kind == TK_K_DELETE || kind == TK_K_DESC || kind == TK_K_DETACH || kind == TK_K_DISTINCT || kind == TK_K_DROP || kind == TK_K_EACH || kind == TK_K_ELSE || kind == TK_K_END || kind == TK_K_ESCAPE || kind == TK_K_EXCEPT || kind == TK_K_EXCLUSIVE || kind == TK_K_EXISTS || kind == TK_K_EXPLAIN || kind == TK_K_FAIL || kind == TK_K_FOR || kind == TK_K_FOREIGN || kind == TK_K_FROM || kind == TK_K_FULL || kind == TK_K_GLOB || kind == TK_K_GROUP || kind == TK_K_HAVING || kind == TK_K_IF || kind == TK_K_IGNORE || kind == TK_K_IMMEDIATE || kind == TK_K_IN || kind == TK_K_INDEX || kind == TK_K_INDEXED || kind == TK_K_INITIALLY || kind == TK_K_INNER || kind == TK_K_INSERT || kind == TK_K_INSTEAD || kind == TK_K_INTERSECT || kind == TK_K_INTO || kind == TK_K_IS || kind == TK_K_ISNULL || kind == TK_K_JOIN || kind == TK_K_KEY || kind == TK_K_LEFT || kind == TK_K_LIKE || kind == TK_K_LIMIT || kind == TK_K_MATCH || kind == TK_K_NATURAL || kind == TK_K_NO || kind == TK_K_NOT || kind == TK_K_NOTNULL || kind == TK_K_OF || kind == TK_K_OFFSET || kind == TK_K_ON || kind == TK_K_OR || kind == TK_K_ORDER || kind == TK_K_OUTER || kind == TK_K_PLAN || kind == TK_K_PRAGMA || kind == TK_K_PRIMARY || kind == TK_K_QUERY || kind == TK_K_RAISE || kind == TK_K_RECURSIVE || kind == TK_K_REFERENCES || kind == TK_K_REGEXP || kind == TK_K_REINDEX || kind == TK_K_RELEASE || kind == TK_K_RENAME || kind == TK_K_REPLACE || kind == TK_K_RESTRICT || kind == TK_K_RIGHT || kind == TK_K_ROLLBACK || kind == TK_K_ROW || kind == TK_K_SAVEPOINT || kind == TK_K_SELECT || kind == TK_K_SET || kind == TK_K_TABLE || kind == TK_K_TEMP || kind == TK_K_TEMPORARY || kind == TK_K_THEN || kind == TK_K_TO || kind == TK_K_TRANSACTION || kind == TK_K_TRIGGER || kind == TK_K_UNION || kind == TK_K_UNIQUE || kind == TK_K_UPDATE || kind == TK_K_USING || kind == TK_K_VACUUM || kind == TK_K_VALUES || kind == TK_K_VIEW || kind == TK_K_VIRTUAL || kind == TK_K_WHEN || kind == TK_K_WHERE || kind == TK_K_WITH || kind == TK_K_WITHOUT || kind == TK_LIT_LPAREN || kind == TK_LIT_MINUS || kind == TK_LIT_PLUS || kind == TK_LIT_TILDE {
+    if kind == TK_K_CAST || kind == TK_LIT_LPAREN || kind == TK_LIT_MINUS || kind == TK_LIT_PLUS || kind == TK_LIT_TILDE || kind == TK_K_NOT || kind == TK_IDENTIFIER || kind == TK_K_ABORT || kind == TK_K_ACTION || kind == TK_K_ADD || kind == TK_K_AFTER || kind == TK_K_ALL || kind == TK_K_ALTER || kind == TK_K_ANALYZE || kind == TK_K_AND || kind == TK_K_AS || kind == TK_K_ASC || kind == TK_K_ATTACH || kind == TK_K_AUTOINCREMENT || kind == TK_K_BEFORE || kind == TK_K_BEGIN || kind == TK_K_BETWEEN || kind == TK_K_BY || kind == TK_K_CASCADE || kind == TK_K_CASE || kind == TK_K_CHECK || kind == TK_K_COLLATE || kind == TK_K_COLUMN || kind == TK_K_COMMIT || kind == TK_K_CONFLICT || kind == TK_K_CONSTRAINT || kind == TK_K_CREATE || kind == TK_K_CROSS || kind == TK_K_CURRENT_DATE || kind == TK_K_CURRENT_TIME || kind == TK_K_CURRENT_TIMESTAMP || kind == TK_K_DATABASE || kind == TK_K_DEFAULT || kind == TK_K_DEFERRABLE || kind == TK_K_DEFERRED || kind == TK_K_DELETE || kind == TK_K_DESC || kind == TK_K_DETACH || kind == TK_K_DISTINCT || kind == TK_K_DROP || kind == TK_K_EACH || kind == TK_K_ELSE || kind == TK_K_END || kind == TK_K_ESCAPE || kind == TK_K_EXCEPT || kind == TK_K_EXCLUSIVE || kind == TK_K_EXISTS || kind == TK_K_EXPLAIN || kind == TK_K_FAIL || kind == TK_K_FOR || kind == TK_K_FOREIGN || kind == TK_K_FROM || kind == TK_K_FULL || kind == TK_K_GLOB || kind == TK_K_GROUP || kind == TK_K_HAVING || kind == TK_K_IF || kind == TK_K_IGNORE || kind == TK_K_IMMEDIATE || kind == TK_K_IN || kind == TK_K_INDEX || kind == TK_K_INDEXED || kind == TK_K_INITIALLY || kind == TK_K_INNER || kind == TK_K_INSERT || kind == TK_K_INSTEAD || kind == TK_K_INTERSECT || kind == TK_K_INTO || kind == TK_K_IS || kind == TK_K_ISNULL || kind == TK_K_JOIN || kind == TK_K_KEY || kind == TK_K_LEFT || kind == TK_K_LIKE || kind == TK_K_LIMIT || kind == TK_K_MATCH || kind == TK_K_NATURAL || kind == TK_K_NO || kind == TK_K_NOTNULL || kind == TK_K_NULL || kind == TK_K_OF || kind == TK_K_OFFSET || kind == TK_K_ON || kind == TK_K_OR || kind == TK_K_ORDER || kind == TK_K_OUTER || kind == TK_K_PLAN || kind == TK_K_PRAGMA || kind == TK_K_PRIMARY || kind == TK_K_QUERY || kind == TK_K_RAISE || kind == TK_K_RECURSIVE || kind == TK_K_REFERENCES || kind == TK_K_REGEXP || kind == TK_K_REINDEX || kind == TK_K_RELEASE || kind == TK_K_RENAME || kind == TK_K_REPLACE || kind == TK_K_RESTRICT || kind == TK_K_RIGHT || kind == TK_K_ROLLBACK || kind == TK_K_ROW || kind == TK_K_SAVEPOINT || kind == TK_K_SELECT || kind == TK_K_SET || kind == TK_K_TABLE || kind == TK_K_TEMP || kind == TK_K_TEMPORARY || kind == TK_K_THEN || kind == TK_K_TO || kind == TK_K_TRANSACTION || kind == TK_K_TRIGGER || kind == TK_K_UNION || kind == TK_K_UNIQUE || kind == TK_K_UPDATE || kind == TK_K_USING || kind == TK_K_VACUUM || kind == TK_K_VALUES || kind == TK_K_VIEW || kind == TK_K_VIRTUAL || kind == TK_K_WHEN || kind == TK_K_WHERE || kind == TK_K_WITH || kind == TK_K_WITHOUT || kind == TK_STRING_LITERAL || kind == TK_NUMERIC_LITERAL || kind == TK_BLOB_LITERAL {
         let saved = p.pos;
-        let r_0 = parse_expr_bt_0(p);
-        if let Err(_) = r_0 {
+        let r_15 = parse_expr_bt_15(p);
+        if let Err(_) = r_15 {
             p.pos = saved;
         } else {
-            return r_0;
+            return r_15;
         }
-        let r_2 = parse_expr_bt_2(p);
-        if let Err(_) = r_2 {
+        let r_14 = parse_expr_bt_14(p);
+        if let Err(_) = r_14 {
             p.pos = saved;
         } else {
-            return r_2;
+            return r_14;
         }
         let r_3 = parse_expr_bt_3(p);
         if let Err(_) = r_3 {
@@ -8274,17 +8274,17 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
         } else {
             return r_13;
         }
-        let r_14 = parse_expr_bt_14(p);
-        if let Err(_) = r_14 {
+        let r_0 = parse_expr_bt_0(p);
+        if let Err(_) = r_0 {
             p.pos = saved;
         } else {
-            return r_14;
+            return r_0;
         }
-        let r_15 = parse_expr_bt_15(p);
-        if let Err(_) = r_15 {
+        let r_2 = parse_expr_bt_2(p);
+        if let Err(_) = r_2 {
             p.pos = saved;
         } else {
-            return r_15;
+            return r_2;
         }
         let r_21 = parse_expr_bt_21(p);
         if let Err(_) = r_21 {
@@ -8314,6 +8314,269 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
     ));
 }
 
+fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
+    let start = p.peek().span.start;
+    let mut result = parse_expr_atom(p)?;
+    loop {
+        let suffix_kind = p.peek_kind();
+        if suffix_kind == TK_LIT_PIPEPIPE {
+            let lit___ = p.expect(TK_LIT_PIPEPIPE, "'||'")?;
+            let expr_2 = parse_expr(p)?;
+            result = ExprNode::Alt4(ExprAlt4 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            lit___,
+            expr_2,
+            });
+        } else if suffix_kind == TK_LIT_STAR || suffix_kind == TK_LIT_SLASH || suffix_kind == TK_LIT__ {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_LIT_STAR {
+                let tok = p.expect(TK_LIT_STAR, "'*'")?;
+            } else if grp_kind == TK_LIT_SLASH {
+                let tok = p.expect(TK_LIT_SLASH, "'/'")?;
+            } else if grp_kind == TK_LIT__ {
+                let tok = p.expect(TK_LIT__, "'%'")?;
+            }
+            let expr_2 = parse_expr(p)?;
+            result = ExprNode::Alt5(ExprAlt5 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            expr_2,
+            });
+        } else if suffix_kind == TK_LIT_PLUS || suffix_kind == TK_LIT_MINUS {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_LIT_PLUS {
+                let tok = p.expect(TK_LIT_PLUS, "'+'")?;
+            } else if grp_kind == TK_LIT_MINUS {
+                let tok = p.expect(TK_LIT_MINUS, "'-'")?;
+            }
+            let expr_2 = parse_expr(p)?;
+            result = ExprNode::Alt6(ExprAlt6 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            expr_2,
+            });
+        } else if suffix_kind == TK_LIT_LTLT || suffix_kind == TK_LIT_GTGT || suffix_kind == TK_LIT_AMP || suffix_kind == TK_LIT_PIPE {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_LIT_LTLT {
+                let tok = p.expect(TK_LIT_LTLT, "'<<'")?;
+            } else if grp_kind == TK_LIT_GTGT {
+                let tok = p.expect(TK_LIT_GTGT, "'>>'")?;
+            } else if grp_kind == TK_LIT_AMP {
+                let tok = p.expect(TK_LIT_AMP, "'&'")?;
+            } else if grp_kind == TK_LIT_PIPE {
+                let tok = p.expect(TK_LIT_PIPE, "'|'")?;
+            }
+            let expr_2 = parse_expr(p)?;
+            result = ExprNode::Alt7(ExprAlt7 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            expr_2,
+            });
+        } else if suffix_kind == TK_LIT_LT || suffix_kind == TK_LIT_LTEQ || suffix_kind == TK_LIT_GT || suffix_kind == TK_LIT_GTEQ {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_LIT_LT {
+                let tok = p.expect(TK_LIT_LT, "'<'")?;
+            } else if grp_kind == TK_LIT_LTEQ {
+                let tok = p.expect(TK_LIT_LTEQ, "'<='")?;
+            } else if grp_kind == TK_LIT_GT {
+                let tok = p.expect(TK_LIT_GT, "'>'")?;
+            } else if grp_kind == TK_LIT_GTEQ {
+                let tok = p.expect(TK_LIT_GTEQ, "'>='")?;
+            }
+            let expr_2 = parse_expr(p)?;
+            result = ExprNode::Alt8(ExprAlt8 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            expr_2,
+            });
+        } else if suffix_kind == TK_LIT_EQ || suffix_kind == TK_LIT_EQEQ || suffix_kind == TK_LIT_BANGEQ || suffix_kind == TK_LIT_LTGT {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_LIT_EQ {
+                let tok = p.expect(TK_LIT_EQ, "'='")?;
+            } else if grp_kind == TK_LIT_EQEQ {
+                let tok = p.expect(TK_LIT_EQEQ, "'=='")?;
+            } else if grp_kind == TK_LIT_BANGEQ {
+                let tok = p.expect(TK_LIT_BANGEQ, "'!='")?;
+            } else if grp_kind == TK_LIT_LTGT {
+                let tok = p.expect(TK_LIT_LTGT, "'<>'")?;
+            }
+            let expr_2 = parse_expr(p)?;
+            result = ExprNode::Alt9(ExprAlt9 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            expr_2,
+            });
+        } else if suffix_kind == TK_K_NOT {
+            let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
+                let k_not = p.expect(TK_K_NOT, "K_NOT")?;
+                Option::<Token>::Some(k_not)
+            } else { null };
+            let k_in = p.expect(TK_K_IN, "K_IN")?;
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_LIT_LPAREN || grp_kind == TK_IDENTIFIER || grp_kind == TK_K_ABORT || grp_kind == TK_K_ACTION || grp_kind == TK_K_ADD || grp_kind == TK_K_AFTER || grp_kind == TK_K_ALL || grp_kind == TK_K_ALTER || grp_kind == TK_K_ANALYZE || grp_kind == TK_K_AND || grp_kind == TK_K_AS || grp_kind == TK_K_ASC || grp_kind == TK_K_ATTACH || grp_kind == TK_K_AUTOINCREMENT || grp_kind == TK_K_BEFORE || grp_kind == TK_K_BEGIN || grp_kind == TK_K_BETWEEN || grp_kind == TK_K_BY || grp_kind == TK_K_CASCADE || grp_kind == TK_K_CASE || grp_kind == TK_K_CAST || grp_kind == TK_K_CHECK || grp_kind == TK_K_COLLATE || grp_kind == TK_K_COLUMN || grp_kind == TK_K_COMMIT || grp_kind == TK_K_CONFLICT || grp_kind == TK_K_CONSTRAINT || grp_kind == TK_K_CREATE || grp_kind == TK_K_CROSS || grp_kind == TK_K_CURRENT_DATE || grp_kind == TK_K_CURRENT_TIME || grp_kind == TK_K_CURRENT_TIMESTAMP || grp_kind == TK_K_DATABASE || grp_kind == TK_K_DEFAULT || grp_kind == TK_K_DEFERRABLE || grp_kind == TK_K_DEFERRED || grp_kind == TK_K_DELETE || grp_kind == TK_K_DESC || grp_kind == TK_K_DETACH || grp_kind == TK_K_DISTINCT || grp_kind == TK_K_DROP || grp_kind == TK_K_EACH || grp_kind == TK_K_ELSE || grp_kind == TK_K_END || grp_kind == TK_K_ESCAPE || grp_kind == TK_K_EXCEPT || grp_kind == TK_K_EXCLUSIVE || grp_kind == TK_K_EXISTS || grp_kind == TK_K_EXPLAIN || grp_kind == TK_K_FAIL || grp_kind == TK_K_FOR || grp_kind == TK_K_FOREIGN || grp_kind == TK_K_FROM || grp_kind == TK_K_FULL || grp_kind == TK_K_GLOB || grp_kind == TK_K_GROUP || grp_kind == TK_K_HAVING || grp_kind == TK_K_IF || grp_kind == TK_K_IGNORE || grp_kind == TK_K_IMMEDIATE || grp_kind == TK_K_IN || grp_kind == TK_K_INDEX || grp_kind == TK_K_INDEXED || grp_kind == TK_K_INITIALLY || grp_kind == TK_K_INNER || grp_kind == TK_K_INSERT || grp_kind == TK_K_INSTEAD || grp_kind == TK_K_INTERSECT || grp_kind == TK_K_INTO || grp_kind == TK_K_IS || grp_kind == TK_K_ISNULL || grp_kind == TK_K_JOIN || grp_kind == TK_K_KEY || grp_kind == TK_K_LEFT || grp_kind == TK_K_LIKE || grp_kind == TK_K_LIMIT || grp_kind == TK_K_MATCH || grp_kind == TK_K_NATURAL || grp_kind == TK_K_NO || grp_kind == TK_K_NOT || grp_kind == TK_K_NOTNULL || grp_kind == TK_K_NULL || grp_kind == TK_K_OF || grp_kind == TK_K_OFFSET || grp_kind == TK_K_ON || grp_kind == TK_K_OR || grp_kind == TK_K_ORDER || grp_kind == TK_K_OUTER || grp_kind == TK_K_PLAN || grp_kind == TK_K_PRAGMA || grp_kind == TK_K_PRIMARY || grp_kind == TK_K_QUERY || grp_kind == TK_K_RAISE || grp_kind == TK_K_RECURSIVE || grp_kind == TK_K_REFERENCES || grp_kind == TK_K_REGEXP || grp_kind == TK_K_REINDEX || grp_kind == TK_K_RELEASE || grp_kind == TK_K_RENAME || grp_kind == TK_K_REPLACE || grp_kind == TK_K_RESTRICT || grp_kind == TK_K_RIGHT || grp_kind == TK_K_ROLLBACK || grp_kind == TK_K_ROW || grp_kind == TK_K_SAVEPOINT || grp_kind == TK_K_SELECT || grp_kind == TK_K_SET || grp_kind == TK_K_TABLE || grp_kind == TK_K_TEMP || grp_kind == TK_K_TEMPORARY || grp_kind == TK_K_THEN || grp_kind == TK_K_TO || grp_kind == TK_K_TRANSACTION || grp_kind == TK_K_TRIGGER || grp_kind == TK_K_UNION || grp_kind == TK_K_UNIQUE || grp_kind == TK_K_UPDATE || grp_kind == TK_K_USING || grp_kind == TK_K_VACUUM || grp_kind == TK_K_VALUES || grp_kind == TK_K_VIEW || grp_kind == TK_K_VIRTUAL || grp_kind == TK_K_WHEN || grp_kind == TK_K_WHERE || grp_kind == TK_K_WITH || grp_kind == TK_K_WITHOUT || grp_kind == TK_STRING_LITERAL {
+                let saved_pos = p.pos;
+                let mut bt_done = false;
+                if !bt_done {
+                    let tok = p.expect(TK_LIT_LPAREN, "'('")?;
+                    if p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_NUMERIC_LITERAL || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_BLOB_LITERAL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_BIND_PARAMETER || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_LIT_LPAREN || p.peek_kind() == TK_LIT_MINUS || p.peek_kind() == TK_LIT_PLUS || p.peek_kind() == TK_LIT_TILDE {
+                        let opt_saved = p.pos;
+                        opt_bt: {
+                            let grp_kind = p.peek_kind();
+                            if grp_kind == TK_K_WITH || grp_kind == TK_K_SELECT || grp_kind == TK_K_VALUES || grp_kind == TK_NUMERIC_LITERAL || grp_kind == TK_STRING_LITERAL || grp_kind == TK_BLOB_LITERAL || grp_kind == TK_K_NULL || grp_kind == TK_K_CURRENT_TIME || grp_kind == TK_K_CURRENT_DATE || grp_kind == TK_K_CURRENT_TIMESTAMP || grp_kind == TK_BIND_PARAMETER || grp_kind == TK_IDENTIFIER || grp_kind == TK_K_ABORT || grp_kind == TK_K_ACTION || grp_kind == TK_K_ADD || grp_kind == TK_K_AFTER || grp_kind == TK_K_ALL || grp_kind == TK_K_ALTER || grp_kind == TK_K_ANALYZE || grp_kind == TK_K_AND || grp_kind == TK_K_AS || grp_kind == TK_K_ASC || grp_kind == TK_K_ATTACH || grp_kind == TK_K_AUTOINCREMENT || grp_kind == TK_K_BEFORE || grp_kind == TK_K_BEGIN || grp_kind == TK_K_BETWEEN || grp_kind == TK_K_BY || grp_kind == TK_K_CASCADE || grp_kind == TK_K_CASE || grp_kind == TK_K_CAST || grp_kind == TK_K_CHECK || grp_kind == TK_K_COLLATE || grp_kind == TK_K_COLUMN || grp_kind == TK_K_COMMIT || grp_kind == TK_K_CONFLICT || grp_kind == TK_K_CONSTRAINT || grp_kind == TK_K_CREATE || grp_kind == TK_K_CROSS || grp_kind == TK_K_DATABASE || grp_kind == TK_K_DEFAULT || grp_kind == TK_K_DEFERRABLE || grp_kind == TK_K_DEFERRED || grp_kind == TK_K_DELETE || grp_kind == TK_K_DESC || grp_kind == TK_K_DETACH || grp_kind == TK_K_DISTINCT || grp_kind == TK_K_DROP || grp_kind == TK_K_EACH || grp_kind == TK_K_ELSE || grp_kind == TK_K_END || grp_kind == TK_K_ESCAPE || grp_kind == TK_K_EXCEPT || grp_kind == TK_K_EXCLUSIVE || grp_kind == TK_K_EXISTS || grp_kind == TK_K_EXPLAIN || grp_kind == TK_K_FAIL || grp_kind == TK_K_FOR || grp_kind == TK_K_FOREIGN || grp_kind == TK_K_FROM || grp_kind == TK_K_FULL || grp_kind == TK_K_GLOB || grp_kind == TK_K_GROUP || grp_kind == TK_K_HAVING || grp_kind == TK_K_IF || grp_kind == TK_K_IGNORE || grp_kind == TK_K_IMMEDIATE || grp_kind == TK_K_IN || grp_kind == TK_K_INDEX || grp_kind == TK_K_INDEXED || grp_kind == TK_K_INITIALLY || grp_kind == TK_K_INNER || grp_kind == TK_K_INSERT || grp_kind == TK_K_INSTEAD || grp_kind == TK_K_INTERSECT || grp_kind == TK_K_INTO || grp_kind == TK_K_IS || grp_kind == TK_K_ISNULL || grp_kind == TK_K_JOIN || grp_kind == TK_K_KEY || grp_kind == TK_K_LEFT || grp_kind == TK_K_LIKE || grp_kind == TK_K_LIMIT || grp_kind == TK_K_MATCH || grp_kind == TK_K_NATURAL || grp_kind == TK_K_NO || grp_kind == TK_K_NOT || grp_kind == TK_K_NOTNULL || grp_kind == TK_K_OF || grp_kind == TK_K_OFFSET || grp_kind == TK_K_ON || grp_kind == TK_K_OR || grp_kind == TK_K_ORDER || grp_kind == TK_K_OUTER || grp_kind == TK_K_PLAN || grp_kind == TK_K_PRAGMA || grp_kind == TK_K_PRIMARY || grp_kind == TK_K_QUERY || grp_kind == TK_K_RAISE || grp_kind == TK_K_RECURSIVE || grp_kind == TK_K_REFERENCES || grp_kind == TK_K_REGEXP || grp_kind == TK_K_REINDEX || grp_kind == TK_K_RELEASE || grp_kind == TK_K_RENAME || grp_kind == TK_K_REPLACE || grp_kind == TK_K_RESTRICT || grp_kind == TK_K_RIGHT || grp_kind == TK_K_ROLLBACK || grp_kind == TK_K_ROW || grp_kind == TK_K_SAVEPOINT || grp_kind == TK_K_SET || grp_kind == TK_K_TABLE || grp_kind == TK_K_TEMP || grp_kind == TK_K_TEMPORARY || grp_kind == TK_K_THEN || grp_kind == TK_K_TO || grp_kind == TK_K_TRANSACTION || grp_kind == TK_K_TRIGGER || grp_kind == TK_K_UNION || grp_kind == TK_K_UNIQUE || grp_kind == TK_K_UPDATE || grp_kind == TK_K_USING || grp_kind == TK_K_VACUUM || grp_kind == TK_K_VIEW || grp_kind == TK_K_VIRTUAL || grp_kind == TK_K_WHEN || grp_kind == TK_K_WHERE || grp_kind == TK_K_WITHOUT || grp_kind == TK_LIT_LPAREN || grp_kind == TK_LIT_MINUS || grp_kind == TK_LIT_PLUS || grp_kind == TK_LIT_TILDE {
+                                let saved_pos = p.pos;
+                                let mut bt_done = false;
+                                if !bt_done {
+                                    let r = parse_select_stmt(p);
+                                    if let Err(_) = r {
+                                        p.pos = saved_pos;
+                                    } else {
+                                        bt_done = true;
+                                    }
+                                }
+                                if !bt_done {
+                                    let tok = parse_expr(p)?;
+                                    while p.peek_kind() == TK_LIT_COMMA {
+                                        let tok = p.expect(TK_LIT_COMMA, "','")?;
+                                        let tok_2 = parse_expr(p)?;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    let tok_2 = p.expect(TK_LIT_RPAREN, "')'")?;
+                    bt_done = true;
+                }
+                if !bt_done {
+                    if p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
+                        let opt_saved = p.pos;
+                        opt_bt: {
+                            let opt_r = parse_database_name(p);
+                            if let Err(_) = opt_r { p.pos = opt_saved; break opt_bt; }
+                            let opt_r_2 = p.expect(TK_LIT_DOT, "'.'");
+                            if let Err(_) = opt_r_2 { p.pos = opt_saved; break opt_bt; }
+                        }
+                    }
+                    let tok = parse_table_name(p)?;
+                }
+            }
+            result = ExprNode::Alt10(ExprAlt10 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            k_not,
+            k_in,
+            });
+        } else if suffix_kind == TK_K_AND {
+            let k_and = p.expect(TK_K_AND, "K_AND")?;
+            let expr_2 = parse_expr(p)?;
+            result = ExprNode::Alt11(ExprAlt11 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            k_and,
+            expr_2,
+            });
+        } else if suffix_kind == TK_K_OR {
+            let k_or = p.expect(TK_K_OR, "K_OR")?;
+            let expr_2 = parse_expr(p)?;
+            result = ExprNode::Alt12(ExprAlt12 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            k_or,
+            expr_2,
+            });
+        } else if suffix_kind == TK_K_COLLATE {
+            let k_collate = p.expect(TK_K_COLLATE, "K_COLLATE")?;
+            let collation_name = parse_collation_name(p)?;
+            result = ExprNode::Alt16(ExprAlt16 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            k_collate,
+            collation_name,
+            });
+        } else if suffix_kind == TK_K_NOT {
+            let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
+                let k_not = p.expect(TK_K_NOT, "K_NOT")?;
+                Option::<Token>::Some(k_not)
+            } else { null };
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_K_LIKE {
+                let tok = p.expect(TK_K_LIKE, "K_LIKE")?;
+            } else if grp_kind == TK_K_GLOB {
+                let tok = p.expect(TK_K_GLOB, "K_GLOB")?;
+            } else if grp_kind == TK_K_REGEXP {
+                let tok = p.expect(TK_K_REGEXP, "K_REGEXP")?;
+            } else if grp_kind == TK_K_MATCH {
+                let tok = p.expect(TK_K_MATCH, "K_MATCH")?;
+            }
+            let expr_2 = parse_expr(p)?;
+            if p.peek_kind() == TK_K_ESCAPE {
+                let opt_saved = p.pos;
+                opt_bt: {
+                    let opt_r = p.expect(TK_K_ESCAPE, "K_ESCAPE");
+                    if let Err(_) = opt_r { p.pos = opt_saved; break opt_bt; }
+                    let opt_r_2 = parse_expr(p);
+                    if let Err(_) = opt_r_2 { p.pos = opt_saved; break opt_bt; }
+                }
+            }
+            result = ExprNode::Alt17(ExprAlt17 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            k_not,
+            expr_2,
+            });
+        } else if suffix_kind == TK_K_ISNULL || suffix_kind == TK_K_NOTNULL || suffix_kind == TK_K_NOT {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_K_ISNULL {
+                let tok = p.expect(TK_K_ISNULL, "K_ISNULL")?;
+            } else if grp_kind == TK_K_NOTNULL {
+                let tok = p.expect(TK_K_NOTNULL, "K_NOTNULL")?;
+            } else if grp_kind == TK_K_NOT {
+                let tok = p.expect(TK_K_NOT, "K_NOT")?;
+                let tok_2 = p.expect(TK_K_NULL, "K_NULL")?;
+            }
+            result = ExprNode::Alt18(ExprAlt18 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            });
+        } else if suffix_kind == TK_K_IS {
+            let k_is = p.expect(TK_K_IS, "K_IS")?;
+            let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
+                let k_not = p.expect(TK_K_NOT, "K_NOT")?;
+                Option::<Token>::Some(k_not)
+            } else { null };
+            let expr_2 = parse_expr(p)?;
+            result = ExprNode::Alt19(ExprAlt19 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            k_is,
+            k_not,
+            expr_2,
+            });
+        } else if suffix_kind == TK_K_NOT {
+            let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
+                let k_not = p.expect(TK_K_NOT, "K_NOT")?;
+                Option::<Token>::Some(k_not)
+            } else { null };
+            let k_between = p.expect(TK_K_BETWEEN, "K_BETWEEN")?;
+            let expr_2 = parse_expr(p)?;
+            let k_and = p.expect(TK_K_AND, "K_AND")?;
+            let expr_3 = parse_expr(p)?;
+            result = ExprNode::Alt20(ExprAlt20 {
+                span: Span::new(start, p.last_end()),
+                expr: result,
+            k_not,
+            k_between,
+            expr_2,
+            k_and,
+            expr_3,
+            });
+        } else {
+            break;
+        }
+    }
+    return Result::<ExprNode, ParseError>::Ok(result);
+}
+
 fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, ParseError> {
     let start = p.peek().span.start;
     let k_references = p.expect(TK_K_REFERENCES, "K_REFERENCES")?;
@@ -8326,8 +8589,8 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
             let opt_r_2 = parse_column_name(p);
             if let Err(_) = opt_r_2 { p.pos = opt_saved; break opt_bt; }
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_column_name(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_column_name(p)?;
             }
             let opt_r_3 = p.expect(TK_LIT_RPAREN, "')'");
             if let Err(_) = opt_r_3 { p.pos = opt_saved; break opt_bt; }
@@ -8336,37 +8599,37 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
     while p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_MATCH {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_ON {
-            p.expect(TK_K_ON, "K_ON")?;
+            let tok = p.expect(TK_K_ON, "K_ON")?;
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_DELETE {
-                p.expect(TK_K_DELETE, "K_DELETE")?;
+                let tok = p.expect(TK_K_DELETE, "K_DELETE")?;
             } else if grp_kind == TK_K_UPDATE {
-                p.expect(TK_K_UPDATE, "K_UPDATE")?;
+                let tok = p.expect(TK_K_UPDATE, "K_UPDATE")?;
             }
             let grp_kind_2 = p.peek_kind();
             if grp_kind_2 == TK_K_SET {
                 let saved_pos = p.pos;
                 let mut bt_done = false;
                 if !bt_done {
-                    p.expect(TK_K_SET, "K_SET")?;
-                    p.expect(TK_K_NULL, "K_NULL")?;
+                    let tok = p.expect(TK_K_SET, "K_SET")?;
+                    let tok_2 = p.expect(TK_K_NULL, "K_NULL")?;
                     bt_done = true;
                 }
                 if !bt_done {
-                    p.expect(TK_K_SET, "K_SET")?;
-                    p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
+                    let tok = p.expect(TK_K_SET, "K_SET")?;
+                    let tok_2 = p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
                 }
             } else if grp_kind_2 == TK_K_CASCADE {
-                p.expect(TK_K_CASCADE, "K_CASCADE")?;
+                let tok = p.expect(TK_K_CASCADE, "K_CASCADE")?;
             } else if grp_kind_2 == TK_K_RESTRICT {
-                p.expect(TK_K_RESTRICT, "K_RESTRICT")?;
+                let tok = p.expect(TK_K_RESTRICT, "K_RESTRICT")?;
             } else if grp_kind_2 == TK_K_NO {
-                p.expect(TK_K_NO, "K_NO")?;
-                p.expect(TK_K_ACTION, "K_ACTION")?;
+                let tok = p.expect(TK_K_NO, "K_NO")?;
+                let tok_2 = p.expect(TK_K_ACTION, "K_ACTION")?;
             }
         } else if grp_kind == TK_K_MATCH {
-            p.expect(TK_K_MATCH, "K_MATCH")?;
-            parse_name(p)?;
+            let tok = p.expect(TK_K_MATCH, "K_MATCH")?;
+            let tok_2 = parse_name(p)?;
         }
     }
     if p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_DEFERRABLE {
@@ -8386,13 +8649,13 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
                         let saved_pos = p.pos;
                         let mut bt_done = false;
                         if !bt_done {
-                            p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
-                            p.expect(TK_K_DEFERRED, "K_DEFERRED")?;
+                            let tok = p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
+                            let tok_2 = p.expect(TK_K_DEFERRED, "K_DEFERRED")?;
                             bt_done = true;
                         }
                         if !bt_done {
-                            p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
-                            p.expect(TK_K_IMMEDIATE, "K_IMMEDIATE")?;
+                            let tok = p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
+                            let tok_2 = p.expect(TK_K_IMMEDIATE, "K_IMMEDIATE")?;
                         }
                     }
                 }
@@ -8412,18 +8675,18 @@ fn parse_raise_function(p: &mut Parser) -> Result<RaiseFunctionNode, ParseError>
     let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_IGNORE {
-        p.expect(TK_K_IGNORE, "K_IGNORE")?;
+        let tok = p.expect(TK_K_IGNORE, "K_IGNORE")?;
     } else if grp_kind == TK_K_ROLLBACK || grp_kind == TK_K_ABORT || grp_kind == TK_K_FAIL {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_ROLLBACK {
-            p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
+            let tok = p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
         } else if grp_kind == TK_K_ABORT {
-            p.expect(TK_K_ABORT, "K_ABORT")?;
+            let tok = p.expect(TK_K_ABORT, "K_ABORT")?;
         } else if grp_kind == TK_K_FAIL {
-            p.expect(TK_K_FAIL, "K_FAIL")?;
+            let tok = p.expect(TK_K_FAIL, "K_FAIL")?;
         }
-        p.expect(TK_LIT_COMMA, "','")?;
-        parse_error_message(p)?;
+        let tok = p.expect(TK_LIT_COMMA, "','")?;
+        let tok_2 = parse_error_message(p)?;
     }
     let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
     return Result::<RaiseFunctionNode, ParseError>::Ok(RaiseFunctionNode {
@@ -8451,9 +8714,9 @@ fn parse_indexed_column(p: &mut Parser) -> Result<IndexedColumnNode, ParseError>
         opt_bt_2: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_ASC {
-                p.expect(TK_K_ASC, "K_ASC")?;
+                let tok = p.expect(TK_K_ASC, "K_ASC")?;
             } else if grp_kind == TK_K_DESC {
-                p.expect(TK_K_DESC, "K_DESC")?;
+                let tok = p.expect(TK_K_DESC, "K_DESC")?;
             }
         }
     }
@@ -8478,35 +8741,35 @@ fn parse_table_constraint(p: &mut Parser) -> Result<TableConstraintNode, ParseEr
     if grp_kind == TK_K_PRIMARY || grp_kind == TK_K_UNIQUE {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_PRIMARY {
-            p.expect(TK_K_PRIMARY, "K_PRIMARY")?;
-            p.expect(TK_K_KEY, "K_KEY")?;
+            let tok = p.expect(TK_K_PRIMARY, "K_PRIMARY")?;
+            let tok_2 = p.expect(TK_K_KEY, "K_KEY")?;
         } else if grp_kind == TK_K_UNIQUE {
-            p.expect(TK_K_UNIQUE, "K_UNIQUE")?;
+            let tok = p.expect(TK_K_UNIQUE, "K_UNIQUE")?;
         }
-        p.expect(TK_LIT_LPAREN, "'('")?;
-        parse_indexed_column(p)?;
+        let tok = p.expect(TK_LIT_LPAREN, "'('")?;
+        let tok_2 = parse_indexed_column(p)?;
         while p.peek_kind() == TK_LIT_COMMA {
-            p.expect(TK_LIT_COMMA, "','")?;
-            parse_indexed_column(p)?;
+            let tok = p.expect(TK_LIT_COMMA, "','")?;
+            let tok_2 = parse_indexed_column(p)?;
         }
-        p.expect(TK_LIT_RPAREN, "')'")?;
-        parse_conflict_clause(p)?;
+        let tok_3 = p.expect(TK_LIT_RPAREN, "')'")?;
+        let tok_4 = parse_conflict_clause(p)?;
     } else if grp_kind == TK_K_CHECK {
-        p.expect(TK_K_CHECK, "K_CHECK")?;
-        p.expect(TK_LIT_LPAREN, "'('")?;
-        parse_expr(p)?;
-        p.expect(TK_LIT_RPAREN, "')'")?;
+        let tok = p.expect(TK_K_CHECK, "K_CHECK")?;
+        let tok_2 = p.expect(TK_LIT_LPAREN, "'('")?;
+        let tok_3 = parse_expr(p)?;
+        let tok_4 = p.expect(TK_LIT_RPAREN, "')'")?;
     } else if grp_kind == TK_K_FOREIGN {
-        p.expect(TK_K_FOREIGN, "K_FOREIGN")?;
-        p.expect(TK_K_KEY, "K_KEY")?;
-        p.expect(TK_LIT_LPAREN, "'('")?;
-        parse_column_name(p)?;
+        let tok = p.expect(TK_K_FOREIGN, "K_FOREIGN")?;
+        let tok_2 = p.expect(TK_K_KEY, "K_KEY")?;
+        let tok_3 = p.expect(TK_LIT_LPAREN, "'('")?;
+        let tok_4 = parse_column_name(p)?;
         while p.peek_kind() == TK_LIT_COMMA {
-            p.expect(TK_LIT_COMMA, "','")?;
-            parse_column_name(p)?;
+            let tok = p.expect(TK_LIT_COMMA, "','")?;
+            let tok_2 = parse_column_name(p)?;
         }
-        p.expect(TK_LIT_RPAREN, "')'")?;
-        parse_foreign_key_clause(p)?;
+        let tok_5 = p.expect(TK_LIT_RPAREN, "')'")?;
+        let tok_6 = parse_foreign_key_clause(p)?;
     }
     return Result::<TableConstraintNode, ParseError>::Ok(TableConstraintNode {
         span: Span::new(start, p.last_end()),
@@ -8522,8 +8785,8 @@ fn parse_with_clause(p: &mut Parser) -> Result<WithClauseNode, ParseError> {
     } else { null };
     let common_table_expression = parse_common_table_expression(p)?;
     while p.peek_kind() == TK_LIT_COMMA {
-        p.expect(TK_LIT_COMMA, "','")?;
-        parse_common_table_expression(p)?;
+        let tok = p.expect(TK_LIT_COMMA, "','")?;
+        let tok_2 = parse_common_table_expression(p)?;
     }
     return Result::<WithClauseNode, ParseError>::Ok(WithClauseNode {
         span: Span::new(start, p.last_end()),
@@ -8550,12 +8813,12 @@ fn parse_qualified_table_name(p: &mut Parser) -> Result<QualifiedTableNameNode, 
         opt_bt_2: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_INDEXED {
-                p.expect(TK_K_INDEXED, "K_INDEXED")?;
-                p.expect(TK_K_BY, "K_BY")?;
-                parse_index_name(p)?;
+                let tok = p.expect(TK_K_INDEXED, "K_INDEXED")?;
+                let tok_2 = p.expect(TK_K_BY, "K_BY")?;
+                let tok_3 = parse_index_name(p)?;
             } else if grp_kind == TK_K_NOT {
-                p.expect(TK_K_NOT, "K_NOT")?;
-                p.expect(TK_K_INDEXED, "K_INDEXED")?;
+                let tok = p.expect(TK_K_NOT, "K_NOT")?;
+                let tok_2 = p.expect(TK_K_INDEXED, "K_INDEXED")?;
             }
         }
     }
@@ -8582,9 +8845,9 @@ fn parse_ordering_term(p: &mut Parser) -> Result<OrderingTermNode, ParseError> {
         opt_bt_2: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_ASC {
-                p.expect(TK_K_ASC, "K_ASC")?;
+                let tok = p.expect(TK_K_ASC, "K_ASC")?;
             } else if grp_kind == TK_K_DESC {
-                p.expect(TK_K_DESC, "K_DESC")?;
+                let tok = p.expect(TK_K_DESC, "K_DESC")?;
             }
         }
     }
@@ -8650,8 +8913,8 @@ fn parse_common_table_expression(p: &mut Parser) -> Result<CommonTableExpression
             let opt_r_2 = parse_column_name(p);
             if let Err(_) = opt_r_2 { p.pos = opt_saved; break opt_bt; }
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_column_name(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_column_name(p)?;
             }
             let opt_r_3 = p.expect(TK_LIT_RPAREN, "')'");
             if let Err(_) = opt_r_3 { p.pos = opt_saved; break opt_bt; }
@@ -8731,93 +8994,6 @@ fn parse_result_column(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
     ));
 }
 
-fn parse_table_or_subquery_bt_0(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
-    let start = p.peek().span.start;
-    if p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
-        let opt_saved = p.pos;
-        opt_bt: {
-            let opt_r = parse_schema_name(p);
-            if let Err(_) = opt_r { p.pos = opt_saved; break opt_bt; }
-            let opt_r_2 = p.expect(TK_LIT_DOT, "'.'");
-            if let Err(_) = opt_r_2 { p.pos = opt_saved; break opt_bt; }
-        }
-    }
-    let table_name = parse_table_name(p)?;
-    if p.peek_kind() == TK_K_AS || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
-        let opt_saved_2 = p.pos;
-        opt_bt_2: {
-            let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
-                let k_as = p.expect(TK_K_AS, "K_AS")?;
-                Option::<Token>::Some(k_as)
-            } else { null };
-            let opt_r_3 = parse_table_alias(p);
-            if let Err(_) = opt_r_3 { p.pos = opt_saved_2; break opt_bt_2; }
-        }
-    }
-    if p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_NOT {
-        let opt_saved_3 = p.pos;
-        opt_bt_3: {
-            let grp_kind = p.peek_kind();
-            if grp_kind == TK_K_INDEXED {
-                p.expect(TK_K_INDEXED, "K_INDEXED")?;
-                p.expect(TK_K_BY, "K_BY")?;
-                parse_index_name(p)?;
-            } else if grp_kind == TK_K_NOT {
-                p.expect(TK_K_NOT, "K_NOT")?;
-                p.expect(TK_K_INDEXED, "K_INDEXED")?;
-            }
-        }
-    }
-    return Result::<TableOrSubqueryNode, ParseError>::Ok(TableOrSubqueryNode::Alt0(TableOrSubqueryAlt0 {
-        span: Span::new(start, p.last_end()),
-        table_name,
-    }));
-}
-
-fn parse_table_or_subquery_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
-    let start = p.peek().span.start;
-    if p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
-        let opt_saved = p.pos;
-        opt_bt: {
-            let opt_r = parse_schema_name(p);
-            if let Err(_) = opt_r { p.pos = opt_saved; break opt_bt; }
-            let opt_r_2 = p.expect(TK_LIT_DOT, "'.'");
-            if let Err(_) = opt_r_2 { p.pos = opt_saved; break opt_bt; }
-        }
-    }
-    let table_function_name = parse_table_function_name(p)?;
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
-    if p.peek_kind() == TK_NUMERIC_LITERAL || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_BLOB_LITERAL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_BIND_PARAMETER || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_LIT_LPAREN || p.peek_kind() == TK_LIT_MINUS || p.peek_kind() == TK_LIT_PLUS || p.peek_kind() == TK_LIT_TILDE {
-        let opt_saved_2 = p.pos;
-        opt_bt_2: {
-            let opt_r_3 = parse_expr(p);
-            if let Err(_) = opt_r_3 { p.pos = opt_saved_2; break opt_bt_2; }
-            while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_expr(p)?;
-            }
-        }
-    }
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
-    if p.peek_kind() == TK_K_AS || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
-        let opt_saved_3 = p.pos;
-        opt_bt_3: {
-            let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
-                let k_as = p.expect(TK_K_AS, "K_AS")?;
-                Option::<Token>::Some(k_as)
-            } else { null };
-            let opt_r_4 = parse_table_alias(p);
-            if let Err(_) = opt_r_4 { p.pos = opt_saved_3; break opt_bt_3; }
-        }
-    }
-    return Result::<TableOrSubqueryNode, ParseError>::Ok(TableOrSubqueryNode::Alt1(TableOrSubqueryAlt1 {
-        span: Span::new(start, p.last_end()),
-        table_function_name,
-        lparen,
-        rparen,
-    }));
-}
-
 fn parse_table_or_subquery_bt_2(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
@@ -8826,15 +9002,15 @@ fn parse_table_or_subquery_bt_2(p: &mut Parser) -> Result<TableOrSubqueryNode, P
         let saved_pos = p.pos;
         let mut bt_done = false;
         if !bt_done {
-            parse_table_or_subquery(p)?;
+            let tok = parse_table_or_subquery(p)?;
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_table_or_subquery(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_table_or_subquery(p)?;
             }
             bt_done = true;
         }
         if !bt_done {
-            parse_join_clause(p)?;
+            let tok = parse_join_clause(p)?;
         }
     }
     let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
@@ -8869,30 +9045,117 @@ fn parse_table_or_subquery_bt_3(p: &mut Parser) -> Result<TableOrSubqueryNode, P
     }));
 }
 
+fn parse_table_or_subquery_bt_0(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
+    let start = p.peek().span.start;
+    if p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
+        let opt_saved = p.pos;
+        opt_bt: {
+            let opt_r = parse_schema_name(p);
+            if let Err(_) = opt_r { p.pos = opt_saved; break opt_bt; }
+            let opt_r_2 = p.expect(TK_LIT_DOT, "'.'");
+            if let Err(_) = opt_r_2 { p.pos = opt_saved; break opt_bt; }
+        }
+    }
+    let table_name = parse_table_name(p)?;
+    if p.peek_kind() == TK_K_AS || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
+        let opt_saved_2 = p.pos;
+        opt_bt_2: {
+            let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
+                let k_as = p.expect(TK_K_AS, "K_AS")?;
+                Option::<Token>::Some(k_as)
+            } else { null };
+            let opt_r_3 = parse_table_alias(p);
+            if let Err(_) = opt_r_3 { p.pos = opt_saved_2; break opt_bt_2; }
+        }
+    }
+    if p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_NOT {
+        let opt_saved_3 = p.pos;
+        opt_bt_3: {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_K_INDEXED {
+                let tok = p.expect(TK_K_INDEXED, "K_INDEXED")?;
+                let tok_2 = p.expect(TK_K_BY, "K_BY")?;
+                let tok_3 = parse_index_name(p)?;
+            } else if grp_kind == TK_K_NOT {
+                let tok = p.expect(TK_K_NOT, "K_NOT")?;
+                let tok_2 = p.expect(TK_K_INDEXED, "K_INDEXED")?;
+            }
+        }
+    }
+    return Result::<TableOrSubqueryNode, ParseError>::Ok(TableOrSubqueryNode::Alt0(TableOrSubqueryAlt0 {
+        span: Span::new(start, p.last_end()),
+        table_name,
+    }));
+}
+
+fn parse_table_or_subquery_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
+    let start = p.peek().span.start;
+    if p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
+        let opt_saved = p.pos;
+        opt_bt: {
+            let opt_r = parse_schema_name(p);
+            if let Err(_) = opt_r { p.pos = opt_saved; break opt_bt; }
+            let opt_r_2 = p.expect(TK_LIT_DOT, "'.'");
+            if let Err(_) = opt_r_2 { p.pos = opt_saved; break opt_bt; }
+        }
+    }
+    let table_function_name = parse_table_function_name(p)?;
+    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    if p.peek_kind() == TK_NUMERIC_LITERAL || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_BLOB_LITERAL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_BIND_PARAMETER || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_LIT_LPAREN || p.peek_kind() == TK_LIT_MINUS || p.peek_kind() == TK_LIT_PLUS || p.peek_kind() == TK_LIT_TILDE {
+        let opt_saved_2 = p.pos;
+        opt_bt_2: {
+            let opt_r_3 = parse_expr(p);
+            if let Err(_) = opt_r_3 { p.pos = opt_saved_2; break opt_bt_2; }
+            while p.peek_kind() == TK_LIT_COMMA {
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_expr(p)?;
+            }
+        }
+    }
+    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    if p.peek_kind() == TK_K_AS || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
+        let opt_saved_3 = p.pos;
+        opt_bt_3: {
+            let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
+                let k_as = p.expect(TK_K_AS, "K_AS")?;
+                Option::<Token>::Some(k_as)
+            } else { null };
+            let opt_r_4 = parse_table_alias(p);
+            if let Err(_) = opt_r_4 { p.pos = opt_saved_3; break opt_bt_3; }
+        }
+    }
+    return Result::<TableOrSubqueryNode, ParseError>::Ok(TableOrSubqueryNode::Alt1(TableOrSubqueryAlt1 {
+        span: Span::new(start, p.last_end()),
+        table_function_name,
+        lparen,
+        rparen,
+    }));
+}
+
 fn parse_table_or_subquery(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind == TK_IDENTIFIER || kind == TK_K_ABORT || kind == TK_K_ACTION || kind == TK_K_ADD || kind == TK_K_AFTER || kind == TK_K_ALL || kind == TK_K_ALTER || kind == TK_K_ANALYZE || kind == TK_K_AND || kind == TK_K_AS || kind == TK_K_ASC || kind == TK_K_ATTACH || kind == TK_K_AUTOINCREMENT || kind == TK_K_BEFORE || kind == TK_K_BEGIN || kind == TK_K_BETWEEN || kind == TK_K_BY || kind == TK_K_CASCADE || kind == TK_K_CASE || kind == TK_K_CAST || kind == TK_K_CHECK || kind == TK_K_COLLATE || kind == TK_K_COLUMN || kind == TK_K_COMMIT || kind == TK_K_CONFLICT || kind == TK_K_CONSTRAINT || kind == TK_K_CREATE || kind == TK_K_CROSS || kind == TK_K_CURRENT_DATE || kind == TK_K_CURRENT_TIME || kind == TK_K_CURRENT_TIMESTAMP || kind == TK_K_DATABASE || kind == TK_K_DEFAULT || kind == TK_K_DEFERRABLE || kind == TK_K_DEFERRED || kind == TK_K_DELETE || kind == TK_K_DESC || kind == TK_K_DETACH || kind == TK_K_DISTINCT || kind == TK_K_DROP || kind == TK_K_EACH || kind == TK_K_ELSE || kind == TK_K_END || kind == TK_K_ESCAPE || kind == TK_K_EXCEPT || kind == TK_K_EXCLUSIVE || kind == TK_K_EXISTS || kind == TK_K_EXPLAIN || kind == TK_K_FAIL || kind == TK_K_FOR || kind == TK_K_FOREIGN || kind == TK_K_FROM || kind == TK_K_FULL || kind == TK_K_GLOB || kind == TK_K_GROUP || kind == TK_K_HAVING || kind == TK_K_IF || kind == TK_K_IGNORE || kind == TK_K_IMMEDIATE || kind == TK_K_IN || kind == TK_K_INDEX || kind == TK_K_INDEXED || kind == TK_K_INITIALLY || kind == TK_K_INNER || kind == TK_K_INSERT || kind == TK_K_INSTEAD || kind == TK_K_INTERSECT || kind == TK_K_INTO || kind == TK_K_IS || kind == TK_K_ISNULL || kind == TK_K_JOIN || kind == TK_K_KEY || kind == TK_K_LEFT || kind == TK_K_LIKE || kind == TK_K_LIMIT || kind == TK_K_MATCH || kind == TK_K_NATURAL || kind == TK_K_NO || kind == TK_K_NOT || kind == TK_K_NOTNULL || kind == TK_K_NULL || kind == TK_K_OF || kind == TK_K_OFFSET || kind == TK_K_ON || kind == TK_K_OR || kind == TK_K_ORDER || kind == TK_K_OUTER || kind == TK_K_PLAN || kind == TK_K_PRAGMA || kind == TK_K_PRIMARY || kind == TK_K_QUERY || kind == TK_K_RAISE || kind == TK_K_RECURSIVE || kind == TK_K_REFERENCES || kind == TK_K_REGEXP || kind == TK_K_REINDEX || kind == TK_K_RELEASE || kind == TK_K_RENAME || kind == TK_K_REPLACE || kind == TK_K_RESTRICT || kind == TK_K_RIGHT || kind == TK_K_ROLLBACK || kind == TK_K_ROW || kind == TK_K_SAVEPOINT || kind == TK_K_SELECT || kind == TK_K_SET || kind == TK_K_TABLE || kind == TK_K_TEMP || kind == TK_K_TEMPORARY || kind == TK_K_THEN || kind == TK_K_TO || kind == TK_K_TRANSACTION || kind == TK_K_TRIGGER || kind == TK_K_UNION || kind == TK_K_UNIQUE || kind == TK_K_UPDATE || kind == TK_K_USING || kind == TK_K_VACUUM || kind == TK_K_VALUES || kind == TK_K_VIEW || kind == TK_K_VIRTUAL || kind == TK_K_WHEN || kind == TK_K_WHERE || kind == TK_K_WITH || kind == TK_K_WITHOUT || kind == TK_STRING_LITERAL || kind == TK_LIT_LPAREN {
+    if kind == TK_LIT_LPAREN || kind == TK_IDENTIFIER || kind == TK_K_ABORT || kind == TK_K_ACTION || kind == TK_K_ADD || kind == TK_K_AFTER || kind == TK_K_ALL || kind == TK_K_ALTER || kind == TK_K_ANALYZE || kind == TK_K_AND || kind == TK_K_AS || kind == TK_K_ASC || kind == TK_K_ATTACH || kind == TK_K_AUTOINCREMENT || kind == TK_K_BEFORE || kind == TK_K_BEGIN || kind == TK_K_BETWEEN || kind == TK_K_BY || kind == TK_K_CASCADE || kind == TK_K_CASE || kind == TK_K_CAST || kind == TK_K_CHECK || kind == TK_K_COLLATE || kind == TK_K_COLUMN || kind == TK_K_COMMIT || kind == TK_K_CONFLICT || kind == TK_K_CONSTRAINT || kind == TK_K_CREATE || kind == TK_K_CROSS || kind == TK_K_CURRENT_DATE || kind == TK_K_CURRENT_TIME || kind == TK_K_CURRENT_TIMESTAMP || kind == TK_K_DATABASE || kind == TK_K_DEFAULT || kind == TK_K_DEFERRABLE || kind == TK_K_DEFERRED || kind == TK_K_DELETE || kind == TK_K_DESC || kind == TK_K_DETACH || kind == TK_K_DISTINCT || kind == TK_K_DROP || kind == TK_K_EACH || kind == TK_K_ELSE || kind == TK_K_END || kind == TK_K_ESCAPE || kind == TK_K_EXCEPT || kind == TK_K_EXCLUSIVE || kind == TK_K_EXISTS || kind == TK_K_EXPLAIN || kind == TK_K_FAIL || kind == TK_K_FOR || kind == TK_K_FOREIGN || kind == TK_K_FROM || kind == TK_K_FULL || kind == TK_K_GLOB || kind == TK_K_GROUP || kind == TK_K_HAVING || kind == TK_K_IF || kind == TK_K_IGNORE || kind == TK_K_IMMEDIATE || kind == TK_K_IN || kind == TK_K_INDEX || kind == TK_K_INDEXED || kind == TK_K_INITIALLY || kind == TK_K_INNER || kind == TK_K_INSERT || kind == TK_K_INSTEAD || kind == TK_K_INTERSECT || kind == TK_K_INTO || kind == TK_K_IS || kind == TK_K_ISNULL || kind == TK_K_JOIN || kind == TK_K_KEY || kind == TK_K_LEFT || kind == TK_K_LIKE || kind == TK_K_LIMIT || kind == TK_K_MATCH || kind == TK_K_NATURAL || kind == TK_K_NO || kind == TK_K_NOT || kind == TK_K_NOTNULL || kind == TK_K_NULL || kind == TK_K_OF || kind == TK_K_OFFSET || kind == TK_K_ON || kind == TK_K_OR || kind == TK_K_ORDER || kind == TK_K_OUTER || kind == TK_K_PLAN || kind == TK_K_PRAGMA || kind == TK_K_PRIMARY || kind == TK_K_QUERY || kind == TK_K_RAISE || kind == TK_K_RECURSIVE || kind == TK_K_REFERENCES || kind == TK_K_REGEXP || kind == TK_K_REINDEX || kind == TK_K_RELEASE || kind == TK_K_RENAME || kind == TK_K_REPLACE || kind == TK_K_RESTRICT || kind == TK_K_RIGHT || kind == TK_K_ROLLBACK || kind == TK_K_ROW || kind == TK_K_SAVEPOINT || kind == TK_K_SELECT || kind == TK_K_SET || kind == TK_K_TABLE || kind == TK_K_TEMP || kind == TK_K_TEMPORARY || kind == TK_K_THEN || kind == TK_K_TO || kind == TK_K_TRANSACTION || kind == TK_K_TRIGGER || kind == TK_K_UNION || kind == TK_K_UNIQUE || kind == TK_K_UPDATE || kind == TK_K_USING || kind == TK_K_VACUUM || kind == TK_K_VALUES || kind == TK_K_VIEW || kind == TK_K_VIRTUAL || kind == TK_K_WHEN || kind == TK_K_WHERE || kind == TK_K_WITH || kind == TK_K_WITHOUT || kind == TK_STRING_LITERAL {
         let saved = p.pos;
-        let r_0 = parse_table_or_subquery_bt_0(p);
-        if let Err(_) = r_0 {
-            p.pos = saved;
-        } else {
-            return r_0;
-        }
-        let r_1 = parse_table_or_subquery_bt_1(p);
-        if let Err(_) = r_1 {
-            p.pos = saved;
-        } else {
-            return r_1;
-        }
         let r_2 = parse_table_or_subquery_bt_2(p);
         if let Err(_) = r_2 {
             p.pos = saved;
         } else {
             return r_2;
         }
-        return parse_table_or_subquery_bt_3(p);
+        let r_3 = parse_table_or_subquery_bt_3(p);
+        if let Err(_) = r_3 {
+            p.pos = saved;
+        } else {
+            return r_3;
+        }
+        let r_0 = parse_table_or_subquery_bt_0(p);
+        if let Err(_) = r_0 {
+            p.pos = saved;
+        } else {
+            return r_0;
+        }
+        return parse_table_or_subquery_bt_1(p);
     }
     return Result::<TableOrSubqueryNode, ParseError>::Err(ParseError::new(
         "expected table_or_subquery",
@@ -8905,9 +9168,9 @@ fn parse_join_clause(p: &mut Parser) -> Result<JoinClauseNode, ParseError> {
     let start = p.peek().span.start;
     let table_or_subquery = parse_table_or_subquery(p)?;
     while p.peek_kind() == TK_LIT_COMMA || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_JOIN {
-        parse_join_operator(p)?;
-        parse_table_or_subquery(p)?;
-        parse_join_constraint(p)?;
+        let tok = parse_join_operator(p)?;
+        let tok_2 = parse_table_or_subquery(p)?;
+        let tok_3 = parse_join_constraint(p)?;
     }
     return Result::<JoinClauseNode, ParseError>::Ok(JoinClauseNode {
         span: Span::new(start, p.last_end()),
@@ -8935,15 +9198,15 @@ fn parse_join_operator(p: &mut Parser) -> Result<JoinOperatorNode, ParseError> {
             opt_bt: {
                 let grp_kind = p.peek_kind();
                 if grp_kind == TK_K_LEFT {
-                    p.expect(TK_K_LEFT, "K_LEFT")?;
+                    let tok = p.expect(TK_K_LEFT, "K_LEFT")?;
                     let k_outer: Option<Token> = if p.peek_kind() == TK_K_OUTER {
                         let k_outer = p.expect(TK_K_OUTER, "K_OUTER")?;
                         Option::<Token>::Some(k_outer)
                     } else { null };
                 } else if grp_kind == TK_K_INNER {
-                    p.expect(TK_K_INNER, "K_INNER")?;
+                    let tok = p.expect(TK_K_INNER, "K_INNER")?;
                 } else if grp_kind == TK_K_CROSS {
-                    p.expect(TK_K_CROSS, "K_CROSS")?;
+                    let tok = p.expect(TK_K_CROSS, "K_CROSS")?;
                 }
             }
         }
@@ -8968,17 +9231,17 @@ fn parse_join_constraint(p: &mut Parser) -> Result<JoinConstraintNode, ParseErro
         opt_bt: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_ON {
-                p.expect(TK_K_ON, "K_ON")?;
-                parse_expr(p)?;
+                let tok = p.expect(TK_K_ON, "K_ON")?;
+                let tok_2 = parse_expr(p)?;
             } else if grp_kind == TK_K_USING {
-                p.expect(TK_K_USING, "K_USING")?;
-                p.expect(TK_LIT_LPAREN, "'('")?;
-                parse_column_name(p)?;
+                let tok = p.expect(TK_K_USING, "K_USING")?;
+                let tok_2 = p.expect(TK_LIT_LPAREN, "'('")?;
+                let tok_3 = parse_column_name(p)?;
                 while p.peek_kind() == TK_LIT_COMMA {
-                    p.expect(TK_LIT_COMMA, "','")?;
-                    parse_column_name(p)?;
+                    let tok = p.expect(TK_LIT_COMMA, "','")?;
+                    let tok_2 = parse_column_name(p)?;
                 }
-                p.expect(TK_LIT_RPAREN, "')'")?;
+                let tok_4 = p.expect(TK_LIT_RPAREN, "')'")?;
             }
         }
     }
@@ -8997,16 +9260,16 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
             opt_bt: {
                 let grp_kind = p.peek_kind();
                 if grp_kind == TK_K_DISTINCT {
-                    p.expect(TK_K_DISTINCT, "K_DISTINCT")?;
+                    let tok = p.expect(TK_K_DISTINCT, "K_DISTINCT")?;
                 } else if grp_kind == TK_K_ALL {
-                    p.expect(TK_K_ALL, "K_ALL")?;
+                    let tok = p.expect(TK_K_ALL, "K_ALL")?;
                 }
             }
         }
         let result_column = parse_result_column(p)?;
         while p.peek_kind() == TK_LIT_COMMA {
-            p.expect(TK_LIT_COMMA, "','")?;
-            parse_result_column(p)?;
+            let tok = p.expect(TK_LIT_COMMA, "','")?;
+            let tok_2 = parse_result_column(p)?;
         }
         if p.peek_kind() == TK_K_FROM {
             let opt_saved_2 = p.pos;
@@ -9018,15 +9281,15 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                     let saved_pos = p.pos;
                     let mut bt_done = false;
                     if !bt_done {
-                        parse_table_or_subquery(p)?;
+                        let tok = parse_table_or_subquery(p)?;
                         while p.peek_kind() == TK_LIT_COMMA {
-                            p.expect(TK_LIT_COMMA, "','")?;
-                            parse_table_or_subquery(p)?;
+                            let tok = p.expect(TK_LIT_COMMA, "','")?;
+                            let tok_2 = parse_table_or_subquery(p)?;
                         }
                         bt_done = true;
                     }
                     if !bt_done {
-                        parse_join_clause(p)?;
+                        let tok = parse_join_clause(p)?;
                     }
                 }
             }
@@ -9050,8 +9313,8 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                 let opt_r_6 = parse_expr(p);
                 if let Err(_) = opt_r_6 { p.pos = opt_saved_4; break opt_bt_4; }
                 while p.peek_kind() == TK_LIT_COMMA {
-                    p.expect(TK_LIT_COMMA, "','")?;
-                    parse_expr(p)?;
+                    let tok = p.expect(TK_LIT_COMMA, "','")?;
+                    let tok_2 = parse_expr(p)?;
                 }
                 if p.peek_kind() == TK_K_HAVING {
                     let opt_saved_5 = p.pos;
@@ -9075,19 +9338,19 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
         let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
         let expr = parse_expr(p)?;
         while p.peek_kind() == TK_LIT_COMMA {
-            p.expect(TK_LIT_COMMA, "','")?;
-            parse_expr(p)?;
+            let tok = p.expect(TK_LIT_COMMA, "','")?;
+            let tok_2 = parse_expr(p)?;
         }
         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
         while p.peek_kind() == TK_LIT_COMMA {
-            p.expect(TK_LIT_COMMA, "','")?;
-            p.expect(TK_LIT_LPAREN, "'('")?;
-            parse_expr(p)?;
+            let tok = p.expect(TK_LIT_COMMA, "','")?;
+            let tok_2 = p.expect(TK_LIT_LPAREN, "'('")?;
+            let tok_3 = parse_expr(p)?;
             while p.peek_kind() == TK_LIT_COMMA {
-                p.expect(TK_LIT_COMMA, "','")?;
-                parse_expr(p)?;
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_expr(p)?;
             }
-            p.expect(TK_LIT_RPAREN, "')'")?;
+            let tok_4 = p.expect(TK_LIT_RPAREN, "')'")?;
         }
         return Result::<SelectCoreNode, ParseError>::Ok(SelectCoreNode::Alt1(SelectCoreAlt1 {
             span: Span::new(start, p.last_end()),
@@ -9104,15 +9367,6 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
     ));
 }
 
-fn parse_compound_operator_bt_0(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
-    let start = p.peek().span.start;
-    let k_union = p.expect(TK_K_UNION, "K_UNION")?;
-    return Result::<CompoundOperatorNode, ParseError>::Ok(CompoundOperatorNode::Alt0(CompoundOperatorAlt0 {
-        span: Span::new(start, p.last_end()),
-        k_union,
-    }));
-}
-
 fn parse_compound_operator_bt_1(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
     let start = p.peek().span.start;
     let k_union = p.expect(TK_K_UNION, "K_UNION")?;
@@ -9124,18 +9378,27 @@ fn parse_compound_operator_bt_1(p: &mut Parser) -> Result<CompoundOperatorNode, 
     }));
 }
 
+fn parse_compound_operator_bt_0(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
+    let start = p.peek().span.start;
+    let k_union = p.expect(TK_K_UNION, "K_UNION")?;
+    return Result::<CompoundOperatorNode, ParseError>::Ok(CompoundOperatorNode::Alt0(CompoundOperatorAlt0 {
+        span: Span::new(start, p.last_end()),
+        k_union,
+    }));
+}
+
 fn parse_compound_operator(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_K_UNION {
         let saved = p.pos;
-        let r_0 = parse_compound_operator_bt_0(p);
-        if let Err(_) = r_0 {
+        let r_1 = parse_compound_operator_bt_1(p);
+        if let Err(_) = r_1 {
             p.pos = saved;
         } else {
-            return r_0;
+            return r_1;
         }
-        return parse_compound_operator_bt_1(p);
+        return parse_compound_operator_bt_0(p);
     }
     if kind == TK_K_INTERSECT {
         let k_intersect = p.expect(TK_K_INTERSECT, "K_INTERSECT")?;
@@ -9165,9 +9428,9 @@ fn parse_signed_number(p: &mut Parser) -> Result<SignedNumberNode, ParseError> {
         opt_bt: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_LIT_PLUS {
-                p.expect(TK_LIT_PLUS, "'+'")?;
+                let tok = p.expect(TK_LIT_PLUS, "'+'")?;
             } else if grp_kind == TK_LIT_MINUS {
-                p.expect(TK_LIT_MINUS, "'-'")?;
+                let tok = p.expect(TK_LIT_MINUS, "'-'")?;
             }
         }
     }

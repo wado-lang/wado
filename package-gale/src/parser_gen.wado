@@ -92,8 +92,17 @@ fn gen_parse_fn(
         let mut visiting: Array<String> = [];
         first_sets.append(first_of_alt(&rule.alternatives[idx], all_rules, lit_tokens, &mut visiting));
     }
-    let groups = compute_overlap_groups(&first_sets);
+    let mut groups = compute_overlap_groups(&first_sets);
     let needs_bt = has_multi_alt_groups(&groups);
+
+    // Sort each backtracking group: more specific alternatives (deeper LL(k)) first
+    if needs_bt {
+        for let mut g = 0; g < groups.len(); g += 1 {
+            if groups[g].len() > 1 {
+                sort_group_by_specificity(&mut groups[g], &non_lr_indices, &rule.alternatives, all_rules, lit_tokens);
+            }
+        }
+    }
 
     if needs_bt {
         // Emit helper functions for backtracking alternatives
@@ -119,17 +128,44 @@ fn gen_parse_fn(
         }
     }
 
-    // Emit main parse function
-    out.append(`fn {fn_name}(p: &mut Parser) -> Result<{type_name}, ParseError> \{\n`);
-    out.append("    let start = p.peek().span.start;\n");
-
-    if needs_bt {
-        gen_multi_alt_body_bt(out, rule, &type_name, all_rules, lit_tokens, &groups, &first_sets, &non_lr_indices);
-    } else {
-        gen_multi_alt_body(out, rule, &type_name, all_rules, lit_tokens);
+    // Check for left-recursive alternatives
+    let mut lr_indices: Array<i32> = [];
+    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+        if is_left_recursive(&rule.alternatives[i], &rule.name) {
+            lr_indices.append(i);
+        }
     }
+    let has_lr = lr_indices.len() > 0;
 
-    out.append("}\n\n");
+    if has_lr {
+        // Emit atom function (base expression parser)
+        out.append(`fn {fn_name}_atom(p: &mut Parser) -> Result<{type_name}, ParseError> \{\n`);
+        out.append("    let start = p.peek().span.start;\n");
+        if needs_bt {
+            gen_multi_alt_body_bt(out, rule, &type_name, all_rules, lit_tokens, &groups, &first_sets, &non_lr_indices);
+        } else {
+            gen_multi_alt_body(out, rule, &type_name, all_rules, lit_tokens);
+        }
+        out.append("}\n\n");
+
+        // Emit main parse function with suffix loop
+        out.append(`fn {fn_name}(p: &mut Parser) -> Result<{type_name}, ParseError> \{\n`);
+        out.append("    let start = p.peek().span.start;\n");
+        out.append(`    let mut result = {fn_name}_atom(p)?;\n`);
+        gen_lr_suffix_loop(out, rule, &type_name, &lr_indices, all_rules, lit_tokens);
+        out.append(`    return Result::<{type_name}, ParseError>::Ok(result);\n`);
+        out.append("}\n\n");
+    } else {
+        // No left recursion: emit directly
+        out.append(`fn {fn_name}(p: &mut Parser) -> Result<{type_name}, ParseError> \{\n`);
+        out.append("    let start = p.peek().span.start;\n");
+        if needs_bt {
+            gen_multi_alt_body_bt(out, rule, &type_name, all_rules, lit_tokens, &groups, &first_sets, &non_lr_indices);
+        } else {
+            gen_multi_alt_body(out, rule, &type_name, all_rules, lit_tokens);
+        }
+        out.append("}\n\n");
+    }
 }
 
 fn gen_alt_body(
@@ -269,7 +305,9 @@ fn gen_element(
             let field_name = dedup_name(&to_lower(&name), name_counts);
             out.append(`{indent}let {field_name} = p.expect({const_name}, {escape_string(&name)})?;\n`);
         } else {
-            out.append(`{indent}p.expect({const_name}, {escape_string(&name)})?;\n`);
+            // Always bind result to ensure &mut self mutation persists
+            let discard = dedup_name(&"tok", name_counts);
+            out.append(`{indent}let {discard} = p.expect({const_name}, {escape_string(&name)})?;\n`);
         }
         return;
     }
@@ -280,7 +318,8 @@ fn gen_element(
             let field_name = dedup_name(&literal_field_name(&text), name_counts);
             out.append(`{indent}let {field_name} = p.expect({const_name}, {escape_string(&display)})?;\n`);
         } else {
-            out.append(`{indent}p.expect({const_name}, {escape_string(&display)})?;\n`);
+            let discard = dedup_name(&"tok", name_counts);
+            out.append(`{indent}let {discard} = p.expect({const_name}, {escape_string(&display)})?;\n`);
         }
         return;
     }
@@ -290,7 +329,8 @@ fn gen_element(
             let field_name = dedup_name(&to_snake_case(&name), name_counts);
             out.append(`{indent}let {field_name} = {fn_name}(p)?;\n`);
         } else {
-            out.append(`{indent}{fn_name}(p)?;\n`);
+            let discard = dedup_name(&"tok", name_counts);
+            out.append(`{indent}let {discard} = {fn_name}(p)?;\n`);
         }
         return;
     }
@@ -929,6 +969,124 @@ fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
         }
     }
     return true;
+}
+
+fn gen_lr_suffix_loop(
+    out: &mut String,
+    rule: &ParserRule,
+    type_name: &String,
+    lr_indices: &Array<i32>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+    let fn_name = `parse_{to_snake_case(&rule.name)}`;
+    let all_labeled = all_alternatives_labeled(&rule.alternatives);
+
+    out.append("    loop {\n");
+    out.append("        let suffix_kind = p.peek_kind();\n");
+
+    let mut is_first = true;
+    for let lr_idx_ref of lr_indices {
+        let lr_idx = *lr_idx_ref;
+        let alt = &rule.alternatives[lr_idx];
+        // Suffix elements are everything after the first element (the self-reference)
+        // Compute FIRST of elements[1]
+        let mut suffix_first: Array<String> = [];
+        if alt.elements.len() > 1 {
+            let mut visiting: Array<String> = [];
+            suffix_first = first_of_element(&alt.elements[1], all_rules, lit_tokens, &mut visiting);
+        }
+        if suffix_first.len() == 0 { continue; }
+
+        if is_first {
+            out.append("        if ");
+            is_first = false;
+        } else {
+            out.append(" else if ");
+        }
+        for let mut j = 0; j < suffix_first.len(); j += 1 {
+            if j > 0 { out.append(" || "); }
+            out.append(`suffix_kind == {suffix_first[j]}`);
+        }
+        out.append(" {\n");
+
+        // Parse suffix elements (elements[1..]) and construct result
+        let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{lr_idx}` };
+        let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+        let indent = "            ";
+
+        // Parse each suffix element
+        let mut name_counts: Array<[String, i32]> = [];
+        // Account for first element "expr" in name counting
+        dedup_name(&to_snake_case(&rule.name), &mut name_counts);
+
+        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+            let elem = &alt.elements[ei];
+            if let RuleRef(name) = *elem {
+                if name == rule.name {
+                    // Self-reference in suffix: call the FULL parser (not atom)
+                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
+                    out.append(`{indent}let {field_name} = {fn_name}(p)?;\n`);
+                } else {
+                    let elem_fn = `parse_{to_snake_case(&name)}`;
+                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
+                    out.append(`{indent}let {field_name} = {elem_fn}(p)?;\n`);
+                }
+            } else {
+                gen_element(out, elem, all_rules, lit_tokens, indent, true, &mut name_counts);
+            }
+        }
+
+        // Construct the variant
+        out.append(`{indent}result = {type_name}::{case_name}({sname} \{\n`);
+        out.append(`{indent}    span: Span::new(start, p.last_end()),\n`);
+        // First field is the left operand (self-reference)
+        let first_field = to_snake_case(&rule.name);
+        out.append(`{indent}    {first_field}: result,\n`);
+        // Remaining fields from suffix elements
+        let mut field_counts: Array<[String, i32]> = [];
+        dedup_name(&to_snake_case(&rule.name), &mut field_counts);
+        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+            gen_field_assignment(out, &alt.elements[ei], &mut field_counts, indent);
+        }
+        out.append(`{indent}\});\n`);
+
+        out.append("        }");
+    }
+
+    if !is_first {
+        out.append(" else {\n");
+        out.append("            break;\n");
+        out.append("        }\n");
+    } else {
+        out.append("        break;\n");
+    }
+    out.append("    }\n");
+}
+
+fn sort_group_by_specificity(
+    group: &mut Array<i32>,
+    non_lr_indices: &Array<i32>,
+    alts: &Array<Alternative>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+    // Compute LL(k) depth for each member (more positions = more specific)
+    let mut depths: Array<i32> = [];
+    for let gi of group {
+        let alt_idx = non_lr_indices[*gi];
+        let pos_sets = alt_position_first_sets(&alts[alt_idx], 5, all_rules, lit_tokens);
+        depths.append(pos_sets.len());
+    }
+    // Bubble sort: deeper (more specific) alternatives first
+    for let mut i = 0; i < group.len(); i += 1 {
+        for let mut j = i + 1; j < group.len(); j += 1 {
+            if depths[j] > depths[i] {
+                let tmp = group[i]; group[i] = group[j]; group[j] = tmp;
+                let tmp_d = depths[i]; depths[i] = depths[j]; depths[j] = tmp_d;
+            }
+        }
+    }
 }
 
 fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {

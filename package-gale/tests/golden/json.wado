@@ -555,8 +555,8 @@ fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
     let pair = parse_pair(p)?;
     while p.peek_kind() == TK_LIT_COMMA {
-        p.expect(TK_LIT_COMMA, "','")?;
-        parse_pair(p)?;
+        let tok = p.expect(TK_LIT_COMMA, "','")?;
+        let tok_2 = parse_pair(p)?;
     }
     let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
     return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt0(ObjAlt0 {
@@ -616,8 +616,8 @@ fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let lbracket = p.expect(TK_LIT_LBRACKET, "'['")?;
     let value = parse_value(p)?;
     while p.peek_kind() == TK_LIT_COMMA {
-        p.expect(TK_LIT_COMMA, "','")?;
-        parse_value(p)?;
+        let tok = p.expect(TK_LIT_COMMA, "','")?;
+        let tok_2 = parse_value(p)?;
     }
     let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
     return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt0(ArrAlt0 {

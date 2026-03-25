@@ -913,11 +913,11 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     while p.peek_kind() == TK_PLUS || p.peek_kind() == TK_MINUS {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_PLUS {
-            p.expect(TK_PLUS, "PLUS")?;
+            let tok = p.expect(TK_PLUS, "PLUS")?;
         } else if grp_kind == TK_MINUS {
-            p.expect(TK_MINUS, "MINUS")?;
+            let tok = p.expect(TK_MINUS, "MINUS")?;
         }
-        parse_multiplying_expression(p)?;
+        let tok = parse_multiplying_expression(p)?;
     }
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode {
         span: Span::new(start, p.last_end()),
@@ -931,11 +931,11 @@ fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionN
     while p.peek_kind() == TK_TIMES || p.peek_kind() == TK_DIV {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_TIMES {
-            p.expect(TK_TIMES, "TIMES")?;
+            let tok = p.expect(TK_TIMES, "TIMES")?;
         } else if grp_kind == TK_DIV {
-            p.expect(TK_DIV, "DIV")?;
+            let tok = p.expect(TK_DIV, "DIV")?;
         }
-        parse_pow_expression(p)?;
+        let tok = parse_pow_expression(p)?;
     }
     return Result::<MultiplyingExpressionNode, ParseError>::Ok(MultiplyingExpressionNode {
         span: Span::new(start, p.last_end()),
@@ -947,8 +947,8 @@ fn parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError>
     let start = p.peek().span.start;
     let signed_atom = parse_signed_atom(p)?;
     while p.peek_kind() == TK_POW {
-        p.expect(TK_POW, "POW")?;
-        parse_signed_atom(p)?;
+        let tok = p.expect(TK_POW, "POW")?;
+        let tok_2 = parse_signed_atom(p)?;
     }
     return Result::<PowExpressionNode, ParseError>::Ok(PowExpressionNode {
         span: Span::new(start, p.last_end()),
@@ -1095,8 +1095,8 @@ fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
     let lparen = p.expect(TK_LPAREN, "LPAREN")?;
     let expression = parse_expression(p)?;
     while p.peek_kind() == TK_COMMA {
-        p.expect(TK_COMMA, "COMMA")?;
-        parse_expression(p)?;
+        let tok = p.expect(TK_COMMA, "COMMA")?;
+        let tok_2 = parse_expression(p)?;
     }
     let rparen = p.expect(TK_RPAREN, "RPAREN")?;
     return Result::<FuncNode, ParseError>::Ok(FuncNode {
