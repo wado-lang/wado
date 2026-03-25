@@ -20,7 +20,7 @@ use crate::token::Span;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Lightweight signature extracted from TirFunction for effect checking.
+/// Lightweight signature extracted from `TirFunction` for effect checking.
 /// Avoids cloning the entire function body.
 struct EffectSignature {
     effects: Vec<EffectRef>,
@@ -153,7 +153,7 @@ struct EffectChecker<'a, H: CompilerHost> {
     type_table: Option<Rc<RefCell<TypeTable>>>,
     /// What this checker is checking
     mode: CheckMode,
-    /// Pre-built index: (module_source, func_name) -> EffectSignature
+    /// Pre-built index: (`module_source`, `func_name`) -> `EffectSignature`
     func_index: IndexMap<(ModuleSource, String), EffectSignature>,
 }
 
@@ -665,14 +665,12 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             let tt = tt.borrow();
             // For method calls, args doesn't include the receiver (self), but params does.
             // Skip the self parameter when the function is a method.
-            let params_iter: Box<dyn Iterator<Item = _>> = if sig.is_method
-                && !sig.params.is_empty()
-                && sig.params[0].name == "self"
-            {
-                Box::new(sig.params.iter().skip(1))
-            } else {
-                Box::new(sig.params.iter())
-            };
+            let params_iter: Box<dyn Iterator<Item = _>> =
+                if sig.is_method && !sig.params.is_empty() && sig.params[0].name == "self" {
+                    Box::new(sig.params.iter().skip(1))
+                } else {
+                    Box::new(sig.params.iter())
+                };
             for (param, arg) in params_iter.zip(args.iter()) {
                 if let ResolvedType::Function {
                     effects: formal_effects,

@@ -150,7 +150,7 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// on recursive types (e.g., variant Elem containing struct `RepeatElem` with field Elem).
     trait_check_stack: RefCell<Vec<(TypeId, String)>>,
     /// Cache for `lookup_method_info` results.
-    /// Key: (base_type_id, method_name) → cached MethodInfo
+    /// Key: (`base_type_id`, `method_name`) → cached `MethodInfo`
     method_info_cache: IndexMap<(TypeId, String), Option<types::MethodInfo>>,
 }
 
