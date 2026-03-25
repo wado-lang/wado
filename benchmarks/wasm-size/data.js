@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774441963688,
+  "lastUpdate": 1774474772029,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7394,6 +7394,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0f425839d8383f9a2c7897e495a3985c18ff3075"
         },
         "date": 1774441963474,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fdf532ffdbad36e05a8d942352b9b0467fe3d910",
+          "message": "Merge pull request #695 from wado-lang/claude/refactor-monomorph-module-22d8b\n\nRefactor monomorphization into modular components",
+          "timestamp": "2026-03-26T06:36:59+09:00",
+          "tree_id": "28dfe448aaaeb48063ad7d97433a343f405af75e",
+          "url": "https://github.com/wado-lang/wado/commit/fdf532ffdbad36e05a8d942352b9b0467fe3d910"
+        },
+        "date": 1774474771837,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
