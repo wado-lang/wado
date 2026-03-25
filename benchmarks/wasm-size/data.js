@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774429354831,
+  "lastUpdate": 1774429618633,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7316,6 +7316,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/070749cf5b815b82c0f52ec3921b8ae049e9c0d6"
         },
         "date": 1774429354606,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e5982bb5c17ec3663f82a553ff4b392ec6d55316",
+          "message": "Merge pull request #691 from wado-lang/claude/allow-shadowing-with-rhs-MJPrh\n\nAllow same-scope shadowing when RHS references the variable",
+          "timestamp": "2026-03-25T18:04:27+09:00",
+          "tree_id": "80fef1613f50149651b93b82f6215c84f25fab5a",
+          "url": "https://github.com/wado-lang/wado/commit/e5982bb5c17ec3663f82a553ff4b392ec6d55316"
+        },
+        "date": 1774429618418,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
