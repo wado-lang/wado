@@ -340,7 +340,7 @@ When you have completed a task, make sure everything is up-to-date and tested:
   - docs/cheatsheet.md
   - docs/compiler.md
   - docs/optimizer.md
-- Run `mise run on-task-done`
+- Run `time mise run on-task-done`
   - It performs format, clippy-fix, update golden fixtures, regenerate stdlib docs, and tests.
   - It will take 15+ minutes
   - Run in foreground and commit the results with without `| tail` in order not to lost the results.
