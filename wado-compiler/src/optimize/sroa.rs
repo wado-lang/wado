@@ -252,7 +252,33 @@ fn mark_ref_fields_in_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             mark_ref_field_locals_as_aliased(body, decomposed, stores_aliased);
         }
-        _ => {}
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            mark_ref_fields_in_expr(scrutinee, decomposed, stores_aliased);
+            mark_ref_field_locals_as_aliased(then_block, decomposed, stores_aliased);
+            if let Some(eb) = else_block {
+                mark_ref_field_locals_as_aliased(eb, decomposed, stores_aliased);
+            }
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                mark_ref_fields_in_expr(v, decomposed, stores_aliased);
+            }
+        }
+        TirStmtKind::LetDestructure { value, .. } => {
+            mark_ref_fields_in_expr(value, decomposed, stores_aliased);
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+        }
+        TirStmtKind::VariadicForOf { .. } => {
+            unreachable!("VariadicForOf should be expanded during monomorphization")
+        }
     }
 }
 
@@ -276,7 +302,112 @@ fn mark_ref_fields_in_expr(
                 mark_ref_field_locals_as_aliased(eb, decomposed, stores_aliased);
             }
         }
-        _ => {}
+        TirExprKind::Match { expr: inner, arms } => {
+            mark_ref_fields_in_expr(inner, decomposed, stores_aliased);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    mark_ref_fields_in_expr(guard, decomposed, stores_aliased);
+                }
+                mark_ref_fields_in_expr(&arm.body, decomposed, stores_aliased);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            mark_ref_fields_in_expr(scrutinee, decomposed, stores_aliased);
+            for arm in arms {
+                mark_ref_field_locals_as_aliased(arm, decomposed, stores_aliased);
+            }
+            mark_ref_field_locals_as_aliased(default, decomposed, stores_aliased);
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            mark_ref_fields_in_expr(left, decomposed, stores_aliased);
+            mark_ref_fields_in_expr(right, decomposed, stores_aliased);
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+            mark_ref_fields_in_expr(inner, decomposed, stores_aliased);
+        }
+        TirExprKind::Assign { target, value } => {
+            mark_ref_fields_in_expr(target, decomposed, stores_aliased);
+            mark_ref_fields_in_expr(value, decomposed, stores_aliased);
+        }
+        TirExprKind::Index { expr: inner, index } => {
+            mark_ref_fields_in_expr(inner, decomposed, stores_aliased);
+            mark_ref_fields_in_expr(index, decomposed, stores_aliased);
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                mark_ref_fields_in_expr(&arg.expr, decomposed, stores_aliased);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                mark_ref_fields_in_expr(arg, decomposed, stores_aliased);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            mark_ref_fields_in_expr(receiver, decomposed, stores_aliased);
+            for arg in args {
+                mark_ref_fields_in_expr(&arg.expr, decomposed, stores_aliased);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            mark_ref_fields_in_expr(callee, decomposed, stores_aliased);
+            for arg in args {
+                mark_ref_fields_in_expr(arg, decomposed, stores_aliased);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                mark_ref_fields_in_expr(&field.value, decomposed, stores_aliased);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                mark_ref_fields_in_expr(elem, decomposed, stores_aliased);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                mark_ref_fields_in_expr(p, decomposed, stores_aliased);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            mark_ref_fields_in_expr(body, decomposed, stores_aliased);
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            mark_ref_fields_in_expr(value, decomposed, stores_aliased);
+        }
+        // Leaf nodes
+        TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -915,7 +1046,99 @@ fn check_has_field_access_expr(
                 check_has_field_access(eb, candidates, has_access);
             }
         }
-        _ => {}
+        TirExprKind::Match { expr: inner, arms } => {
+            check_has_field_access_expr(inner, candidates, has_access);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    check_has_field_access_expr(guard, candidates, has_access);
+                }
+                check_has_field_access_expr(&arm.body, candidates, has_access);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            check_has_field_access_expr(scrutinee, candidates, has_access);
+            for arm in arms {
+                check_has_field_access(arm, candidates, has_access);
+            }
+            check_has_field_access(default, candidates, has_access);
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+            check_has_field_access_expr(inner, candidates, has_access);
+        }
+        TirExprKind::Index { expr: inner, index } => {
+            check_has_field_access_expr(inner, candidates, has_access);
+            check_has_field_access_expr(index, candidates, has_access);
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                check_has_field_access_expr(&arg.expr, candidates, has_access);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                check_has_field_access_expr(arg, candidates, has_access);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            check_has_field_access_expr(receiver, candidates, has_access);
+            for arg in args {
+                check_has_field_access_expr(&arg.expr, candidates, has_access);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            check_has_field_access_expr(callee, candidates, has_access);
+            for arg in args {
+                check_has_field_access_expr(arg, candidates, has_access);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                check_has_field_access_expr(&field.value, candidates, has_access);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                check_has_field_access_expr(elem, candidates, has_access);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                check_has_field_access_expr(p, candidates, has_access);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            check_has_field_access_expr(body, candidates, has_access);
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            check_has_field_access_expr(value, candidates, has_access);
+        }
+        // Leaf nodes
+        TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 

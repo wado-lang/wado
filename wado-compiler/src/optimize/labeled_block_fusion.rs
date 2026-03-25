@@ -271,6 +271,10 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec
             fuse_in_expr(functor, local_count, local_types)
         }
         TirExprKind::GlobalVarSet { value, .. } => fuse_in_expr(value, local_count, local_types),
+        TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
+            fuse_in_expr(inner, local_count, local_types)
+        }
         TirExprKind::Switch {
             scrutinee,
             arms,
@@ -295,7 +299,23 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec
             changed
         }
         TirExprKind::Closure { body, .. } => fuse_in_expr(body, local_count, local_types),
-        _ => false,
+        // Leaf nodes
+        TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. } => false,
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -740,7 +760,26 @@ fn count_local_uses_in_expr(expr: &TirExpr, local_idx: u32) -> usize {
                 + count_local_uses_in_block(default, local_idx)
         }
         TirExprKind::Closure { body, .. } => count_local_uses_in_expr(body, local_idx),
-        _ => 0,
+        TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
+            count_local_uses_in_expr(inner, local_idx)
+        }
+        // Leaf nodes
+        TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. } => 0,
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -907,7 +946,26 @@ fn count_variant_payload_uses_in_expr(expr: &TirExpr, local_idx: u32, case_index
         TirExprKind::Closure { body, .. } => {
             count_variant_payload_uses_in_expr(body, local_idx, case_index)
         }
-        _ => 0,
+        TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
+            count_variant_payload_uses_in_expr(inner, local_idx, case_index)
+        }
+        // Leaf nodes
+        TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. } => 0,
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -1297,7 +1355,14 @@ fn transform_lb_in_stmt_kind(
                 );
             }
         }
-        _ => {}
+        // If/Loop/LabeledBlock/IfLet are handled before this function is called (in
+        // transform_lb_stmt). The remaining kinds carry no expressions to transform.
+        TirStmtKind::If { .. }
+        | TirStmtKind::Loop { .. }
+        | TirStmtKind::LabeledBlock { .. }
+        | TirStmtKind::IfLet { .. }
+        | TirStmtKind::Continue
+        | TirStmtKind::VariadicForOf { .. } => {}
     }
 }
 
@@ -1482,7 +1547,44 @@ fn transform_lb_in_expr(
                 span,
             );
         }
-        _ => {}
+        // These expression kinds cannot contain `break orig_label` that reaches the outer
+        // scope, because check_lb_breaks_in_expr conservatively rejects fusion when a
+        // break to the target label is found inside any of these expressions.
+        TirExprKind::Binary { .. }
+        | TirExprKind::Unary { .. }
+        | TirExprKind::Cast { .. }
+        | TirExprKind::FieldAccess { .. }
+        | TirExprKind::TupleSpread { .. }
+        | TirExprKind::TypePackExpansion { .. }
+        | TirExprKind::Assign { .. }
+        | TirExprKind::Index { .. }
+        | TirExprKind::Call { .. }
+        | TirExprKind::CmRawCall { .. }
+        | TirExprKind::MethodCall { .. }
+        | TirExprKind::IndirectCall { .. }
+        | TirExprKind::StructLiteral { .. }
+        | TirExprKind::TupleLiteral { .. }
+        | TirExprKind::VariantConstruct { .. }
+        | TirExprKind::VariantTag { .. }
+        | TirExprKind::VariantTest { .. }
+        | TirExprKind::VariantPayload { .. }
+        | TirExprKind::Closure { .. }
+        | TirExprKind::ClosureToCanonical { .. }
+        | TirExprKind::GlobalVarSet { .. }
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. }
+        | TirExprKind::TemplateString { .. } => {}
     }
 }
 
@@ -1607,9 +1709,7 @@ fn subst_variant_payload_in_expr(
 
     // Recurse into sub-expressions.
     match &mut expr.kind {
-        TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. } => {}
+        TirExprKind::Local { .. } => {}
         TirExprKind::Binary { left, right, .. } => {
             subst_variant_payload_in_expr(left, temp_local, case_index, payload_local);
             subst_variant_payload_in_expr(right, temp_local, case_index, payload_local);
@@ -1707,7 +1807,26 @@ fn subst_variant_payload_in_expr(
         TirExprKind::Closure { body, .. } => {
             subst_variant_payload_in_expr(body, temp_local, case_index, payload_local);
         }
-        _ => {}
+        TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TypePackExpansion { call_expr: inner, .. } => {
+            subst_variant_payload_in_expr(inner, temp_local, case_index, payload_local);
+        }
+        // Leaf nodes carry no sub-expressions to substitute into.
+        TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
