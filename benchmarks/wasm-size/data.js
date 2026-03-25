@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774428855421,
+  "lastUpdate": 1774429354831,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7277,6 +7277,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3424c6a028691fd31365ea5bbb694ff490513088"
         },
         "date": 1774428855257,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "070749cf5b815b82c0f52ec3921b8ae049e9c0d6",
+          "message": "Merge pull request #690 from wado-lang/claude/research-code-generation-vseW2\n\ndocs: Add research on code generation approaches for Wado",
+          "timestamp": "2026-03-25T18:00:06+09:00",
+          "tree_id": "c1791b09d99b281a556dd1915584eb9e952c3375",
+          "url": "https://github.com/wado-lang/wado/commit/070749cf5b815b82c0f52ec3921b8ae049e9c0d6"
+        },
+        "date": 1774429354606,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
