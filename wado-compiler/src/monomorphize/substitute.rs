@@ -6,11 +6,13 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::mangle_generic_name;
-use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
+use crate::tir::{
+    ResolvedType, TirExpr, TirExprKind, TirModule, TirPattern, TirStmt, TirStmtKind, TypeId,
+    TypeTable,
+};
 use crate::tir_visitor::TirMutVisitor;
 
 use super::state::Monomorphizer;
-use super::TypeRewriter;
 
 impl Monomorphizer {
     /// Rewrite all `GenericInstance` `type_ids` in expressions to use monomorphized struct types
@@ -387,5 +389,74 @@ impl Monomorphizer {
                 }
             }
         }
+    }
+}
+
+/// Rewrites `GenericInstance` type_ids throughout a TIR tree to use concrete struct types.
+/// Used by `rewrite_types_in_module`.
+pub(super) struct TypeRewriter<'a> {
+    pub mono: &'a Monomorphizer,
+    pub type_table: &'a mut TypeTable,
+}
+
+impl TypeRewriter<'_> {
+    pub fn rewrite_type_id(&mut self, type_id: TypeId) -> TypeId {
+        self.mono.rewrite_type_id(type_id, self.type_table)
+    }
+}
+
+impl TirMutVisitor for TypeRewriter<'_> {
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        if let TirStmtKind::Let { type_id, .. } = &mut stmt.kind {
+            *type_id = self.rewrite_type_id(*type_id);
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_pattern(&mut self, pattern: &mut TirPattern) {
+        match pattern {
+            TirPattern::Variant { enum_type, .. } | TirPattern::Enum { enum_type, .. } => {
+                *enum_type = self.rewrite_type_id(*enum_type);
+            }
+            TirPattern::Struct { struct_type, .. } => {
+                *struct_type = self.rewrite_type_id(*struct_type);
+            }
+            _ => {}
+        }
+        self.walk_pattern(pattern);
+    }
+
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        expr.type_id = self.rewrite_type_id(expr.type_id);
+
+        if let TirExprKind::StructLiteral {
+            struct_type,
+            struct_name,
+            ..
+        } = &mut expr.kind
+        {
+            let original_type_id = *struct_type;
+            let new_type_id = self.rewrite_type_id(original_type_id);
+            *struct_type = new_type_id;
+            if let Some(mangled_name) = self.mono.structs.type_to_mangled_name.get(&original_type_id) {
+                struct_name.clone_from(mangled_name);
+            } else {
+                match self.type_table.get(new_type_id) {
+                    ResolvedType::Struct { name, .. } => {
+                        struct_name.clone_from(name);
+                    }
+                    ResolvedType::GenericInstance { name, type_args, .. } => {
+                        let type_names: Vec<String> = type_args
+                            .iter()
+                            .map(|&arg| self.type_table.mangle_type_name(arg))
+                            .collect();
+                        *struct_name = mangle_generic_name(name, &type_names);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        self.walk_expr(expr);
     }
 }
