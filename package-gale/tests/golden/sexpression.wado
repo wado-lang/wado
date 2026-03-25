@@ -632,10 +632,36 @@ fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
     });
 }
 
+fn parse_item_bt_1(p: &mut Parser) -> Result<ItemNode, ParseError> {
+    let start = p.peek().span.start;
+    let list_ = parse_list_(p)?;
+    return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt1(ItemAlt1 {
+        span: Span::new(start, p.last_end()),
+        list_,
+    }));
+}
+
+fn parse_item_bt_2(p: &mut Parser) -> Result<ItemNode, ParseError> {
+    let start = p.peek().span.start;
+    let lparen = p.expect(TK_LPAREN, "LPAREN")?;
+    let item = parse_item(p)?;
+    let dot = p.expect(TK_DOT, "DOT")?;
+    let item_2 = parse_item(p)?;
+    let rparen = p.expect(TK_RPAREN, "RPAREN")?;
+    return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt2(ItemAlt2 {
+        span: Span::new(start, p.last_end()),
+        lparen,
+        item,
+        dot,
+        item_2,
+        rparen,
+    }));
+}
+
 fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if (kind == TK_STRING || kind == TK_SYMBOL || kind == TK_NUMBER || kind == TK_DOT) {
+    if kind == TK_STRING || kind == TK_SYMBOL || kind == TK_NUMBER || kind == TK_DOT {
         let atom = parse_atom(p)?;
         return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt0(ItemAlt0 {
             span: Span::new(start, p.last_end()),
@@ -643,26 +669,14 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
         }));
     }
     if kind == TK_LPAREN {
-        let list_ = parse_list_(p)?;
-        return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt1(ItemAlt1 {
-            span: Span::new(start, p.last_end()),
-            list_,
-        }));
-    }
-    if kind == TK_LPAREN && (p.peek_at(1) == TK_STRING || p.peek_at(1) == TK_SYMBOL || p.peek_at(1) == TK_NUMBER || p.peek_at(1) == TK_DOT || p.peek_at(1) == TK_LPAREN) {
-        let lparen = p.expect(TK_LPAREN, "LPAREN")?;
-        let item = parse_item(p)?;
-        let dot = p.expect(TK_DOT, "DOT")?;
-        let item_2 = parse_item(p)?;
-        let rparen = p.expect(TK_RPAREN, "RPAREN")?;
-        return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt2(ItemAlt2 {
-            span: Span::new(start, p.last_end()),
-            lparen,
-            item,
-            dot,
-            item_2,
-            rparen,
-        }));
+        let saved = p.pos;
+        let r_1 = parse_item_bt_1(p);
+        if let Err(_) = r_1 {
+            p.pos = saved;
+        } else {
+            return r_1;
+        }
+        return parse_item_bt_2(p);
     }
     return Result::<ItemNode, ParseError>::Err(ParseError::new(
         "expected item",
