@@ -119,13 +119,13 @@ Identifiers are case-sensitive.
 
 The following keywords are **contextual** — they act as keywords only in specific syntactic positions and can be used as variable names, field names, and function parameters elsewhere:
 
-| Keyword | Keyword context | Identifier elsewhere |
-|---------|----------------|---------------------|
-| `flags` | `flags` declaration | Variable, field, parameter |
-| `type`  | `type` declaration | Variable, field, parameter |
-| `of`    | `for let <pattern> of <expr>` | Variable, field, parameter |
-| `from`  | `use { ... } from "..."` | Variable, field, parameter, type name |
-| `test`  | `test "name" { ... }` block | Variable, field, parameter |
+| Keyword | Keyword context               | Identifier elsewhere                  |
+| ------- | ----------------------------- | ------------------------------------- |
+| `flags` | `flags` declaration           | Variable, field, parameter            |
+| `type`  | `type` declaration            | Variable, field, parameter            |
+| `of`    | `for let <pattern> of <expr>` | Variable, field, parameter            |
+| `from`  | `use { ... } from "..."`      | Variable, field, parameter, type name |
+| `test`  | `test "name" { ... }` block   | Variable, field, parameter            |
 
 ```wado
 // 'of' as a variable name
