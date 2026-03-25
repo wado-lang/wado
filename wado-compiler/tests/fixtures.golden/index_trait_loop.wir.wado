@@ -121,7 +121,7 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(25), used: 0 };
         String::append(__local_2, String { repr: array.new_data<u8>("Sum 1-5: "), used: 9 });
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(__sroa___sroa_w_acc_sum, __local_3);
         break __tmpl: __local_2;
     });
@@ -335,7 +335,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

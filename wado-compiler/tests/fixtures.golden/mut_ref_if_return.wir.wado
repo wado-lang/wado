@@ -195,12 +195,12 @@ fn parse_item(p) {
                 let __cast_1: ref Result<Token,String>::Err;
                 __cast_1 = ref.cast Result<Token,String>::Err(__match_scrut_0);
                 __local_10 = __cast_1.payload_0;
-                break __inline_parse_leaf_2: Result<NodeA,String>::Err { discriminant: 1, payload_0: ref.as_non_null(__local_10) };
+                break __inline_parse_leaf_2: Result<NodeA,String>::Err { discriminant: 1, payload_0: __local_10 };
                 unreachable;
             } else {
                 unreachable;
             });
-            break __inline_parse_leaf_2: Result<NodeA,String>::Ok { discriminant: 0, payload_0: NodeA::Leaf { discriminant: 0, payload_0: ref.as_non_null(__local_11) } };
+            break __inline_parse_leaf_2: Result<NodeA,String>::Ok { discriminant: 0, payload_0: NodeA::Leaf { discriminant: 0, payload_0: __local_11 } };
         }; if ref.test Result<NodeA,String>::Ok(__match_scrut_1) -> ref NodeA {
             let __cast_4: ref Result<NodeA,String>::Ok;
             __cast_4 = ref.cast Result<NodeA,String>::Ok(__match_scrut_1);
@@ -210,12 +210,12 @@ fn parse_item(p) {
             let __cast_3: ref Result<NodeA,String>::Err;
             __cast_3 = ref.cast Result<NodeA,String>::Err(__match_scrut_1);
             __local_3 = __cast_3.payload_0;
-            return Result<NodeA,String>::Err { discriminant: 1, payload_0: ref.as_non_null(__local_3) };
+            return Result<NodeA,String>::Err { discriminant: 1, payload_0: __local_3 };
             unreachable;
         } else {
             unreachable;
         });
-        return Result<NodeA,String>::Ok { discriminant: 0, payload_0: ref.as_non_null(node) };
+        return Result<NodeA,String>::Ok { discriminant: 0, payload_0: node };
     };
     return Result<NodeA,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("no match"), used: 8 } };
 }
@@ -257,7 +257,7 @@ fn parse_root(p) {
                 let __cast_1: ref Result<NodeA,String>::Err;
                 __cast_1 = ref.cast Result<NodeA,String>::Err(__match_scrut_0);
                 __local_2 = __cast_1.payload_0;
-                return 1; 0; ref.as_non_null(__local_2);
+                return 1; 0; __local_2;
                 unreachable;
             } else {
                 unreachable;
@@ -278,7 +278,7 @@ fn parse_root(p) {
             String::append_char(__local_8, 32);
             String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_ref_if_return.wado"), used: 51 });
             String::append_char(__local_8, 58);
-            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
             __local_14 = __local_9;
             i32::fmt_decimal(53, __local_14);
             String::append_char(__local_8, 58);
@@ -286,7 +286,7 @@ fn parse_root(p) {
             String::append(__local_8, __tmpl: block -> ref String {
                 __local_6 = String { repr: builtin::array_new<u8>(40), used: 0 };
                 String::append(__local_6, String { repr: array.new_data<u8>("expected pos=1, got pos="), used: 24 });
-                __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
+                __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
                 i32::fmt_decimal(p.pos, __local_7);
                 break __tmpl: __local_6;
             });
@@ -300,7 +300,7 @@ condition: p.pos == 1
             String::append_char(__local_8, 115);
             String::append_char(__local_8, 58);
             String::append_char(__local_8, 32);
-            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
             __local_25 = __local_9;
             i32::fmt_decimal(__v0, __local_25);
             String::append_char(__local_8, 10);
@@ -321,7 +321,7 @@ fn run() {
         __local_0 = Array<Token> { repr: array.new_fixed<ref Token>(Token { kind: 1, text: String { repr: array.new_data<u8>("hello"), used: 5 } }, Token { kind: 0, text: String { repr: builtin::array_new<u8>(0), used: 0 } }), used: 2 };
         break __seq_lit: __local_0;
     };
-    parser = Parser { tokens: ref.as_non_null(tokens), pos: 0 };
+    parser = Parser { tokens: tokens, pos: 0 };
     let __sroa___sroa_r_value_discriminant: i32;
     let __sroa___sroa_r_value_case0_payload_0: i32;
     let __sroa___sroa_r_value_case1_payload_0: ref null String;
@@ -551,7 +551,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -644,7 +644,7 @@ fn Parser::expect(self, kind) {
     return Result<Token,String>::Err { discriminant: 1, payload_0: ref.as_non_null(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(25), used: 0 };
         String::append(__local_2, String { repr: array.new_data<u8>("expected "), used: 9 });
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(kind, __local_3);
         break __tmpl: __local_2;
     }) };
@@ -689,7 +689,7 @@ fn Array<Token>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Formatter::write_char_n(self, c, n) {

@@ -155,7 +155,7 @@ fn __test_4_double_deref_then_cast____rr_as_i64() {
             String::append_char(__local_6, 32);
             String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cast_deref_precedence.wado"), used: 55 });
             String::append_char(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_12 = __local_7;
             i32::fmt_decimal(41, __local_12);
             String::append(__local_6, String { repr: array.new_data<u8>("
@@ -164,7 +164,7 @@ condition: v == 7 as i64
             String::append_char(__local_6, 118);
             String::append_char(__local_6, 58);
             String::append_char(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_17 = __local_7;
             i64::fmt_decimal(v, __local_17);
             String::append_char(__local_6, 10);
@@ -436,7 +436,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

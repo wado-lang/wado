@@ -169,14 +169,14 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(21), used: 0 };
         String::append(__local_2, String { repr: array.new_data<u8>("f32: "), used: 5 });
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         f32::fmt_into(3.14_f32, __local_3);
         break __tmpl: __local_2;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(21), used: 0 };
         String::append(__local_4, String { repr: array.new_data<u8>("f64: "), used: 5 });
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
         f64::fmt_into(2.718, __local_5);
         break __tmpl: __local_4;
     });
@@ -1324,7 +1324,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn f32::fmt_into(self, f) {
@@ -1579,7 +1579,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::append_byte_filled(self, byte, n) {

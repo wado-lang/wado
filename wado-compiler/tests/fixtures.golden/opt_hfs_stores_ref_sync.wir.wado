@@ -111,7 +111,7 @@ import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
 
 fn store_ref(c) {
-    return Holder { c: ref.as_non_null(c) };
+    return Holder { c: c };
 }
 
 fn bump_y(c) {
@@ -181,7 +181,7 @@ fn run() {
             String::append_char(__local_10, 32);
             String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado"), used: 57 });
             String::append_char(__local_10, 58);
-            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             __local_20 = __local_11;
             i32::fmt_decimal(37, __local_20);
             String::append(__local_10, String { repr: array.new_data<u8>("
@@ -194,7 +194,7 @@ condition: total == 45
             String::append_char(__local_10, 108);
             String::append_char(__local_10, 58);
             String::append_char(__local_10, 32);
-            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             __local_25 = __local_11;
             i32::fmt_decimal(__v0_4, __local_25);
             String::append_char(__local_10, 10);
@@ -217,7 +217,7 @@ condition: total == 45
             String::append_char(__local_12, 32);
             String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado"), used: 57 });
             String::append_char(__local_12, 58);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             __local_31 = __local_13;
             i32::fmt_decimal(38, __local_31);
             String::append(__local_12, String { repr: array.new_data<u8>("
@@ -228,7 +228,7 @@ condition: c.x == 5
             String::append_char(__local_12, 120);
             String::append_char(__local_12, 58);
             String::append_char(__local_12, 32);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             __local_36 = __local_13;
             i32::fmt_decimal(__v0_6, __local_36);
             String::append_char(__local_12, 10);
@@ -251,7 +251,7 @@ condition: c.x == 5
             String::append_char(__local_14, 32);
             String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_hfs_stores_ref_sync.wado"), used: 57 });
             String::append_char(__local_14, 58);
-            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
+            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
             __local_42 = __local_15;
             i32::fmt_decimal(39, __local_42);
             String::append(__local_14, String { repr: array.new_data<u8>("
@@ -262,7 +262,7 @@ condition: c.y == 50
             String::append_char(__local_14, 121);
             String::append_char(__local_14, 58);
             String::append_char(__local_14, 32);
-            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
+            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
             __local_47 = __local_15;
             i32::fmt_decimal(__v0_8, __local_47);
             String::append_char(__local_14, 10);
@@ -479,7 +479,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

@@ -214,7 +214,7 @@ fn run() with Stdout {
     __for_0: block {
         i_1 = 0;
         __tmpl_buf_68 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __fmt_buf_69 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: ref.as_non_null(__tmpl_buf_68) };
+        __fmt_buf_69 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 6, indent: 0, buf: __tmpl_buf_68 };
         block {
             l2: loop {
                 if (i_1 < 5) == 0 {
@@ -241,7 +241,7 @@ fn run() with Stdout {
         String::append_char(__local_16, 101);
         String::append_char(__local_16, 100);
         String::append_char(__local_16, 61);
-        __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
+        __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
         i32::fmt_decimal(total, __local_17);
         break __tmpl: __local_16;
     });
@@ -249,7 +249,7 @@ fn run() with Stdout {
     __for_1: block {
         i_5 = 0;
         __tmpl_buf_70 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __fmt_buf_71 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__tmpl_buf_70) };
+        __fmt_buf_71 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __tmpl_buf_70 };
         block {
             l5: loop {
                 if (i_5 < 16) == 0 {
@@ -273,7 +273,7 @@ fn run() with Stdout {
         String::append_char(__local_20, 101);
         String::append_char(__local_20, 120);
         String::append_char(__local_20, 61);
-        __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
+        __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
         i32::fmt_decimal(total2, __local_21);
         break __tmpl: __local_20;
     });
@@ -281,7 +281,7 @@ fn run() with Stdout {
     __for_2: block {
         i_8 = 0;
         __tmpl_buf_72 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __fmt_buf_73 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__tmpl_buf_72) };
+        __fmt_buf_73 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __tmpl_buf_72 };
         block {
             l8: loop {
                 if (i_8 < 5) == 0 {
@@ -309,7 +309,7 @@ fn run() with Stdout {
         String::append_char(__local_24, 108);
         String::append_char(__local_24, 116);
         String::append_char(__local_24, 61);
-        __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_24) };
+        __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
         i32::fmt_decimal(total3, __local_25);
         break __tmpl: __local_24;
     });
@@ -317,7 +317,7 @@ fn run() with Stdout {
     __for_3: block {
         i_11 = 0;
         __tmpl_buf_74 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __fmt_buf_75 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__tmpl_buf_74) };
+        __fmt_buf_75 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: __tmpl_buf_74 };
         block {
             l11: loop {
                 if (i_11 < 5) == 0 {
@@ -344,7 +344,7 @@ fn run() with Stdout {
         String::append_char(__local_28, 99);
         String::append_char(__local_28, 50);
         String::append_char(__local_28, 61);
-        __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
+        __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_28 };
         i32::fmt_decimal(total4, __local_29);
         break __tmpl: __local_28;
     });
@@ -1475,7 +1475,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1723,7 +1723,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

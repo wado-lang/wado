@@ -149,7 +149,7 @@ fn trait_bound_ref_type() with Stdout {
     let __local_3: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(12, __local_3);
         break __tmpl: __local_2;
     });
@@ -164,13 +164,13 @@ fn trait_bound_result_eq() with Stdout {
     b = Result<i32,String>::Ok { discriminant: 0, payload_0: 42 };
     c = Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("fail"), used: 4 } };
     d = Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("fail"), used: 4 } };
-    if Result<i32,String>^Eq::eq(ref.as_non_null(a), ref.as_non_null(b)) {
+    if Result<i32,String>^Eq::eq(a, b) {
         "core:cli/println"(String { repr: array.new_data<u8>("Ok == Ok"), used: 8 });
     };
-    if Result<i32,String>^Eq::eq(ref.as_non_null(a), ref.as_non_null(c)) == 0 {
+    if Result<i32,String>^Eq::eq(a, c) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("Ok != Err"), used: 9 });
     };
-    if Result<i32,String>^Eq::eq(ref.as_non_null(c), ref.as_non_null(d)) {
+    if Result<i32,String>^Eq::eq(c, d) {
         "core:cli/println"(String { repr: array.new_data<u8>("Err == Err"), used: 10 });
     };
 }
@@ -181,7 +181,7 @@ fn trait_bound_struct_field_bounded() with Stdout {
     let __local_3: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(Holder<i32>::min(ref.as_non_null(__seq_lit: block -> ref Array<i32> {
             __local_0 = Array<i32> { repr: array.new_fixed<i32>(5, 3, 8, 1, 4), used: 5 };
             break __seq_lit: __local_0;
@@ -441,7 +441,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -612,7 +612,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Result<i32,String>^Eq::eq(self, other) {

@@ -179,7 +179,7 @@ fn __test_0_enum_field_access_on_cross_module_struct() {
             String::append_char(__local_3, 32);
             String::append(__local_3, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_error_kind.wado"), used: 55 });
             String::append_char(__local_3, 58);
-            __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
+            __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
             i32::fmt_decimal(11, __local_4);
             String::append(__local_3, String { repr: array.new_data<u8>("
 condition: r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData }
@@ -216,7 +216,7 @@ fn __test_1_enum_field_compared_directly() {
                 String::append_char(__local_5, 32);
                 String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_error_kind.wado"), used: 55 });
                 String::append_char(__local_5, 58);
-                __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+                __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_12 = __local_6;
                 i32::fmt_decimal(17, __local_12);
                 String::append(__local_5, String { repr: array.new_data<u8>("
@@ -230,11 +230,11 @@ condition: e.kind == DeserializeErrorKind::UnexpectedType
                 String::append_char(__local_5, 100);
                 String::append_char(__local_5, 58);
                 String::append_char(__local_5, 32);
-                __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+                __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 "core:serde/DeserializeErrorKind^Inspect::inspect"(__v0, __local_6);
                 String::append_char(__local_5, 10);
                 String::append(__local_5, String { repr: array.new_data<u8>("DeserializeErrorKind::UnexpectedType: "), used: 38 });
-                __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+                __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 "core:serde/DeserializeErrorKind^Inspect::inspect"(__v1, __local_6);
                 String::append_char(__local_5, 10);
                 break __tmpl: __local_5;
@@ -260,7 +260,7 @@ fn "core/json/from_string<i32>"(input) {
     let e: ref "core:serde/DeserializeError";
     let __local_9: ref String;
     let __local_10: i64;
-    de = "core:json/JsonDeserializer" { input: ref.as_non_null(input), pos: 0 };
+    de = "core:json/JsonDeserializer" { input: input, pos: 0 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: i32;
     let __sroa_r_case1_payload_0: ref null "core:serde/DeserializeError";
@@ -281,7 +281,7 @@ fn "core/json/from_string<i32>"(input) {
     };
     if __sroa_r_discriminant == 1 {
         e = ref.as_non_null(__sroa_r_case1_payload_0);
-        return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e) };
+        return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: e };
     };
     "core:internal/unreachable"();
     unreachable;
@@ -833,7 +833,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -1056,7 +1056,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
         return 1; 0; ref.as_non_null(__inline_DeserializeError__unexpected_type_6: block -> ref "core:serde/DeserializeError" {
             __local_24 = String { repr: array.new_data<u8>("expected number"), used: 15 };
             __local_25 = builtin::i64_extend_i32_s(self.pos);
-            break __inline_DeserializeError__unexpected_type_6: "core:serde/DeserializeError" { kind: 0, message: ref.as_non_null(__local_24), offset: __local_25 };
+            break __inline_DeserializeError__unexpected_type_6: "core:serde/DeserializeError" { kind: 0, message: __local_24, offset: __local_25 };
         });
     };
     result = first - 48;
@@ -1193,7 +1193,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                     self.pos = _hfs_pos_51;
                     return 1; 0; ref.as_non_null(__inline_DeserializeError__unexpected_type_18: block -> ref "core:serde/DeserializeError" {
                         __local_42 = String { repr: array.new_data<u8>("expected integer, got float"), used: 27 };
-                        break __inline_DeserializeError__unexpected_type_18: "core:serde/DeserializeError" { kind: 0, message: ref.as_non_null(__local_42), offset: start };
+                        break __inline_DeserializeError__unexpected_type_18: "core:serde/DeserializeError" { kind: 0, message: __local_42, offset: start };
                     });
                 };
                 if if v_signed < -2147483648 -> i32 {
@@ -1204,7 +1204,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                     self.pos = _hfs_pos_51;
                     return 1; 0; ref.as_non_null(__inline_DeserializeError__overflow_19: block -> ref "core:serde/DeserializeError" {
                         __local_44 = String { repr: array.new_data<u8>("value out of range for i32"), used: 26 };
-                        break __inline_DeserializeError__overflow_19: "core:serde/DeserializeError" { kind: 5, message: ref.as_non_null(__local_44), offset: start };
+                        break __inline_DeserializeError__overflow_19: "core:serde/DeserializeError" { kind: 5, message: __local_44, offset: start };
                     });
                 };
                 self.pos = _hfs_pos_51;

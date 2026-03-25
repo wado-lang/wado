@@ -125,7 +125,7 @@ fn run() {
             String::append_char(__local_6, 32);
             String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_stores_ref_blocked.wado"), used: 61 });
             String::append_char(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_15 = __local_7;
             i32::fmt_decimal(25, __local_15);
             String::append(__local_6, String { repr: array.new_data<u8>("
@@ -136,7 +136,7 @@ condition: p.x == 10
             String::append_char(__local_6, 120);
             String::append_char(__local_6, 58);
             String::append_char(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
+            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_20 = __local_7;
             i32::fmt_decimal(__v0_2, __local_20);
             String::append_char(__local_6, 10);
@@ -159,7 +159,7 @@ condition: p.x == 10
             String::append_char(__local_8, 32);
             String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_stores_ref_blocked.wado"), used: 61 });
             String::append_char(__local_8, 58);
-            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
             __local_26 = __local_9;
             i32::fmt_decimal(26, __local_26);
             String::append(__local_8, String { repr: array.new_data<u8>("
@@ -172,7 +172,7 @@ condition: h.p.x == 10
             String::append_char(__local_8, 120);
             String::append_char(__local_8, 58);
             String::append_char(__local_8, 32);
-            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
             __local_31 = __local_9;
             i32::fmt_decimal(__v0_4, __local_31);
             String::append_char(__local_8, 10);
@@ -389,7 +389,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

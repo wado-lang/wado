@@ -206,7 +206,7 @@ fn run() with Stdout {
             String::append_char(__local_88, 32);
             String::append(__local_88, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/from_numeric_widening.wado"), used: 55 });
             String::append_char(__local_88, 58);
-            __local_89 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_88) };
+            __local_89 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_88 };
             __local_316 = __local_89;
             i32::fmt_decimal(37, __local_316);
             String::append(__local_88, String { repr: array.new_data<u8>("
@@ -215,7 +215,7 @@ condition: h > 3.13
             String::append_char(__local_88, 104);
             String::append_char(__local_88, 58);
             String::append_char(__local_88, 32);
-            __local_89 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_88) };
+            __local_89 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_88 };
             __local_321 = __local_89;
             f64::inspect_into(h, __local_321);
             String::append_char(__local_88, 10);
@@ -237,7 +237,7 @@ condition: h > 3.13
             String::append_char(__local_90, 32);
             String::append(__local_90, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/from_numeric_widening.wado"), used: 55 });
             String::append_char(__local_90, 58);
-            __local_91 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_90) };
+            __local_91 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_90 };
             __local_325 = __local_91;
             i32::fmt_decimal(38, __local_325);
             String::append(__local_90, String { repr: array.new_data<u8>("
@@ -246,7 +246,7 @@ condition: h < 3.15
             String::append_char(__local_90, 104);
             String::append_char(__local_90, 58);
             String::append_char(__local_90, 32);
-            __local_91 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_90) };
+            __local_91 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_90 };
             __local_330 = __local_91;
             f64::inspect_into(h, __local_330);
             String::append_char(__local_90, 10);
@@ -272,14 +272,14 @@ condition: h < 3.15
             String::append_char(__local_92, 32);
             String::append(__local_92, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/from_numeric_widening.wado"), used: 55 });
             String::append_char(__local_92, 58);
-            __local_93 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_92) };
+            __local_93 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_92 };
             __local_335 = __local_93;
             i32::fmt_decimal(40, __local_335);
             String::append(__local_92, String { repr: array.new_data<u8>("
 condition: i32::from(true) == 1
 "), used: 33 });
             String::append(__local_92, String { repr: array.new_data<u8>("i32::from(true): "), used: 17 });
-            __local_93 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_92) };
+            __local_93 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_92 };
             __local_340 = __local_93;
             i32::fmt_decimal(__v0, __local_340);
             String::append_char(__local_92, 10);
@@ -1436,7 +1436,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1656,7 +1656,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

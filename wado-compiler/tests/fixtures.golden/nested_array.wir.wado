@@ -256,7 +256,7 @@ fn nested_array_3deep_iterate_test() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_14 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
+        __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_34: block -> i32 {
             __local_71 = __inline_Array_Array_i32___IndexValue__index_value_33: block -> ref Array<i32> {
                 __local_69 = __inline_Array_Array_Array_i32____IndexValue__index_value_32: block -> ref Array<Array<i32>> {
@@ -282,7 +282,7 @@ fn nested_array_3deep_iterate_test() with Stdout {
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_16 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
+        __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_41: block -> i32 {
             __local_83 = __inline_Array_Array_i32___IndexValue__index_value_40: block -> ref Array<i32> {
                 __local_81 = __inline_Array_Array_Array_i32____IndexValue__index_value_39: block -> ref Array<Array<i32>> {
@@ -307,19 +307,19 @@ fn nested_array_3deep_iterate_test() with Stdout {
         break __tmpl: __local_16;
     });
     total = 0;
-    __iter_8 = "core:allocator/ArrayIter<Array<Array<i32>>>" { repr: ref.as_non_null(deep.repr), used: deep.used, index: 0 };
+    __iter_8 = "core:allocator/ArrayIter<Array<Array<i32>>>" { repr: deep.repr, used: deep.used, index: 0 };
     b6: block {
         l7: loop {
             __pattern_temp_0 = ArrayIter<Array<Array<i32>>>^Iterator::next(__iter_8);
             if ref.is_null(__pattern_temp_0) == 0 {
                 plane = value_copy Array<Array<i32>>(ref.as_non_null(__pattern_temp_0));
-                __iter_10 = "core:allocator/ArrayIter<Array<i32>>" { repr: ref.as_non_null(plane.repr), used: plane.used, index: 0 };
+                __iter_10 = "core:allocator/ArrayIter<Array<i32>>" { repr: plane.repr, used: plane.used, index: 0 };
                 b9: block {
                     l10: loop {
                         __pattern_temp_1 = ArrayIter<Array<i32>>^Iterator::next(__iter_10);
                         if ref.is_null(__pattern_temp_1) == 0 {
                             row = value_copy Array<i32>(ref.as_non_null(__pattern_temp_1));
-                            __iter_12 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(row.repr), used: row.used, index: 0 };
+                            __iter_12 = "core:allocator/ArrayIter<i32>" { repr: row.repr, used: row.used, index: 0 };
                             b12: block {
                                 l13: loop {
                                     let __sroa___pattern_temp_2_discriminant: i32;
@@ -348,7 +348,7 @@ fn nested_array_3deep_iterate_test() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_18 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
+        __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
         i32::fmt_decimal(total, __local_19);
         break __tmpl: __local_18;
     });
@@ -390,7 +390,7 @@ fn nested_array_iterate_test() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_10 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_19: block -> i32 {
             if 0 >= first_row.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -401,13 +401,13 @@ fn nested_array_iterate_test() with Stdout {
         break __tmpl: __local_10;
     });
     buf = String { repr: builtin::array_new<u8>(0), used: 0 };
-    __iter_6 = "core:allocator/ArrayIter<Array<i32>>" { repr: ref.as_non_null(matrix.repr), used: 2, index: 0 };
+    __iter_6 = "core:allocator/ArrayIter<Array<i32>>" { repr: matrix.repr, used: 2, index: 0 };
     b17: block {
         l18: loop {
             __pattern_temp_0 = ArrayIter<Array<i32>>^Iterator::next(__iter_6);
             if ref.is_null(__pattern_temp_0) == 0 {
                 row = value_copy Array<i32>(ref.as_non_null(__pattern_temp_0));
-                __iter_8 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(row.repr), used: row.used, index: 0 };
+                __iter_8 = "core:allocator/ArrayIter<i32>" { repr: row.repr, used: row.used, index: 0 };
                 b20: block {
                     l21: loop {
                         let __sroa___pattern_temp_1_discriminant: i32;
@@ -417,7 +417,7 @@ fn nested_array_iterate_test() with Stdout {
                             val = __sroa___pattern_temp_1_payload_0;
                             buf = String::concat(buf, __tmpl: block -> ref String {
                                 __local_12 = String { repr: builtin::array_new<u8>(17), used: 0 };
-                                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                                 i32::fmt_decimal(val, __local_13);
                                 String::append_char(__local_12, 32);
                                 break __tmpl: __local_12;
@@ -470,13 +470,13 @@ fn nested_array_method_test() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         i32::fmt_decimal(row0.used, __local_6);
         break __tmpl: __local_5;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         i32::fmt_decimal(__inline_Array_i32___len_26: block -> i32 {
             __local_47 = __inline_Array_Array_i32___IndexValue__index_value_25: block -> ref Array<i32> {
                 if 1 >= matrix.used {
@@ -524,7 +524,7 @@ fn nested_array_mutate_test() with Stdout {
     Array<i32>::append(row, 99);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         Array<i32>^Inspect::inspect(row, __local_8);
         break __tmpl: __local_7;
     });
@@ -539,7 +539,7 @@ fn nested_array_mutate_test() with Stdout {
     builtin::array_set<ref Array<i32>>(matrix.repr, 0, new_row);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         Array<Array<i32>>^Inspect::inspect(matrix, __local_10);
         break __tmpl: __local_9;
     });
@@ -589,7 +589,7 @@ fn nested_array_option_access_test() with Stdout {
             String::append_char(__local_10, 116);
             String::append_char(__local_10, 58);
             String::append_char(__local_10, 32);
-            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             i32::fmt_decimal(x, __local_11);
             break __tmpl: __local_10;
         });
@@ -604,7 +604,7 @@ fn nested_array_option_access_test() with Stdout {
     if __pattern_temp_1.discriminant == 1 {
         "core:cli/println"(String { repr: array.new_data<u8>("second: null"), used: 12 });
     };
-    __iter_6 = "core:allocator/ArrayIter<Option<i32>>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
+    __iter_6 = "core:allocator/ArrayIter<Option<i32>>" { repr: arr.repr, used: 3, index: 0 };
     b31: block {
         l32: loop {
             __pattern_temp_2 = ArrayIter<Option<i32>>^Iterator::next(__iter_6);
@@ -623,7 +623,7 @@ fn nested_array_option_access_test() with Stdout {
                         String::append_char(__local_12, 109);
                         String::append_char(__local_12, 101);
                         String::append_char(__local_12, 40);
-                        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                         i32::fmt_decimal(__local_8, __local_13);
                         String::append_char(__local_12, 41);
                         break __tmpl: __local_12;
@@ -898,7 +898,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -939,7 +939,7 @@ fn String::concat(a, b) {
     repr = builtin::array_new<u8>(total);
     builtin::array_copy<u8>(repr, 0, a.repr, 0, len_a);
     builtin::array_copy<u8>(repr, len_a, b.repr, 0, len_b);
-    return String { repr: ref.as_non_null(repr), used: total };
+    return String { repr: repr, used: total };
 }
 
 fn String::append_char(self, c) {
@@ -976,7 +976,7 @@ fn ArrayIter<Option<i32>>^Iterator::next(self) {
     };
     item = builtin::array_get<ref Option<i32>>(self.repr, self.index);
     self.index = self.index + 1;
-    return ref.as_non_null(item);
+    return item;
 }
 
 fn Array<Option<i32>>::append(self, value) {
@@ -1018,7 +1018,7 @@ fn Array<Option<i32>>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Array<Array<i32>>^Inspect::inspect(self, f) {
@@ -1124,7 +1124,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn ArrayIter<i32>^Iterator::next(self) {
@@ -1144,7 +1144,7 @@ fn ArrayIter<Array<i32>>^Iterator::next(self) {
     };
     item = builtin::array_get<ref Array<i32>>(self.repr, self.index);
     self.index = self.index + 1;
-    return ref.as_non_null(item);
+    return item;
 }
 
 fn ArrayIter<Array<Array<i32>>>^Iterator::next(self) {
@@ -1154,7 +1154,7 @@ fn ArrayIter<Array<Array<i32>>>^Iterator::next(self) {
     };
     item = builtin::array_get<ref Array<Array<i32>>>(self.repr, self.index);
     self.index = self.index + 1;
-    return ref.as_non_null(item);
+    return item;
 }
 
 fn Array<Array<i32>>::append(self, value) {
@@ -1196,7 +1196,7 @@ fn Array<Array<i32>>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Array<Array<Array<i32>>>::append(self, value) {
@@ -1238,7 +1238,7 @@ fn Array<Array<Array<i32>>>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Formatter::write_char_n(self, c, n) {

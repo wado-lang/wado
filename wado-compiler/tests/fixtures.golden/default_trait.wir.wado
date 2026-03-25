@@ -166,14 +166,14 @@ fn run() {
             String::append_char(__local_17, 32);
             String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/default_trait.wado"), used: 47 });
             String::append_char(__local_17, 58);
-            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
             __local_55 = __local_18;
             i32::fmt_decimal(5, __local_55);
             String::append(__local_17, String { repr: array.new_data<u8>("
 condition: String::default() == \"\"
 "), used: 36 });
             String::append(__local_17, String { repr: array.new_data<u8>("String::default(): "), used: 19 });
-            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
             String^Inspect::inspect(__v0_6, __local_18);
             String::append_char(__local_17, 10);
             break __tmpl: __local_17;
@@ -199,14 +199,14 @@ condition: String::default() == \"\"
             String::append_char(__local_19, 32);
             String::append(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/default_trait.wado"), used: 47 });
             String::append_char(__local_19, 58);
-            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_19) };
+            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
             __local_67 = __local_20;
             i32::fmt_decimal(8, __local_67);
             String::append(__local_19, String { repr: array.new_data<u8>("
 condition: a.len() == 0
 "), used: 25 });
             String::append(__local_19, String { repr: array.new_data<u8>("a.len(): "), used: 9 });
-            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_19) };
+            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
             __local_72 = __local_20;
             i32::fmt_decimal(__v0_9, __local_72);
             String::append_char(__local_19, 10);
@@ -426,7 +426,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -468,7 +468,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -711,7 +711,7 @@ fn String^Inspect::inspect(self, f) {
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
