@@ -224,8 +224,7 @@ fn lower_eq(
     };
 
     if needs_negation {
-        let bool_type =
-            type_table.intern(ResolvedType::Primitive(crate::tir::PrimitiveType::Bool));
+        let bool_type = type_table.intern(ResolvedType::Primitive(crate::tir::PrimitiveType::Bool));
         return Some(TirExprKind::Unary {
             op: TirUnaryOp::Not,
             expr: Box::new(TirExpr::new(method_call, bool_type, span)),

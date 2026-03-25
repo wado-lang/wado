@@ -9,8 +9,7 @@ use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
     FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirTemplatePart, TypeId,
-    TypeTable,
+    TirTemplatePart, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -571,11 +570,12 @@ impl Monomorphizer {
                     self.get_struct_info_from_type(left.type_id, type_table)
                     && !impl_type_args.is_empty()
                 {
-                    let (trait_name, method_name) = if matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
-                        ("Eq", "eq")
-                    } else {
-                        ("Ord", "cmp")
-                    };
+                    let (trait_name, method_name) =
+                        if matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
+                            ("Eq", "eq")
+                        } else {
+                            ("Ord", "cmp")
+                        };
                     let generic_method_name =
                         MethodName::format_local(&base_struct, Some(trait_name), method_name);
                     if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
