@@ -2781,6 +2781,9 @@ pub struct TirModule {
     /// Closure metadata for optimization (populated by lower phase).
     /// Maps closure ID to functor info including the `__call` method for inlining.
     pub closure_functors: Vec<ClosureFunctor>,
+    /// Map from concrete trait method function name → module where it's defined.
+    /// Populated by monomorphization, consumed by comparison lowering in the lower phase.
+    pub trait_method_locations: IndexMap<String, ModuleSource>,
 }
 
 impl TirModule {
@@ -2811,6 +2814,7 @@ impl TirModule {
             generic_functions: IndexMap::default(),
             instantiation_requests: IndexSet::default(),
             closure_functors: Vec::new(),
+            trait_method_locations: IndexMap::default(),
         }
     }
 
@@ -2844,6 +2848,7 @@ impl TirModule {
             generic_functions: IndexMap::default(),
             instantiation_requests: IndexSet::default(),
             closure_functors: Vec::new(),
+            trait_method_locations: IndexMap::default(),
         }
     }
 
