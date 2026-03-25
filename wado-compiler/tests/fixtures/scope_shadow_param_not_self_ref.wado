@@ -1,0 +1,10 @@
+// Test: closure parameter with same name does NOT count as self-reference
+// `|x| x + 1` — the `x` inside refers to the parameter, not the outer variable
+
+export fn run() {
+    let x = 1;
+    let x = |x: i32| x + 1;
+}
+
+__DATA__
+{"compile_error": "redeclare"}

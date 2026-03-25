@@ -69,20 +69,20 @@ A `let` declaration may shadow a same-scope binding of name `N` if and only if t
 
 The check is performed during the bind phase. A "variable reference" is an `Ident` AST node that resolves to the variable being shadowed. The check walks the entire initializer expression, including nested sub-expressions:
 
-| Expression | References `x`? | Reason |
-|---|---|---|
-| `let x = x + 1` | Yes | Direct reference |
-| `let x = transform(x)` | Yes | Passed as argument |
-| `let x = if cond { x } else { 0 }` | Yes | In branch |
-| `let x = match opt { Some(v) => x, None => 0 }` | Yes | In match arm |
-| `let x = [x, 1, 2]` | Yes | In array/tuple literal |
-| `let x = \|\| x + 1` | Yes | Captured in closure |
-| `let x = some_fn(\|\| x)` | Yes | Captured and passed |
-| `let x = 2` | **No** | No reference to `x` |
-| `let x = y + 1` | **No** | References `y`, not `x` |
-| `let x = \|x\| x + 1` | **No** | `x` in body refers to the parameter, not the outer variable |
-| `let x = foo.x()` | **No** | `.x()` is a method call, not a variable reference |
-| `let x = point.x` | **No** | `.x` is a field access, not a variable reference |
+| Expression                                      | References `x`? | Reason                                                      |
+| ----------------------------------------------- | --------------- | ----------------------------------------------------------- |
+| `let x = x + 1`                                 | Yes             | Direct reference                                            |
+| `let x = transform(x)`                          | Yes             | Passed as argument                                          |
+| `let x = if cond { x } else { 0 }`              | Yes             | In branch                                                   |
+| `let x = match opt { Some(v) => x, None => 0 }` | Yes             | In match arm                                                |
+| `let x = [x, 1, 2]`                             | Yes             | In array/tuple literal                                      |
+| `let x = \|\| x + 1`                            | Yes             | Captured in closure                                         |
+| `let x = some_fn(\|\| x)`                       | Yes             | Captured and passed                                         |
+| `let x = 2`                                     | **No**          | No reference to `x`                                         |
+| `let x = y + 1`                                 | **No**          | References `y`, not `x`                                     |
+| `let x = \|x\| x + 1`                           | **No**          | `x` in body refers to the parameter, not the outer variable |
+| `let x = foo.x()`                               | **No**          | `.x()` is a method call, not a variable reference           |
+| `let x = point.x`                               | **No**          | `.x` is a field access, not a variable reference            |
 
 ### Semantics
 

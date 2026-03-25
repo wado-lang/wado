@@ -148,11 +148,20 @@ if true {
 println(`{x}`);     // 1 (outer x unchanged)
 ```
 
-Same-scope redeclaration is not allowed (unlike Rust):
+Same-scope shadowing is allowed when the new value is derived from the old one:
+
+```wado
+let x = 1;
+let x = x + 1;  // OK: RHS references x
+let x = transform(x);  // OK: RHS references x
+```
+
+Same-scope redeclaration without referencing the old value is not allowed:
 
 ```wado
 let x = 1;
 let x = 2;  // Error: cannot redeclare 'x' in the same scope
+let x = |x: i32| x + 1;  // Error: the x inside is the closure parameter, not the outer variable
 ```
 
 ### Global Variables

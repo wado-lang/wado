@@ -70,6 +70,11 @@ null // coerce to Option::None
 let x = 42;             // immutable
 let mut y = 0;          // mutable
 let z: i64 = 100;       // with type annotation
+
+// Same-scope shadowing (when RHS references the old value)
+let x = x + 1;          // OK: derives from old x
+let x = transform(x);   // OK: derives from old x
+// let x = 2;           // Error: does not reference old x
 ```
 
 ## Global Variables
