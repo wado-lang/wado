@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774429618633,
+  "lastUpdate": 1774441963688,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7355,6 +7355,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e5982bb5c17ec3663f82a553ff4b392ec6d55316"
         },
         "date": 1774429618418,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0f425839d8383f9a2c7897e495a3985c18ff3075",
+          "message": "Merge pull request #693 from wado-lang/claude/fix-optimizer-bugs-eoZgw\n\nFix optimizer traversal wildcards and migrate passes to TirVisitor",
+          "timestamp": "2026-03-25T21:30:12+09:00",
+          "tree_id": "80e3912bfbb450744ee3b10542c9c03ab0826611",
+          "url": "https://github.com/wado-lang/wado/commit/0f425839d8383f9a2c7897e495a3985c18ff3075"
+        },
+        "date": 1774441963474,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
