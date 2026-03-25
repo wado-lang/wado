@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774392603984,
+  "lastUpdate": 1774397909258,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7160,6 +7160,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/caf59eb91cb725e993c1613574dbc7ed04f6216a"
         },
         "date": 1774392603770,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d1ccddba06d0ce2727e58454904bbbf039ee7bf9",
+          "message": "Merge pull request #688 from wado-lang/claude/optimize-parser-compile-6hgbm\n\nOptimize effect checking and resolver performance with caching",
+          "timestamp": "2026-03-25T09:16:00+09:00",
+          "tree_id": "44a0106c1f832d3b4d28792d2f8d0a9384868da7",
+          "url": "https://github.com/wado-lang/wado/commit/d1ccddba06d0ce2727e58454904bbbf039ee7bf9"
+        },
+        "date": 1774397909169,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
