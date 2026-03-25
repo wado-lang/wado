@@ -1,0 +1,391 @@
+//! Type substitution and type rewriting for monomorphization.
+//!
+//! Contains `substitute_type` (replacing type params with concrete types),
+//! `rewrite_type_id` (rewriting GenericInstance to concrete struct types),
+//! and `rewrite_types_in_module` (applying rewrites across a module).
+
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::mangle_generic_name;
+use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
+use crate::tir_visitor::TirMutVisitor;
+
+use super::state::Monomorphizer;
+use super::TypeRewriter;
+
+impl Monomorphizer {
+    /// Rewrite all `GenericInstance` `type_ids` in expressions to use monomorphized struct types
+    pub fn rewrite_types_in_module(&self, module: &mut TirModule) {
+        let mut rewriter = TypeRewriter {
+            mono: self,
+            type_table: &mut module.type_table.borrow_mut(),
+        };
+
+        // Rewrite struct field types
+        for strct in &mut module.structs {
+            for field in &mut strct.fields {
+                field.type_id = rewriter.rewrite_type_id(field.type_id);
+            }
+        }
+
+        // Rewrite function signatures and bodies
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            for param in &mut func.params {
+                param.type_id = rewriter.rewrite_type_id(param.type_id);
+            }
+            func.return_type = rewriter.rewrite_type_id(func.return_type);
+            for local_type in &mut func.local_types {
+                *local_type = rewriter.rewrite_type_id(*local_type);
+            }
+            if let Some(body) = &mut func.body {
+                rewriter.visit_block(body);
+            }
+        }
+
+        // Rewrite global variable initializers
+        for global in &mut module.globals {
+            global.ty = rewriter.rewrite_type_id(global.ty);
+            rewriter.visit_expr(&mut global.initializer);
+        }
+    }
+
+    /// Rewrite a single `type_id`: if it's a `GenericInstance`, return the concrete struct `type_id`.
+    /// Also handles container types (Array, Option, Tuple) that may contain `GenericInstance`.
+    pub fn rewrite_type_id(&self, type_id: TypeId, type_table: &mut TypeTable) -> TypeId {
+        // First check direct substitution
+        if let Some(&new_id) = self.structs.type_substitutions.get(&type_id) {
+            return new_id;
+        }
+
+        // Handle container types that may contain GenericInstance
+        match type_table.get(type_id).clone() {
+            ResolvedType::BuiltinArray(inner_id) => {
+                let new_inner_id = self.rewrite_type_id(inner_id, type_table);
+                if new_inner_id == inner_id {
+                    type_id
+                } else {
+                    type_table.intern(ResolvedType::BuiltinArray(new_inner_id))
+                }
+            }
+            ResolvedType::Ref(inner_id) => {
+                let new_inner_id = self.rewrite_type_id(inner_id, type_table);
+                if new_inner_id == inner_id {
+                    type_id
+                } else {
+                    type_table.make_ref(new_inner_id)
+                }
+            }
+            ResolvedType::MutRef(inner_id) => {
+                let new_inner_id = self.rewrite_type_id(inner_id, type_table);
+                if new_inner_id == inner_id {
+                    type_id
+                } else {
+                    type_table.make_mut_ref(new_inner_id)
+                }
+            }
+            ResolvedType::Tuple(elem_ids) => {
+                let new_elem_ids: Vec<TypeId> = elem_ids
+                    .iter()
+                    .map(|&id| self.rewrite_type_id(id, type_table))
+                    .collect();
+                if new_elem_ids == elem_ids {
+                    type_id
+                } else {
+                    type_table.make_tuple(new_elem_ids)
+                }
+            }
+            // Handle GenericInstance types that weren't in the direct substitution map
+            // This can happen when function substitution creates new GenericInstance types
+            // with different TypeIds for the type arguments
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                // Skip Array - it has special codegen handling and should remain
+                // as GenericInstance, not be rewritten to Struct
+                if name == "Array" {
+                    return type_id;
+                }
+
+                // Build the mangled name using type names (not TypeIds)
+                let type_names: Vec<String> = type_args
+                    .iter()
+                    .map(|&arg| type_table.mangle_type_name(arg))
+                    .collect();
+                let mangled_name = mangle_generic_name(&name, &type_names);
+
+                // Look for existing Struct with this mangled name via O(1) index
+                if let Some(tid) = type_table.find_struct_by_name(&mangled_name, &module_source) {
+                    return tid;
+                }
+                // If not found, return original type_id
+                type_id
+            }
+            _ => type_id,
+        }
+    }
+
+    /// Collect all `GenericInstance` types from the type table
+    /// Only collects types whose base struct is in `valid_struct_names`
+    pub fn collect_instantiation_sites(
+        &mut self,
+        type_table: &TypeTable,
+        valid_struct_names: &IndexSet<String>,
+    ) {
+        for id in type_table.iter_type_ids() {
+            if let ResolvedType::GenericInstance {
+                name, type_args, ..
+            } = type_table.get(id)
+            {
+                // Skip empty type_args (invalid generic instances)
+                if type_args.is_empty() {
+                    continue;
+                }
+
+                // Skip Array - it has special codegen handling and should not be
+                // monomorphized as a regular struct
+                if name == "Array" {
+                    continue;
+                }
+
+                // Only collect if the struct is in our valid set
+                // This prevents library modules from trying to instantiate entry module's structs
+                if !valid_struct_names.contains(name) {
+                    continue;
+                }
+
+                // Only process if all type args are concrete (no TypeParams)
+                let all_concrete = type_args
+                    .iter()
+                    .all(|&arg| !type_table.contains_type_param(arg));
+
+                if all_concrete {
+                    let key = crate::tir::InstantiationKey {
+                        name: name.clone(),
+                        impl_type_args: type_args.clone(),
+                        method_type_args: vec![],
+                        method_info: None, // Struct instantiation,
+                    };
+
+                    let mangled = self.instantiation_name(&key, type_table);
+                    self.try_queue_struct(key, mangled);
+                }
+            }
+        }
+    }
+
+    /// Substitute type parameters in a type with concrete types
+    pub fn substitute_type(
+        &self,
+        type_id: TypeId,
+        substitution: &IndexMap<u32, TypeId>,
+        type_table: &mut TypeTable,
+    ) -> TypeId {
+        match type_table.get(type_id).clone() {
+            ResolvedType::TypeParam { index, name } => {
+                // Direct substitution
+                *substitution.get(&index).unwrap_or_else(|| {
+                    panic!("TypeParam `{name}` (index {index}) not found in substitution map")
+                })
+            }
+            ResolvedType::TypePack { index, name } => {
+                // Direct substitution (the substituted type is typically a tuple)
+                *substitution.get(&index).unwrap_or_else(|| {
+                    panic!("TypePack `..{name}` (index {index}) not found in substitution map")
+                })
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                let new_elem = self.substitute_type(elem, substitution, type_table);
+                type_table.intern(ResolvedType::BuiltinArray(new_elem))
+            }
+            ResolvedType::Ref(inner) => {
+                let new_inner = self.substitute_type(inner, substitution, type_table);
+                type_table.make_ref(new_inner)
+            }
+            ResolvedType::MutRef(inner) => {
+                let new_inner = self.substitute_type(inner, substitution, type_table);
+                type_table.make_mut_ref(new_inner)
+            }
+            ResolvedType::Tuple(elems) => {
+                let mut new_elems: Vec<TypeId> = Vec::new();
+                for &e in &elems {
+                    match type_table.get(e).clone() {
+                        ResolvedType::TypePack { index, name } => {
+                            // Splice: the substituted type for a pack is a tuple; expand its elements
+                            let &pack_type = substitution.get(&index).unwrap_or_else(|| {
+                                panic!(
+                                    "TypePack `..{name}` (index {index}) not found in substitution map"
+                                )
+                            });
+                            match type_table.get(pack_type).clone() {
+                                ResolvedType::Tuple(pack_elems) => {
+                                    new_elems.extend_from_slice(&pack_elems);
+                                }
+                                _ => {
+                                    // Single type (not a tuple) — treat as one-element pack
+                                    new_elems.push(pack_type);
+                                }
+                            }
+                        }
+                        _ => {
+                            new_elems.push(self.substitute_type(e, substitution, type_table));
+                        }
+                    }
+                }
+                type_table.make_tuple(new_elems)
+            }
+            ResolvedType::Function {
+                params,
+                return_type,
+                effects,
+                stores,
+            } => {
+                // Substitute type parameters in function parameter types and return type
+                let new_params: Vec<TypeId> = params
+                    .iter()
+                    .map(|&p| self.substitute_type(p, substitution, type_table))
+                    .collect();
+                let new_return_type = self.substitute_type(return_type, substitution, type_table);
+                type_table.make_function(new_params, new_return_type, effects, stores)
+            }
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                // Handle invalid GenericInstance with empty type_args
+                // This can occur when a generic type is referenced without type arguments in its own methods
+                // e.g., in Container<T>::new(), the return value Container { ... } has type Container<T>
+                // but may be represented as GenericInstance with empty type_args
+                if type_args.is_empty() {
+                    // If we're in a substitution context (substitution map is not empty),
+                    // try to infer the type args from the substitution
+                    if !substitution.is_empty() {
+                        // Build mangled name using ALL values in substitution map
+                        // Sort by param index to get correct order
+                        let mut indexed_args: Vec<(u32, TypeId)> =
+                            substitution.iter().map(|(&idx, &tid)| (idx, tid)).collect();
+                        indexed_args.sort_by_key(|(idx, _)| *idx);
+
+                        // Build name using new format: Name<Type1,Type2>
+                        let type_names: Vec<String> = indexed_args
+                            .iter()
+                            .map(|(_, arg_id)| type_table.mangle_type_name(*arg_id))
+                            .collect();
+                        let mangled_name = mangle_generic_name(&name, &type_names);
+
+                        // Look for monomorphized struct with this name via O(1) index
+                        if let Some(tid) =
+                            type_table.find_struct_by_name(&mangled_name, &module_source)
+                        {
+                            return tid;
+                        }
+                    }
+
+                    // Fallback: look for plain struct by name
+                    if let Some(tid) = type_table.find_struct_by_name(&name, &module_source) {
+                        return tid;
+                    }
+                    // If not found, just return the original type_id
+                    return type_id;
+                }
+
+                // Recursively substitute in nested generic instances
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&arg| self.substitute_type(arg, substitution, type_table))
+                    .collect();
+
+                // Check if there's already a monomorphized struct for this instance
+                // Build the mangled name: Container<i32> (using type names)
+                let type_names: Vec<String> = new_args
+                    .iter()
+                    .map(|&arg| type_table.mangle_type_name(arg))
+                    .collect();
+                let mangled_name = mangle_generic_name(&name, &type_names);
+
+                // Look for existing struct with this name via O(1) index
+                if let Some(tid) = type_table.find_struct_by_name(&mangled_name, &module_source) {
+                    return tid;
+                }
+
+                // Fallback to GenericInstance if no monomorphized struct found
+                type_table.make_generic_instance(name, module_source, new_args)
+            }
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                ..
+            } => {
+                // Substitute the underlying type param to get the concrete type
+                let concrete_id = self.substitute_type(param_id, substitution, type_table);
+                if concrete_id != param_id {
+                    // Direct lookup for pre-registered concrete types
+                    if let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name)
+                    {
+                        return resolved;
+                    }
+                    // Fallback for GenericInstance types: resolve using generic definitions
+                    if let Some(resolved) =
+                        type_table.resolve_generic_assoc_type(concrete_id, &assoc_name)
+                    {
+                        return resolved;
+                    }
+                }
+                // Fallback: return the original type (projection unresolved)
+                type_id
+            }
+            // Other types don't contain type parameters
+            _ => type_id,
+        }
+    }
+
+    /// Substitute type parameters in a pattern
+    pub fn substitute_types_in_pattern(
+        &self,
+        pattern: &mut crate::tir::TirPattern,
+        substitution: &IndexMap<u32, TypeId>,
+        type_table: &mut TypeTable,
+    ) {
+        use crate::tir::TirPattern;
+        match pattern {
+            TirPattern::Wildcard | TirPattern::Literal(_) => {}
+            TirPattern::Binding { type_id, .. } => {
+                // Substitute the binding's type (e.g., type parameter T -> i32)
+                *type_id = self.substitute_type(*type_id, substitution, type_table);
+            }
+            TirPattern::Tuple(patterns) => {
+                for p in patterns {
+                    self.substitute_types_in_pattern(p, substitution, type_table);
+                }
+            }
+            TirPattern::Variant {
+                enum_type,
+                bindings,
+                payload_type,
+                ..
+            } => {
+                *enum_type = self.substitute_type(*enum_type, substitution, type_table);
+                // Also substitute the payload type (e.g., type parameter U -> i32)
+                *payload_type = self.substitute_type(*payload_type, substitution, type_table);
+                for binding in bindings {
+                    self.substitute_types_in_pattern(binding, substitution, type_table);
+                }
+            }
+            TirPattern::Enum { enum_type, .. } => {
+                *enum_type = self.substitute_type(*enum_type, substitution, type_table);
+            }
+            TirPattern::Struct {
+                struct_type,
+                fields,
+                ..
+            } => {
+                *struct_type = self.substitute_type(*struct_type, substitution, type_table);
+                for field in fields {
+                    self.substitute_types_in_pattern(&mut field.pattern, substitution, type_table);
+                }
+            }
+        }
+    }
+}
