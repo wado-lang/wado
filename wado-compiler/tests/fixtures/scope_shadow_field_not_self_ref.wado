@@ -1,0 +1,20 @@
+// Test: field access and method call with same name does NOT count as self-reference
+
+struct Foo {
+    x: i32,
+}
+
+impl Foo {
+    fn x(&self) -> i32 {
+        return self.x;
+    }
+}
+
+export fn run() {
+    let foo = Foo { x: 1 };
+    let x = 1;
+    let x = foo.x();
+}
+
+__DATA__
+{"compile_error": "redeclare"}

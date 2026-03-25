@@ -130,7 +130,7 @@ impl From<BindError> for crate::compiler_host::Diagnostic {
             } => (
                 Code::DuplicateDefinition,
                 format!(
-                    "cannot redeclare '{name}' in the same scope (first defined at {}:{})",
+                    "cannot redeclare '{name}' in the same scope (first defined at {}:{})\n  hint: shadowing is allowed when the new value is derived from the old one (e.g., `let {name} = {name} + 1`)",
                     first.line, first.column
                 ),
                 *second,
@@ -151,6 +151,188 @@ impl From<BindError> for crate::compiler_host::Diagnostic {
             code,
             message,
             span: Some(DiagnosticSpan::from_span(&span, None)),
+        }
+    }
+}
+
+/// Check whether an expression contains a variable reference to `name`.
+///
+/// This is used to decide whether `let x = <expr>` is a self-referential
+/// shadowing (e.g., `let x = x + 1`). The walk skips closure bodies when
+/// a parameter shadows `name`, since that `name` refers to the parameter
+/// rather than the outer variable.
+fn expr_references_var(expr: &Expr, name: &str) -> bool {
+    match expr {
+        Expr::Ident(ident) => ident.name == name,
+
+        // Closure: skip body if a parameter shadows the name
+        Expr::Closure(closure) => {
+            let param_shadows = closure.params.iter().any(|p| p.name == name);
+            if param_shadows {
+                false
+            } else {
+                expr_references_var(&closure.body, name)
+            }
+        }
+
+        // Field access / method call: the *receiver* can reference `name`,
+        // but the field/method name itself is not a variable reference.
+        Expr::FieldAccess(fa) => expr_references_var(&fa.expr, name),
+        Expr::MethodCall(mc) => {
+            expr_references_var(&mc.receiver, name)
+                || mc.args.iter().any(|a| expr_references_var(a, name))
+        }
+
+        // Recurse into sub-expressions
+        Expr::Binary(b) => {
+            expr_references_var(&b.left, name) || expr_references_var(&b.right, name)
+        }
+        Expr::Unary(u) => expr_references_var(&u.expr, name),
+        Expr::Call(c) => {
+            expr_references_var(&c.callee, name)
+                || c.args.iter().any(|a| expr_references_var(a, name))
+        }
+        Expr::StaticMethodCall(sc) => sc.args.iter().any(|a| expr_references_var(a, name)),
+        Expr::Index(idx) => {
+            expr_references_var(&idx.expr, name) || expr_references_var(&idx.index, name)
+        }
+        Expr::Cast(c) => expr_references_var(&c.expr, name),
+        Expr::TryOp(t) => expr_references_var(&t.expr, name),
+        Expr::Spread(inner, _) => expr_references_var(inner, name),
+
+        Expr::If(if_expr) => {
+            condition_references_var(&if_expr.condition, name)
+                || if_expr
+                    .then_block
+                    .stmts
+                    .iter()
+                    .any(|s| stmt_references_var(s, name))
+                || if_expr
+                    .else_block
+                    .as_ref()
+                    .is_some_and(|b| b.stmts.iter().any(|s| stmt_references_var(s, name)))
+        }
+        Expr::Match(m) => {
+            expr_references_var(&m.expr, name)
+                || m.arms.iter().any(|arm| {
+                    arm.guard
+                        .as_ref()
+                        .is_some_and(|g| expr_references_var(g, name))
+                        || expr_references_var(&arm.body, name)
+                })
+        }
+        Expr::Matches(m) => {
+            expr_references_var(&m.expr, name)
+                || m.guard
+                    .as_ref()
+                    .is_some_and(|g| expr_references_var(g, name))
+        }
+
+        Expr::Block(block) => block.stmts.iter().any(|s| stmt_references_var(s, name)),
+        Expr::LabeledBlock(lb) => lb.block.stmts.iter().any(|s| stmt_references_var(s, name)),
+
+        Expr::TemplateString(ts) => ts.parts.iter().any(|part| {
+            if let crate::ast::TemplatePart::Interpolation { expr, .. } = part {
+                expr_references_var(expr, name)
+            } else {
+                false
+            }
+        }),
+        Expr::TupleLiteral(t) => t.elements.iter().any(|e| expr_references_var(e, name)),
+        Expr::StructLiteral(s) => s.fields.iter().any(|f| expr_references_var(&f.value, name)),
+        Expr::ComparisonChain(cc) => {
+            expr_references_var(&cc.first, name)
+                || cc
+                    .comparisons
+                    .iter()
+                    .any(|c| expr_references_var(&c.right, name))
+        }
+        Expr::Assign(a) => {
+            expr_references_var(&a.target, name) || expr_references_var(&a.value, name)
+        }
+        Expr::CompoundAssign(ca) => {
+            expr_references_var(&ca.target, name) || expr_references_var(&ca.value, name)
+        }
+
+        Expr::Literal(_) => false,
+    }
+}
+
+fn stmt_references_var(stmt: &crate::ast::Stmt, name: &str) -> bool {
+    match stmt {
+        crate::ast::Stmt::Let(let_stmt) => let_stmt
+            .value
+            .as_ref()
+            .is_some_and(|v| expr_references_var(v, name)),
+        crate::ast::Stmt::Expr(expr_stmt) => expr_references_var(&expr_stmt.expr, name),
+        crate::ast::Stmt::Return(ret) => ret
+            .value
+            .as_ref()
+            .is_some_and(|v| expr_references_var(v, name)),
+        crate::ast::Stmt::TaskReturn(tr) => expr_references_var(&tr.value, name),
+        crate::ast::Stmt::Assert(a) => {
+            expr_references_var(&a.condition, name)
+                || a.message
+                    .as_ref()
+                    .is_some_and(|m| expr_references_var(m, name))
+        }
+        crate::ast::Stmt::If(if_stmt) => {
+            condition_references_var(&if_stmt.condition, name)
+                || if_stmt
+                    .then_block
+                    .stmts
+                    .iter()
+                    .any(|s| stmt_references_var(s, name))
+                || if_stmt
+                    .else_block
+                    .as_ref()
+                    .is_some_and(|b| b.stmts.iter().any(|s| stmt_references_var(s, name)))
+        }
+        crate::ast::Stmt::While(w) => {
+            condition_references_var(&w.condition, name)
+                || w.body.stmts.iter().any(|s| stmt_references_var(s, name))
+        }
+        crate::ast::Stmt::For(f) => {
+            f.init
+                .as_ref()
+                .is_some_and(|i| stmt_references_var(i, name))
+                || f.condition
+                    .as_ref()
+                    .is_some_and(|c| condition_references_var(c, name))
+                || f.update
+                    .as_ref()
+                    .is_some_and(|u| expr_references_var(u, name))
+                || f.body.stmts.iter().any(|s| stmt_references_var(s, name))
+        }
+        crate::ast::Stmt::ForOf(fo) => {
+            expr_references_var(&fo.iterable, name)
+                || fo.body.stmts.iter().any(|s| stmt_references_var(s, name))
+        }
+        crate::ast::Stmt::Loop(l) => l.body.stmts.iter().any(|s| stmt_references_var(s, name)),
+        crate::ast::Stmt::Match(m) => {
+            expr_references_var(&m.expr, name)
+                || m.arms.iter().any(|arm| {
+                    arm.guard
+                        .as_ref()
+                        .is_some_and(|g| expr_references_var(g, name))
+                        || expr_references_var(&arm.body, name)
+                })
+        }
+        crate::ast::Stmt::LabeledBlock(lb) => {
+            lb.block.stmts.iter().any(|s| stmt_references_var(s, name))
+        }
+        crate::ast::Stmt::Break(_) | crate::ast::Stmt::Continue(_) => false,
+    }
+}
+
+fn condition_references_var(condition: &crate::ast::Condition, name: &str) -> bool {
+    match condition {
+        crate::ast::Condition::Expr(expr) => expr_references_var(expr, name),
+        crate::ast::Condition::LetChain { elements, .. } => {
+            elements.iter().any(|elem| match elem {
+                crate::ast::ConditionElement::Let { expr, .. } => expr_references_var(expr, name),
+                crate::ast::ConditionElement::Expr(expr) => expr_references_var(expr, name),
+            })
         }
     }
 }
@@ -301,6 +483,28 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         if let Some(ref value) = let_stmt.value {
             // Initialized let: bind the initializer first (uses outer scope vars)
             self.bind_expr(value)?;
+
+            // Check if this is a same-scope shadowing with self-reference
+            // (e.g., `let x = x + 1`). The old binding must remain in scope
+            // during bind_expr above so the RHS can reference it. Now that
+            // the RHS is bound, remove the old binding before define() so it
+            // won't report a duplicate.
+            if let crate::ast::Pattern::Ident(name) | crate::ast::Pattern::MutIdent(name) =
+                &let_stmt.pattern
+            {
+                let is_duplicate_in_scope = self
+                    .scopes
+                    .last()
+                    .is_some_and(|scope| scope.bindings.contains_key(name));
+                if is_duplicate_in_scope && expr_references_var(value, name) {
+                    self.scopes
+                        .last_mut()
+                        .unwrap()
+                        .bindings
+                        .shift_remove(name.as_str());
+                }
+            }
+
             // Define the variables from the pattern as initialized
             self.bind_let_pattern(
                 &let_stmt.pattern,
@@ -1022,6 +1226,73 @@ mod tests {
         assert!(!ok);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("cannot redeclare"));
+    }
+
+    #[test]
+    fn test_same_scope_shadow_with_self_ref() {
+        let module = parse(
+            r#"
+            fn run() {
+                let x = 1;
+                let x = x + 1;
+            }
+        "#,
+        );
+        let (ok, diags) = bind_and_check(&module);
+        assert!(ok, "shadowing with self-ref should be allowed: {:?}", diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_same_scope_shadow_with_self_ref_in_call() {
+        let module = parse(
+            r#"
+            fn transform(n: i32) -> i32 { return n; }
+            fn run() {
+                let x = 1;
+                let x = transform(x);
+            }
+        "#,
+        );
+        let (ok, diags) = bind_and_check(&module);
+        assert!(
+            ok,
+            "shadowing with self-ref in call should be allowed: {:?}",
+            diags
+        );
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_same_scope_shadow_closure_param_not_self_ref() {
+        // |x| x + 1 — the x inside refers to the closure param, not the outer variable
+        let module = parse(
+            r#"
+            fn run() {
+                let x = 1;
+                let x = |x: i32| x + 1;
+            }
+        "#,
+        );
+        let (ok, diags) = bind_and_check(&module);
+        assert!(!ok, "closure param shadowing should NOT count as self-ref");
+        assert!(diags[0].message.contains("cannot redeclare"));
+    }
+
+    #[test]
+    fn test_same_scope_shadow_closure_capture_is_self_ref() {
+        // || x + 1 — captures the outer x, this IS a self-reference
+        let module = parse(
+            r#"
+            fn run() {
+                let x = 1;
+                let x = || x + 1;
+            }
+        "#,
+        );
+        let (ok, diags) = bind_and_check(&module);
+        assert!(ok, "closure capture should count as self-ref: {:?}", diags);
+        assert!(diags.is_empty());
     }
 
     #[test]
