@@ -61,17 +61,6 @@ package-gale/
       parser_test.wado
       integration_test.wado — parse real-world .g4 grammars
 ```
-
-## Implementation Status
-
-| Phase | Description | Status |
-| ----- | --- | --- |
-| 0 | Project scaffold, runtime types | Done |
-| 1 | G4 lexer and parser | Done |
-| 2 | Code generation (CST types, visitor, walk functions) | Done |
-| 2 | Lexer function generation (`fn tokenize`) | In progress |
-| 2 | Recursive descent parser function generation | Planned |
-
 ## Related WEPs
 
 - [WEP: Gale](../docs/wep-2026-03-02-gale.md) — full design and architecture
