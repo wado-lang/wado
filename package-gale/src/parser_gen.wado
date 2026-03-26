@@ -1334,55 +1334,80 @@ fn gen_backtracking_body(
     lit_tokens: &Array<LitToken>,
     name_counts: &mut Array<[String, i32]>,
 ) {
-    let saved_var = dedup_name(&"saved_pos", name_counts);
-    let done_var = dedup_name(&"bt_done", name_counts);
-    w.line(`let {saved_var} = p.pos;`);
-    w.line(`let mut {done_var} = false;`);
-
+    // Build prediction tree for the group alternatives.
+    let mut pred_indices: Array<i32> = [];
+    let mut pred_firsts: Array<Array<String>> = [];
+    let mut pred_elements: Array<Array<Element>> = [];
     for let mut k = 0; k < group.len(); k += 1 {
         let alt_idx = group[k];
-        let is_last = k == group.len() - 1;
-        let alt = &alts[alt_idx];
+        pred_indices.append(alt_idx);
+        let mut visiting: Array<String> = [];
+        pred_firsts.append(first_of_alt(&alts[alt_idx], all_rules, lit_tokens, &mut visiting));
+        pred_elements.append(alts[alt_idx].elements);
+    }
+    let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements,
+        0, 5, all_rules, lit_tokens);
+    gen_group_prediction_code(w, &tree, alts, all_rules, lit_tokens, name_counts);
+}
 
-        if is_last {
-            w.begin(`if !{done_var}`);
-            let mut nc: Array<[String, i32]> = [];
-            for let elem of alt.elements {
-                gen_element(w, &elem, all_rules, lit_tokens, false, &mut nc);
-            }
-            w.end();
-        } else if alt.elements.len() == 1 {
-            let el = &alt.elements[0];
-            if let RuleRef(rule_name) = *el {
-                let fn_name = `parse_{to_snake_case(&rule_name)}`;
-                let r_var = dedup_name(&"r", name_counts);
-                w.begin(`if !{done_var}`);
-                w.line(`let {r_var} = {fn_name}(p);`);
-                w.begin(`if let Err(_) = {r_var}`);
-                w.line(`p.pos = {saved_var};`);
-                w.else_begin("else");
-                w.line(`{done_var} = true;`);
-                w.end();
-                w.end();
-            } else {
+fn gen_group_prediction_code(
+    w: &mut CodeWriter,
+    node: &PredictionNode,
+    alts: &Array<Alternative>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    name_counts: &mut Array<[String, i32]>,
+) {
+    if let Leaf(idx) = *node {
+        gen_elements_with_non_greedy(w, &alts[idx].elements, all_rules, lit_tokens, name_counts);
+        return;
+    }
+    if let Backtrack(indices) = *node {
+        let mut sorted = indices.sorted();
+        sort_group_by_element_count(&mut sorted, alts);
+        let saved_var = dedup_name(&"saved_pos", name_counts);
+        let done_var = dedup_name(&"bt_done", name_counts);
+        w.line(`let {saved_var} = p.pos;`);
+        w.line(`let mut {done_var} = false;`);
+        for let mut k = 0; k < sorted.len(); k += 1 {
+            let alt_idx = sorted[k];
+            let is_last = k == sorted.len() - 1;
+            let alt = &alts[alt_idx];
+            if is_last {
                 w.begin(`if !{done_var}`);
                 let mut nc: Array<[String, i32]> = [];
-                gen_element(w, el, all_rules, lit_tokens, false, &mut nc);
+                for let elem of alt.elements {
+                    gen_element(w, &elem, all_rules, lit_tokens, false, &mut nc);
+                }
+                w.end();
+            } else {
+                let bt_label = dedup_name(&"bt_try", name_counts);
+                w.begin(`if !{done_var}`);
+                w.begin(`{bt_label}:`);
+                let mut nc: Array<[String, i32]> = [];
+                for let elem of alt.elements {
+                    gen_element_failable(w, &elem, all_rules, lit_tokens, &saved_var, &bt_label, &mut nc);
+                }
                 w.line(`{done_var} = true;`);
+                w.end(); // label
                 w.end();
             }
-        } else {
-            let bt_label = dedup_name(&"bt_try", name_counts);
-            w.begin(`if !{done_var}`);
-            w.begin(`{bt_label}:`);
-            let mut nc: Array<[String, i32]> = [];
-            for let elem of alt.elements {
-                gen_element_failable(w, &elem, all_rules, lit_tokens, &saved_var, &bt_label, &mut nc);
-            }
-            w.line(`{done_var} = true;`);
-            w.end(); // label
-            w.end();
         }
+        return;
+    }
+    if let Dispatch(d) = *node {
+        let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at({d.depth})` };
+        for let mut i = 0; i < d.branches.len(); i += 1 {
+            let branch = &d.branches[i];
+            let cond = kind_check_str(&branch.tokens, &check_var);
+            if i == 0 {
+                w.begin(`if {cond}`);
+            } else {
+                w.else_begin(`else if {cond}`);
+            }
+            gen_group_prediction_code(w, &branch.child, alts, all_rules, lit_tokens, name_counts);
+        }
+        w.end();
     }
 }
 
