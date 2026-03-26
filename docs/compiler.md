@@ -46,7 +46,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Bind            | `bind.rs`                            | Local name binding, scope analysis, mutability check        |
 | Loader          | `loader.rs`                          | Module loading, dependency resolution                       |
 | Desugar         | `desugar.rs`                         | AST transformations (compound assign, etc.)                 |
-| EffectCheck     | `effect_check.rs`                    | Validates effect requirements for function calls            |
+| EffectCheck     | `effect_check.rs`                    | Validates effect requirements and stores declarations       |
 | Unparser        | `unparse.rs`                         | Converts AST/TIR back to source code                        |
 | Analyzer        | `analyze.rs`                         | Semantic analysis, symbol table construction                |
 | Symbol          | `symbol.rs`                          | Symbol table data structures                                |
@@ -85,6 +85,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | FieldScalarize  | `optimize/field_scalarize.rs`        | Hot field scalarization from GC structs                     |
 | BlockFusion     | `optimize/labeled_block_fusion.rs`   | Labeled block fusion                                        |
 | StoreLoadFwd    | `optimize/store_load_forward.rs`     | Store-load forwarding for literal values                    |
+| CondImplication | `optimize/condition_implication.rs`   | Condition implication from dominating guards                 |
 | TmplHoist       | `optimize/tmpl_hoist.rs`             | Template buffer hoisting out of loops                       |
 | ComponentPlan   | `wir_build/component_plan.rs`        | `ComponentPlan` types and `build_component_plan`            |
 | Stdlib          | `stdlib.rs`                          | Embedded core library sources                               |
@@ -92,6 +93,9 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Logger          | `logger.rs`                          | Diagnostic logging with timestamps                          |
 | ComponentModel  | `component_model.rs`                 | WASI import registry and CM ABI type support                |
 | BuiltinRegistry | `builtin_registry.rs`                | Builtin function registry from `core:builtin`               |
+| Doc             | `doc.rs`                             | Documentation generation from AST                           |
+| HashMap         | `hashmap.rs`                         | Deterministic `IndexMap`/`IndexSet` type aliases            |
+| TirVisitor      | `tir_visitor.rs`                     | Generic visitor traits for TIR tree traversal               |
 | WorldRegistry   | `world_registry.rs`                  | World definitions registry for export signatures            |
 | WIR             | `wir.rs`                             | Wasm IR data structures                                     |
 | WIR Unparse     | `wir_unparse.rs`                     | WIR → pseudo-Wado source code for debugging                 |
@@ -220,8 +224,14 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | `core:prelude/primitive.wado` | `prelude/primitive.wado` | Primitive type trait implementations               |
 | `core:prelude/format.wado`    | `prelude/format.wado`    | Format traits (Display, Formatter)                 |
 | `core:prelude/fpfmt.wado`     | `prelude/fpfmt.wado`     | Float-to-string formatting (pure Wado)             |
+| `core:prelude/tuple.wado`     | `prelude/tuple.wado`     | Tuple trait implementations                        |
 | `core:cli`                    | `cli.wado`               | CLI output (println, eprintln, etc.)               |
 | `core:collections`            | `collections.wado`       | TreeMap and other collections                      |
+| `core:serde`                  | `serde.wado`             | Serialization/deserialization traits               |
+| `core:json`                   | `json.wado`              | JSON serialization/deserialization                 |
+| `core:json_nsd`               | `json_nsd.wado`          | JSON non-self-describing deserializer              |
+| `core:json_value`             | `json_value.wado`        | JSON value type representation                     |
+| `core:simd`                   | `simd.wado`              | SIMD v128 operations                               |
 | `core:zlib`                   | `zlib.wado`              | Compression (zlib/deflate)                         |
 | `core:base64`                 | `base64.wado`            | Base64 encoding/decoding (RFC 4648)                |
 | `core:internal`               | `internal.wado`          | Compiler-generated code support, panic/unreachable |

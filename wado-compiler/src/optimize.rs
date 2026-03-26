@@ -73,9 +73,9 @@ struct OptConfig {
 /// |-------|-----|------------|------------------|
 /// | O0    | Yes | 0          | N/A              |
 /// | O1    | Yes | 2          | 5                |
-/// | O2    | Yes | 10         | 10               |
-/// | O3    | Yes | 100        | 19               |
-/// | Os    | Yes | 10         | 10               |
+/// | O2    | Yes | 10         | 12               |
+/// | O3    | Yes | 100        | 20               |
+/// | Os    | Yes | 10         | 12               |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
     /// No optimization passes. DCE only.
@@ -84,11 +84,11 @@ pub enum OptLevel {
     /// Iterations: 2, Inline threshold: 5.
     O1,
     /// Production optimizations. All passes including DCE.
-    /// Iterations: 10, Inline threshold: 10.
+    /// Iterations: 10, Inline threshold: 12.
     #[default]
     O2,
     /// Aggressive production optimizations. All passes including DCE.
-    /// Iterations: 100, Inline threshold: 19 (20 degrades fts benchmark performance).
+    /// Iterations: 100, Inline threshold: 20.
     O3,
     /// Size optimizations. Same as O2 plus name section stripping.
     /// Intended for frontend/browser deployment.
