@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774528403585,
+  "lastUpdate": 1774532119895,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7706,6 +7706,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1ff0f5c78477fdfc0edb9fe94c4552c7eb0c1cce"
         },
         "date": 1774528403381,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f2dcf02519d40fb3db2ebfd3f073877e35916451",
+          "message": "Merge pull request #701 from wado-lang/claude/add-antlr4-reference-iwEJ9\n\nAdd ANTLR4 grammar files for e2e testing",
+          "timestamp": "2026-03-26T22:28:56+09:00",
+          "tree_id": "9c41886486d23388f874463759c8409449d0b1c8",
+          "url": "https://github.com/wado-lang/wado/commit/f2dcf02519d40fb3db2ebfd3f073877e35916451"
+        },
+        "date": 1774532119674,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
