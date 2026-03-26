@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774539146009,
+  "lastUpdate": 1774557750607,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7784,6 +7784,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4ba6ad81ec71c4479469e6dd3e8c12146d2dd2d2"
         },
         "date": 1774539145801,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8bdae8133119a5ec85d98a41f3fef5734ef283a9",
+          "message": "Merge pull request #702 from wado-lang/dependabot/npm_and_yarn/wado-vscode/npm_and_yarn-66413a1f6e\n\nchore(deps): bump picomatch from 2.3.1 to 2.3.2 in /wado-vscode in the npm_and_yarn group across 1 directory",
+          "timestamp": "2026-03-27T05:39:56+09:00",
+          "tree_id": "ed18dc0040872e77b28af104ed28a78b69a2a5ff",
+          "url": "https://github.com/wado-lang/wado/commit/8bdae8133119a5ec85d98a41f3fef5734ef283a9"
+        },
+        "date": 1774557750393,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
