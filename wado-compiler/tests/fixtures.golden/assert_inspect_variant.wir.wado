@@ -120,7 +120,7 @@ fn run() with Stdout, Stderr {
     let __local_11: ref Formatter;
     v = Option<i32>::Some { discriminant: 0, payload_0: 42 };
     expected = Option<i32>::Some { discriminant: 0, payload_0: 99 };
-    __cond = Option<i32>^Eq::eq(ref.as_non_null(v), ref.as_non_null(expected));
+    __cond = Option<i32>^Eq::eq(v, expected);
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_5 = String { repr: builtin::array_new<u8>(146), used: 0 };
@@ -134,7 +134,7 @@ fn run() with Stdout, Stderr {
             String::append_char(__local_5, 32);
             String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/assert_inspect_variant.wado"), used: 56 });
             String::append_char(__local_5, 58);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
             __local_11 = __local_6;
             i32::fmt_decimal(7, __local_11);
             String::append(__local_5, String { repr: array.new_data<u8>("
@@ -143,12 +143,12 @@ condition: v == expected
             String::append_char(__local_5, 118);
             String::append_char(__local_5, 58);
             String::append_char(__local_5, 32);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
-            Option<i32>^Inspect::inspect(ref.as_non_null(v), __local_6);
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            Option<i32>^Inspect::inspect(v, __local_6);
             String::append_char(__local_5, 10);
             String::append(__local_5, String { repr: array.new_data<u8>("expected: "), used: 10 });
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
-            Option<i32>^Inspect::inspect(ref.as_non_null(expected), __local_6);
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            Option<i32>^Inspect::inspect(expected, __local_6);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
         });
@@ -363,7 +363,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

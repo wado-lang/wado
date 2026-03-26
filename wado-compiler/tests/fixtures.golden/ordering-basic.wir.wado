@@ -72,6 +72,8 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
+type "functype/i32^Ord::cmp" = fn(i32, i32) -> enum:Ordering;
+
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
 import fn realloc from "mem/realloc";
@@ -280,6 +282,16 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     return;
 }
 
+fn i32^Ord::cmp(self, other) {
+    if self < other {
+        return 0;
+    };
+    if self > other {
+        return 2;
+    };
+    return 1;
+}
+
 fn String^Eq::eq(self, other) {
     let len_a: i32;
     let len_b: i32;
@@ -296,7 +308,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l20: loop {
+            l22: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -304,7 +316,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l20;
+                continue l22;
             };
         };
     };
@@ -328,7 +340,7 @@ fn String^Ord::cmp(self, other) {
     __for_2: block {
         i = 0;
         block {
-            l24: loop {
+            l26: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
                 };
@@ -341,7 +353,7 @@ fn String^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l24;
+                continue l26;
             };
         };
     };
@@ -368,15 +380,15 @@ fn Array<i32>^Eq::eq(self, other) {
         _licm_repr_4 = self.repr;
         _licm_repr_5 = other.repr;
         block {
-            l32: loop {
+            l34: loop {
                 if (i < _licm_used_3) == 0 {
                     break __for_3;
                 };
-                if builtin::array_get<i32>(_licm_repr_4, i) != builtin::array_get<i32>(_licm_repr_5, i) {
+                if (builtin::array_get<i32>(_licm_repr_4, i) == builtin::array_get<i32>(_licm_repr_5, i)) == 0 {
                     return 0;
                 };
                 i = i + 1;
-                continue l32;
+                continue l34;
             };
         };
     };
@@ -402,20 +414,20 @@ fn Array<i32>^Ord::cmp(self, other) {
         _licm_repr_8 = self.repr;
         _licm_repr_9 = other.repr;
         block {
-            l36: loop {
+            l38: loop {
                 if (i < min_len) == 0 {
                     break __for_4;
                 };
                 a = builtin::array_get<i32>(_licm_repr_8, i);
                 b = builtin::array_get<i32>(_licm_repr_9, i);
-                if a < b {
+                if i32^Ord::cmp(a, b) == 0 {
                     return 0;
                 };
-                if a > b {
+                if i32^Ord::cmp(a, b) == 2 {
                     return 2;
                 };
                 i = i + 1;
-                continue l36;
+                continue l38;
             };
         };
     };
@@ -457,17 +469,17 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l44: loop {
+            l46: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l44;
+                continue l46;
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 export fn __cm_export__run as "run"

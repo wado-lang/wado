@@ -119,13 +119,13 @@ fn run() with Stdout {
         String::append_char(__local_4, 97);
         String::append_char(__local_4, 58);
         String::append_char(__local_4, 32);
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
         i32::fmt_decimal(42, __local_5);
         break __tmpl: __local_4;
     });
     cb = __inline_ContainerB__make_8: block -> ref "./sub/wasm_name_conflict_method_mod_b.wado/ContainerB" {
         __local_17 = String { repr: array.new_data<u8>("hello"), used: 5 };
-        break __inline_ContainerB__make_8: "./sub/wasm_name_conflict_method_mod_b.wado/ContainerB" { config: "./sub/wasm_name_conflict_method_mod_b.wado/Config" { name: ref.as_non_null(__local_17), count: 7 } };
+        break __inline_ContainerB__make_8: "./sub/wasm_name_conflict_method_mod_b.wado/ContainerB" { config: "./sub/wasm_name_conflict_method_mod_b.wado/Config" { name: __local_17, count: 7 } };
     };
     cfg_b = cb.config;
     "core:cli/println"(__tmpl: block -> ref String {
@@ -135,7 +135,7 @@ fn run() with Stdout {
         String::append_char(__local_6, 32);
         String::append(__local_6, cfg_b.name);
         String::append_char(__local_6, 32);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         i32::fmt_decimal(cfg_b.count, __local_7);
         break __tmpl: __local_6;
     });
@@ -349,7 +349,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

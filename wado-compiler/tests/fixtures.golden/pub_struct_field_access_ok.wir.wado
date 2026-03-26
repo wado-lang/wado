@@ -110,13 +110,13 @@ fn run() with Stdout {
     let __local_5: ref String;
     c = __inline_make_config_2: block -> ref "./sub/pub_struct_field_module.wado/Config" {
         __local_5 = String { repr: array.new_data<u8>("hello"), used: 5 };
-        break __inline_make_config_2: "./sub/pub_struct_field_module.wado/Config" { name: ref.as_non_null(__local_5), secret: 42 };
+        break __inline_make_config_2: "./sub/pub_struct_field_module.wado/Config" { name: __local_5, secret: 42 };
     };
     "core:cli/println"(c.name);
     s = c.secret;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(s, __local_3);
         break __tmpl: __local_2;
     });
@@ -330,7 +330,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

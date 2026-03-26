@@ -237,13 +237,13 @@ fn process(elem, out) {
     __pattern_temp_3 = elem;
     if ref.test "./sub/variant_deref_helper.wado/Elem::Repeat"(__pattern_temp_3) {
         rep = value_copy "./sub/variant_deref_helper.wado/RepeatElem"(ref.cast "./sub/variant_deref_helper.wado/Elem::Repeat"(__pattern_temp_3).payload_0);
-        process(ref.as_non_null(rep.element), out);
+        process(rep.element, out);
         return;
     };
     __pattern_temp_4 = elem;
     if ref.test "./sub/variant_deref_helper.wado/Elem::Group"(__pattern_temp_4) {
         alts = value_copy Array<Alt>(ref.cast "./sub/variant_deref_helper.wado/Elem::Group"(__pattern_temp_4).payload_0);
-        __iter_7 = "core:allocator/ArrayIter<Alt>" { repr: ref.as_non_null(alts.repr), used: alts.used, index: 0 };
+        __iter_7 = "core:allocator/ArrayIter<Alt>" { repr: alts.repr, used: alts.used, index: 0 };
         b5: block {
             l6: loop {
                 __pattern_temp_5 = ArrayIter<Alt>^Iterator::next(__iter_7);
@@ -261,7 +261,7 @@ fn process(elem, out) {
     __pattern_temp_6 = elem;
     if ref.test "./sub/variant_deref_helper.wado/Elem::Label"(__pattern_temp_6) {
         lab = value_copy "./sub/variant_deref_helper.wado/LabelElem"(ref.cast "./sub/variant_deref_helper.wado/Elem::Label"(__pattern_temp_6).payload_0);
-        process(ref.as_non_null(lab.element), out);
+        process(lab.element, out);
         return;
     };
 }
@@ -272,7 +272,7 @@ fn process_all(alt, out) {
     let __local_5: ref Array<Elem>;
     __iter_2 = __inline_Array_Elem__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<Elem>" {
         __local_5 = alt.elements;
-        break __inline_Array_Elem__IntoIterator__into_iter_0: "core:allocator/ArrayIter<Elem>" { repr: ref.as_non_null(__local_5.repr), used: __local_5.used, index: 0 };
+        break __inline_Array_Elem__IntoIterator__into_iter_0: "core:allocator/ArrayIter<Elem>" { repr: __local_5.repr, used: __local_5.used, index: 0 };
     };
     b9: block {
         l10: loop {
@@ -315,7 +315,7 @@ fn __test_0_recursive_variant_deref_from_another_module() {
             String::append_char(__local_5, 32);
             String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_deref_cross_module.wado"), used: 60 });
             String::append_char(__local_5, 58);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
             __local_19 = __local_6;
             i32::fmt_decimal(50, __local_19);
             String::append(__local_5, String { repr: array.new_data<u8>("
@@ -326,7 +326,7 @@ condition: out == \"hello world\"
             String::append_char(__local_5, 116);
             String::append_char(__local_5, 58);
             String::append_char(__local_5, 32);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
             String^Inspect::inspect(__v0, __local_6);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
@@ -542,7 +542,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -713,7 +713,7 @@ fn Array<Elem>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn ArrayIter<Elem>^Iterator::next(self) {
@@ -723,7 +723,7 @@ fn ArrayIter<Elem>^Iterator::next(self) {
     };
     item = builtin::array_get<ref "./sub/variant_deref_helper.wado/Elem">(self.repr, self.index);
     self.index = self.index + 1;
-    return ref.as_non_null(item);
+    return item;
 }
 
 fn ArrayIter<Alt>^Iterator::next(self) {
@@ -733,7 +733,7 @@ fn ArrayIter<Alt>^Iterator::next(self) {
     };
     item = builtin::array_get<ref "./sub/variant_deref_helper.wado/Alt">(self.repr, self.index);
     self.index = self.index + 1;
-    return ref.as_non_null(item);
+    return item;
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -847,7 +847,7 @@ fn String^Inspect::inspect(self, f) {
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };

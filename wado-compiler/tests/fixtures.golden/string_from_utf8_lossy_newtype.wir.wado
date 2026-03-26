@@ -167,7 +167,7 @@ fn run() {
             String::append_char(__local_5, 32);
             String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/string_from_utf8_lossy_newtype.wado"), used: 64 });
             String::append_char(__local_5, 58);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
             __local_24 = __local_6;
             i32::fmt_decimal(10, __local_24);
             String::append(__local_5, String { repr: array.new_data<u8>("
@@ -176,7 +176,7 @@ condition: s == \"Hello\"
             String::append_char(__local_5, 115);
             String::append_char(__local_5, 58);
             String::append_char(__local_5, 32);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
             String^Inspect::inspect(__v0, __local_6);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
@@ -392,7 +392,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -548,7 +548,7 @@ fn String::from_utf8_lossy<Array<u8>>(bytes) {
     let __pattern_temp_6: ref Option<u8>;
     let __local_25: u32;
     builder = String { repr: builtin::array_new<u8>(8), used: 0 };
-    iter = "core:allocator/ArrayIter<u8>" { repr: ref.as_non_null(bytes.repr), used: bytes.used, index: 0 };
+    iter = "core:allocator/ArrayIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
     pending = Option<u8> { 1 };
     b33: block {
         l34: loop {
@@ -758,7 +758,7 @@ fn Array<u8>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -872,7 +872,7 @@ fn String^Inspect::inspect(self, f) {
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };

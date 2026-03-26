@@ -92,6 +92,8 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
+type "functype/i32^Ord::cmp" = fn(i32, i32) -> enum:Ordering;
+
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
 import fn realloc from "mem/realloc";
@@ -108,26 +110,40 @@ import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn trait_bound_fn() with Stdout {
+    let result: i32;
     let __local_1: ref String;
     let __local_2: ref Formatter;
+    result = __inline_max_i32__0: block -> i32 {
+        if i32^Ord::cmp(3, 7) == 2 {
+            break __inline_max_i32__0: 3;
+        };
+        break __inline_max_i32__0: 7;
+    };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
-        i32::fmt_decimal(7, __local_2);
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        i32::fmt_decimal(result, __local_2);
         break __tmpl: __local_1;
     });
 }
 
 fn trait_bound_generic_return() with Stdout {
+    let result: i32;
     let s: ref String;
     let __local_2: ref String;
     let __local_3: ref Formatter;
     let __local_12: ref String;
     let __local_13: ref String;
+    result = __inline_smaller_i32__0: block -> i32 {
+        if i32^Ord::cmp(10, 5) == 0 {
+            break __inline_smaller_i32__0: 10;
+        };
+        break __inline_smaller_i32__0: 5;
+    };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
-        i32::fmt_decimal(5, __local_3);
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
+        i32::fmt_decimal(result, __local_3);
         break __tmpl: __local_2;
     });
     s = __inline_smaller_String__5: block -> ref String {
@@ -146,11 +162,13 @@ fn trait_bound_impl_block() with Stdout {
     let __local_3: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(10, __local_3);
         break __tmpl: __local_2;
     });
-    "core:cli/println"(String { repr: array.new_data<u8>("b is greater"), used: 12 });
+    if i32^Ord::cmp(20, 10) == 2 {
+        "core:cli/println"(String { repr: array.new_data<u8>("b is greater"), used: 12 });
+    };
 }
 
 fn run() with Stdout {
@@ -162,7 +180,7 @@ fn run() with Stdout {
     "core:cli/println"(__inline_i32_Stringify__to_str_4: block -> ref String {
         __tmpl: block -> ref String {
             __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
-            __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
+            __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
             i32::fmt_decimal(42, __local_4);
             break __tmpl: __local_3;
         };
@@ -185,7 +203,7 @@ fn __cm_export__run() {
     "core:cli/println"(__inline_i32_Stringify__to_str_5: block -> ref String {
         __tmpl: block -> ref String {
             __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
-            __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
+            __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
             i32::fmt_decimal(42, __local_4);
             break __tmpl: __local_3;
         };
@@ -229,13 +247,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l3: loop {
+            l6: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l3;
+                continue l6;
             };
         };
     };
@@ -315,13 +333,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l9: loop {
+            l12: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l9;
+                continue l12;
             };
         };
     };
@@ -338,14 +356,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l13: loop {
+                l16: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l13;
+                    continue l16;
                 };
             };
         };
@@ -372,6 +390,16 @@ fn i32::fmt_decimal(self, f) {
     }, offset, abs_val, digit_count);
 }
 
+fn i32^Ord::cmp(self, other) {
+    if self < other {
+        return 0;
+    };
+    if self > other {
+        return 2;
+    };
+    return 1;
+}
+
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
@@ -391,7 +419,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -438,7 +466,7 @@ fn String^Ord::cmp(self, other) {
     __for_2: block {
         i = 0;
         block {
-            l21: loop {
+            l26: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
                 };
@@ -451,7 +479,7 @@ fn String^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l21;
+                continue l26;
             };
         };
     };
@@ -498,13 +526,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l32: loop {
+            l37: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l32;
+                continue l37;
             };
         };
     };

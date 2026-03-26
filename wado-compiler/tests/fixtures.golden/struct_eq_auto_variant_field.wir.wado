@@ -320,7 +320,7 @@ fn Pixel^Eq::eq(self, other) {
     } else {
         0;
     } -> i32 {
-        Color^Eq::eq(ref.as_non_null(self.color), ref.as_non_null(other.color));
+        Color^Eq::eq(self.color, other.color);
     } else {
         0;
     };
@@ -328,7 +328,7 @@ fn Pixel^Eq::eq(self, other) {
 
 fn Container^Eq::eq(self, other) {
     return if String^Eq::eq(self.label, other.label) -> i32 {
-        Option<i32>^Eq::eq(ref.as_non_null(self.value), ref.as_non_null(other.value));
+        Option<i32>^Eq::eq(self.value, other.value);
     } else {
         0;
     };

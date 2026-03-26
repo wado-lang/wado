@@ -93,7 +93,7 @@ fn run() with Stdout {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_1 = "wasi:cli/ArrayIter<i32>" { repr: ref.as_non_null(__sroa_c_items.repr), used: 3, index: 0 };
+    __iter_1 = "wasi:cli/ArrayIter<i32>" { repr: __sroa_c_items.repr, used: 3, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -280,7 +280,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 export fn __cm_export__run as "run"

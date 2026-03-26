@@ -42,6 +42,8 @@ struct Array<i32> {  // Array<T> with T=i32
     mut used: i32,
 }
 
+enum Ordering { Less = 0, Equal = 1, Greater = 2 };
+
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -124,6 +126,8 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
+type "functype/i32^Ord::cmp" = fn(i32, i32) -> enum:Ordering;
+
 type "functype/Holder<i32>::min" = fn(ref Array<i32>) -> i32;
 
 type "functype/Result<i32,String>^Eq::eq" = fn(ref Result<i32,String>, ref Result<i32,String>) -> bool;
@@ -149,7 +153,7 @@ fn trait_bound_ref_type() with Stdout {
     let __local_3: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(12, __local_3);
         break __tmpl: __local_2;
     });
@@ -164,13 +168,13 @@ fn trait_bound_result_eq() with Stdout {
     b = Result<i32,String>::Ok { discriminant: 0, payload_0: 42 };
     c = Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("fail"), used: 4 } };
     d = Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("fail"), used: 4 } };
-    if Result<i32,String>^Eq::eq(ref.as_non_null(a), ref.as_non_null(b)) {
+    if Result<i32,String>^Eq::eq(a, b) {
         "core:cli/println"(String { repr: array.new_data<u8>("Ok == Ok"), used: 8 });
     };
-    if Result<i32,String>^Eq::eq(ref.as_non_null(a), ref.as_non_null(c)) == 0 {
+    if Result<i32,String>^Eq::eq(a, c) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("Ok != Err"), used: 9 });
     };
-    if Result<i32,String>^Eq::eq(ref.as_non_null(c), ref.as_non_null(d)) {
+    if Result<i32,String>^Eq::eq(c, d) {
         "core:cli/println"(String { repr: array.new_data<u8>("Err == Err"), used: 10 });
     };
 }
@@ -181,7 +185,7 @@ fn trait_bound_struct_field_bounded() with Stdout {
     let __local_3: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(Holder<i32>::min(ref.as_non_null(__seq_lit: block -> ref Array<i32> {
             __local_0 = Array<i32> { repr: array.new_fixed<i32>(5, 3, 8, 1, 4), used: 5 };
             break __seq_lit: __local_0;
@@ -422,6 +426,16 @@ fn i32::fmt_decimal(self, f) {
     }, offset, abs_val, digit_count);
 }
 
+fn i32^Ord::cmp(self, other) {
+    if self < other {
+        return 0;
+    };
+    if self > other {
+        return 2;
+    };
+    return 1;
+}
+
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
@@ -441,7 +455,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -487,7 +501,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l25: loop {
+            l27: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -495,7 +509,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l25;
+                continue l27;
             };
         };
     };
@@ -552,21 +566,21 @@ fn Holder<i32>::min(self) {
         _licm_used_11 = _licm_items_10.used;
         _licm_repr_12 = _licm_items_10.repr;
         block {
-            l34: loop {
+            l36: loop {
                 if (i < _licm_used_11) == 0 {
                     break __for_0;
                 };
-                if __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
+                if i32^Ord::cmp(__inline_Array_i32__IndexValue__index_value_2: block -> i32 {
                     __local_7 = i;
                     break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_12, __local_7);
-                } < m {
+                }, m) == 0 {
                     m = __inline_Array_i32__IndexValue__index_value_3: block -> i32 {
                         __local_9 = i;
                         break __inline_Array_i32__IndexValue__index_value_3: builtin::array_get<i32>(_licm_repr_12, __local_9);
                     };
                 };
                 i = i + 1;
-                continue l34;
+                continue l36;
             };
         };
     };
@@ -602,17 +616,17 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l39: loop {
+            l41: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l39;
+                continue l41;
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Result<i32,String>^Eq::eq(self, other) {
@@ -668,13 +682,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l48: loop {
+            l50: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l48;
+                continue l50;
             };
         };
     };

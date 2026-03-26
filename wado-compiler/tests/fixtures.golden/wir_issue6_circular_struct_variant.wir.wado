@@ -140,7 +140,7 @@ fn sum_tree(t) {
         let __cast_1: ref Tree::Branch;
         __cast_1 = ref.cast Tree::Branch(__match_scrut_0);
         __local_2 = __cast_1.payload_0;
-        sum_tree(ref.as_non_null(__local_2.left)) + sum_tree(ref.as_non_null(__local_2.right));
+        sum_tree(__local_2.left) + sum_tree(__local_2.right);
     } else {
         unreachable;
     };
@@ -161,7 +161,7 @@ fn run() with Stdout {
     leaf1 = Tree::Leaf { discriminant: 0, payload_0: 1 };
     leaf2 = Tree::Leaf { discriminant: 0, payload_0: 2 };
     leaf3 = Tree::Leaf { discriminant: 0, payload_0: 3 };
-    total = sum_tree(Tree::Branch { discriminant: 1, payload_0: Node { left: ref.as_non_null(leaf1), right: Tree::Branch { discriminant: 1, payload_0: Node { left: ref.as_non_null(leaf2), right: ref.as_non_null(leaf3) } } } });
+    total = sum_tree(Tree::Branch { discriminant: 1, payload_0: Node { left: leaf1, right: Tree::Branch { discriminant: 1, payload_0: Node { left: leaf2, right: leaf3 } } } });
     __cond = total == 6;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -176,7 +176,7 @@ fn run() with Stdout {
             String::append_char(__local_7, 32);
             String::append(__local_7, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado"), used: 68 });
             String::append_char(__local_7, 58);
-            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
             __local_15 = __local_8;
             i32::fmt_decimal(36, __local_15);
             String::append(__local_7, String { repr: array.new_data<u8>("
@@ -189,7 +189,7 @@ condition: total == 6
             String::append_char(__local_7, 108);
             String::append_char(__local_7, 58);
             String::append_char(__local_7, 32);
-            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
             __local_20 = __local_8;
             i32::fmt_decimal(total, __local_20);
             String::append_char(__local_7, 10);
@@ -199,7 +199,7 @@ condition: total == 6
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         i32::fmt_decimal(total, __local_10);
         break __tmpl: __local_9;
     });
@@ -448,7 +448,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

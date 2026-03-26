@@ -216,7 +216,7 @@ fn run() with Stdout {
             String::append_char(__local_11, 32);
             String::append(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-conditional.wado"), used: 63 });
             String::append_char(__local_11, 58);
-            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
+            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
             __local_31 = __local_12;
             i32::fmt_decimal(15, __local_31);
             String::append(__local_11, String { repr: array.new_data<u8>("
@@ -230,7 +230,7 @@ condition: m[\"a\"] == 1
             String::append_char(__local_11, 93);
             String::append_char(__local_11, 58);
             String::append_char(__local_11, 32);
-            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
+            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
             __local_36 = __local_12;
             i32::fmt_decimal(__v0_4, __local_36);
             String::append_char(__local_11, 10);
@@ -262,14 +262,14 @@ condition: m[\"a\"] == 1
             String::append_char(__local_13, 32);
             String::append(__local_13, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-conditional.wado"), used: 63 });
             String::append_char(__local_13, 58);
-            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
+            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
             __local_54 = __local_14;
             i32::fmt_decimal(23, __local_54);
             String::append(__local_13, String { repr: array.new_data<u8>("
 condition: m2[\"b\"] == 2
 "), used: 25 });
             String::append(__local_13, String { repr: array.new_data<u8>("m2[\"b\"]: "), used: 9 });
-            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
+            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
             __local_59 = __local_14;
             i32::fmt_decimal(__v0_9, __local_59);
             String::append_char(__local_13, 10);
@@ -523,7 +523,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -708,7 +708,7 @@ fn TreeMap<String,i32>^IndexValue::index_value(self, key) {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_3 = String { repr: builtin::array_new<u8>(31), used: 0 };
             String::append(__local_3, String { repr: array.new_data<u8>("key not found: "), used: 15 });
-            __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
+            __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
             String^Inspect::inspect(key, __local_4);
             break __tmpl: __local_3;
         });
@@ -792,7 +792,7 @@ fn TreeMap<String,i32>::insert(self, key, value) {
         __local_8 = self.entries;
         break __inline_Array_TreeMapEntry_String_i32____len_1: __local_8.used;
     };
-    entry = "core:allocator/TreeMapEntry<String,i32>" { key: ref.as_non_null(key), value: value, deleted: 0 };
+    entry = "core:allocator/TreeMapEntry<String,i32>" { key: key, value: value, deleted: 0 };
     Array<TreeMapEntry<String,i32>>::append(self.entries, entry);
     self.root = TreeMap<String,i32>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
@@ -806,18 +806,18 @@ fn TreeMap<String,i32>::insert_node(self, node, key, index) {
         n = ref.as_non_null(node);
         if String^Eq::eq(key, n.key) {
             n.index = index;
-            return ref.as_non_null(n);
+            return n;
         };
         if String^Ord::cmp(key, n.key) == 0 {
             n.left = TreeMap<String,i32>::insert_node(self, n.left, key, index);
         } else {
             n.right = TreeMap<String,i32>::insert_node(self, n.right, key, index);
         };
-        after_skew = TreeMap<String,i32>::skew(self, ref.as_non_null(n));
+        after_skew = TreeMap<String,i32>::skew(self, n);
         return TreeMap<String,i32>::split(self, after_skew);
     };
-    new_node = "core:allocator/TreeMapNode<String>" { key: ref.as_non_null(key), index: index, level: 1, left: ref.null none, right: ref.null none };
-    return ref.as_non_null(new_node);
+    new_node = "core:allocator/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
+    return new_node;
 }
 
 fn TreeMap<String,i32>::split(self, node) {
@@ -838,11 +838,11 @@ fn TreeMap<String,i32>::split(self, node) {
                     n.right = right.left;
                     right.left = n;
                     right.level = right.level + 1;
-                    return ref.as_non_null(right);
+                    return right;
                 };
             };
         };
-        return ref.as_non_null(n);
+        return n;
     };
     return ref.null none;
 }
@@ -859,10 +859,10 @@ fn TreeMap<String,i32>::skew(self, node) {
             if left.level == n.level {
                 n.left = left.right;
                 left.right = n;
-                return ref.as_non_null(left);
+                return left;
             };
         };
-        return ref.as_non_null(n);
+        return n;
     };
     return ref.null none;
 }
@@ -906,7 +906,7 @@ fn Array<TreeMapEntry<String,i32>>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -1020,7 +1020,7 @@ fn String^Inspect::inspect(self, f) {
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };

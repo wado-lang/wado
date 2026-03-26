@@ -147,7 +147,7 @@ fn __test_0_recursive_variant_eq() {
     let __local_33: ref Formatter;
     a = Node::Branch { discriminant: 1, payload_0: BranchData { left: Node::Leaf { discriminant: 0, payload_0: 1 }, right: Node::Leaf { discriminant: 0, payload_0: 2 } } };
     b = Node::Branch { discriminant: 1, payload_0: BranchData { left: Node::Leaf { discriminant: 0, payload_0: 1 }, right: Node::Leaf { discriminant: 0, payload_0: 2 } } };
-    __cond_4 = Node^Eq::eq(ref.as_non_null(a), ref.as_non_null(b));
+    __cond_4 = Node^Eq::eq(a, b);
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_10 = String { repr: builtin::array_new<u8>(132), used: 0 };
@@ -159,7 +159,7 @@ fn __test_0_recursive_variant_eq() {
             String::append_char(__local_10, 32);
             String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado"), used: 59 });
             String::append_char(__local_10, 58);
-            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             __local_18 = __local_11;
             i32::fmt_decimal(20, __local_18);
             String::append(__local_10, String { repr: array.new_data<u8>("
@@ -168,21 +168,21 @@ condition: a == b
             String::append_char(__local_10, 97);
             String::append_char(__local_10, 58);
             String::append_char(__local_10, 32);
-            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
-            Node^Inspect::inspect(ref.as_non_null(a), __local_11);
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
+            Node^Inspect::inspect(a, __local_11);
             String::append_char(__local_10, 10);
             String::append_char(__local_10, 98);
             String::append_char(__local_10, 58);
             String::append_char(__local_10, 32);
-            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
-            Node^Inspect::inspect(ref.as_non_null(b), __local_11);
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
+            Node^Inspect::inspect(b, __local_11);
             String::append_char(__local_10, 10);
             break __tmpl: __local_10;
         });
         unreachable;
     };
     c = Node::Branch { discriminant: 1, payload_0: BranchData { left: Node::Leaf { discriminant: 0, payload_0: 1 }, right: Node::Leaf { discriminant: 0, payload_0: 3 } } };
-    __v2 = Node^Eq::eq(ref.as_non_null(a), ref.as_non_null(c));
+    __v2 = Node^Eq::eq(a, c);
     __cond_9 = __v2 == 0;
     if __cond_9 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -195,7 +195,7 @@ condition: a == b
             String::append_char(__local_12, 32);
             String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado"), used: 59 });
             String::append_char(__local_12, 58);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             __local_26 = __local_13;
             i32::fmt_decimal(26, __local_26);
             String::append(__local_12, String { repr: array.new_data<u8>("
@@ -204,14 +204,14 @@ condition: !a == c
             String::append_char(__local_12, 97);
             String::append_char(__local_12, 58);
             String::append_char(__local_12, 32);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
-            Node^Inspect::inspect(ref.as_non_null(a), __local_13);
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
+            Node^Inspect::inspect(a, __local_13);
             String::append_char(__local_12, 10);
             String::append_char(__local_12, 99);
             String::append_char(__local_12, 58);
             String::append_char(__local_12, 32);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
-            Node^Inspect::inspect(ref.as_non_null(c), __local_13);
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
+            Node^Inspect::inspect(c, __local_13);
             String::append_char(__local_12, 10);
             String::append_char(__local_12, 97);
             String::append_char(__local_12, 32);
@@ -221,7 +221,7 @@ condition: !a == c
             String::append_char(__local_12, 99);
             String::append_char(__local_12, 58);
             String::append_char(__local_12, 32);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             __local_33 = __local_13;
             Formatter::pad(__local_33, if __v2 -> ref String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
@@ -244,7 +244,7 @@ fn __test_1_recursive_variant_eq_nested() {
     let __local_11: ref Formatter;
     a = Node::Branch { discriminant: 1, payload_0: BranchData { left: Node::Branch { discriminant: 1, payload_0: BranchData { left: Node::Leaf { discriminant: 0, payload_0: 10 }, right: Node::Leaf { discriminant: 0, payload_0: 20 } } }, right: Node::Leaf { discriminant: 0, payload_0: 30 } } };
     b = Node::Branch { discriminant: 1, payload_0: BranchData { left: Node::Branch { discriminant: 1, payload_0: BranchData { left: Node::Leaf { discriminant: 0, payload_0: 10 }, right: Node::Leaf { discriminant: 0, payload_0: 20 } } }, right: Node::Leaf { discriminant: 0, payload_0: 30 } } };
-    __cond = Node^Eq::eq(ref.as_non_null(a), ref.as_non_null(b));
+    __cond = Node^Eq::eq(a, b);
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_5 = String { repr: builtin::array_new<u8>(132), used: 0 };
@@ -256,7 +256,7 @@ fn __test_1_recursive_variant_eq_nested() {
             String::append_char(__local_5, 32);
             String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado"), used: 59 });
             String::append_char(__local_5, 58);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
             __local_11 = __local_6;
             i32::fmt_decimal(44, __local_11);
             String::append(__local_5, String { repr: array.new_data<u8>("
@@ -265,14 +265,14 @@ condition: a == b
             String::append_char(__local_5, 97);
             String::append_char(__local_5, 58);
             String::append_char(__local_5, 32);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
-            Node^Inspect::inspect(ref.as_non_null(a), __local_6);
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            Node^Inspect::inspect(a, __local_6);
             String::append_char(__local_5, 10);
             String::append_char(__local_5, 98);
             String::append_char(__local_5, 58);
             String::append_char(__local_5, 32);
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
-            Node^Inspect::inspect(ref.as_non_null(b), __local_6);
+            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            Node^Inspect::inspect(b, __local_6);
             String::append_char(__local_5, 10);
             break __tmpl: __local_5;
         });
@@ -492,7 +492,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -550,8 +550,8 @@ fn String::append_char(self, c) {
 }
 
 fn BranchData^Eq::eq(self, other) {
-    return if Node^Eq::eq(ref.as_non_null(self.left), ref.as_non_null(other.left)) -> i32 {
-        Node^Eq::eq(ref.as_non_null(self.right), ref.as_non_null(other.right));
+    return if Node^Eq::eq(self.left, other.left) -> i32 {
+        Node^Eq::eq(self.right, other.right);
     } else {
         0;
     };
@@ -589,12 +589,12 @@ fn BranchData^Inspect::inspect(self, f) {
     String::append(f.buf, s_3);
     s_5 = String { repr: array.new_data<u8>("left: "), used: 6 };
     String::append(f.buf, s_5);
-    Node^Inspect::inspect(ref.as_non_null(self.left), f);
+    Node^Inspect::inspect(self.left, f);
     s_7 = String { repr: array.new_data<u8>(", "), used: 2 };
     String::append(f.buf, s_7);
     s_9 = String { repr: array.new_data<u8>("right: "), used: 7 };
     String::append(f.buf, s_9);
-    Node^Inspect::inspect(ref.as_non_null(self.right), f);
+    Node^Inspect::inspect(self.right, f);
     s_11 = String { repr: array.new_data<u8>(" }"), used: 2 };
     String::append(f.buf, s_11);
 }

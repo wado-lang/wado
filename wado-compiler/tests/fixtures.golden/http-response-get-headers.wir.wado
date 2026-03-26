@@ -523,14 +523,14 @@ fn handle(request) {
             String::append_char(__local_11, 32);
             String::append(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-response-get-headers.wado"), used: 59 });
             String::append_char(__local_11, 58);
-            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
+            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
             __local_178 = __local_12;
             i32::fmt_decimal(17, __local_178);
             String::append(__local_11, String { repr: array.new_data<u8>("
 condition: resp_headers.has(\"x-check\" as FieldName)
 "), used: 53 });
             String::append(__local_11, String { repr: array.new_data<u8>("resp_headers.has(\"x-check\" as FieldName): "), used: 42 });
-            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
+            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
             __local_183 = __local_12;
             Formatter::pad(__local_183, if __v0 -> ref String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
@@ -902,7 +902,7 @@ fn __cm_binding__Fields_append(self, name, value) {
         } else {
             __vresult = "wasi:http/types.wado/HeaderError" { 2 };
         };
-        __result_val = ref.as_non_null(__vresult);
+        __result_val = __vresult;
     };
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __result_val;
@@ -1147,7 +1147,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -1243,7 +1243,7 @@ fn Array<u8>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Formatter::write_char_n(self, c, n) {

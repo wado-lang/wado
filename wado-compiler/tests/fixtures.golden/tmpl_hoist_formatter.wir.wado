@@ -206,7 +206,7 @@ fn run() with Stdout {
     __for_0: block {
         i_1 = 0;
         __tmpl_buf_57 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __fmt_buf_58 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: ref.as_non_null(__tmpl_buf_57) };
+        __fmt_buf_58 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 4, indent: 0, buf: __tmpl_buf_57 };
         block {
             l2: loop {
                 if (i_1 < 5) == 0 {
@@ -233,7 +233,7 @@ fn run() with Stdout {
         String::append_char(__local_13, 97);
         String::append_char(__local_13, 108);
         String::append_char(__local_13, 61);
-        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
+        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
         i32::fmt_decimal(total, __local_14);
         break __tmpl: __local_13;
     });
@@ -241,7 +241,7 @@ fn run() with Stdout {
     __for_1: block {
         i_5 = 0;
         __tmpl_buf_59 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __fmt_buf_60 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__tmpl_buf_59) };
+        __fmt_buf_60 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __tmpl_buf_59 };
         block {
             l5: loop {
                 if (i_5 < 5) == 0 {
@@ -268,7 +268,7 @@ fn run() with Stdout {
         String::append_char(__local_17, 108);
         String::append_char(__local_17, 50);
         String::append_char(__local_17, 61);
-        __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_17) };
+        __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
         i32::fmt_decimal(total2, __local_18);
         break __tmpl: __local_17;
     });
@@ -276,8 +276,8 @@ fn run() with Stdout {
     __for_2: block {
         i_8 = 0;
         __tmpl_buf_61 = String { repr: builtin::array_new<u8>(38), used: 0 };
-        __fmt_buf_62 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__tmpl_buf_61) };
-        __fmt_buf_63 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: ref.as_non_null(__tmpl_buf_61) };
+        __fmt_buf_62 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __tmpl_buf_61 };
+        __fmt_buf_63 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 0, precision: 2, indent: 0, buf: __tmpl_buf_61 };
         block {
             l8: loop {
                 if (i_8 < 3) == 0 {
@@ -313,7 +313,7 @@ fn run() with Stdout {
         String::append_char(__local_21, 108);
         String::append_char(__local_21, 51);
         String::append_char(__local_21, 61);
-        __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_21) };
+        __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
         i32::fmt_decimal(total3, __local_22);
         break __tmpl: __local_21;
     });
@@ -1444,7 +1444,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1678,7 +1678,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

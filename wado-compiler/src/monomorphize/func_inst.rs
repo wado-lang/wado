@@ -5,16 +5,78 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
 use crate::tir::{
-    FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirTemplatePart, TypeId, TypeTable,
+    CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock,
+    TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use super::state::Monomorphizer;
 use super::{generic_function_key, module_source_for_trait_impl};
+
+/// Lower remaining comparison operators on non-primitive types in all module functions.
+pub fn lower_comparisons_in_module(
+    module: &mut TirModule,
+    trait_method_locations: &IndexMap<String, ModuleSource>,
+) {
+    let type_table_rc = module.type_table.clone();
+    let module_source = module.module_source.clone();
+
+    struct ComparisonLowerer<'a> {
+        trait_method_locations: &'a IndexMap<String, ModuleSource>,
+        current_module_source: &'a ModuleSource,
+        type_table: &'a std::rc::Rc<std::cell::RefCell<TypeTable>>,
+    }
+
+    impl TirMutVisitor for ComparisonLowerer<'_> {
+        fn visit_expr(&mut self, expr: &mut TirExpr) {
+            self.walk_expr(expr);
+
+            if let TirExprKind::Binary { op, left, right } = &mut expr.kind
+                && matches!(
+                    *op,
+                    TirBinaryOp::Eq
+                        | TirBinaryOp::NotEq
+                        | TirBinaryOp::Lt
+                        | TirBinaryOp::Gt
+                        | TirBinaryOp::LtEq
+                        | TirBinaryOp::GtEq
+                )
+                && let Some(new_kind) = try_lower_comparison(
+                    self.trait_method_locations,
+                    self.current_module_source,
+                    expr.span,
+                    *op,
+                    left,
+                    right,
+                    &mut self.type_table.borrow_mut(),
+                )
+            {
+                expr.kind = new_kind;
+            }
+        }
+    }
+
+    let mut lowerer = ComparisonLowerer {
+        trait_method_locations,
+        current_module_source: &module_source,
+        type_table: &type_table_rc,
+    };
+
+    for func_rc in &module.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(mut body) = func.body.take() {
+            lowerer.visit_block(&mut body);
+            func.body = Some(body);
+        }
+    }
+
+    for global in &mut module.globals {
+        lowerer.visit_expr(&mut global.initializer);
+    }
+}
 
 /// Collects function instantiation sites by traversing TIR with `TirRefVisitor`.
 ///
@@ -549,53 +611,6 @@ impl Monomorphizer {
                         &generic_func.impl_type_params,
                     );
                     self.try_queue_function(key, mangled);
-                }
-            }
-            // Comparison operators on non-primitive types will be lowered to
-            // Eq::eq / Ord::cmp method calls in the lower phase. Pre-collect the
-            // trait method instantiation sites so transitive monomorphization
-            // creates the needed concrete functions.
-            TirExprKind::Binary { op, left, .. }
-                if matches!(
-                    op,
-                    TirBinaryOp::Eq
-                        | TirBinaryOp::NotEq
-                        | TirBinaryOp::Lt
-                        | TirBinaryOp::Gt
-                        | TirBinaryOp::LtEq
-                        | TirBinaryOp::GtEq
-                ) =>
-            {
-                if let Some((base_struct, impl_type_args)) =
-                    self.get_struct_info_from_type(left.type_id, type_table)
-                    && !impl_type_args.is_empty()
-                {
-                    let (trait_name, method_name) =
-                        if matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
-                            ("Eq", "eq")
-                        } else {
-                            ("Ord", "cmp")
-                        };
-                    let generic_method_name =
-                        MethodName::format_local(&base_struct, Some(trait_name), method_name);
-                    if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
-                        let generic_func = generic_func_rc.borrow();
-                        if impl_type_args.len() >= generic_func.impl_type_params.len() {
-                            let method_info = generic_func.method_info.clone();
-                            let key = InstantiationKey {
-                                name: generic_method_name,
-                                impl_type_args: impl_type_args.clone(),
-                                method_type_args: vec![],
-                                method_info,
-                            };
-                            let mangled = self.method_instantiation_name(
-                                &key,
-                                type_table,
-                                impl_type_args.len(),
-                            );
-                            self.try_queue_function(key, mangled);
-                        }
-                    }
                 }
             }
             _ => {}
@@ -1194,7 +1209,7 @@ impl Monomorphizer {
                 for type_arg in type_args.iter_mut() {
                     *type_arg = self.substitute_type(*type_arg, substitution, type_table);
                 }
-                for arg in args {
+                for arg in &mut *args {
                     self.substitute_types_in_expr(
                         &mut arg.expr,
                         substitution,
@@ -1204,14 +1219,74 @@ impl Monomorphizer {
                     );
                 }
 
-                // Update the method func name if receiver type contains type params
-                // e.g., Array<T>::len -> Array<i32>::len when T->i32
+                // Capture trait info before substitution clears is_type_param_receiver
+                let type_param_trait_info = method_func.method_info.as_ref().and_then(|i| {
+                    if i.is_type_param_receiver {
+                        Some((i.trait_name.clone(), i.method_name.clone()))
+                    } else {
+                        None
+                    }
+                });
+
                 self.resolve_method_call_substitution(
                     method_func,
                     receiver.type_id,
                     substitution,
                     type_table,
                 );
+
+                // Primitives use direct Wasm instructions, not trait methods.
+                // Convert back to a binary op when monomorphization concretized to a primitive.
+                if let Some((trait_name_before, method_name_before)) = type_param_trait_info {
+                    let mut recv_inner = receiver.type_id;
+                    while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                        type_table.get(recv_inner).clone()
+                    {
+                        recv_inner = t;
+                    }
+                    if type_table.is_primitive_like(recv_inner)
+                        && let Some(binary_op) = trait_method_to_binary_op(
+                            trait_name_before.as_deref(),
+                            &method_name_before,
+                        )
+                    {
+                        // Unwrap receiver: &T -> T (strip the Ref wrapper)
+                        let left = if let TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: inner,
+                        } = &receiver.kind
+                        {
+                            (**inner).clone()
+                        } else {
+                            (**receiver).clone()
+                        };
+                        // Unwrap first arg: &T -> T
+                        let right = if let Some(arg) = args.first()
+                            && let TirExprKind::Unary {
+                                op: TirUnaryOp::Ref,
+                                expr: inner,
+                            } = &arg.expr.kind
+                        {
+                            (**inner).clone()
+                        } else if let Some(arg) = args.first() {
+                            arg.expr.clone()
+                        } else {
+                            unreachable!()
+                        };
+                        let result_type =
+                            if matches!(binary_op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
+                                TypeTable::BOOL
+                            } else {
+                                left.type_id
+                            };
+                        expr.kind = TirExprKind::Binary {
+                            op: binary_op,
+                            left: Box::new(left),
+                            right: Box::new(right),
+                        };
+                        expr.type_id = result_type;
+                    }
+                }
             }
             TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
@@ -1224,7 +1299,7 @@ impl Monomorphizer {
                     );
                 }
             }
-            TirExprKind::Binary { op: _, left, right } => {
+            TirExprKind::Binary { op, left, right } => {
                 self.substitute_types_in_expr(
                     left,
                     substitution,
@@ -1239,6 +1314,27 @@ impl Monomorphizer {
                     local_count,
                     local_types,
                 );
+                // After type substitution, comparison operators on non-primitive
+                // types must be lowered to Eq::eq / Ord::cmp method calls.
+                if matches!(
+                    *op,
+                    TirBinaryOp::Eq
+                        | TirBinaryOp::NotEq
+                        | TirBinaryOp::Lt
+                        | TirBinaryOp::Gt
+                        | TirBinaryOp::LtEq
+                        | TirBinaryOp::GtEq
+                ) && let Some(new_kind) = try_lower_comparison(
+                    &self.functions.trait_method_locations,
+                    &self.current_module_source,
+                    expr.span,
+                    *op,
+                    left,
+                    right,
+                    type_table,
+                ) {
+                    expr.kind = new_kind;
+                }
             }
             TirExprKind::Unary { expr: inner, .. } => {
                 self.substitute_types_in_expr(
@@ -3190,5 +3286,182 @@ impl Monomorphizer {
 
     fn rewrite_local_index_in_expr(expr: &mut TirExpr, old_idx: u32, new_idx: u32) {
         LocalIndexRewriter { old_idx, new_idx }.visit_expr(expr);
+    }
+}
+
+/// Convert `==`/`!=`/`<`/`>`/`<=`/`>=` on Struct/Variant/GenericInstance types to
+/// `Eq::eq` / `Ord::cmp` method calls. Returns `None` for primitives.
+fn try_lower_comparison(
+    trait_method_locations: &IndexMap<String, ModuleSource>,
+    current_module_source: &ModuleSource,
+    span: crate::token::Span,
+    op: TirBinaryOp,
+    left: &TirExpr,
+    right: &TirExpr,
+    type_table: &mut TypeTable,
+) -> Option<TirExprKind> {
+    let operand_type = type_table.get(left.type_id);
+    let (base_struct_name, impl_type_args, type_module_source): (
+        String,
+        Vec<String>,
+        Option<ModuleSource>,
+    ) = match operand_type {
+        ResolvedType::Struct {
+            name,
+            module_source,
+            base_name,
+            ..
+        } => {
+            let struct_name = base_name.as_deref().unwrap_or(name).to_string();
+            (struct_name, vec![], Some(module_source.clone()))
+        }
+        ResolvedType::Variant {
+            name,
+            module_source,
+            ..
+        } => (name.clone(), vec![], Some(module_source.clone())),
+        ResolvedType::GenericInstance {
+            name,
+            type_args,
+            module_source,
+            ..
+        } => {
+            let args: Vec<String> = type_args
+                .iter()
+                .map(|&t| type_table.mangle_type_name(t))
+                .collect();
+            (name.clone(), args, Some(module_source.clone()))
+        }
+        _ => return None,
+    };
+
+    let make_ref = |e: &TirExpr, tt: &mut TypeTable| -> TirExpr {
+        let ref_type = tt.intern(ResolvedType::Ref(e.type_id));
+        TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: Box::new(e.clone()),
+            },
+            ref_type,
+            span,
+        )
+    };
+
+    let resolve_module = |mangled: &str, type_mod: Option<ModuleSource>| -> ModuleSource {
+        trait_method_locations
+            .get(mangled)
+            .cloned()
+            .or(type_mod)
+            .unwrap_or_else(|| current_module_source.clone())
+    };
+
+    if matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
+        let receiver = make_ref(left, type_table);
+        let arg_ref = make_ref(right, type_table);
+        let method_info =
+            LocalMethodName::new(base_struct_name, Some("Eq".to_string()), "eq".to_string())
+                .with_struct_type_args(&impl_type_args);
+        let mangled_name = method_info.to_mangled_name();
+        let method_module = resolve_module(&mangled_name, type_module_source);
+
+        let method_call = TirExprKind::MethodCall {
+            receiver: Box::new(receiver),
+            func: FunctionRef {
+                module_source: method_module,
+                name: mangled_name,
+                monomorph_info: None,
+                method_info: Some(method_info),
+                is_cm_binding: false,
+            },
+            type_args: vec![],
+            args: vec![CallArg::new(arg_ref, false)],
+        };
+
+        if op == TirBinaryOp::NotEq {
+            return Some(TirExprKind::Unary {
+                op: TirUnaryOp::Not,
+                expr: Box::new(TirExpr::new(method_call, TypeTable::BOOL, span)),
+            });
+        }
+        return Some(method_call);
+    }
+
+    if matches!(
+        op,
+        TirBinaryOp::Lt | TirBinaryOp::Gt | TirBinaryOp::LtEq | TirBinaryOp::GtEq
+    ) {
+        let receiver = make_ref(left, type_table);
+        let arg_ref = make_ref(right, type_table);
+        let ordering_type_id = type_table.intern(ResolvedType::Enum {
+            name: "Ordering".to_string(),
+            module_source: ModuleSource::prelude(),
+        });
+        let method_info =
+            LocalMethodName::new(base_struct_name, Some("Ord".to_string()), "cmp".to_string())
+                .with_struct_type_args(&impl_type_args);
+        let mangled_name = method_info.to_mangled_name();
+        let method_module = resolve_module(&mangled_name, type_module_source);
+
+        let cmp_call = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(receiver),
+                func: FunctionRef {
+                    module_source: method_module,
+                    name: mangled_name,
+                    monomorph_info: None,
+                    method_info: Some(method_info),
+                    is_cm_binding: false,
+                },
+                type_args: vec![],
+                args: vec![CallArg::new(arg_ref, false)],
+            },
+            ordering_type_id,
+            span,
+        );
+
+        let (compare_op, case_name, case_index): (TirBinaryOp, &str, u32) = match op {
+            TirBinaryOp::Lt => (TirBinaryOp::Eq, "Less", 0),
+            TirBinaryOp::Gt => (TirBinaryOp::Eq, "Greater", 2),
+            TirBinaryOp::LtEq => (TirBinaryOp::NotEq, "Greater", 2),
+            TirBinaryOp::GtEq => (TirBinaryOp::NotEq, "Less", 0),
+            _ => unreachable!(),
+        };
+
+        let ordering_variant = TirExpr::new(
+            TirExprKind::EnumConstruct {
+                enum_type: ordering_type_id,
+                case_name: case_name.to_string(),
+                case_index,
+            },
+            ordering_type_id,
+            span,
+        );
+
+        return Some(TirExprKind::Binary {
+            op: compare_op,
+            left: Box::new(cmp_call),
+            right: Box::new(ordering_variant),
+        });
+    }
+
+    None
+}
+
+/// Convert a trait method name to a TIR binary operator, if applicable.
+/// Used when a type-param-receiver method call is monomorphized to a primitive type.
+fn trait_method_to_binary_op(trait_name: Option<&str>, method_name: &str) -> Option<TirBinaryOp> {
+    match (trait_name, method_name) {
+        (Some("Add"), "add") => Some(TirBinaryOp::Add),
+        (Some("Sub"), "sub") => Some(TirBinaryOp::Sub),
+        (Some("Mul"), "mul") => Some(TirBinaryOp::Mul),
+        (Some("Div"), "div") => Some(TirBinaryOp::Div),
+        (Some("Rem"), "rem") => Some(TirBinaryOp::Mod),
+        (Some("BitAnd"), "bitand") => Some(TirBinaryOp::BitAnd),
+        (Some("BitOr"), "bitor") => Some(TirBinaryOp::BitOr),
+        (Some("BitXor"), "bitxor") => Some(TirBinaryOp::BitXor),
+        (Some("Shl"), "shl") => Some(TirBinaryOp::Shl),
+        (Some("Shr"), "shr") => Some(TirBinaryOp::Shr),
+        (Some("Eq"), "eq") => Some(TirBinaryOp::Eq),
+        _ => None,
     }
 }

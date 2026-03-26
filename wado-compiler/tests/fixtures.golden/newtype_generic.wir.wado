@@ -154,7 +154,7 @@ fn run() with Stdout {
         String::append_char(__local_6, 110);
         String::append_char(__local_6, 58);
         String::append_char(__local_6, 32);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         i32::fmt_decimal(arr.used, __local_7);
         break __tmpl: __local_6;
     });
@@ -167,7 +167,7 @@ fn run() with Stdout {
         String::append_char(__local_8, 116);
         String::append_char(__local_8, 58);
         String::append_char(__local_8, 32);
-        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
         i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_16: block -> i32 {
             if 0 >= arr.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -185,7 +185,7 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_10 = String { repr: builtin::array_new<u8>(30), used: 0 };
         String::append(__local_10, String { repr: array.new_data<u8>("after append: "), used: 14 });
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         i32::fmt_decimal(arr2.used, __local_11);
         break __tmpl: __local_10;
     });
@@ -201,7 +201,7 @@ fn run() with Stdout {
         String::append_char(__local_12, 115);
         String::append_char(__local_12, 58);
         String::append_char(__local_12, 32);
-        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
         i32::fmt_decimal(strs.used, __local_13);
         break __tmpl: __local_12;
     });
@@ -450,7 +450,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -546,7 +546,7 @@ fn Array<String>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Array<i32>::append(self, value) {
@@ -588,7 +588,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Formatter::write_char_n(self, c, n) {

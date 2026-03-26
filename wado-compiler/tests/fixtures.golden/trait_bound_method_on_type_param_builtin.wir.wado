@@ -20,6 +20,8 @@ struct Formatter {
     mut buf: ref String,
 }
 
+enum Ordering { Less = 0, Equal = 1, Greater = 2 };
+
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -82,6 +84,8 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
+type "functype/i32^Ord::cmp" = fn(i32, i32) -> enum:Ordering;
+
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
 import fn realloc from "mem/realloc";
@@ -104,15 +108,22 @@ fn run() with Stdout {
     let __local_3: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_0 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_1 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_0) };
-        i32::fmt_decimal(7, __local_1);
+        __local_1 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
+        i32::fmt_decimal(__inline_max_of_i32__5: block -> i32 {
+            if i32^Ord::cmp(3, 7) == 2 {
+                break __inline_max_of_i32__5: 3;
+            };
+            break __inline_max_of_i32__5: 7;
+        }, __local_1);
         break __tmpl: __local_0;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(__inline_min_of_i32__10: block -> i32 {
-            break __inline_min_of_i32__10: 3;
+            if i32^Ord::cmp(3, 7) == 0 {
+                break __inline_min_of_i32__10: 3;
+            };
             break __inline_min_of_i32__10: 7;
         }, __local_3);
         break __tmpl: __local_2;
@@ -165,13 +176,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l2: loop {
+            l4: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l2;
+                continue l4;
             };
         };
     };
@@ -251,13 +262,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l8: loop {
+            l10: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l8;
+                continue l10;
             };
         };
     };
@@ -274,14 +285,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l12: loop {
+                l14: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l12;
+                    continue l14;
                 };
             };
         };
@@ -308,6 +319,16 @@ fn i32::fmt_decimal(self, f) {
     }, offset, abs_val, digit_count);
 }
 
+fn i32^Ord::cmp(self, other) {
+    if self < other {
+        return 0;
+    };
+    if self > other {
+        return 2;
+    };
+    return 1;
+}
+
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
@@ -327,7 +348,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -391,13 +412,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l24: loop {
+            l28: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l24;
+                continue l28;
             };
         };
     };

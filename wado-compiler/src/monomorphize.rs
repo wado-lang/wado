@@ -474,10 +474,10 @@ impl Monomorphizer {
         // Phase 12: Rewrite function calls to use monomorphized names
         self.rewrite_function_calls_in_module(&mut module);
 
-        // Store trait_method_locations in module for the lower phase's comparison desugaring.
-        module
-            .trait_method_locations
-            .clone_from(&self.functions.trait_method_locations);
+        // Phase 12.5: Lower remaining comparison operators on non-primitive types to
+        // trait method calls. This handles comparisons in concrete (non-generic) functions
+        // on Struct/Variant/GenericInstance types that weren't resolved at resolve time.
+        func_inst::lower_comparisons_in_module(&mut module, &self.functions.trait_method_locations);
 
         // Phase 13: Rewrite types (single pass — unified loop above ensures all structs exist)
         self.rewrite_types_in_module(&mut module);

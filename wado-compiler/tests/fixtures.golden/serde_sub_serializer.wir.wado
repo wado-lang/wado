@@ -140,7 +140,7 @@ fn run() with Stdout {
     __fused___inline_TextSerializer_Serializer__begin_seq_2: block {
         self_15 = ser;
         String::append_char(self_15.buf, 91);
-        __fused_payload_24 = TextSeqSerializer { parent: ref.as_non_null(self_15), count: 0 };
+        __fused_payload_24 = TextSeqSerializer { parent: self_15, count: 0 };
         s_2 = __fused_payload_24;
         drop(TextSeqSerializer^SerializeSeq::element<i32>(s_2, 1));
         drop(TextSeqSerializer^SerializeSeq::element<i32>(s_2, 2));
@@ -165,7 +165,7 @@ fn run() with Stdout {
     __fused___inline_TextSerializer_Serializer__begin_struct_5: block {
         self_19 = ser;
         String::append_char(self_19.buf, 123);
-        __fused_payload_25 = TextStructSerializer { parent: ref.as_non_null(self_19), count: 0 };
+        __fused_payload_25 = TextStructSerializer { parent: self_19, count: 0 };
         s_7 = __fused_payload_25;
         name_8 = String { repr: array.new_data<u8>("Alice"), used: 5 };
         drop(TextStructSerializer^SerializeStruct::field<String>(s_7, String { repr: array.new_data<u8>("name"), used: 4 }, name_8));
@@ -399,7 +399,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -461,7 +461,7 @@ fn TextSerializer^Serializer::serialize_i32(self, v) {
     let __local_3: ref Formatter;
     String::append(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(v, __local_3);
         break __tmpl: __local_2;
     });

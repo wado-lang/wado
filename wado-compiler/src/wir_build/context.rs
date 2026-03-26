@@ -871,7 +871,7 @@ fn collect_referenced_globals(instrs: &[crate::wir::WirInstr], out: &mut IndexMa
 fn collect_referenced_globals_instr(instr: &crate::wir::WirInstr, out: &mut IndexMap<String, ()>) {
     use crate::wir::WirInstr;
     match instr {
-        WirInstr::GlobalGet { name } | WirInstr::GlobalSet { name, .. } => {
+        WirInstr::GlobalGet { name, .. } | WirInstr::GlobalSet { name, .. } => {
             out.insert(name.fq.clone(), ());
         }
         _ => {}
