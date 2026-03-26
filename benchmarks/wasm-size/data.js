@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774532119895,
+  "lastUpdate": 1774539146009,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7745,6 +7745,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f2dcf02519d40fb3db2ebfd3f073877e35916451"
         },
         "date": 1774532119674,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4ba6ad81ec71c4479469e6dd3e8c12146d2dd2d2",
+          "message": "Merge pull request #703 from wado-lang/claude/anonymous-struct-inference-frKI3\n\nAdd support for anonymous struct literals with type inference",
+          "timestamp": "2026-03-27T00:29:56+09:00",
+          "tree_id": "504fe7c2ff86e92dee5261ba99b16642bdafe5a2",
+          "url": "https://github.com/wado-lang/wado/commit/4ba6ad81ec71c4479469e6dd3e8c12146d2dd2d2"
+        },
+        "date": 1774539145801,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
