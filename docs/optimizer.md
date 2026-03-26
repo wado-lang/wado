@@ -39,7 +39,8 @@ The optimizer runs after lowering and before Wasm emission:
    9. Constant Global Promotion (`const_global_promotion.rs`)
    10. Constant Branch Pruning (`const_branch_prune.rs`)
    11. Loop-Invariant Code Motion (`licm.rs`)
-   12. Template String Buffer Hoisting (`tmpl_hoist.rs`)
+   12. Condition Implication (`condition_implication.rs`)
+   13. Template String Buffer Hoisting (`tmpl_hoist.rs`)
 3. **Hot Field Scalarization** (`field_scalarize.rs`): runs once after the loop converges
 4. **Final DCE**: clean up code made dead by optimizations (all levels)
 5. **Select Lowering** (`select_lowering.rs`): post-optimization rewrite (all levels)
@@ -116,6 +117,14 @@ Eliminates branches with compile-time-known boolean conditions. Also simplifies 
 
 Hoists loop-invariant field accesses out of loops when the target variable does not change within the loop body.
 
+### Condition Implication (`condition_implication.rs`)
+
+Eliminates conditions implied false by dominating guards. When a loop guard proves `i < bound`, any inner condition `i >= bound` is known false and can be replaced with `false`. The existing `const_branch_prune` pass then removes the dead branch on the next iteration.
+
+Also handles dominating if-conditions: when `if (var + offset) < bound { ... }`, bounds checks `(var + k) >= bound` for `k <= offset` inside the then-block are known false.
+
+This subsumes the former WIR-level bounds check elimination pass, handling both strict `<` and inclusive `<=` guard patterns at the TIR level.
+
 ### Template String Buffer Hoisting (`tmpl_hoist.rs`)
 
 Hoists the backing array allocation for template strings out of loops. Each iteration reuses the same backing array buffer. Escape analysis ensures the template result is not stored beyond the iteration.
@@ -145,6 +154,7 @@ WIR-level optimizations run after WIR build and before Wasm emission, operating 
 ### Phase 1: Type Representation
 
 - **Nullable ref optimization** — rewrites type-level representations for nullable references
+- **Pre-SROA copy propagation** — inlines trivial copies like `alias = source` so that SROA can see direct variant access patterns (RefTest/RefCast on source)
 - **Multi-value return SROA** — rewrites functions returning small scalar structs (2–4 fields) to use Wasm multi-value returns, eliminating GC struct allocation at function boundaries
 - **Single-field parameter SROA** — rewrites `ref null S` parameters (where `S` is a single-field struct) to take the scalar field value directly. Primary trigger is `Box<T>` from template string interpolation.
 
@@ -155,8 +165,7 @@ After parameter SROA, substitutes `StructGet(LocalGet(x), field)` with the inner
 ### Phase 3: Data Flow
 
 - **Collapse array append sequences** — merges consecutive `append` calls into `array.new_fixed`
-- **Forward struct field constants** — tracks known field values (constants and `LocalGet` references) through `StructGet` for bounds check elimination. Also resolves block-result `StructNew` patterns for single-exit blocks. Uses stores-aware alias analysis: locals passed to functions without `stores` declarations are not marked as aliased, enabling field forwarding even when references are passed to callees
-- **Eliminate loop-guarded bounds checks** — removes redundant `index >= bound` checks when the loop guard dominates them. Supports both `i < bound` (strict) and `i <= limit` (inclusive) guards. For inclusive guards, resolves definition chains to verify that the bounds check bound equals `limit + 1` (e.g., `arr.used == limit + 1` when `arr = Array::filled(limit + 1, ...)`)
+- **Forward struct field constants** — tracks known field values (constants and `LocalGet` references) through `StructGet` for constant index bounds check elimination. Also resolves block-result `StructNew` patterns for single-exit blocks. Uses stores-aware alias analysis: locals passed to functions without `stores` declarations are not marked as aliased, enabling field forwarding even when references are passed to callees
 
 ### Phase 4: Library-Specific Rewrites
 
@@ -201,7 +210,7 @@ After parameter SROA, substitutes `StructGet(LocalGet(x), field)` with the inner
 - **Reassociation** — reorder associative operations to group constants
 - **SimplifyCFG** — general control flow graph simplification
 - **Tail Call Optimization** — emit `return_call` for tail-recursive calls
-- **Bounds Check Elimination (outside loops)** — redundant consecutive checks
+- **Bounds Check Elimination (outside loops)** — redundant consecutive checks (loop-guarded bounds checks are handled by `condition_implication`)
 
 ## Testing Strategy
 
