@@ -50,6 +50,10 @@ This runs `gale gen` against each `.g4` in `tests/grammars/` and overwrites the 
 
 `runtime.wado` is included verbatim into every generated file via `#include_str` in `generator.wado`. It must remain self-contained (no imports from other source files). See [WEP: Compile-Time File Inclusion](../docs/wep-2026-03-02-include-str.md).
 
+## Generated Parser Rules
+
+- **No backtracking in new code.** Use static k-token lookahead prediction to disambiguate alternatives. If prediction cannot resolve within depth 5, file an issue rather than adding backtracking. Existing backtracking sites are being migrated to prediction; do not add new ones.
+
 ## On-Task-Done
 
 When completing a task, run from the project root:
