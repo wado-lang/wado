@@ -566,20 +566,20 @@ fn try_variable(chars: &Array<char>, start: i32) -> i32 {
         alts_ok_0 = true;
     }
     if !alts_ok_0 {
-    alts_0_1: {
-        pos = alts_saved_0;
-        if pos >= chars.len() || chars[pos] < 'A' || chars[pos] > 'Z' { break alts_0_1; }
-        pos += 1;
-        alts_ok_0 = true;
-    }
-    if !alts_ok_0 {
-    alts_0_2: {
-        pos = alts_saved_0;
-        if pos >= chars.len() || chars[pos] != '_' { break alts_0_2; }
-        pos += 1;
-        alts_ok_0 = true;
-    }
-    }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= chars.len() || chars[pos] < 'A' || chars[pos] > 'Z' { break alts_0_1; }
+            pos += 1;
+            alts_ok_0 = true;
+        }
+        if !alts_ok_0 {
+            alts_0_2: {
+                pos = alts_saved_0;
+                if pos >= chars.len() || chars[pos] != '_' { break alts_0_2; }
+                pos += 1;
+                alts_ok_0 = true;
+            }
+        }
     }
     if !alts_ok_0 { return -1; }
     loop {
@@ -598,31 +598,31 @@ fn try_variable(chars: &Array<char>, start: i32) -> i32 {
                     alts_ok_3 = true;
                 }
                 if !alts_ok_3 {
-                alts_3_1: {
-                    pos = alts_saved_3;
-                    if pos >= chars.len() || chars[pos] < 'A' || chars[pos] > 'Z' { break alts_3_1; }
-                    pos += 1;
-                    alts_ok_3 = true;
-                }
-                if !alts_ok_3 {
-                alts_3_2: {
-                    pos = alts_saved_3;
-                    if pos >= chars.len() || chars[pos] != '_' { break alts_3_2; }
-                    pos += 1;
-                    alts_ok_3 = true;
-                }
-                }
+                    alts_3_1: {
+                        pos = alts_saved_3;
+                        if pos >= chars.len() || chars[pos] < 'A' || chars[pos] > 'Z' { break alts_3_1; }
+                        pos += 1;
+                        alts_ok_3 = true;
+                    }
+                    if !alts_ok_3 {
+                        alts_3_2: {
+                            pos = alts_saved_3;
+                            if pos >= chars.len() || chars[pos] != '_' { break alts_3_2; }
+                            pos += 1;
+                            alts_ok_3 = true;
+                        }
+                    }
                 }
                 if !alts_ok_3 { break alts_2_0; }
                 alts_ok_2 = true;
             }
             if !alts_ok_2 {
-            alts_2_1: {
-                pos = alts_saved_2;
-                if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break alts_2_1; }
-                pos += 1;
-                alts_ok_2 = true;
-            }
+                alts_2_1: {
+                    pos = alts_saved_2;
+                    if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break alts_2_1; }
+                    pos += 1;
+                    alts_ok_2 = true;
+                }
             }
             if !alts_ok_2 { break rep_1; }
             continue;
@@ -638,113 +638,113 @@ fn try_scientific_number(chars: &Array<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_0; }
+        let rep_saved_4 = pos;
+        rep_4: {
+            if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_4; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_0;
+        pos = rep_saved_4;
         break;
     }
-    let opt_saved_1 = pos;
-    let mut opt_ok_1 = false;
-    opt_1: {
-        if pos >= chars.len() || chars[pos] != '.' { break opt_1; }
+    let opt_saved_5 = pos;
+    let mut opt_ok_5 = false;
+    rep_5: {
+        if pos >= chars.len() || chars[pos] != '.' { break rep_5; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break opt_1; }
+        if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_5; }
         pos += 1;
         loop {
-            let rep_saved_2 = pos;
-            rep_2: {
-                if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_2; }
+            let rep_saved_6 = pos;
+            rep_6: {
+                if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_6; }
                 pos += 1;
                 continue;
             }
-            pos = rep_saved_2;
+            pos = rep_saved_6;
             break;
         }
-        opt_ok_1 = true;
+        opt_ok_5 = true;
     }
-    if !opt_ok_1 { pos = opt_saved_1; }
-    let opt_saved_3 = pos;
-    let mut opt_ok_3 = false;
-    opt_3: {
-        let alts_saved_4 = pos;
-        let mut alts_ok_4 = false;
-        alts_4_0: {
-            pos = alts_saved_4;
-            if pos >= chars.len() || chars[pos] != 'E' { break alts_4_0; }
+    if !opt_ok_5 { pos = opt_saved_5; }
+    let opt_saved_7 = pos;
+    let mut opt_ok_7 = false;
+    rep_7: {
+        let alts_saved_8 = pos;
+        let mut alts_ok_8 = false;
+        alts_8_0: {
+            pos = alts_saved_8;
+            if pos >= chars.len() || chars[pos] != 'E' { break alts_8_0; }
             pos += 1;
-            alts_ok_4 = true;
+            alts_ok_8 = true;
         }
-        if !alts_ok_4 {
-        alts_4_1: {
-            pos = alts_saved_4;
-            if pos >= chars.len() || chars[pos] != 'e' { break alts_4_1; }
-            pos += 1;
-            alts_ok_4 = true;
-        }
-        }
-        if !alts_ok_4 { break opt_3; }
-        let opt_saved_5 = pos;
-        let mut opt_ok_5 = false;
-        opt_5: {
-            let alts_saved_6 = pos;
-            let mut alts_ok_6 = false;
-            alts_6_0: {
-                pos = alts_saved_6;
-                if pos >= chars.len() || chars[pos] != '+' { break alts_6_0; }
+        if !alts_ok_8 {
+            alts_8_1: {
+                pos = alts_saved_8;
+                if pos >= chars.len() || chars[pos] != 'e' { break alts_8_1; }
                 pos += 1;
-                alts_ok_6 = true;
+                alts_ok_8 = true;
             }
-            if !alts_ok_6 {
-            alts_6_1: {
-                pos = alts_saved_6;
-                if pos >= chars.len() || chars[pos] != '-' { break alts_6_1; }
-                pos += 1;
-                alts_ok_6 = true;
-            }
-            }
-            if !alts_ok_6 { break opt_5; }
-            opt_ok_5 = true;
         }
-        if !opt_ok_5 { pos = opt_saved_5; }
-        if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break opt_3; }
+        if !alts_ok_8 { break rep_7; }
+        let opt_saved_9 = pos;
+        let mut opt_ok_9 = false;
+        rep_9: {
+            let alts_saved_10 = pos;
+            let mut alts_ok_10 = false;
+            alts_10_0: {
+                pos = alts_saved_10;
+                if pos >= chars.len() || chars[pos] != '+' { break alts_10_0; }
+                pos += 1;
+                alts_ok_10 = true;
+            }
+            if !alts_ok_10 {
+                alts_10_1: {
+                    pos = alts_saved_10;
+                    if pos >= chars.len() || chars[pos] != '-' { break alts_10_1; }
+                    pos += 1;
+                    alts_ok_10 = true;
+                }
+            }
+            if !alts_ok_10 { break rep_9; }
+            opt_ok_9 = true;
+        }
+        if !opt_ok_9 { pos = opt_saved_9; }
+        if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_7; }
         pos += 1;
         loop {
-            let rep_saved_7 = pos;
-            rep_7: {
-                if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_7; }
+            let rep_saved_11 = pos;
+            rep_11: {
+                if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_11; }
                 pos += 1;
                 continue;
             }
-            pos = rep_saved_7;
+            pos = rep_saved_11;
             break;
         }
-        let opt_saved_8 = pos;
-        let mut opt_ok_8 = false;
-        opt_8: {
-            if pos >= chars.len() || chars[pos] != '.' { break opt_8; }
+        let opt_saved_12 = pos;
+        let mut opt_ok_12 = false;
+        rep_12: {
+            if pos >= chars.len() || chars[pos] != '.' { break rep_12; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break opt_8; }
+            if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_12; }
             pos += 1;
             loop {
-                let rep_saved_9 = pos;
-                rep_9: {
-                    if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_9; }
+                let rep_saved_13 = pos;
+                rep_13: {
+                    if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_13; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_9;
+                pos = rep_saved_13;
                 break;
             }
-            opt_ok_8 = true;
+            opt_ok_12 = true;
         }
-        if !opt_ok_8 { pos = opt_saved_8; }
-        opt_ok_3 = true;
+        if !opt_ok_12 { pos = opt_saved_12; }
+        opt_ok_7 = true;
     }
-    if !opt_ok_3 { pos = opt_saved_3; }
+    if !opt_ok_7 { pos = opt_saved_7; }
     return pos;
 }
 
@@ -754,14 +754,14 @@ fn try_ws(chars: &Array<char>, start: i32) -> i32 {
     if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { return -1; }
     pos += 1;
     loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            if pos >= chars.len() { break rep_0; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { break rep_0; }
+        let rep_saved_14 = pos;
+        rep_14: {
+            if pos >= chars.len() { break rep_14; }
+            if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { break rep_14; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_0;
+        pos = rep_saved_14;
         break;
     }
     return pos;

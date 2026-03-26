@@ -7,60 +7,104 @@ use {
     to_lower, to_snake_case, to_pascal_case, rule_type_name, literal_field_name,
     strip_suffix, escape_string, literal_const_name, array_contains_str,
 } from "./gen_util.wado";
+use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
 
-pub fn gen_parser(out: &mut String, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
-    gen_parser_struct(out);
+pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
+    gen_parser_struct(w);
     for let rule of grammar.parser_rules {
-        gen_parse_fn(out, &rule, &grammar.parser_rules, lit_tokens);
+        gen_parse_fn(w, &rule, &grammar.parser_rules, lit_tokens);
     }
-    gen_parse_entry(out, &grammar.parser_rules);
+    gen_parse_entry(w, &grammar.parser_rules);
 }
 
-fn gen_parser_struct(out: &mut String) {
-    out.append("struct Parser {\n");
-    out.append("    tokens: Array<Token>,\n");
-    out.append("    pos: i32,\n");
-    out.append("}\n\n");
-    out.append("impl Parser {\n");
-    out.append("    fn new(tokens: Array<Token>) -> Parser {\n");
-    out.append("        return Parser { tokens, pos: 0 };\n");
-    out.append("    }\n\n");
-    out.append("    fn peek(&self) -> &Token {\n");
-    out.append("        return &self.tokens[self.pos];\n");
-    out.append("    }\n\n");
-    out.append("    fn peek_kind(&self) -> i32 {\n");
-    out.append("        return self.tokens[self.pos].kind;\n");
-    out.append("    }\n\n");
-    out.append("    fn peek_at(&self, offset: i32) -> i32 {\n");
-    out.append("        let idx = self.pos + offset;\n");
-    out.append("        if idx >= self.tokens.len() { return TK_EOF; }\n");
-    out.append("        return self.tokens[idx].kind;\n");
-    out.append("    }\n\n");
-    out.append("    fn advance(&mut self) -> Token {\n");
-    out.append("        let tok = self.tokens[self.pos];\n");
-    out.append("        self.pos += 1;\n");
-    out.append("        return tok;\n");
-    out.append("    }\n\n");
-    out.append("    fn last_end(&self) -> i32 {\n");
-    out.append("        if self.pos == 0 { return 0; }\n");
-    out.append("        return self.tokens[self.pos - 1].span.end;\n");
-    out.append("    }\n\n");
-    out.append("    fn expect(&mut self, kind: i32, name: String) -> Result<Token, ParseError> {\n");
-    out.append("        if self.tokens[self.pos].kind == kind {\n");
-    out.append("            return Result::<Token, ParseError>::Ok(self.advance());\n");
-    out.append("        }\n");
-    out.append("        let tok = &self.tokens[self.pos];\n");
-    out.append("        return Result::<Token, ParseError>::Err(ParseError::new(\n");
-    out.append("            `expected {name}, got \"{tok.text}\"`,\n");
-    out.append("            tok.span,\n");
-    out.append("            [name],\n");
-    out.append("        ));\n");
-    out.append("    }\n");
-    out.append("}\n\n");
+fn gen_parser_struct(w: &mut CodeWriter) {
+    let mut s = StructSpec::new("Parser");
+    s.add_field("tokens", "Array<Token>");
+    s.add_field("pos", "i32");
+    s.emit(w);
+    w.blank();
+
+    ImplSpec::new("Parser").emit_begin(w);
+
+    let mut f = FnSpec::new("new");
+    f.add_param("tokens", "Array<Token>");
+    f.set_return_type("Parser");
+    f.emit_begin(w);
+    w.line("return Parser { tokens, pos: 0 };");
+    w.end();
+    w.blank();
+
+    let mut f2 = FnSpec::new("peek");
+    f2.set_receiver("&self");
+    f2.set_return_type("&Token");
+    f2.emit_begin(w);
+    w.line("return &self.tokens[self.pos];");
+    w.end();
+    w.blank();
+
+    let mut f3 = FnSpec::new("peek_kind");
+    f3.set_receiver("&self");
+    f3.set_return_type("i32");
+    f3.emit_begin(w);
+    w.line("return self.tokens[self.pos].kind;");
+    w.end();
+    w.blank();
+
+    let mut f4 = FnSpec::new("peek_at");
+    f4.set_receiver("&self");
+    f4.add_param("offset", "i32");
+    f4.set_return_type("i32");
+    f4.emit_begin(w);
+    w.line("let idx = self.pos + offset;");
+    w.line("if idx >= self.tokens.len() { return TK_EOF; }");
+    w.line("return self.tokens[idx].kind;");
+    w.end();
+    w.blank();
+
+    let mut f5 = FnSpec::new("advance");
+    f5.set_receiver("&mut self");
+    f5.set_return_type("Token");
+    f5.emit_begin(w);
+    w.line("let tok = self.tokens[self.pos];");
+    w.line("self.pos += 1;");
+    w.line("return tok;");
+    w.end();
+    w.blank();
+
+    let mut f6 = FnSpec::new("last_end");
+    f6.set_receiver("&self");
+    f6.set_return_type("i32");
+    f6.emit_begin(w);
+    w.line("if self.pos == 0 { return 0; }");
+    w.line("return self.tokens[self.pos - 1].span.end;");
+    w.end();
+    w.blank();
+
+    let mut f7 = FnSpec::new("expect");
+    f7.set_receiver("&mut self");
+    f7.add_param("kind", "i32");
+    f7.add_param("name", "String");
+    f7.set_return_type("Result<Token, ParseError>");
+    f7.emit_begin(w);
+    w.begin("if self.tokens[self.pos].kind == kind");
+    w.line("return Result::<Token, ParseError>::Ok(self.advance());");
+    w.end();
+    w.line("let tok = &self.tokens[self.pos];");
+    w.line("return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.indent();
+    w.line("`expected {name}, got \"{tok.text}\"`,");
+    w.line("tok.span,");
+    w.line("[name],");
+    w.dedent();
+    w.line("));");
+    w.end();
+
+    w.end(); // impl
+    w.blank();
 }
 
 fn gen_parse_fn(
-    out: &mut String,
+    w: &mut CodeWriter,
     rule: &ParserRule,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
@@ -69,17 +113,19 @@ fn gen_parse_fn(
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
 
     if rule.alternatives.len() == 1 {
-        out.append(`fn {fn_name}(p: &mut Parser) -> Result<{type_name}, ParseError> \{\n`);
-        out.append("    let start = p.peek().span.start;\n");
-        gen_alt_body(out, &type_name, null, null, &rule.alternatives[0], all_rules, lit_tokens, "    ");
-        out.append("}\n\n");
+        let mut f = FnSpec::new(&fn_name);
+        f.add_param("p", "&mut Parser");
+        f.set_return_type(`Result<{type_name}, ParseError>`);
+        f.emit_begin(w);
+        w.line("let start = p.peek().span.start;");
+        gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], all_rules, lit_tokens);
+        w.end();
+        w.blank();
         return;
     }
 
-    // Multi-alt: filter out left-recursive alternatives and check for overlapping FIRST sets
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
 
-    // Identify non-left-recursive alternatives
     let mut non_lr_indices: Array<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         if !is_left_recursive(&rule.alternatives[i], &rule.name) {
@@ -95,7 +141,6 @@ fn gen_parse_fn(
     let mut groups = compute_overlap_groups(&first_sets);
     let needs_bt = has_multi_alt_groups(&groups);
 
-    // Sort each backtracking group: more specific alternatives (deeper LL(k)) first
     if needs_bt {
         for let mut g = 0; g < groups.len(); g += 1 {
             if groups[g].len() > 1 {
@@ -105,30 +150,28 @@ fn gen_parse_fn(
     }
 
     if needs_bt {
-        // Emit helper functions for backtracking alternatives
         for let group of groups {
             if group.len() > 1 {
                 for let gi of group {
                     let alt_idx = non_lr_indices[gi];
                     let alt = &rule.alternatives[alt_idx];
-                    let case_name = if all_labeled {
-                        alt.label.unwrap()
-                    } else {
-                        `Alt{alt_idx}`
-                    };
+                    let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{alt_idx}` };
                     let sname = `{strip_suffix(&type_name, "Node")}{case_name}`;
                     let helper_name = `{fn_name}_bt_{alt_idx}`;
 
-                    out.append(`fn {helper_name}(p: &mut Parser) -> Result<{type_name}, ParseError> \{\n`);
-                    out.append("    let start = p.peek().span.start;\n");
-                    gen_alt_body(out, &type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens, "    ");
-                    out.append("}\n\n");
+                    let mut f = FnSpec::new(&helper_name);
+                    f.add_param("p", "&mut Parser");
+                    f.set_return_type(`Result<{type_name}, ParseError>`);
+                    f.emit_begin(w);
+                    w.line("let start = p.peek().span.start;");
+                    gen_alt_body(w, &type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens);
+                    w.end();
+                    w.blank();
                 }
             }
         }
     }
 
-    // Check for left-recursive alternatives
     let mut lr_indices: Array<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         if is_left_recursive(&rule.alternatives[i], &rule.name) {
@@ -138,68 +181,79 @@ fn gen_parse_fn(
     let has_lr = lr_indices.len() > 0;
 
     if has_lr {
-        // Emit atom function (base expression parser)
-        out.append(`fn {fn_name}_atom(p: &mut Parser) -> Result<{type_name}, ParseError> \{\n`);
-        out.append("    let start = p.peek().span.start;\n");
+        let atom_name = `{fn_name}_atom`;
+        let mut f = FnSpec::new(&atom_name);
+        f.add_param("p", "&mut Parser");
+        f.set_return_type(`Result<{type_name}, ParseError>`);
+        f.emit_begin(w);
+        w.line("let start = p.peek().span.start;");
         if needs_bt {
-            gen_multi_alt_body_bt(out, rule, &type_name, all_rules, lit_tokens, &groups, &first_sets, &non_lr_indices);
+            gen_multi_alt_body_bt(w, rule, &type_name, all_rules, lit_tokens, &groups, &first_sets, &non_lr_indices);
         } else {
-            gen_multi_alt_body(out, rule, &type_name, all_rules, lit_tokens);
+            gen_multi_alt_body(w, rule, &type_name, all_rules, lit_tokens);
         }
-        out.append("}\n\n");
+        w.end();
+        w.blank();
 
-        // Emit LR suffix handler functions
-        gen_lr_suffix_helpers(out, rule, &type_name, &lr_indices, all_rules, lit_tokens);
+        gen_lr_suffix_helpers(w, rule, &type_name, &lr_indices, all_rules, lit_tokens);
 
-        // Emit main parse function with suffix loop
-        out.append(`fn {fn_name}(p: &mut Parser) -> Result<{type_name}, ParseError> \{\n`);
-        out.append("    let start = p.peek().span.start;\n");
-        out.append(`    let mut result = {fn_name}_atom(p)?;\n`);
-        gen_lr_suffix_dispatch(out, rule, &type_name, &lr_indices, all_rules, lit_tokens);
-        out.append(`    return Result::<{type_name}, ParseError>::Ok(result);\n`);
-        out.append("}\n\n");
+        let mut f2 = FnSpec::new(&fn_name);
+        f2.add_param("p", "&mut Parser");
+        f2.set_return_type(`Result<{type_name}, ParseError>`);
+        f2.emit_begin(w);
+        w.line("let start = p.peek().span.start;");
+        w.line(`let mut result = {fn_name}_atom(p)?;`);
+        gen_lr_suffix_dispatch(w, rule, &type_name, &lr_indices, all_rules, lit_tokens);
+        w.line(`return Result::<{type_name}, ParseError>::Ok(result);`);
+        w.end();
+        w.blank();
     } else {
-        // No left recursion: emit directly
-        out.append(`fn {fn_name}(p: &mut Parser) -> Result<{type_name}, ParseError> \{\n`);
-        out.append("    let start = p.peek().span.start;\n");
+        let mut f = FnSpec::new(&fn_name);
+        f.add_param("p", "&mut Parser");
+        f.set_return_type(`Result<{type_name}, ParseError>`);
+        f.emit_begin(w);
+        w.line("let start = p.peek().span.start;");
         if needs_bt {
-            gen_multi_alt_body_bt(out, rule, &type_name, all_rules, lit_tokens, &groups, &first_sets, &non_lr_indices);
+            gen_multi_alt_body_bt(w, rule, &type_name, all_rules, lit_tokens, &groups, &first_sets, &non_lr_indices);
         } else {
-            gen_multi_alt_body(out, rule, &type_name, all_rules, lit_tokens);
+            gen_multi_alt_body(w, rule, &type_name, all_rules, lit_tokens);
         }
-        out.append("}\n\n");
+        w.end();
+        w.blank();
     }
 }
 
 fn gen_alt_body(
-    out: &mut String,
+    w: &mut CodeWriter,
     type_name: &String,
     variant_case: Option<String>,
     struct_name: Option<String>,
     alt: &Alternative,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
-    indent: &String,
 ) {
-    gen_alt_elements(out, &alt.elements, all_rules, lit_tokens, indent);
+    gen_alt_elements(w, &alt.elements, all_rules, lit_tokens);
 
-    let end_expr = "p.last_end()";
     if let Some(case) = variant_case {
         let sname = struct_name.unwrap();
-        out.append(`{indent}return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{\n`);
-        out.append(`{indent}    span: Span::new(start, {end_expr}),\n`);
-        gen_field_assignments(out, &alt.elements, `{indent}    `);
-        out.append(`{indent}\}));\n`);
+        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
+        w.indent();
+        w.line("span: Span::new(start, p.last_end()),");
+        gen_field_assignments(w, &alt.elements);
+        w.dedent();
+        w.line("}));");
     } else {
-        out.append(`{indent}return Result::<{type_name}, ParseError>::Ok({type_name} \{\n`);
-        out.append(`{indent}    span: Span::new(start, {end_expr}),\n`);
-        gen_field_assignments(out, &alt.elements, `{indent}    `);
-        out.append(`{indent}\});\n`);
+        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
+        w.indent();
+        w.line("span: Span::new(start, p.last_end()),");
+        gen_field_assignments(w, &alt.elements);
+        w.dedent();
+        w.line("});");
     }
 }
 
 fn gen_multi_alt_body(
-    out: &mut String,
+    w: &mut CodeWriter,
     rule: &ParserRule,
     type_name: &String,
     all_rules: &Array<ParserRule>,
@@ -207,7 +261,6 @@ fn gen_multi_alt_body(
 ) {
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
 
-    // Compute LL(k) lookahead info
     let max_k = 5;
     let mut all_pos_sets: Array<Array<Array<String>>> = [];
     for let alt of rule.alternatives {
@@ -215,90 +268,47 @@ fn gen_multi_alt_body(
     }
     let depth = find_needed_depth(&all_pos_sets);
 
-    out.append("    let kind = p.peek_kind();\n");
+    w.line("let kind = p.peek_kind();");
 
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         let alt = &rule.alternatives[i];
-        let case_name = if all_labeled {
-            alt.label.unwrap()
-        } else {
-            `Alt{i}`
-        };
+        let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{i}` };
         let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
 
         let pos_sets = &all_pos_sets[i];
         let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
 
         if cond_depth > 0 {
-            out.append("    if ");
-            for let mut d = 0; d < cond_depth; d += 1 {
-                if d > 0 { out.append(" && "); }
-                let tokens = &pos_sets[d];
-                let check_expr = if d == 0 { "kind" } else { `p.peek_at({d})` };
-                if tokens.len() == 1 {
-                    out.append(`{check_expr} == {tokens[0]}`);
-                } else {
-                    out.append("(");
-                    for let mut j = 0; j < tokens.len(); j += 1 {
-                        if j > 0 { out.append(" || "); }
-                        out.append(`{check_expr} == {tokens[j]}`);
-                    }
-                    out.append(")");
-                }
-            }
-            out.append(" {\n");
+            let cond = build_lookahead_condition(pos_sets, cond_depth);
+            w.begin(`if {cond}`);
         } else {
-            out.append("    {\n");
+            w.begin("scope:");
         }
 
-        gen_alt_body(out, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens, "        ");
-        out.append("    }\n");
+        gen_alt_body(w, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens);
+        w.end();
     }
 
-    // Error fallback
-    let mut expected: Array<String> = [];
-    for let alt of rule.alternatives {
-        let mut visiting2: Array<String> = [];
-        let first = first_of_alt(&alt, all_rules, lit_tokens, &mut visiting2);
-        for let tk of first {
-            if !array_contains_str(&expected, &tk) {
-                expected.append(tk);
-            }
-        }
-    }
-    out.append(`    return Result::<{type_name}, ParseError>::Err(ParseError::new(\n`);
-    out.append(`        `);
-    out.append(escape_string(&`expected {rule.name}`));
-    out.append(",\n");
-    out.append("        p.peek().span,\n");
-    out.append("        [");
-    for let mut i = 0; i < expected.len(); i += 1 {
-        if i > 0 { out.append(", "); }
-        out.append(escape_string(&expected[i]));
-    }
-    out.append("],\n");
-    out.append("    ));\n");
+    gen_error_fallback(w, rule, type_name, all_rules, lit_tokens);
 }
 
 fn gen_alt_elements(
-    out: &mut String,
+    w: &mut CodeWriter,
     elements: &Array<Element>,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
-    indent: &String,
 ) {
     let mut name_counts: Array<[String, i32]> = [];
     for let elem of elements {
-        gen_element(out, &elem, all_rules, lit_tokens, indent, true, &mut name_counts);
+        gen_element(w, &elem, all_rules, lit_tokens, true, &mut name_counts);
     }
 }
 
 fn gen_element(
-    out: &mut String,
+    w: &mut CodeWriter,
     elem: &Element,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
-    indent: &String,
     store: bool,
     name_counts: &mut Array<[String, i32]>,
 ) {
@@ -306,11 +316,10 @@ fn gen_element(
         let const_name = `TK_{name}`;
         if store {
             let field_name = dedup_name(&to_lower(&name), name_counts);
-            out.append(`{indent}let {field_name} = p.expect({const_name}, {escape_string(&name)})?;\n`);
+            w.line(`let {field_name} = p.expect({const_name}, {escape_string(&name)})?;`);
         } else {
-            // Always bind result to ensure &mut self mutation persists
             let discard = dedup_name(&"tok", name_counts);
-            out.append(`{indent}let {discard} = p.expect({const_name}, {escape_string(&name)})?;\n`);
+            w.line(`let {discard} = p.expect({const_name}, {escape_string(&name)})?;`);
         }
         return;
     }
@@ -319,10 +328,10 @@ fn gen_element(
         let display = `'{text}'`;
         if store {
             let field_name = dedup_name(&literal_field_name(&text), name_counts);
-            out.append(`{indent}let {field_name} = p.expect({const_name}, {escape_string(&display)})?;\n`);
+            w.line(`let {field_name} = p.expect({const_name}, {escape_string(&display)})?;`);
         } else {
             let discard = dedup_name(&"tok", name_counts);
-            out.append(`{indent}let {discard} = p.expect({const_name}, {escape_string(&display)})?;\n`);
+            w.line(`let {discard} = p.expect({const_name}, {escape_string(&display)})?;`);
         }
         return;
     }
@@ -330,146 +339,128 @@ fn gen_element(
         let fn_name = `parse_{to_snake_case(&name)}`;
         if store {
             let field_name = dedup_name(&to_snake_case(&name), name_counts);
-            out.append(`{indent}let {field_name} = {fn_name}(p)?;\n`);
+            w.line(`let {field_name} = {fn_name}(p)?;`);
         } else {
             let discard = dedup_name(&"tok", name_counts);
-            out.append(`{indent}let {discard} = {fn_name}(p)?;\n`);
+            w.line(`let {discard} = {fn_name}(p)?;`);
         }
         return;
     }
     if let Repeat(rep) = *elem {
-        gen_repeat(out, &rep, all_rules, lit_tokens, indent, name_counts);
+        gen_repeat(w, &rep, all_rules, lit_tokens, name_counts);
         return;
     }
     if let Group(alts) = *elem {
-        gen_consume_group(out, &alts, all_rules, lit_tokens, indent, name_counts);
+        gen_consume_group(w, &alts, all_rules, lit_tokens, name_counts);
         return;
     }
     if let Label(lab) = *elem {
-        gen_element(out, &lab.element, all_rules, lit_tokens, indent, store, name_counts);
+        gen_element(w, &lab.element, all_rules, lit_tokens, store, name_counts);
         return;
     }
 }
 
 fn gen_repeat(
-    out: &mut String,
+    w: &mut CodeWriter,
     rep: &RepeatElement,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
-    indent: &String,
     name_counts: &mut Array<[String, i32]>,
 ) {
     let inner = &rep.element;
     let mut visiting: Array<String> = [];
     let first = first_of_element(inner, all_rules, lit_tokens, &mut visiting);
-    let inner_indent = `{indent}    `;
 
     if has_field(inner) {
         let field_info = element_field_info(inner);
         if let Star = rep.kind {
             let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
-            out.append(`{indent}let mut {list_name}: Array<{field_info.1}> = [];\n`);
-            out.append(`{indent}while `);
-            gen_first_check(out, &first);
-            out.append(" {\n");
+            w.line(`let mut {list_name}: Array<{field_info.1}> = [];`);
+            w.begin(`while {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(out, inner, all_rules, lit_tokens, &inner_indent, true, &mut nc);
-            out.append(`{inner_indent}{list_name}.append({field_info.0});\n`);
-            out.append(`{indent}\}\n`);
+            gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+            w.line(`{list_name}.append({field_info.0});`);
+            w.end();
         }
         if let Plus = rep.kind {
             let mut nc: Array<[String, i32]> = [];
-            gen_element(out, inner, all_rules, lit_tokens, indent, true, &mut nc);
+            gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
             let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
-            out.append(`{indent}let mut {list_name}: Array<{field_info.1}> = [{field_info.0}];\n`);
-            out.append(`{indent}while `);
-            gen_first_check(out, &first);
-            out.append(" {\n");
+            w.line(`let mut {list_name}: Array<{field_info.1}> = [{field_info.0}];`);
+            w.begin(`while {first_check_str(&first)}`);
             let mut nc2: Array<[String, i32]> = [];
-            gen_element(out, inner, all_rules, lit_tokens, &inner_indent, true, &mut nc2);
-            out.append(`{inner_indent}{list_name}.append({field_info.0});\n`);
-            out.append(`{indent}\}\n`);
+            gen_element(w, inner, all_rules, lit_tokens, true, &mut nc2);
+            w.line(`{list_name}.append({field_info.0});`);
+            w.end();
         }
         if let Optional = rep.kind {
             let type_str = field_info.1;
             let opt_name = dedup_name(&field_info.0, name_counts);
-            out.append(`{indent}let {opt_name}: Option<{type_str}> = if `);
-            gen_first_check(out, &first);
-            out.append(" {\n");
+            w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(out, inner, all_rules, lit_tokens, &inner_indent, true, &mut nc);
-            out.append(`{inner_indent}Option::<{type_str}>::Some({field_info.0})\n`);
-            out.append(`{indent}\} else \{ null \};\n`);
+            gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+            w.line(`Option::<{type_str}>::Some({field_info.0})`);
+            w.else_begin("else");
+            w.line("null");
+            w.end_with(";");
         }
     } else {
         if let Star = rep.kind {
-            out.append(`{indent}while `);
-            gen_first_check(out, &first);
-            out.append(" {\n");
+            w.begin(`while {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(out, inner, all_rules, lit_tokens, &inner_indent, false, &mut nc);
-            out.append(`{indent}\}\n`);
+            gen_element(w, inner, all_rules, lit_tokens, false, &mut nc);
+            w.end();
         }
         if let Plus = rep.kind {
-            gen_element(out, inner, all_rules, lit_tokens, indent, false, name_counts);
-            out.append(`{indent}while `);
-            gen_first_check(out, &first);
-            out.append(" {\n");
+            gen_element(w, inner, all_rules, lit_tokens, false, name_counts);
+            w.begin(`while {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(out, inner, all_rules, lit_tokens, &inner_indent, false, &mut nc);
-            out.append(`{indent}\}\n`);
+            gen_element(w, inner, all_rules, lit_tokens, false, &mut nc);
+            w.end();
         }
         if let Optional = rep.kind {
-            gen_optional_with_backtrack(out, inner, all_rules, lit_tokens, indent, &first, name_counts);
+            gen_optional_with_backtrack(w, inner, all_rules, lit_tokens, &first, name_counts);
         }
     }
 }
 
 fn gen_optional_with_backtrack(
-    out: &mut String,
+    w: &mut CodeWriter,
     inner: &Element,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
-    indent: &String,
     first: &Array<String>,
     name_counts: &mut Array<[String, i32]>,
 ) {
-    let inner_indent = `{indent}    `;
-    out.append(`{indent}if `);
-    gen_first_check(out, first);
-    out.append(" {\n");
+    w.begin(`if {first_check_str(first)}`);
 
     let saved = dedup_name(&"opt_saved", name_counts);
     let label = dedup_name(&"opt_bt", name_counts);
-    out.append(`{inner_indent}let {saved} = p.pos;\n`);
-    out.append(`{inner_indent}{label}: \{\n`);
-    let bt_indent = `{inner_indent}    `;
+    w.line(`let {saved} = p.pos;`);
+    w.begin(`{label}:`);
 
-    // Emit inner elements with failable error checking (break on error)
     if let Group(alts) = *inner {
         if alts.len() == 1 {
             for let elem of alts[0].elements {
-                gen_element_failable(out, &elem, all_rules, lit_tokens, &bt_indent, &saved, &label, name_counts);
+                gen_element_failable(w, &elem, all_rules, lit_tokens, &saved, &label, name_counts);
             }
         } else {
-            // Multi-alt group: just use normal gen_element (may not backtrack inner errors)
             let mut nc: Array<[String, i32]> = [];
-            gen_element(out, inner, all_rules, lit_tokens, &bt_indent, false, &mut nc);
+            gen_element(w, inner, all_rules, lit_tokens, false, &mut nc);
         }
     } else {
-        gen_element_failable(out, inner, all_rules, lit_tokens, &bt_indent, &saved, &label, name_counts);
+        gen_element_failable(w, inner, all_rules, lit_tokens, &saved, &label, name_counts);
     }
 
-    out.append(`{inner_indent}\}\n`);
-    out.append(`{indent}\}\n`);
+    w.end(); // label
+    w.end(); // if
 }
 
 fn gen_element_failable(
-    out: &mut String,
+    w: &mut CodeWriter,
     elem: &Element,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
-    indent: &String,
     saved_var: &String,
     label: &String,
     name_counts: &mut Array<[String, i32]>,
@@ -477,43 +468,41 @@ fn gen_element_failable(
     if let TokenRef(name) = *elem {
         let const_name = `TK_{name}`;
         let r_var = dedup_name(&"opt_r", name_counts);
-        out.append(`{indent}let {r_var} = p.expect({const_name}, {escape_string(&name)});\n`);
-        out.append(`{indent}if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}\n`);
+        w.line(`let {r_var} = p.expect({const_name}, {escape_string(&name)});`);
+        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
         return;
     }
     if let Literal(text) = *elem {
         let const_name = literal_const_name(&text);
         let display = `'{text}'`;
         let r_var = dedup_name(&"opt_r", name_counts);
-        out.append(`{indent}let {r_var} = p.expect({const_name}, {escape_string(&display)});\n`);
-        out.append(`{indent}if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}\n`);
+        w.line(`let {r_var} = p.expect({const_name}, {escape_string(&display)});`);
+        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
         return;
     }
     if let RuleRef(name) = *elem {
         let fn_name = `parse_{to_snake_case(&name)}`;
         let r_var = dedup_name(&"opt_r", name_counts);
-        out.append(`{indent}let {r_var} = {fn_name}(p);\n`);
-        out.append(`{indent}if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}\n`);
+        w.line(`let {r_var} = {fn_name}(p);`);
+        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
         return;
     }
     if let Repeat(rep) = *elem {
-        // Nested repeats within failable context: use normal gen_repeat
-        // The inner Optional will generate its own backtracking
-        gen_repeat(out, &rep, all_rules, lit_tokens, indent, name_counts);
+        gen_repeat(w, &rep, all_rules, lit_tokens, name_counts);
         return;
     }
     if let Group(alts) = *elem {
         if alts.len() == 1 {
             for let inner_elem of alts[0].elements {
-                gen_element_failable(out, &inner_elem, all_rules, lit_tokens, indent, saved_var, label, name_counts);
+                gen_element_failable(w, &inner_elem, all_rules, lit_tokens, saved_var, label, name_counts);
             }
         } else {
-            gen_consume_group(out, &alts, all_rules, lit_tokens, indent, name_counts);
+            gen_consume_group(w, &alts, all_rules, lit_tokens, name_counts);
         }
         return;
     }
     if let Label(lab) = *elem {
-        gen_element_failable(out, &lab.element, all_rules, lit_tokens, indent, saved_var, label, name_counts);
+        gen_element_failable(w, &lab.element, all_rules, lit_tokens, saved_var, label, name_counts);
         return;
     }
 }
@@ -542,36 +531,31 @@ fn element_field_info(elem: &Element) -> [String, String] {
     return ["_", "Token"];
 }
 
-fn gen_field_assignments(
-    out: &mut String,
-    elements: &Array<Element>,
-    indent: String,
-) {
+fn gen_field_assignments(w: &mut CodeWriter, elements: &Array<Element>) {
     let mut name_counts: Array<[String, i32]> = [];
     for let elem of elements {
-        gen_field_assignment(out, &elem, &mut name_counts, &indent);
+        gen_field_assignment(w, &elem, &mut name_counts);
     }
 }
 
 fn gen_field_assignment(
-    out: &mut String,
+    w: &mut CodeWriter,
     elem: &Element,
     name_counts: &mut Array<[String, i32]>,
-    indent: &String,
 ) {
     if let TokenRef(name) = *elem {
         let field_name = dedup_name(&to_lower(&name), name_counts);
-        out.append(`{indent}{field_name},\n`);
+        w.line(`{field_name},`);
         return;
     }
     if let Literal(text) = *elem {
         let field_name = dedup_name(&literal_field_name(&text), name_counts);
-        out.append(`{indent}{field_name},\n`);
+        w.line(`{field_name},`);
         return;
     }
     if let RuleRef(name) = *elem {
         let field_name = dedup_name(&to_snake_case(&name), name_counts);
-        out.append(`{indent}{field_name},\n`);
+        w.line(`{field_name},`);
         return;
     }
     if let Repeat(rep) = *elem {
@@ -579,15 +563,15 @@ fn gen_field_assignment(
             let info = element_field_info(&rep.element);
             if let Star = rep.kind {
                 let field_name = dedup_name(&`{info.0}_list`, name_counts);
-                out.append(`{indent}{field_name},\n`);
+                w.line(`{field_name},`);
             }
             if let Plus = rep.kind {
                 let field_name = dedup_name(&`{info.0}_list`, name_counts);
-                out.append(`{indent}{field_name},\n`);
+                w.line(`{field_name},`);
             }
             if let Optional = rep.kind {
                 let field_name = dedup_name(&info.0, name_counts);
-                out.append(`{indent}{field_name},\n`);
+                w.line(`{field_name},`);
             }
         }
         return;
@@ -596,29 +580,27 @@ fn gen_field_assignment(
         if has_field(&lab.element) {
             let field_name = to_snake_case(&lab.name);
             dedup_name(&field_name, name_counts);
-            out.append(`{indent}{field_name},\n`);
+            w.line(`{field_name},`);
         }
         return;
     }
 }
 
 fn gen_consume_group(
-    out: &mut String,
+    w: &mut CodeWriter,
     alts: &Array<Alternative>,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
-    indent: &String,
     name_counts: &mut Array<[String, i32]>,
 ) {
     if alts.len() == 0 { return; }
     if alts.len() == 1 {
         for let elem of alts[0].elements {
-            gen_element(out, &elem, all_rules, lit_tokens, indent, false, name_counts);
+            gen_element(w, &elem, all_rules, lit_tokens, false, name_counts);
         }
         return;
     }
 
-    // Compute FIRST sets and group overlapping alternatives
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
         let mut visiting: Array<String> = [];
@@ -626,14 +608,12 @@ fn gen_consume_group(
     }
     let groups = compute_overlap_groups(&first_sets);
 
-    // Generate dispatch code
     let grp_var = dedup_name(&"grp_kind", name_counts);
-    out.append(`{indent}let {grp_var} = p.peek_kind();\n`);
+    w.line(`let {grp_var} = p.peek_kind();`);
 
     for let mut g = 0; g < groups.len(); g += 1 {
         let group = &groups[g];
 
-        // Compute union FIRST for the group
         let mut union_first: Array<String> = [];
         for let idx of group {
             for let tk of first_sets[*idx] {
@@ -643,102 +623,341 @@ fn gen_consume_group(
             }
         }
 
+        let cond = kind_check_str(&union_first, &grp_var);
         if g == 0 {
-            out.append(`{indent}if `);
+            w.begin(`if {cond}`);
         } else {
-            out.append(` else if `);
+            w.else_begin(`else if {cond}`);
         }
-        for let mut j = 0; j < union_first.len(); j += 1 {
-            if j > 0 { out.append(" || "); }
-            out.append(`{grp_var} == {union_first[j]}`);
-        }
-        out.append(" {\n");
-
-        let inner = `{indent}    `;
 
         if group.len() == 1 {
             let alt_idx = group[0];
             let mut nc: Array<[String, i32]> = [];
             for let elem of alts[alt_idx].elements {
-                gen_element(out, &elem, all_rules, lit_tokens, &inner, false, &mut nc);
+                gen_element(w, &elem, all_rules, lit_tokens, false, &mut nc);
             }
         } else {
-            gen_backtracking_body(out, group, alts, all_rules, lit_tokens, &inner, name_counts);
+            gen_backtracking_body(w, group, alts, all_rules, lit_tokens, name_counts);
         }
-
-        out.append(`{indent}\}`);
     }
-    out.append("\n");
+    w.end();
 }
 
 fn gen_backtracking_body(
-    out: &mut String,
+    w: &mut CodeWriter,
     group: &Array<i32>,
     alts: &Array<Alternative>,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
-    indent: &String,
     name_counts: &mut Array<[String, i32]>,
 ) {
     let saved_var = dedup_name(&"saved_pos", name_counts);
     let done_var = dedup_name(&"bt_done", name_counts);
-    out.append(`{indent}let {saved_var} = p.pos;\n`);
-    out.append(`{indent}let mut {done_var} = false;\n`);
+    w.line(`let {saved_var} = p.pos;`);
+    w.line(`let mut {done_var} = false;`);
 
     for let mut k = 0; k < group.len(); k += 1 {
         let alt_idx = group[k];
         let is_last = k == group.len() - 1;
         let alt = &alts[alt_idx];
-        let body_indent = `{indent}    `;
 
         if is_last {
-            out.append(`{indent}if !{done_var} \{\n`);
+            w.begin(`if !{done_var}`);
             let mut nc: Array<[String, i32]> = [];
             for let elem of alt.elements {
-                gen_element(out, &elem, all_rules, lit_tokens, &body_indent, false, &mut nc);
+                gen_element(w, &elem, all_rules, lit_tokens, false, &mut nc);
             }
-            out.append(`{indent}\}\n`);
+            w.end();
         } else if alt.elements.len() == 1 {
             let el = &alt.elements[0];
             if let RuleRef(rule_name) = *el {
                 let fn_name = `parse_{to_snake_case(&rule_name)}`;
                 let r_var = dedup_name(&"r", name_counts);
-                out.append(`{indent}if !{done_var} \{\n`);
-                out.append(`{body_indent}let {r_var} = {fn_name}(p);\n`);
-                out.append(`{body_indent}if let Err(_) = {r_var} \{\n`);
-                out.append(`{body_indent}    p.pos = {saved_var};\n`);
-                out.append(`{body_indent}\} else \{\n`);
-                out.append(`{body_indent}    {done_var} = true;\n`);
-                out.append(`{body_indent}\}\n`);
-                out.append(`{indent}\}\n`);
+                w.begin(`if !{done_var}`);
+                w.line(`let {r_var} = {fn_name}(p);`);
+                w.begin(`if let Err(_) = {r_var}`);
+                w.line(`p.pos = {saved_var};`);
+                w.else_begin("else");
+                w.line(`{done_var} = true;`);
+                w.end();
+                w.end();
             } else {
-                out.append(`{indent}if !{done_var} \{\n`);
+                w.begin(`if !{done_var}`);
                 let mut nc: Array<[String, i32]> = [];
-                gen_element(out, el, all_rules, lit_tokens, &body_indent, false, &mut nc);
-                out.append(`{body_indent}{done_var} = true;\n`);
-                out.append(`{indent}\}\n`);
+                gen_element(w, el, all_rules, lit_tokens, false, &mut nc);
+                w.line(`{done_var} = true;`);
+                w.end();
             }
         } else {
-            out.append(`{indent}if !{done_var} \{\n`);
+            w.begin(`if !{done_var}`);
             let mut nc: Array<[String, i32]> = [];
             for let elem of alt.elements {
-                gen_element(out, &elem, all_rules, lit_tokens, &body_indent, false, &mut nc);
+                gen_element(w, &elem, all_rules, lit_tokens, false, &mut nc);
             }
-            out.append(`{body_indent}{done_var} = true;\n`);
-            out.append(`{indent}\}\n`);
+            w.line(`{done_var} = true;`);
+            w.end();
         }
     }
 }
 
-fn gen_first_check(out: &mut String, first_set: &Array<String>) {
-    if first_set.len() == 0 {
-        out.append("true");
-        return;
+fn gen_lr_suffix_helpers(
+    w: &mut CodeWriter,
+    rule: &ParserRule,
+    type_name: &String,
+    lr_indices: &Array<i32>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+    let fn_name = `parse_{to_snake_case(&rule.name)}`;
+    let all_labeled = all_alternatives_labeled(&rule.alternatives);
+
+    for let lr_idx_ref of lr_indices {
+        let lr_idx = *lr_idx_ref;
+        let alt = &rule.alternatives[lr_idx];
+        if alt.elements.len() <= 1 { continue; }
+
+        let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{lr_idx}` };
+        let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+        let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+
+        let mut f = FnSpec::new(&suffix_fn);
+        f.add_param("p", "&mut Parser");
+        f.add_param("left", type_name);
+        f.add_param("start", "i32");
+        f.set_return_type(`Result<{type_name}, ParseError>`);
+        f.emit_begin(w);
+
+        let mut name_counts: Array<[String, i32]> = [];
+        dedup_name(&to_snake_case(&rule.name), &mut name_counts);
+
+        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+            let elem = &alt.elements[ei];
+            if let RuleRef(name) = *elem {
+                if name == rule.name {
+                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
+                    w.line(`let {field_name} = {fn_name}(p)?;`);
+                } else {
+                    let elem_fn = `parse_{to_snake_case(&name)}`;
+                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
+                    w.line(`let {field_name} = {elem_fn}(p)?;`);
+                }
+            } else if let Group(_) = *elem {
+                let discard = dedup_name(&"op_tok", &mut name_counts);
+                w.line(`let {discard} = p.advance();`);
+            } else if let Repeat(rep) = *elem {
+                gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
+            } else {
+                gen_element(w, elem, all_rules, lit_tokens, true, &mut name_counts);
+            }
+        }
+
+        let first_field = to_snake_case(&rule.name);
+        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_name}({sname} \{`);
+        w.indent();
+        w.line("span: Span::new(start, p.last_end()),");
+        w.line(`{first_field}: left,`);
+        let mut field_counts: Array<[String, i32]> = [];
+        dedup_name(&to_snake_case(&rule.name), &mut field_counts);
+        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+            gen_field_assignment(w, &alt.elements[ei], &mut field_counts);
+        }
+        w.dedent();
+        w.line("}));");
+
+        w.end(); // fn
+        w.blank();
     }
-    for let mut i = 0; i < first_set.len(); i += 1 {
-        if i > 0 { out.append(" || "); }
-        out.append(`p.peek_kind() == {first_set[i]}`);
+}
+
+fn gen_lr_suffix_dispatch(
+    w: &mut CodeWriter,
+    rule: &ParserRule,
+    type_name: &String,
+    lr_indices: &Array<i32>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+    let fn_name = `parse_{to_snake_case(&rule.name)}`;
+    w.begin("loop");
+    w.line("let suffix_kind = p.peek_kind();");
+
+    let mut is_first = true;
+    for let lr_idx_ref of lr_indices {
+        let lr_idx = *lr_idx_ref;
+        let alt = &rule.alternatives[lr_idx];
+        if alt.elements.len() <= 1 { continue; }
+
+        let mut suffix_first: Array<String> = [];
+        let mut visiting: Array<String> = [];
+        suffix_first = first_of_element(&alt.elements[1], all_rules, lit_tokens, &mut visiting);
+        if suffix_first.len() == 0 { continue; }
+
+        let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+        let cond = kind_check_str(&suffix_first, "suffix_kind");
+
+        if is_first {
+            w.begin(`if {cond}`);
+            is_first = false;
+        } else {
+            w.else_begin(`else if {cond}`);
+        }
+        w.line(`result = {suffix_fn}(p, result, start)?;`);
     }
+
+    if !is_first {
+        w.else_begin("else");
+        w.line("break;");
+        w.end();
+    } else {
+        w.line("break;");
+    }
+    w.end(); // loop
+}
+
+fn gen_multi_alt_body_bt(
+    w: &mut CodeWriter,
+    rule: &ParserRule,
+    type_name: &String,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    groups: &Array<Array<i32>>,
+    first_sets: &Array<Array<String>>,
+    non_lr_indices: &Array<i32>,
+) {
+    let all_labeled = all_alternatives_labeled(&rule.alternatives);
+    let fn_name = `parse_{to_snake_case(&rule.name)}`;
+    w.line("let kind = p.peek_kind();");
+
+    for let mut g = 0; g < groups.len(); g += 1 {
+        let group = &groups[g];
+        let mut union_first: Array<String> = [];
+        for let idx of group {
+            for let tk of first_sets[*idx] {
+                if !array_contains_str(&union_first, &tk) {
+                    union_first.append(tk);
+                }
+            }
+        }
+
+        let cond = kind_check_str(&union_first, "kind");
+        w.begin(`if {cond}`);
+
+        if group.len() == 1 {
+            let alt_idx = non_lr_indices[group[0]];
+            let alt = &rule.alternatives[alt_idx];
+            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{alt_idx}` };
+            let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+            gen_alt_body(w, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens);
+        } else {
+            w.line("let saved = p.pos;");
+            for let mut k = 0; k < group.len(); k += 1 {
+                let alt_idx = non_lr_indices[group[k]];
+                let helper_name = `{fn_name}_bt_{alt_idx}`;
+                let is_last = k == group.len() - 1;
+                if is_last {
+                    w.line(`return {helper_name}(p);`);
+                } else {
+                    let r_var = `r_{alt_idx}`;
+                    w.line(`let {r_var} = {helper_name}(p);`);
+                    w.begin(`if let Err(_) = {r_var}`);
+                    w.line("p.pos = saved;");
+                    w.else_begin("else");
+                    w.line(`return {r_var};`);
+                    w.end();
+                }
+            }
+        }
+
+        w.end();
+    }
+
+    gen_error_fallback(w, rule, type_name, all_rules, lit_tokens);
+}
+
+fn gen_parse_entry(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
+    if parser_rules.len() == 0 { return; }
+    let root = &parser_rules[0];
+    let type_name = rule_type_name(&root.name);
+    let fn_name = `parse_{to_snake_case(&root.name)}`;
+    let mut f = FnSpec::new("parse");
+    f.set_pub();
+    f.add_param("input", "&String");
+    f.set_return_type(`Result<{type_name}, ParseError>`);
+    f.emit_begin(w);
+    w.line("let tokens = tokenize(input);");
+    w.line("let mut parser = Parser::new(tokens);");
+    w.line(`return {fn_name}(&mut parser);`);
+    w.end();
+    w.blank();
+}
+
+fn first_check_str(first_set: &Array<String>) -> String {
+    return kind_check_str(first_set, "p.peek_kind()");
+}
+
+fn kind_check_str(tokens: &Array<String>, expr: &String) -> String {
+    if tokens.len() == 0 {
+        return "true";
+    }
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if i > 0 { result.append(" || "); }
+        result.append(`{expr} == {tokens[i]}`);
+    }
+    return result;
+}
+
+fn build_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> String {
+    let mut cond = String::with_capacity(128);
+    for let mut d = 0; d < depth; d += 1 {
+        if d > 0 { cond.append(" && "); }
+        let tokens = &pos_sets[d];
+        let check_expr = if d == 0 { "kind" } else { `p.peek_at({d})` };
+        if tokens.len() == 1 {
+            cond.append(`{check_expr} == {tokens[0]}`);
+        } else {
+            cond.append("(");
+            for let mut j = 0; j < tokens.len(); j += 1 {
+                if j > 0 { cond.append(" || "); }
+                cond.append(`{check_expr} == {tokens[j]}`);
+            }
+            cond.append(")");
+        }
+    }
+    return cond;
+}
+
+fn gen_error_fallback(
+    w: &mut CodeWriter,
+    rule: &ParserRule,
+    type_name: &String,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+    let mut expected: Array<String> = [];
+    for let alt of rule.alternatives {
+        let mut visiting: Array<String> = [];
+        let first = first_of_alt(&alt, all_rules, lit_tokens, &mut visiting);
+        for let tk of first {
+            if !array_contains_str(&expected, &tk) {
+                expected.append(tk);
+            }
+        }
+    }
+    let msg = escape_string(&`expected {rule.name}`);
+    w.line(`return Result::<{type_name}, ParseError>::Err(ParseError::new(`);
+    w.indent();
+    w.line(`{msg},`);
+    w.line("p.peek().span,");
+    w.write("[");
+    for let mut i = 0; i < expected.len(); i += 1 {
+        if i > 0 { w.write(", "); }
+        let s = escape_string(&expected[i]);
+        w.write(s);
+    }
+    w.write("],\n");
+    w.dedent();
+    w.line("));");
 }
 
 fn first_of_alt(
@@ -804,7 +1023,6 @@ fn first_of_rule(
     lit_tokens: &Array<LitToken>,
     visiting: &mut Array<String>,
 ) -> Array<String> {
-    // Cycle detection: if we're already computing this rule's first set, return empty
     if array_contains_str(visiting, name) {
         return [];
     }
@@ -825,7 +1043,6 @@ fn first_of_rule(
         }
     }
 
-    // Remove from visiting
     let mut new_visiting: Array<String> = [];
     for let v of visiting {
         if *v != *name {
@@ -837,7 +1054,6 @@ fn first_of_rule(
     return result;
 }
 
-
 fn is_nullable(elem: &Element) -> bool {
     if let Repeat(rep) = *elem {
         if let Star = rep.kind { return true; }
@@ -846,9 +1062,6 @@ fn is_nullable(elem: &Element) -> bool {
     return false;
 }
 
-/// Compute FIRST sets at each non-nullable element position for an alternative.
-/// Position 0 uses the full first_of_alt logic (handles nullable prefixes).
-/// Subsequent positions advance past elements that contributed to earlier positions.
 fn alt_position_first_sets(
     alt: &Alternative,
     max_depth: i32,
@@ -858,14 +1071,11 @@ fn alt_position_first_sets(
     let mut result: Array<Array<String>> = [];
     let mut start = 0;
     while result.len() < max_depth && start < alt.elements.len() {
-        // If the element at start is nullable and we already have positions,
-        // its tokens are optional — can't use for hard LL(k) disambiguation
         if result.len() > 0 && is_nullable(&alt.elements[start]) { break; }
 
         let first = first_of_elements_from(&alt.elements, start, all_rules, lit_tokens);
         if first.len() == 0 { break; }
         result.append(first);
-        // Advance past nullable elements and the first non-nullable element
         let mut skipped_nullable = false;
         while start < alt.elements.len() {
             let was_nullable = is_nullable(&alt.elements[start]);
@@ -873,14 +1083,11 @@ fn alt_position_first_sets(
             start += 1;
             if !was_nullable { break; }
         }
-        // If we skipped nullable elements, subsequent raw-token positions
-        // are unreliable for LL(k) lookahead
         if skipped_nullable { break; }
     }
     return result;
 }
 
-/// Like first_of_alt but starts from a given element index.
 fn first_of_elements_from(
     elements: &Array<Element>,
     start: i32,
@@ -908,7 +1115,6 @@ fn sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
     return false;
 }
 
-/// Find the minimum lookahead depth needed to disambiguate all alternatives.
 fn find_needed_depth(all_position_sets: &Array<Array<Array<String>>>) -> i32 {
     let max_k = 5;
     for let mut depth = 1; depth <= max_k; depth += 1 {
@@ -974,144 +1180,6 @@ fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
     return true;
 }
 
-fn gen_lr_suffix_helpers(
-    out: &mut String,
-    rule: &ParserRule,
-    type_name: &String,
-    lr_indices: &Array<i32>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) {
-    let fn_name = `parse_{to_snake_case(&rule.name)}`;
-    let all_labeled = all_alternatives_labeled(&rule.alternatives);
-
-    // Emit suffix handler functions (one per LR alternative)
-    for let lr_idx_ref of lr_indices {
-        let lr_idx = *lr_idx_ref;
-        let alt = &rule.alternatives[lr_idx];
-        if alt.elements.len() <= 1 { continue; }
-
-        let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{lr_idx}` };
-        let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
-        let suffix_fn = `{fn_name}_lr_{lr_idx}`;
-
-        out.append(`fn {suffix_fn}(p: &mut Parser, left: {type_name}, start: i32) -> Result<{type_name}, ParseError> \{\n`);
-
-        let indent = "    ";
-        let mut name_counts: Array<[String, i32]> = [];
-        dedup_name(&to_snake_case(&rule.name), &mut name_counts);
-
-        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
-            let elem = &alt.elements[ei];
-            if let RuleRef(name) = *elem {
-                if name == rule.name {
-                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
-                    out.append(`{indent}let {field_name} = {fn_name}(p)?;\n`);
-                } else {
-                    let elem_fn = `parse_{to_snake_case(&name)}`;
-                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
-                    out.append(`{indent}let {field_name} = {elem_fn}(p)?;\n`);
-                }
-            } else if let Group(_) = *elem {
-                let discard = dedup_name(&"op_tok", &mut name_counts);
-                out.append(`{indent}let {discard} = p.advance();\n`);
-            } else if let Repeat(rep) = *elem {
-                gen_repeat(out, &rep, all_rules, lit_tokens, indent, &mut name_counts);
-            } else {
-                gen_element(out, elem, all_rules, lit_tokens, indent, true, &mut name_counts);
-            }
-        }
-
-        out.append(`{indent}return Result::<{type_name}, ParseError>::Ok({type_name}::{case_name}({sname} \{\n`);
-        out.append(`{indent}    span: Span::new(start, p.last_end()),\n`);
-        let first_field = to_snake_case(&rule.name);
-        out.append(`{indent}    {first_field}: left,\n`);
-        let mut field_counts: Array<[String, i32]> = [];
-        dedup_name(&to_snake_case(&rule.name), &mut field_counts);
-        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
-            gen_field_assignment(out, &alt.elements[ei], &mut field_counts, indent);
-        }
-        out.append(`{indent}\}));\n`);
-        out.append("}\n\n");
-    }
-
-}
-
-fn gen_lr_suffix_dispatch(
-    out: &mut String,
-    rule: &ParserRule,
-    type_name: &String,
-    lr_indices: &Array<i32>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) {
-    let fn_name = `parse_{to_snake_case(&rule.name)}`;
-    out.append("    loop {\n");
-    out.append("        let suffix_kind = p.peek_kind();\n");
-
-    let mut is_first = true;
-    for let lr_idx_ref of lr_indices {
-        let lr_idx = *lr_idx_ref;
-        let alt = &rule.alternatives[lr_idx];
-        if alt.elements.len() <= 1 { continue; }
-
-        let mut suffix_first: Array<String> = [];
-        let mut visiting: Array<String> = [];
-        suffix_first = first_of_element(&alt.elements[1], all_rules, lit_tokens, &mut visiting);
-        if suffix_first.len() == 0 { continue; }
-
-        let suffix_fn = `{fn_name}_lr_{lr_idx}`;
-
-        if is_first {
-            out.append("        if ");
-            is_first = false;
-        } else {
-            out.append(" else if ");
-        }
-        for let mut j = 0; j < suffix_first.len(); j += 1 {
-            if j > 0 { out.append(" || "); }
-            out.append(`suffix_kind == {suffix_first[j]}`);
-        }
-        out.append(" {\n");
-        out.append(`            result = {suffix_fn}(p, result, start)?;\n`);
-        out.append("        }");
-    }
-
-    if !is_first {
-        out.append(" else {\n");
-        out.append("            break;\n");
-        out.append("        }\n");
-    } else {
-        out.append("        break;\n");
-    }
-    out.append("    }\n");
-}
-
-fn sort_group_by_specificity(
-    group: &mut Array<i32>,
-    non_lr_indices: &Array<i32>,
-    alts: &Array<Alternative>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) {
-    // Compute LL(k) depth for each member (more positions = more specific)
-    let mut depths: Array<i32> = [];
-    for let gi of group {
-        let alt_idx = non_lr_indices[*gi];
-        let pos_sets = alt_position_first_sets(&alts[alt_idx], 5, all_rules, lit_tokens);
-        depths.append(pos_sets.len());
-    }
-    // Bubble sort: deeper (more specific) alternatives first
-    for let mut i = 0; i < group.len(); i += 1 {
-        for let mut j = i + 1; j < group.len(); j += 1 {
-            if depths[j] > depths[i] {
-                let tmp = group[i]; group[i] = group[j]; group[j] = tmp;
-                let tmp_d = depths[i]; depths[i] = depths[j]; depths[j] = tmp_d;
-            }
-        }
-    }
-}
-
 fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
     if alt.elements.len() == 0 { return false; }
     let first = &alt.elements[0];
@@ -1170,100 +1238,25 @@ fn has_multi_alt_groups(groups: &Array<Array<i32>>) -> bool {
     return false;
 }
 
-fn gen_multi_alt_body_bt(
-    out: &mut String,
-    rule: &ParserRule,
-    type_name: &String,
+fn sort_group_by_specificity(
+    group: &mut Array<i32>,
+    non_lr_indices: &Array<i32>,
+    alts: &Array<Alternative>,
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
-    groups: &Array<Array<i32>>,
-    first_sets: &Array<Array<String>>,
-    non_lr_indices: &Array<i32>,
 ) {
-    let all_labeled = all_alternatives_labeled(&rule.alternatives);
-    let fn_name = `parse_{to_snake_case(&rule.name)}`;
-    out.append("    let kind = p.peek_kind();\n");
-
-    for let mut g = 0; g < groups.len(); g += 1 {
-        let group = &groups[g];
-        let mut union_first: Array<String> = [];
-        for let idx of group {
-            for let tk of first_sets[*idx] {
-                if !array_contains_str(&union_first, &tk) {
-                    union_first.append(tk);
-                }
-            }
-        }
-
-        out.append("    if ");
-        for let mut j = 0; j < union_first.len(); j += 1 {
-            if j > 0 { out.append(" || "); }
-            out.append(`kind == {union_first[j]}`);
-        }
-        out.append(" {\n");
-
-        if group.len() == 1 {
-            let alt_idx = non_lr_indices[group[0]];
-            let alt = &rule.alternatives[alt_idx];
-            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{alt_idx}` };
-            let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
-            gen_alt_body(out, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens, "        ");
-        } else {
-            out.append("        let saved = p.pos;\n");
-            for let mut k = 0; k < group.len(); k += 1 {
-                let alt_idx = non_lr_indices[group[k]];
-                let helper_name = `{fn_name}_bt_{alt_idx}`;
-                let is_last = k == group.len() - 1;
-                if is_last {
-                    out.append(`        return {helper_name}(p);\n`);
-                } else {
-                    let r_var = `r_{alt_idx}`;
-                    out.append(`        let {r_var} = {helper_name}(p);\n`);
-                    out.append(`        if let Err(_) = {r_var} \{\n`);
-                    out.append("            p.pos = saved;\n");
-                    out.append("        } else {\n");
-                    out.append(`            return {r_var};\n`);
-                    out.append("        }\n");
-                }
-            }
-        }
-
-        out.append("    }\n");
+    let mut depths: Array<i32> = [];
+    for let gi of group {
+        let alt_idx = non_lr_indices[*gi];
+        let pos_sets = alt_position_first_sets(&alts[alt_idx], 5, all_rules, lit_tokens);
+        depths.append(pos_sets.len());
     }
-
-    // Error fallback
-    let mut expected: Array<String> = [];
-    for let alt of rule.alternatives {
-        let mut visiting: Array<String> = [];
-        let first = first_of_alt(&alt, all_rules, lit_tokens, &mut visiting);
-        for let tk of first {
-            if !array_contains_str(&expected, &tk) {
-                expected.append(tk);
+    for let mut i = 0; i < group.len(); i += 1 {
+        for let mut j = i + 1; j < group.len(); j += 1 {
+            if depths[j] > depths[i] {
+                let tmp = group[i]; group[i] = group[j]; group[j] = tmp;
+                let tmp_d = depths[i]; depths[i] = depths[j]; depths[j] = tmp_d;
             }
         }
     }
-    out.append(`    return Result::<{type_name}, ParseError>::Err(ParseError::new(\n`);
-    out.append("        ");
-    out.append(escape_string(&`expected {rule.name}`));
-    out.append(",\n");
-    out.append("        p.peek().span,\n");
-    out.append("        [");
-    for let mut i = 0; i < expected.len(); i += 1 {
-        if i > 0 { out.append(", "); }
-        out.append(escape_string(&expected[i]));
-    }
-    out.append("],\n");
-    out.append("    ));\n");
-}
-
-fn gen_parse_entry(out: &mut String, parser_rules: &Array<ParserRule>) {
-    if parser_rules.len() == 0 { return; }
-    let root = &parser_rules[0];
-    let type_name = rule_type_name(&root.name);
-    let fn_name = `parse_{to_snake_case(&root.name)}`;
-    out.append(`pub fn parse(input: &String) -> Result<{type_name}, ParseError> \{\n`);
-    out.append("    let tokens = tokenize(input);\n");
-    out.append("    let mut parser = Parser::new(tokens);\n");
-    out.append(`    return {fn_name}(&mut parser);\n`);
-    out.append("}\n\n");
 }

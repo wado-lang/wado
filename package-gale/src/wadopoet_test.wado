@@ -94,6 +94,19 @@ test "next_id generates unique ids" {
     assert c == 2;
 }
 
+test "else_begin for if/else-if chain" {
+    let mut w = CodeWriter::new();
+    w.begin("if x > 0");
+    w.line("positive();");
+    w.else_begin("else if x < 0");
+    w.line("negative();");
+    w.else_begin("else");
+    w.line("zero();");
+    w.end();
+    let expected = "if x > 0 {\n    positive();\n} else if x < 0 {\n    negative();\n} else {\n    zero();\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
 test "manual indent/dedent" {
     let mut w = CodeWriter::new();
     w.line("outer");
