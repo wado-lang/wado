@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774560044560,
+  "lastUpdate": 1774562733606,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7901,6 +7901,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/24c0da54eabeab3bdb2478c9618e07d9e9d64639"
         },
         "date": 1774560044368,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a74bb9ec08526f33506aed1161fcd43f84582ad0",
+          "message": "Merge pull request #706 from wado-lang/claude/fix-gale-sqlite-parser-SAt2C\n\nAdd prediction engine and non-greedy repeat support to parser generator",
+          "timestamp": "2026-03-27T07:03:01+09:00",
+          "tree_id": "718a1bece0a08f384536a630eb08efbb90f738fb",
+          "url": "https://github.com/wado-lang/wado/commit/a74bb9ec08526f33506aed1161fcd43f84582ad0"
+        },
+        "date": 1774562733388,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
