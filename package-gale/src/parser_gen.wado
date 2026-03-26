@@ -9,6 +9,173 @@ use {
 } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
 
+// --- Prediction Engine ---
+
+/// PredictionNode represents a decision tree for alternative dispatch.
+variant PredictionNode {
+    /// Resolved: pick this alternative index.
+    Leaf(i32),
+    /// Dispatch on peek_at(depth): check token kind to branch.
+    Dispatch(PredictionDispatch),
+    /// Unresolvable at max depth: fall back to sequential backtracking.
+    Backtrack(Array<i32>),
+}
+
+struct PredictionDispatch {
+    depth: i32,
+    branches: Array<PredictionBranch>,
+}
+
+struct PredictionBranch {
+    tokens: Array<String>,
+    child: PredictionNode,
+}
+
+fn build_prediction(
+    alt_indices: &Array<i32>,
+    first_sets: &Array<Array<String>>,
+    alt_elements: &Array<Array<Element>>,
+    depth: i32,
+    max_depth: i32,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> PredictionNode {
+    if alt_indices.len() == 1 {
+        return PredictionNode::Leaf(alt_indices[0]);
+    }
+    if depth >= max_depth {
+        return PredictionNode::Backtrack(alt_indices.sorted());
+    }
+
+    // Compute first set at `depth` for each alternative.
+    // first_sets[i] and alt_elements[i] correspond to alt_indices[i] (positional).
+    let mut depth_firsts: Array<Array<String>> = [];
+    for let mut i = 0; i < alt_indices.len(); i += 1 {
+        if depth == 0 {
+            depth_firsts.append(first_sets[i]);
+        } else {
+            let deeper = compute_deeper_first(&alt_elements[i], depth, all_rules, lit_tokens);
+            depth_firsts.append(deeper);
+        }
+    }
+
+    // Build token → alt_indices mapping.
+    let mut all_tokens: Array<String> = [];
+    for let mut i = 0; i < alt_indices.len(); i += 1 {
+        for let tk of depth_firsts[i] {
+            if !array_contains_str(&all_tokens, &tk) {
+                all_tokens.append(tk);
+            }
+        }
+    }
+
+    let mut branches: Array<PredictionBranch> = [];
+    let mut resolved_alts: Array<i32> = [];
+
+    for let mut t = 0; t < all_tokens.len(); t += 1 {
+        let tk = &all_tokens[t];
+        // Find which alternatives match this token.
+        let mut matching: Array<i32> = [];
+        for let mut i = 0; i < alt_indices.len(); i += 1 {
+            if array_contains_str(&depth_firsts[i], tk) {
+                matching.append(alt_indices[i]);
+            }
+        }
+
+        if matching.len() == 1 {
+            // Unique: merge into existing leaf branch or create new one.
+            let mut merged = false;
+            for let mut b = 0; b < branches.len(); b += 1 {
+                if let Leaf(idx) = branches[b].child {
+                    if idx == matching[0] {
+                        branches[b].tokens.append(*tk);
+                        merged = true;
+                    }
+                }
+            }
+            if !merged {
+                branches.append(PredictionBranch {
+                    tokens: [*tk],
+                    child: PredictionNode::Leaf(matching[0]),
+                });
+            }
+        } else {
+            // Ambiguous: try deeper lookahead.
+            let child = build_prediction(&matching, first_sets, alt_elements,
+                depth + 1, max_depth, all_rules, lit_tokens);
+            // Merge with existing branch that has same child (same alt set).
+            let mut merged = false;
+            for let mut b = 0; b < branches.len(); b += 1 {
+                if prediction_eq(&branches[b].child, &child) {
+                    branches[b].tokens.append(*tk);
+                    merged = true;
+                }
+            }
+            if !merged {
+                branches.append(PredictionBranch {
+                    tokens: [*tk],
+                    child,
+                });
+            }
+        }
+    }
+
+    if branches.len() == 0 {
+        return PredictionNode::Backtrack(alt_indices.sorted());
+    }
+
+    return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
+}
+
+fn prediction_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
+    if let Leaf(ai) = *a {
+        if let Leaf(bi) = *b { return ai == bi; }
+    }
+    if let Backtrack(aa) = *a {
+        if let Backtrack(ba) = *b {
+            if aa.len() != ba.len() { return false; }
+            for let mut i = 0; i < aa.len(); i += 1 {
+                if aa[i] != ba[i] { return false; }
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+fn compute_deeper_first(
+    elements: &Array<Element>,
+    depth: i32,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> Array<String> {
+    // Compute what tokens can appear at lookahead position `depth`.
+    // We walk elements, consuming fixed-width tokens (TokenRef/Literal = 1 token each).
+    // When we reach a RuleRef or complex element, we can only compute first at that point.
+    let mut pos = 0;
+    let mut remaining_depth = depth;
+    while pos < elements.len() && remaining_depth > 0 {
+        let elem = &elements[pos];
+        if let TokenRef(_) = *elem { remaining_depth -= 1; pos += 1; continue; }
+        if let Literal(_) = *elem { remaining_depth -= 1; pos += 1; continue; }
+        if is_nullable(elem) { pos += 1; continue; }
+        // RuleRef or complex element: can't skip precisely, return empty.
+        return [];
+    }
+    if pos >= elements.len() { return []; }
+    return first_of_elements_from(elements, pos, all_rules, lit_tokens);
+}
+
+fn has_backtrack_nodes(node: &PredictionNode) -> bool {
+    if let Backtrack(_) = *node { return true; }
+    if let Dispatch(d) = *node {
+        for let mut i = 0; i < d.branches.len(); i += 1 {
+            if has_backtrack_nodes(&d.branches[i].child) { return true; }
+        }
+    }
+    return false;
+}
+
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
     gen_parser_struct(w);
     for let rule of grammar.parser_rules {
@@ -101,6 +268,88 @@ fn gen_parser_struct(w: &mut CodeWriter) {
 
     w.end(); // impl
     w.blank();
+}
+
+/// Collect all leaf alt indices from a prediction tree.
+fn prediction_leaf_indices(node: &PredictionNode) -> Array<i32> {
+    let mut result: Array<i32> = [];
+    if let Leaf(idx) = *node {
+        if !array_contains_i32(&result, idx) { result.append(idx); }
+    }
+    if let Backtrack(indices) = *node {
+        for let idx of indices {
+            if !array_contains_i32(&result, idx) { result.append(idx); }
+        }
+    }
+    if let Dispatch(d) = *node {
+        for let mut i = 0; i < d.branches.len(); i += 1 {
+            let sub = prediction_leaf_indices(&d.branches[i].child);
+            for let idx of sub {
+                if !array_contains_i32(&result, idx) { result.append(idx); }
+            }
+        }
+    }
+    return result;
+}
+
+fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
+    for let mut i = 0; i < arr.len(); i += 1 {
+        if arr[i] == val { return true; }
+    }
+    return false;
+}
+
+/// Emit a prediction condition tree. Each Leaf emits a call to
+/// a `_bt_{alt_idx}` helper function. Backtrack nodes emit the
+/// traditional save/restore pattern.
+fn gen_prediction_condition(
+    w: &mut CodeWriter,
+    node: &PredictionNode,
+    alts: &Array<Alternative>,
+    fn_name: &String,
+    type_name: &String,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    name_counts: &mut Array<[String, i32]>,
+) {
+    if let Leaf(idx) = *node {
+        w.line(`return {*fn_name}_bt_{idx}(p);`);
+        return;
+    }
+    if let Backtrack(indices) = *node {
+        let saved = dedup_name(&"saved", name_counts);
+        w.line(`let {saved} = p.pos;`);
+        for let mut i = 0; i < indices.len(); i += 1 {
+            let idx = indices[i];
+            let is_last = i == indices.len() - 1;
+            if is_last {
+                w.line(`return {*fn_name}_bt_{idx}(p);`);
+            } else {
+                let r = dedup_name(&"r", name_counts);
+                w.line(`let {r} = {*fn_name}_bt_{idx}(p);`);
+                w.begin(`if let Err(_) = {r}`);
+                w.line(`p.pos = {saved};`);
+                w.else_begin("else");
+                w.line(`return {r};`);
+                w.end();
+            }
+        }
+        return;
+    }
+    if let Dispatch(d) = *node {
+        let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at({d.depth})` };
+        for let mut i = 0; i < d.branches.len(); i += 1 {
+            let branch = &d.branches[i];
+            let cond = kind_check_str(&branch.tokens, &check_var);
+            if i == 0 {
+                w.begin(`if {cond}`);
+            } else {
+                w.else_begin(`else if {cond}`);
+            }
+            gen_prediction_condition(w, &branch.child, alts, fn_name, type_name, all_rules, lit_tokens, name_counts);
+        }
+        w.end();
+    }
 }
 
 fn gen_parse_fn(
@@ -1576,49 +1825,53 @@ fn gen_multi_alt_body_bt(
 ) {
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
-    w.line("let kind = p.peek_kind();");
 
     for let mut g = 0; g < groups.len(); g += 1 {
         let group = &groups[g];
-        let mut union_first: Array<String> = [];
-        for let idx of group {
-            for let tk of first_sets[*idx] {
-                if !array_contains_str(&union_first, &tk) {
-                    union_first.append(tk);
-                }
-            }
-        }
-
-        let cond = kind_check_str(&union_first, "kind");
-        w.begin(`if {cond}`);
 
         if group.len() == 1 {
             let alt_idx = non_lr_indices[group[0]];
             let alt = &rule.alternatives[alt_idx];
             let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{alt_idx}` };
             let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+            let mut union_first: Array<String> = [];
+            for let tk of first_sets[group[0]] {
+                union_first.append(tk);
+            }
+            let cond = kind_check_str(&union_first, "p.peek_kind()");
+            w.begin(`if {cond}`);
             gen_alt_body(w, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens);
+            w.end();
         } else {
-            w.line("let saved = p.pos;");
-            for let mut k = 0; k < group.len(); k += 1 {
-                let alt_idx = non_lr_indices[group[k]];
-                let helper_name = `{fn_name}_bt_{alt_idx}`;
-                let is_last = k == group.len() - 1;
-                if is_last {
-                    w.line(`return {helper_name}(p);`);
-                } else {
-                    let r_var = `r_{alt_idx}`;
-                    w.line(`let {r_var} = {helper_name}(p);`);
-                    w.begin(`if let Err(_) = {r_var}`);
-                    w.line("p.pos = saved;");
-                    w.else_begin("else");
-                    w.line(`return {r_var};`);
-                    w.end();
+            // Build prediction tree for this overlap group.
+            let mut group_alt_indices: Array<i32> = [];
+            let mut group_first_sets: Array<Array<String>> = [];
+            let mut group_elements: Array<Array<Element>> = [];
+            for let idx of group {
+                let real_idx = non_lr_indices[*idx];
+                group_alt_indices.append(real_idx);
+                group_first_sets.append(first_sets[*idx]);
+                group_elements.append(rule.alternatives[real_idx].elements);
+            }
+
+            let tree = build_prediction(&group_alt_indices, &group_first_sets, &group_elements,
+                0, 5, all_rules, lit_tokens);
+
+            // Collect union of all tokens for the outer guard.
+            let mut union_first: Array<String> = [];
+            for let idx of group {
+                for let tk of first_sets[*idx] {
+                    if !array_contains_str(&union_first, &tk) { union_first.append(tk); }
                 }
             }
-        }
+            let cond = kind_check_str(&union_first, "p.peek_kind()");
+            w.begin(`if {cond}`);
 
-        w.end();
+            let mut name_counts: Array<[String, i32]> = [];
+            gen_prediction_condition(w, &tree, &rule.alternatives, &fn_name, type_name, all_rules, lit_tokens, &mut name_counts);
+
+            w.end();
+        }
     }
 
     gen_error_fallback(w, rule, type_name, all_rules, lit_tokens);
