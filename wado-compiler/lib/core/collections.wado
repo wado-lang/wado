@@ -51,7 +51,7 @@ pub struct TreeMap<K, V> {
     deleted_count: i32,
 }
 
-impl TreeMap<K, V> {
+impl TreeMap<K: Ord, V> {
     /// Creates a new empty TreeMap.
     pub fn new() -> TreeMap<K, V> {
         return TreeMap {
@@ -304,7 +304,7 @@ impl TreeMap<K, V> {
 }
 
 // IndexAssign for map[key] = value
-impl IndexAssign<K> for TreeMap<K, V> {
+impl IndexAssign<K> for TreeMap<K: Ord, V> {
     type Input = V;
 
     fn index_assign(&mut self, key: K, value: Self::Input) {
@@ -313,7 +313,7 @@ impl IndexAssign<K> for TreeMap<K, V> {
 }
 
 // IndexValue for map[key] -> V (panics if key not found)
-impl IndexValue<K> for TreeMap<K, V> {
+impl IndexValue<K> for TreeMap<K: Ord, V> {
     type Output = V;
 
     fn index_value(&self, key: K) -> Self::Output {

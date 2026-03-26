@@ -263,7 +263,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
 
-            // TypeParam with trait bounds: resolve operators via trait bound methods
+            // TypeParam with trait bounds: emit trait method calls for comparison operators.
+            // Monomorphization substitutes T with the concrete type and either resolves
+            // the method call normally, or converts back to a binary op for primitives.
             if let ResolvedType::TypeParam { name, .. } = &left_type
                 && let Some(bounds) = self.trait_ctx.type_param_bounds.get(name).cloned()
             {
