@@ -144,7 +144,7 @@ fn gen_parse_fn(
     if needs_bt {
         for let mut g = 0; g < groups.len(); g += 1 {
             if groups[g].len() > 1 {
-                sort_group_by_specificity(&mut groups[g], &non_lr_indices, &rule.alternatives, all_rules, lit_tokens);
+                sort_group_by_specificity(&mut groups[g], &first_sets);
             }
         }
     }
@@ -299,9 +299,29 @@ fn gen_alt_elements(
     lit_tokens: &Array<LitToken>,
 ) {
     let mut name_counts: Array<[String, i32]> = [];
-    for let elem of elements {
-        gen_element(w, &elem, all_rules, lit_tokens, true, &mut name_counts);
+    for let mut i = 0; i < elements.len(); i += 1 {
+        let elem = &elements[i];
+        if let Repeat(rep) = *elem {
+            if let Optional = rep.kind {
+                if is_ruleref_optional(&rep.element) {
+                    let follow = first_of_elements_from(elements, i + 1, all_rules, lit_tokens);
+                    gen_repeat_with_follow(w, &rep, all_rules, lit_tokens, &follow, &mut name_counts);
+                } else {
+                    gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
+                }
+            } else {
+                gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
+            }
+        } else {
+            gen_element(w, elem, all_rules, lit_tokens, true, &mut name_counts);
+        }
     }
+}
+
+fn is_ruleref_optional(elem: &Element) -> bool {
+    if let RuleRef(_) = *elem { return true; }
+    if let Label(lab) = *elem { return is_ruleref_optional(&lab.element); }
+    return false;
 }
 
 fn gen_element(
@@ -421,6 +441,56 @@ fn gen_repeat(
         if let Optional = rep.kind {
             gen_optional_with_backtrack(w, inner, all_rules, lit_tokens, &first, name_counts);
         }
+    }
+}
+
+fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let x of a {
+        if !array_contains_str(b, x) {
+            result.append(x);
+        }
+    }
+    return result;
+}
+
+fn gen_repeat_with_follow(
+    w: &mut CodeWriter,
+    rep: &RepeatElement,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    follow_first: &Array<String>,
+    name_counts: &mut Array<[String, i32]>,
+) {
+    let inner = &rep.element;
+    let mut visiting: Array<String> = [];
+    let raw_first = first_of_element(inner, all_rules, lit_tokens, &mut visiting);
+    let first = subtract_sets(&raw_first, follow_first);
+
+    if first.len() == 0 {
+        // All first tokens overlap with follow — always skip the optional.
+        if has_field(inner) {
+            let field_info = element_field_info(inner);
+            let type_str = field_info.1;
+            let opt_name = dedup_name(&field_info.0, name_counts);
+            w.line(`let {opt_name}: Option<{type_str}> = null;`);
+        }
+        return;
+    }
+
+    if has_field(inner) {
+        let field_info = element_field_info(inner);
+        let type_str = field_info.1;
+        let opt_name = dedup_name(&field_info.0, name_counts);
+        w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
+        let mut nc: Array<[String, i32]> = [];
+        gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+        w.line(`Option::<{type_str}>::Some({field_info.0})`);
+        w.else_begin("else");
+        w.line("null");
+        w.end_with(";");
+    } else {
+        gen_optional_with_backtrack(w, inner, all_rules, lit_tokens, &first, name_counts);
     }
 }
 
@@ -637,7 +707,9 @@ fn gen_consume_group(
                 gen_element(w, &elem, all_rules, lit_tokens, false, &mut nc);
             }
         } else {
-            gen_backtracking_body(w, group, alts, all_rules, lit_tokens, name_counts);
+            let mut sorted_group = group.sorted();
+            sort_group_by_element_count(&mut sorted_group, alts);
+            gen_backtracking_body(w, &sorted_group, alts, all_rules, lit_tokens, name_counts);
         }
     }
     w.end();
@@ -689,12 +761,15 @@ fn gen_backtracking_body(
                 w.end();
             }
         } else {
+            let bt_label = dedup_name(&"bt_try", name_counts);
             w.begin(`if !{done_var}`);
+            w.begin(`{bt_label}:`);
             let mut nc: Array<[String, i32]> = [];
             for let elem of alt.elements {
-                gen_element(w, &elem, all_rules, lit_tokens, false, &mut nc);
+                gen_element_failable(w, &elem, all_rules, lit_tokens, &saved_var, &bt_label, &mut nc);
             }
             w.line(`{done_var} = true;`);
+            w.end(); // label
             w.end();
         }
     }
@@ -1298,22 +1373,28 @@ fn has_multi_alt_groups(groups: &Array<Array<i32>>) -> bool {
 
 fn sort_group_by_specificity(
     group: &mut Array<i32>,
-    non_lr_indices: &Array<i32>,
-    alts: &Array<Alternative>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
+    first_sets: &Array<Array<String>>,
 ) {
-    let mut depths: Array<i32> = [];
-    for let gi of group {
-        let alt_idx = non_lr_indices[*gi];
-        let pos_sets = alt_position_first_sets(&alts[alt_idx], 5, all_rules, lit_tokens);
-        depths.append(pos_sets.len());
-    }
+    // Sort by first set size ascending: smaller first set = more specific = try first.
+    // Ties broken by original order (stable-ish bubble sort).
     for let mut i = 0; i < group.len(); i += 1 {
         for let mut j = i + 1; j < group.len(); j += 1 {
-            if depths[j] > depths[i] {
+            if first_sets[group[j]].len() < first_sets[group[i]].len() {
                 let tmp = group[i]; group[i] = group[j]; group[j] = tmp;
-                let tmp_d = depths[i]; depths[i] = depths[j]; depths[j] = tmp_d;
+            }
+        }
+    }
+}
+
+fn sort_group_by_element_count(
+    group: &mut Array<i32>,
+    alts: &Array<Alternative>,
+) {
+    // Sort by element count descending: more elements = more specific = try first.
+    for let mut i = 0; i < group.len(); i += 1 {
+        for let mut j = i + 1; j < group.len(); j += 1 {
+            if alts[group[j]].elements.len() > alts[group[i]].elements.len() {
+                let tmp = group[i]; group[i] = group[j]; group[j] = tmp;
             }
         }
     }

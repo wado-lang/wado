@@ -632,6 +632,15 @@ fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
     });
 }
 
+fn parse_item_bt_1(p: &mut Parser) -> Result<ItemNode, ParseError> {
+    let start = p.peek().span.start;
+    let list_ = parse_list_(p)?;
+    return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt1(ItemAlt1 {
+        span: Span::new(start, p.last_end()),
+        list_,
+    }));
+}
+
 fn parse_item_bt_2(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN, "LPAREN")?;
@@ -649,15 +658,6 @@ fn parse_item_bt_2(p: &mut Parser) -> Result<ItemNode, ParseError> {
     }));
 }
 
-fn parse_item_bt_1(p: &mut Parser) -> Result<ItemNode, ParseError> {
-    let start = p.peek().span.start;
-    let list_ = parse_list_(p)?;
-    return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt1(ItemAlt1 {
-        span: Span::new(start, p.last_end()),
-        list_,
-    }));
-}
-
 fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
@@ -670,13 +670,13 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     }
     if kind == TK_LPAREN {
         let saved = p.pos;
-        let r_2 = parse_item_bt_2(p);
-        if let Err(_) = r_2 {
+        let r_1 = parse_item_bt_1(p);
+        if let Err(_) = r_1 {
             p.pos = saved;
         } else {
-            return r_2;
+            return r_1;
         }
-        return parse_item_bt_1(p);
+        return parse_item_bt_2(p);
     }
     return Result::<ItemNode, ParseError>::Err(ParseError::new(
         "expected item",
