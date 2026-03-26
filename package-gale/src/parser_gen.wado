@@ -145,6 +145,20 @@ fn gen_parse_fn(
         for let mut g = 0; g < groups.len(); g += 1 {
             if groups[g].len() > 1 {
                 sort_group_by_specificity(&mut groups[g], &first_sets);
+                let mut mapped_alts: Array<Alternative> = [];
+                for let gi of groups[g] {
+                    mapped_alts.append(rule.alternatives[non_lr_indices[gi]]);
+                }
+                let mut local_indices: Array<i32> = [];
+                for let mut i = 0; i < groups[g].len(); i += 1 {
+                    local_indices.append(i);
+                }
+                sort_group_by_element_count(&mut local_indices, &mapped_alts);
+                let mut reordered: Array<i32> = [];
+                for let li of local_indices {
+                    reordered.append(groups[g][li]);
+                }
+                groups[g] = reordered;
             }
         }
     }
@@ -494,6 +508,175 @@ fn gen_repeat_with_follow(
     }
 }
 
+fn is_optional_repeat(elem: &Element) -> bool {
+    if let Repeat(rep) = *elem {
+        if let Optional = rep.kind { return true; }
+    }
+    if let Label(lab) = *elem {
+        return is_optional_repeat(&lab.element);
+    }
+    return false;
+}
+
+fn has_nested_optionals(inner: &Element) -> bool {
+    if let Group(alts) = *inner {
+        if alts.len() != 1 { return false; }
+        for let mut i = 0; i < alts[0].elements.len(); i += 1 {
+            let elem = &alts[0].elements[i];
+            if is_optional_repeat(elem) { return true; }
+        }
+    }
+    return false;
+}
+
+fn compute_shapes(elements: &Array<Element>) -> Array<Array<i32>> {
+    let mut opt_indices: Array<i32> = [];
+    for let mut i = 0; i < elements.len(); i += 1 {
+        if is_nullable(&elements[i]) {
+            opt_indices.append(i);
+        }
+    }
+    let n = opt_indices.len();
+    let mut shapes: Array<Array<i32>> = [];
+    // Enumerate 2^n combinations: bit mask from (2^n - 1) down to 0
+    // Higher bits = more optionals included = longer shape = tried first
+    let total = 1 << n;
+    for let mut mask = total - 1; mask >= 0; mask -= 1 {
+        let mut shape: Array<i32> = [];
+        for let mut i = 0; i < elements.len(); i += 1 {
+            let mut is_opt = false;
+            let mut opt_bit = -1;
+            for let mut j = 0; j < opt_indices.len(); j += 1 {
+                if opt_indices[j] == i {
+                    is_opt = true;
+                    opt_bit = j;
+                }
+            }
+            if is_opt {
+                if (mask >> opt_bit) & 1 == 1 {
+                    shape.append(i);
+                }
+            } else {
+                shape.append(i);
+            }
+        }
+        shapes.append(shape);
+    }
+    return shapes;
+}
+
+fn shape_lookahead_signature(
+    shape: &Array<i32>,
+    elements: &Array<Element>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> Array<Array<String>> {
+    let mut sig: Array<Array<String>> = [];
+    for let mut si = 0; si < shape.len(); si += 1 {
+        let idx = shape[si];
+        let elem = &elements[idx];
+        let actual = unwrap_optional(elem);
+        // For a Group with single alt, compute token-by-token signature
+        if let Group(alts) = *actual {
+            if alts.len() == 1 {
+                for let mut j = 0; j < alts[0].elements.len(); j += 1 {
+                    let mut visiting: Array<String> = [];
+                    sig.append(first_of_element(&alts[0].elements[j], all_rules, lit_tokens, &mut visiting));
+                }
+                continue;
+            }
+        }
+        // For simple elements (RuleRef, TokenRef, Literal), one position
+        let mut visiting: Array<String> = [];
+        sig.append(first_of_element(actual, all_rules, lit_tokens, &mut visiting));
+    }
+    return sig;
+}
+
+fn gen_lookahead_condition(sig: &Array<Array<String>>) -> String {
+    let mut parts: Array<String> = [];
+    for let mut d = 0; d < sig.len(); d += 1 {
+        let tokens = &sig[d];
+        let check_expr = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
+        if tokens.len() == 1 {
+            parts.append(`{check_expr} == {tokens[0]}`);
+        } else {
+            let mut inner = String::with_capacity(64);
+            inner.append("(");
+            for let mut j = 0; j < tokens.len(); j += 1 {
+                if j > 0 { inner.append(" || "); }
+                inner.append(`{check_expr} == {tokens[j]}`);
+            }
+            inner.append(")");
+            parts.append(inner);
+        }
+    }
+    let mut result = String::with_capacity(128);
+    for let mut i = 0; i < parts.len(); i += 1 {
+        if i > 0 { result.append(" && "); }
+        result.append(parts[i]);
+    }
+    return result;
+}
+
+fn gen_optional_with_lookahead(
+    w: &mut CodeWriter,
+    group_elements: &Array<Element>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    name_counts: &mut Array<[String, i32]>,
+) {
+    let shapes = compute_shapes(group_elements);
+
+    let mut is_first = true;
+    for let mut si = 0; si < shapes.len(); si += 1 {
+        let shape = &shapes[si];
+        let sig = shape_lookahead_signature(shape, group_elements, all_rules, lit_tokens);
+        if sig.len() == 0 { continue; }
+        let cond = gen_lookahead_condition(&sig);
+
+        if is_first {
+            w.begin(`if {cond}`);
+            is_first = false;
+        } else {
+            w.else_begin(`else if {cond}`);
+        }
+
+        // Generate parsing code for this shape's elements
+        for let mut k = 0; k < shape.len(); k += 1 {
+            let idx = shape[k];
+            let elem = &group_elements[idx];
+            let actual = unwrap_optional(elem);
+            if let Group(alts) = *actual {
+                if alts.len() == 1 {
+                    for let mut j = 0; j < alts[0].elements.len(); j += 1 {
+                        gen_element(w, &alts[0].elements[j], all_rules, lit_tokens, false, name_counts);
+                    }
+                } else {
+                    gen_element(w, actual, all_rules, lit_tokens, false, name_counts);
+                }
+            } else {
+                gen_element(w, actual, all_rules, lit_tokens, false, name_counts);
+            }
+        }
+    }
+    if !is_first {
+        w.end();
+    }
+}
+
+fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
+    if let Repeat(rep) = *elem {
+        if let Optional = rep.kind {
+            return &rep.element;
+        }
+    }
+    if let Label(lab) = *elem {
+        return unwrap_optional(&lab.element);
+    }
+    return elem;
+}
+
 fn gen_optional_with_backtrack(
     w: &mut CodeWriter,
     inner: &Element,
@@ -502,6 +685,12 @@ fn gen_optional_with_backtrack(
     first: &Array<String>,
     name_counts: &mut Array<[String, i32]>,
 ) {
+    if has_nested_optionals(inner) {
+        if let Group(alts) = *inner {
+            gen_optional_with_lookahead(w, &alts[0].elements, all_rules, lit_tokens, name_counts);
+            return;
+        }
+    }
     w.begin(`if {first_check_str(first)}`);
 
     let saved = dedup_name(&"opt_saved", name_counts);
@@ -1386,14 +1575,38 @@ fn sort_group_by_specificity(
     }
 }
 
+fn alt_sort_priority(alt: &Alternative) -> i32 {
+    // Priority for sorting (higher = try first):
+    // 3: Single RuleRef — can match complex internal patterns (e.g. join_clause)
+    // 2: Multi-element sequences — more specific explicit patterns (e.g. K_INSERT K_OR K_REPLACE)
+    //    Within this tier, more elements = more specific
+    // 1: Single Token/Literal — simple fallbacks (e.g. K_INSERT)
+    if alt.elements.len() == 1 {
+        let elem = &alt.elements[0];
+        if let RuleRef(_) = *elem { return 3; }
+        return 1;
+    }
+    return 2;
+}
+
 fn sort_group_by_element_count(
     group: &mut Array<i32>,
     alts: &Array<Alternative>,
 ) {
-    // Sort by element count descending: more elements = more specific = try first.
     for let mut i = 0; i < group.len(); i += 1 {
         for let mut j = i + 1; j < group.len(); j += 1 {
-            if alts[group[j]].elements.len() > alts[group[i]].elements.len() {
+            let pi = alt_sort_priority(&alts[group[i]]);
+            let pj = alt_sort_priority(&alts[group[j]]);
+            let mut swap = false;
+            if pj > pi {
+                swap = true;
+            } else if pj == pi && pi == 2 {
+                // Within multi-element tier: more elements = more specific = first
+                if alts[group[j]].elements.len() > alts[group[i]].elements.len() {
+                    swap = true;
+                }
+            }
+            if swap {
                 let tmp = group[i]; group[i] = group[j]; group[j] = tmp;
             }
         }
