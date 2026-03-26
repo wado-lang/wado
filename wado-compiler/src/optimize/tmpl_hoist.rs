@@ -287,11 +287,9 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_expr(arg, escaping);
             }
         }
-        // Assignment to a field means the value escapes
+        // Assignment: the value escapes (stored in target location)
         TirExprKind::Assign { target, value } => {
-            if matches!(&target.kind, TirExprKind::FieldAccess { .. }) {
-                collect_local_refs(value, escaping);
-            }
+            collect_local_refs(value, escaping);
             collect_escaping_in_expr(target, escaping);
             collect_escaping_in_expr(value, escaping);
         }
@@ -404,6 +402,7 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
             collect_escaping_in_expr(inner, escaping);
         }
         TirExprKind::GlobalVarSet { value, .. } => {
+            collect_local_refs(value, escaping);
             collect_escaping_in_expr(value, escaping);
         }
         // Leaf nodes
