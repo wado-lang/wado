@@ -833,6 +833,44 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
     return elem;
 }
 
+fn optional_lookahead_depth(inner: &Element) -> i32 {
+    // Returns the number of leading fixed tokens that can be checked via lookahead.
+    // 0 if the first element is not a fixed token.
+    if let Group(alts) = *inner {
+        if alts.len() != 1 { return 0; }
+        let mut depth = 0;
+        for let mut i = 0; i < alts[0].elements.len(); i += 1 {
+            let elem = &alts[0].elements[i];
+            if let TokenRef(_) = *elem { depth += 1; }
+            else if let Literal(_) = *elem { depth += 1; }
+            else { break; }
+        }
+        return depth;
+    }
+    if let TokenRef(_) = *inner { return 1; }
+    if let Literal(_) = *inner { return 1; }
+    return 0;
+}
+
+fn optional_lookahead_tokens(inner: &Element, max_depth: i32) -> Array<String> {
+    // Returns up to max_depth leading fixed token constants.
+    let mut tokens: Array<String> = [];
+    if let Group(alts) = *inner {
+        if alts.len() != 1 { return []; }
+        for let mut i = 0; i < alts[0].elements.len(); i += 1 {
+            if tokens.len() >= max_depth { break; }
+            let elem = &alts[0].elements[i];
+            if let TokenRef(name) = *elem { tokens.append(`TK_{name}`); }
+            else if let Literal(text) = *elem { tokens.append(literal_const_name(&text)); }
+            else { break; }
+        }
+    } else {
+        if let TokenRef(name) = *inner { tokens.append(`TK_{name}`); }
+        else if let Literal(text) = *inner { tokens.append(literal_const_name(&text)); }
+    }
+    return tokens;
+}
+
 fn gen_optional_with_backtrack(
     w: &mut CodeWriter,
     inner: &Element,
@@ -847,6 +885,33 @@ fn gen_optional_with_backtrack(
             return;
         }
     }
+
+    // Use k-token lookahead when leading fixed tokens uniquely identify the optional.
+    let la_depth = optional_lookahead_depth(inner);
+    if la_depth >= 1 {
+        let la_tokens = optional_lookahead_tokens(inner, la_depth);
+        let mut cond_parts: Array<String> = [];
+        for let mut d = 0; d < la_tokens.len(); d += 1 {
+            let check = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
+            cond_parts.append(`{check} == {la_tokens[d]}`);
+        }
+        let mut cond = String::with_capacity(128);
+        for let mut i = 0; i < cond_parts.len(); i += 1 {
+            if i > 0 { cond.append(" && "); }
+            cond.append(cond_parts[i]);
+        }
+        w.begin(`if {cond}`);
+        if let Group(alts) = *inner {
+            for let mut i = 0; i < alts[0].elements.len(); i += 1 {
+                gen_element(w, &alts[0].elements[i], all_rules, lit_tokens, false, name_counts);
+            }
+        } else {
+            gen_element(w, inner, all_rules, lit_tokens, false, name_counts);
+        }
+        w.end();
+        return;
+    }
+
     w.begin(`if {first_check_str(first)}`);
 
     let saved = dedup_name(&"opt_saved", name_counts);
@@ -1241,27 +1306,91 @@ fn gen_lr_suffix_dispatch(
             let suffix_fn = `{fn_name}_lr_{lr_idx}`;
             w.line(`result = {suffix_fn}(p, result, start)?;`);
         } else {
-            w.line("let bt_saved = p.pos;");
-            w.line("let mut bt_ok = false;");
+            // For each alternative in the group, find tokens unique to it vs shared.
+            // Emit unique-token dispatch directly, shared-token dispatch via peek_at(1).
+            let mut emitted: Array<String> = [];
+            let mut first_branch = true;
+            // First pass: emit unique-token branches
             for let mut k = 0; k < group.len(); k += 1 {
-                let lr_idx = valid_lr_indices[group[k]];
-                let suffix_fn = `{fn_name}_lr_{lr_idx}`;
-                let is_last = k == group.len() - 1;
-                if is_last {
-                    w.begin("if !bt_ok");
-                    w.line(`result = {suffix_fn}(p, result, start)?;`);
-                    w.end();
-                } else {
-                    w.begin("if !bt_ok");
-                    w.line(`let bt_r = {suffix_fn}(p, result, start);`);
-                    w.begin("if let Ok(v) = bt_r");
-                    w.line("result = v;");
-                    w.line("bt_ok = true;");
-                    w.else_begin("else");
-                    w.line("p.pos = bt_saved;");
-                    w.end();
-                    w.end();
+                let this_first = &suffix_first_sets[group[k]];
+                for let mut t = 0; t < this_first.len(); t += 1 {
+                    let tk = &this_first[t];
+                    if array_contains_str(&emitted, tk) { continue; }
+                    // Check if this token is unique to this alternative
+                    let mut shared = false;
+                    for let mut j = 0; j < group.len(); j += 1 {
+                        if j == k { continue; }
+                        if array_contains_str(&suffix_first_sets[group[j]], tk) { shared = true; }
+                    }
+                    if !shared {
+                        let lr_idx = valid_lr_indices[group[k]];
+                        let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+                        if first_branch {
+                            w.begin(`if suffix_kind == {*tk}`);
+                            first_branch = false;
+                        } else {
+                            w.else_begin(`else if suffix_kind == {*tk}`);
+                        }
+                        w.line(`result = {suffix_fn}(p, result, start)?;`);
+                        emitted.append(*tk);
+                    }
                 }
+            }
+            // Second pass: emit shared-token branches with peek_at(1) sub-dispatch
+            let mut shared_tokens: Array<String> = [];
+            for let mut k = 0; k < group.len(); k += 1 {
+                for let tk of suffix_first_sets[group[k]] {
+                    if array_contains_str(&emitted, &tk) { continue; }
+                    if !array_contains_str(&shared_tokens, &tk) {
+                        shared_tokens.append(tk);
+                    }
+                }
+            }
+            for let mut st = 0; st < shared_tokens.len(); st += 1 {
+                let shared_tk = &shared_tokens[st];
+                if first_branch {
+                    w.begin(`if suffix_kind == {*shared_tk}`);
+                    first_branch = false;
+                } else {
+                    w.else_begin(`else if suffix_kind == {*shared_tk}`);
+                }
+                // Sub-dispatch by peek_at(1)
+                let mut sub_first = true;
+                let mut last_k = -1;
+                for let mut k = 0; k < group.len(); k += 1 {
+                    if array_contains_str(&suffix_first_sets[group[k]], shared_tk) {
+                        last_k = k;
+                    }
+                }
+                for let mut k = 0; k < group.len(); k += 1 {
+                    if !array_contains_str(&suffix_first_sets[group[k]], shared_tk) { continue; }
+                    let lr_idx = valid_lr_indices[group[k]];
+                    let alt = &rule.alternatives[lr_idx];
+                    let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+                    if k == last_k {
+                        if sub_first {
+                            w.line(`result = {suffix_fn}(p, result, start)?;`);
+                        } else {
+                            w.else_begin("else");
+                            w.line(`result = {suffix_fn}(p, result, start)?;`);
+                            w.end();
+                        }
+                    } else {
+                        let second = first_of_elements_from(&alt.elements, 2, all_rules, lit_tokens);
+                        let sub_cond = kind_check_str(&second, "p.peek_at(1)");
+                        if sub_first {
+                            w.begin(`if {sub_cond}`);
+                            sub_first = false;
+                        } else {
+                            w.else_begin(`else if {sub_cond}`);
+                        }
+                        w.line(`result = {suffix_fn}(p, result, start)?;`);
+                    }
+                }
+                emitted.append(*shared_tk);
+            }
+            if !first_branch {
+                w.end();
             }
         }
     }
