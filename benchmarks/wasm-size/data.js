@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774558490246,
+  "lastUpdate": 1774560044560,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7862,6 +7862,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/733d7924efa8f4c9e3275c817b78369526791c50"
         },
         "date": 1774558490161,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "24c0da54eabeab3bdb2478c9618e07d9e9d64639",
+          "message": "Merge pull request #705 from wado-lang/claude/update-compiler-optimizer-docs-WObXL\n\ndocs: add condition implication optimization pass",
+          "timestamp": "2026-03-27T06:18:15+09:00",
+          "tree_id": "120a9f0ba0b0be879d3a07087f6a89a6ab0788af",
+          "url": "https://github.com/wado-lang/wado/commit/24c0da54eabeab3bdb2478c9618e07d9e9d64639"
+        },
+        "date": 1774560044368,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
