@@ -7,9 +7,10 @@ use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind,
     TirUnaryOp, TypeId, TypeTable,
 };
+use crate::token::Span;
 
 use super::Resolver;
-use super::types::{FunctionContext, TypeError};
+use super::types::{FunctionContext, MethodInfo, TypeError};
 use super::util;
 
 impl<H: CompilerHost> Resolver<'_, H> {
@@ -380,6 +381,45 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
             }
+
+            // TypeParam with trait bounds: resolve operators via trait bound methods
+            if let ResolvedType::TypeParam { name, .. } = &left_type
+                && let Some(bounds) = self.trait_ctx.type_param_bounds.get(name).cloned()
+            {
+                let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
+                if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq)
+                    && let Some((_trait_name, info)) =
+                        self.find_method_in_trait_bounds(&bound_names, "eq", left.type_id)
+                {
+                    return self.build_eq_method_call(
+                        left,
+                        right,
+                        &info,
+                        name,
+                        "Eq",
+                        binary.op == BinaryOp::NotEq,
+                        true,
+                        binary.span,
+                    );
+                }
+                if matches!(
+                    binary.op,
+                    BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
+                ) && let Some((_trait_name, info)) =
+                    self.find_method_in_trait_bounds(&bound_names, "cmp", left.type_id)
+                {
+                    return self.build_ord_method_call(
+                        left,
+                        right,
+                        &info,
+                        name,
+                        "Ord",
+                        binary.op,
+                        true,
+                        binary.span,
+                    );
+                }
+            }
         }
 
         // Check if this is an arithmetic or bitwise operation on a non-primitive type
@@ -486,6 +526,80 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             args: vec![CallArg::new(arg_ref, false)],
                         },
                         trait_info.output_type,
+                        binary.span,
+                    );
+                }
+            }
+
+            // TypeParam with trait bounds: resolve arithmetic operators via trait bound methods
+            if let ResolvedType::TypeParam { name, .. } = &left_type
+                && let Some(bounds) = self.trait_ctx.type_param_bounds.get(name).cloned()
+            {
+                let operand_type_id = left.type_id;
+                let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
+                let (trait_name, method_name) = match binary.op {
+                    BinaryOp::Add => ("Add", "add"),
+                    BinaryOp::Sub => ("Sub", "sub"),
+                    BinaryOp::Mul => ("Mul", "mul"),
+                    BinaryOp::Div => ("Div", "div"),
+                    BinaryOp::Mod => ("Rem", "rem"),
+                    BinaryOp::BitAnd => ("BitAnd", "bitand"),
+                    BinaryOp::BitOr => ("BitOr", "bitor"),
+                    BinaryOp::BitXor => ("BitXor", "bitxor"),
+                    _ => unreachable!(),
+                };
+                if let Some((_found_trait, info)) =
+                    self.find_method_in_trait_bounds(&bound_names, method_name, left.type_id)
+                {
+                    let receiver = self.adjust_receiver_for_self_kind(
+                        left,
+                        info.self_kind,
+                        false,
+                        binary.span,
+                    );
+
+                    let arg_ref_type = self
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(right.type_id));
+                    let arg_ref = TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(right),
+                        },
+                        arg_ref_type,
+                        binary.span,
+                    );
+
+                    let mangled_method_name =
+                        MethodName::format_local(name, Some(trait_name), method_name);
+
+                    let mut method_info_local = LocalMethodName::new(
+                        name.clone(),
+                        Some(trait_name.to_string()),
+                        method_name.to_string(),
+                    );
+                    method_info_local.is_type_param_receiver = true;
+
+                    return TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            func: FunctionRef {
+                                module_source: self.find_struct_module_source(name),
+                                name: mangled_method_name,
+                                monomorph_info: None,
+                                method_info: Some(method_info_local),
+                                is_cm_binding: false,
+                            },
+                            type_args: vec![],
+                            args: vec![CallArg::new(arg_ref, false)],
+                        },
+                        // Use the TypeParam type as the return type, not Self::Output.
+                        // For arithmetic operators, Output == Self is the common case,
+                        // and TypeParam types get properly substituted by monomorphization.
+                        // Using AssocTypeProjection here would cause unresolved types for
+                        // primitives that don't register associated types.
+                        operand_type_id,
                         binary.span,
                     );
                 }
@@ -1284,5 +1398,160 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // This should have been desugared to binary && chain
         // Just resolve the first expression for now
         self.resolve_expr(&chain.first, ctx, None)
+    }
+
+    /// Build a method call for `Eq::eq` (== / !=) operators.
+    #[allow(clippy::too_many_arguments)]
+    fn build_eq_method_call(
+        &mut self,
+        left: TirExpr,
+        right: TirExpr,
+        info: &MethodInfo,
+        struct_name: &str,
+        trait_name: &str,
+        needs_negation: bool,
+        is_type_param_receiver: bool,
+        span: Span,
+    ) -> TirExpr {
+        let receiver = self.adjust_receiver_for_self_kind(left, info.self_kind, false, span);
+
+        let arg_ref_type = self
+            .type_table
+            .borrow_mut()
+            .intern(ResolvedType::Ref(right.type_id));
+        let arg_ref = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: Box::new(right),
+            },
+            arg_ref_type,
+            span,
+        );
+
+        let mangled_method_name = MethodName::format_local(struct_name, Some(trait_name), "eq");
+
+        let mut method_info = LocalMethodName::new(
+            struct_name.to_string(),
+            Some(trait_name.to_string()),
+            "eq".to_string(),
+        );
+        method_info.is_type_param_receiver = is_type_param_receiver;
+
+        let call_expr = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(receiver),
+                func: FunctionRef {
+                    module_source: self.find_struct_module_source(struct_name),
+                    name: mangled_method_name,
+                    monomorph_info: None,
+                    method_info: Some(method_info),
+                    is_cm_binding: false,
+                },
+                type_args: vec![],
+                args: vec![CallArg::new(arg_ref, false)],
+            },
+            TypeTable::BOOL,
+            span,
+        );
+
+        if needs_negation {
+            return TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Not,
+                    expr: Box::new(call_expr),
+                },
+                TypeTable::BOOL,
+                span,
+            );
+        }
+        call_expr
+    }
+
+    /// Build a method call for `Ord::cmp` (<, >, <=, >=) operators.
+    #[allow(clippy::too_many_arguments)]
+    fn build_ord_method_call(
+        &mut self,
+        left: TirExpr,
+        right: TirExpr,
+        info: &MethodInfo,
+        struct_name: &str,
+        trait_name: &str,
+        op: BinaryOp,
+        is_type_param_receiver: bool,
+        span: Span,
+    ) -> TirExpr {
+        let receiver = self.adjust_receiver_for_self_kind(left, info.self_kind, false, span);
+
+        let arg_ref_type = self
+            .type_table
+            .borrow_mut()
+            .intern(ResolvedType::Ref(right.type_id));
+        let arg_ref = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: Box::new(right),
+            },
+            arg_ref_type,
+            span,
+        );
+
+        let ordering_type_id = self.type_table.borrow_mut().intern(ResolvedType::Enum {
+            name: "Ordering".to_string(),
+            module_source: ModuleSource::prelude(),
+        });
+
+        let mangled_method_name = MethodName::format_local(struct_name, Some(trait_name), "cmp");
+
+        let mut method_info = LocalMethodName::new(
+            struct_name.to_string(),
+            Some(trait_name.to_string()),
+            "cmp".to_string(),
+        );
+        method_info.is_type_param_receiver = is_type_param_receiver;
+
+        let cmp_call = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(receiver),
+                func: FunctionRef {
+                    module_source: self.find_struct_module_source(struct_name),
+                    name: mangled_method_name,
+                    monomorph_info: None,
+                    method_info: Some(method_info),
+                    is_cm_binding: false,
+                },
+                type_args: vec![],
+                args: vec![CallArg::new(arg_ref, false)],
+            },
+            ordering_type_id,
+            span,
+        );
+
+        let (compare_op, case_name, case_index): (TirBinaryOp, &str, u32) = match op {
+            BinaryOp::Lt => (TirBinaryOp::Eq, "Less", 0),
+            BinaryOp::Gt => (TirBinaryOp::Eq, "Greater", 2),
+            BinaryOp::LtEq => (TirBinaryOp::NotEq, "Greater", 2),
+            BinaryOp::GtEq => (TirBinaryOp::NotEq, "Less", 0),
+            _ => unreachable!(),
+        };
+
+        let ordering_variant = TirExpr::new(
+            TirExprKind::EnumConstruct {
+                enum_type: ordering_type_id,
+                case_name: case_name.to_string(),
+                case_index,
+            },
+            ordering_type_id,
+            span,
+        );
+
+        TirExpr::new(
+            TirExprKind::Binary {
+                op: compare_op,
+                left: Box::new(cmp_call),
+                right: Box::new(ordering_variant),
+            },
+            TypeTable::BOOL,
+            span,
+        )
     }
 }
