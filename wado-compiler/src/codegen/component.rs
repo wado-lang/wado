@@ -51,7 +51,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
     let component_plan = project
         .component_plan
         .as_ref()
-        .expect("component_plan should be set by wasm_plan phase");
+        .expect("component_plan should be set by wir_build::plan_project");
     let bundled_functions = &component_plan.bundled_functions;
 
     // Core memory module
@@ -863,7 +863,7 @@ fn resolve_future_type(
 fn emit_world_exports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    component_plan: &crate::wasm_plan::ComponentPlan,
+    component_plan: &crate::wir_build::component_plan::ComponentPlan,
     result_unit_type: u32,
 ) {
     for export in &component_plan.world_exports {
