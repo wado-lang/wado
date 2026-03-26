@@ -147,3 +147,508 @@ test "parse multiple statements" {
         panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
     }
 }
+
+// --- JOIN tests ---
+
+test "parse INNER JOIN" {
+    let result = sqlite::parse(&"SELECT u.name, o.total FROM users u INNER JOIN orders o ON u.id = o.user_id;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse LEFT JOIN" {
+    let result = sqlite::parse(&"SELECT u.name, o.total FROM users u LEFT JOIN orders o ON u.id = o.user_id;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse multiple JOINs" {
+    let result = sqlite::parse(&"SELECT u.name, o.id, p.name FROM users u INNER JOIN orders o ON u.id = o.user_id LEFT JOIN products p ON o.product_id = p.id;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse CROSS JOIN" {
+    let result = sqlite::parse(&"SELECT a.x, b.y FROM t1 a CROSS JOIN t2 b;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse NATURAL JOIN" {
+    let result = sqlite::parse(&"SELECT * FROM t1 NATURAL JOIN t2;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse JOIN with USING" {
+    let result = sqlite::parse(&"SELECT * FROM t1 JOIN t2 USING (id, name);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+// --- Subquery tests ---
+
+test "parse subquery in FROM" {
+    let result = sqlite::parse(&"SELECT sub.total FROM (SELECT SUM(amount) AS total FROM orders) sub;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse subquery in WHERE with IN" {
+    let result = sqlite::parse(&"SELECT name FROM users WHERE id IN (SELECT user_id FROM orders WHERE total > 100);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse EXISTS subquery" {
+    let result = sqlite::parse(&"SELECT name FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse NOT EXISTS subquery" {
+    let result = sqlite::parse(&"SELECT name FROM users WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+// --- Compound SELECT (UNION, INTERSECT, EXCEPT) ---
+
+test "parse UNION" {
+    let result = sqlite::parse(&"SELECT name FROM users UNION SELECT name FROM admins;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse UNION ALL" {
+    let result = sqlite::parse(&"SELECT id FROM t1 UNION ALL SELECT id FROM t2 ORDER BY id;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse INTERSECT" {
+    let result = sqlite::parse(&"SELECT id FROM t1 INTERSECT SELECT id FROM t2;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse EXCEPT" {
+    let result = sqlite::parse(&"SELECT id FROM t1 EXCEPT SELECT id FROM t2;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+// --- CTE (WITH clause) ---
+
+test "parse CTE" {
+    let result = sqlite::parse(&"WITH recent AS (SELECT * FROM orders WHERE date > '2024-01-01') SELECT * FROM recent;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse multiple CTEs" {
+    let result = sqlite::parse(&"WITH active_users AS (SELECT id, name FROM users WHERE active = 1), user_orders AS (SELECT user_id, COUNT(*) AS cnt FROM orders GROUP BY user_id) SELECT u.name, o.cnt FROM active_users u JOIN user_orders o ON u.id = o.user_id;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse recursive CTE" {
+    let result = sqlite::parse(&"WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM cnt WHERE x < 100) SELECT x FROM cnt;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+// --- Expression tests ---
+
+test "parse CASE expression" {
+    let result = sqlite::parse(&"SELECT CASE WHEN age < 18 THEN 'minor' WHEN age < 65 THEN 'adult' ELSE 'senior' END AS category FROM users;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse CASE with value" {
+    let result = sqlite::parse(&"SELECT CASE status WHEN 0 THEN 'inactive' WHEN 1 THEN 'active' ELSE 'unknown' END FROM users;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse BETWEEN" {
+    let result = sqlite::parse(&"SELECT * FROM orders WHERE amount BETWEEN 100 AND 500;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse NOT BETWEEN" {
+    let result = sqlite::parse(&"SELECT * FROM orders WHERE amount NOT BETWEEN 100 AND 500;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse LIKE" {
+    let result = sqlite::parse(&"SELECT * FROM users WHERE name LIKE '%alice%';");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse NOT LIKE" {
+    let result = sqlite::parse(&"SELECT * FROM users WHERE name NOT LIKE 'admin%';");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse LIKE with ESCAPE" {
+    let result = sqlite::parse(&"SELECT * FROM t WHERE col LIKE '%10\\%%' ESCAPE '\\';");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse IS NULL and IS NOT NULL" {
+    let result = sqlite::parse(&"SELECT * FROM users WHERE email IS NOT NULL AND phone IS NULL;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse CAST" {
+    let result = sqlite::parse(&"SELECT CAST(price AS INTEGER), CAST(qty AS TEXT) FROM items;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse string concatenation" {
+    let result = sqlite::parse(&"SELECT first_name || ' ' || last_name AS full_name FROM users;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse IN list" {
+    let result = sqlite::parse(&"SELECT * FROM users WHERE status IN ('active', 'pending', 'trial');");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse NOT IN list" {
+    let result = sqlite::parse(&"SELECT * FROM users WHERE id NOT IN (1, 2, 3);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse nested arithmetic" {
+    let result = sqlite::parse(&"SELECT (a + b) * (c - d) / e % f FROM t;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse unary operators" {
+    let result = sqlite::parse(&"SELECT -a, +b, ~c, NOT d FROM t;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+// --- SELECT features ---
+
+test "parse SELECT DISTINCT" {
+    let result = sqlite::parse(&"SELECT DISTINCT category FROM products;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse GROUP BY with HAVING" {
+    let result = sqlite::parse(&"SELECT category, COUNT(*) AS cnt, AVG(price) AS avg_price FROM products GROUP BY category HAVING COUNT(*) > 3;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse ORDER BY multiple columns" {
+    let result = sqlite::parse(&"SELECT * FROM users ORDER BY last_name ASC, first_name DESC;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse LIMIT with OFFSET" {
+    let result = sqlite::parse(&"SELECT * FROM users ORDER BY id LIMIT 20 OFFSET 40;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse table dot star" {
+    let result = sqlite::parse(&"SELECT u.*, o.total FROM users u JOIN orders o ON u.id = o.user_id;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+// --- DDL tests ---
+
+test "parse CREATE TABLE with constraints" {
+    let result = sqlite::parse(&"CREATE TABLE orders (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, amount REAL DEFAULT 0.0, status TEXT CHECK(status IN ('pending', 'shipped', 'delivered')), UNIQUE(user_id, amount));");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse CREATE TABLE IF NOT EXISTS" {
+    let result = sqlite::parse(&"CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY, message TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse CREATE TABLE AS SELECT" {
+    let result = sqlite::parse(&"CREATE TABLE user_summary AS SELECT user_id, COUNT(*) AS order_count FROM orders GROUP BY user_id;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse CREATE INDEX" {
+    let result = sqlite::parse(&"CREATE INDEX idx_users_email ON users(email);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse CREATE UNIQUE INDEX" {
+    let result = sqlite::parse(&"CREATE UNIQUE INDEX IF NOT EXISTS idx_users_name ON users(last_name, first_name);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse CREATE VIEW" {
+    let result = sqlite::parse(&"CREATE VIEW active_users AS SELECT id, name FROM users WHERE active = 1;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse CREATE TRIGGER" {
+    let result = sqlite::parse(&"CREATE TRIGGER update_timestamp AFTER UPDATE ON users FOR EACH ROW BEGIN UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = 1; END;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse ALTER TABLE RENAME" {
+    let result = sqlite::parse(&"ALTER TABLE users RENAME TO customers;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse ALTER TABLE ADD COLUMN" {
+    let result = sqlite::parse(&"ALTER TABLE users ADD COLUMN phone TEXT;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+// --- DML tests ---
+
+test "parse INSERT with column list" {
+    let result = sqlite::parse(&"INSERT INTO users (name, email, age) VALUES ('Alice', 'alice@example.com', 30);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse INSERT multiple rows" {
+    let result = sqlite::parse(&"INSERT INTO users (name, age) VALUES ('Alice', 30), ('Bob', 25), ('Charlie', 35);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse INSERT OR REPLACE" {
+    let result = sqlite::parse(&"INSERT OR REPLACE INTO config (key, value) VALUES ('theme', 'dark');");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse INSERT from SELECT" {
+    let result = sqlite::parse(&"INSERT INTO archive (name, email) SELECT name, email FROM users WHERE active = 0;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse UPDATE with multiple SET" {
+    let result = sqlite::parse(&"UPDATE users SET name = 'Alice', email = 'alice@new.com', age = 31 WHERE id = 1;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse DELETE with WHERE" {
+    let result = sqlite::parse(&"DELETE FROM logs WHERE created_at < '2024-01-01' AND level = 'debug';");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+// --- Transaction tests ---
+
+test "parse BEGIN COMMIT" {
+    let result = sqlite::parse(&"BEGIN TRANSACTION; INSERT INTO t VALUES (1); COMMIT;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse SAVEPOINT and RELEASE" {
+    let result = sqlite::parse(&"SAVEPOINT sp1; INSERT INTO t VALUES (1); RELEASE sp1;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse ROLLBACK" {
+    let result = sqlite::parse(&"BEGIN; INSERT INTO t VALUES (1); ROLLBACK;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+// --- Misc statement tests ---
+
+test "parse EXPLAIN QUERY PLAN" {
+    let result = sqlite::parse(&"EXPLAIN QUERY PLAN SELECT * FROM users WHERE id = 1;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse PRAGMA" {
+    let result = sqlite::parse(&"PRAGMA table_info(users);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse VACUUM" {
+    let result = sqlite::parse(&"VACUUM;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse REPLACE" {
+    let result = sqlite::parse(&"REPLACE INTO config (key, value) VALUES ('mode', 'production');");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse DROP INDEX" {
+    let result = sqlite::parse(&"DROP INDEX IF EXISTS idx_users_email;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse DROP VIEW" {
+    let result = sqlite::parse(&"DROP VIEW IF EXISTS active_users;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse DROP TRIGGER" {
+    let result = sqlite::parse(&"DROP TRIGGER IF EXISTS update_timestamp;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+// --- Complex real-world queries ---
+
+test "parse complex query with CTE and JOIN" {
+    let result = sqlite::parse(&"WITH monthly_sales AS (SELECT strftime('%Y-%m', date) AS month, SUM(amount) AS total FROM orders GROUP BY month) SELECT m.month, m.total, u.name FROM monthly_sales m JOIN users u ON u.id = 1 ORDER BY m.month DESC LIMIT 12;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse nested subqueries" {
+    let result = sqlite::parse(&"SELECT * FROM users WHERE id IN (SELECT user_id FROM orders WHERE product_id IN (SELECT id FROM products WHERE category = 'electronics'));");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse correlated subquery" {
+    let result = sqlite::parse(&"SELECT u.name, (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) AS order_count FROM users u;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse complex CASE with aggregation" {
+    let result = sqlite::parse(&"SELECT category, COUNT(CASE WHEN price > 100 THEN 1 END) AS expensive, COUNT(CASE WHEN price <= 100 THEN 1 END) AS cheap FROM products GROUP BY category HAVING COUNT(*) > 5 ORDER BY expensive DESC;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse UNION with ORDER BY and LIMIT" {
+    let result = sqlite::parse(&"SELECT name, 'user' AS type FROM users UNION ALL SELECT name, 'admin' AS type FROM admins ORDER BY name ASC LIMIT 50 OFFSET 10;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse bind parameters" {
+    let result = sqlite::parse(&"SELECT * FROM users WHERE id = ? AND name = ?1 AND email = :email;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse CREATE TABLE with foreign key constraint" {
+    let result = sqlite::parse(&"CREATE TABLE order_items (id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL, product_id INTEGER NOT NULL, quantity INTEGER DEFAULT 1, FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE, FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "parse complex multi-statement script" {
+    let result = sqlite::parse(&"BEGIN TRANSACTION; CREATE TABLE IF NOT EXISTS migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, applied_at TEXT DEFAULT CURRENT_TIMESTAMP); INSERT INTO migrations (name) VALUES ('001_initial'); COMMIT;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}

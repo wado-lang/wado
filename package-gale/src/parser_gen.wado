@@ -741,9 +741,13 @@ fn gen_lr_suffix_helpers(
                     let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
                     w.line(`let {field_name} = {elem_fn}(p)?;`);
                 }
-            } else if let Group(_) = *elem {
-                let discard = dedup_name(&"op_tok", &mut name_counts);
-                w.line(`let {discard} = p.advance();`);
+            } else if let Group(alts) = *elem {
+                if is_simple_token_group(&alts) {
+                    let discard = dedup_name(&"op_tok", &mut name_counts);
+                    w.line(`let {discard} = p.advance();`);
+                } else {
+                    gen_element(w, elem, all_rules, lit_tokens, false, &mut name_counts);
+                }
             } else if let Repeat(rep) = *elem {
                 gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
             } else {
@@ -778,30 +782,73 @@ fn gen_lr_suffix_dispatch(
     lit_tokens: &Array<LitToken>,
 ) {
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
-    w.begin("loop");
-    w.line("let suffix_kind = p.peek_kind();");
 
-    let mut is_first = true;
+    let mut valid_lr_indices: Array<i32> = [];
+    let mut suffix_first_sets: Array<Array<String>> = [];
     for let lr_idx_ref of lr_indices {
         let lr_idx = *lr_idx_ref;
         let alt = &rule.alternatives[lr_idx];
         if alt.elements.len() <= 1 { continue; }
-
-        let mut suffix_first: Array<String> = [];
-        let mut visiting: Array<String> = [];
-        suffix_first = first_of_element(&alt.elements[1], all_rules, lit_tokens, &mut visiting);
+        let suffix_first = first_of_elements_from(&alt.elements, 1, all_rules, lit_tokens);
         if suffix_first.len() == 0 { continue; }
+        valid_lr_indices.append(lr_idx);
+        suffix_first_sets.append(suffix_first);
+    }
 
-        let suffix_fn = `{fn_name}_lr_{lr_idx}`;
-        let cond = kind_check_str(&suffix_first, "suffix_kind");
+    let groups = compute_overlap_groups(&suffix_first_sets);
 
+    w.begin("loop");
+    w.line("let suffix_kind = p.peek_kind();");
+
+    let mut is_first = true;
+    for let mut g = 0; g < groups.len(); g += 1 {
+        let group = &groups[g];
+
+        let mut union_first: Array<String> = [];
+        for let idx of group {
+            for let tk of suffix_first_sets[*idx] {
+                if !array_contains_str(&union_first, &tk) {
+                    union_first.append(tk);
+                }
+            }
+        }
+
+        let cond = kind_check_str(&union_first, "suffix_kind");
         if is_first {
             w.begin(`if {cond}`);
             is_first = false;
         } else {
             w.else_begin(`else if {cond}`);
         }
-        w.line(`result = {suffix_fn}(p, result, start)?;`);
+
+        if group.len() == 1 {
+            let lr_idx = valid_lr_indices[group[0]];
+            let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+            w.line(`result = {suffix_fn}(p, result, start)?;`);
+        } else {
+            w.line("let bt_saved = p.pos;");
+            w.line("let mut bt_ok = false;");
+            for let mut k = 0; k < group.len(); k += 1 {
+                let lr_idx = valid_lr_indices[group[k]];
+                let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+                let is_last = k == group.len() - 1;
+                if is_last {
+                    w.begin("if !bt_ok");
+                    w.line(`result = {suffix_fn}(p, result, start)?;`);
+                    w.end();
+                } else {
+                    w.begin("if !bt_ok");
+                    w.line(`let bt_r = {suffix_fn}(p, result, start);`);
+                    w.begin("if let Ok(v) = bt_r");
+                    w.line("result = v;");
+                    w.line("bt_ok = true;");
+                    w.else_begin("else");
+                    w.line("p.pos = bt_saved;");
+                    w.end();
+                    w.end();
+                }
+            }
+        }
     }
 
     if !is_first {
@@ -1052,6 +1099,17 @@ fn first_of_rule(
     *visiting = new_visiting;
 
     return result;
+}
+
+fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
+    for let alt of alts {
+        if alt.elements.len() != 1 { return false; }
+        let elem = &alt.elements[0];
+        if let TokenRef(_) = *elem { continue; }
+        if let Literal(_) = *elem { continue; }
+        return false;
+    }
+    return true;
 }
 
 fn is_nullable(elem: &Element) -> bool {
