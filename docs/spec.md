@@ -652,6 +652,33 @@ match customer {
 }
 ```
 
+**Or Patterns:**
+
+Or patterns match if any alternative matches. All alternatives must bind the same names with the same types:
+
+```wado
+// Enum or-patterns
+match color {
+    Red | Blue => "cool",
+    Green => "warm",
+}
+
+// Variant or-patterns with bindings
+match expr {
+    Num(n) | Neg(n) => use(n),
+    Zero => 0,
+}
+
+// Literal or-patterns
+match n {
+    1 | 2 | 3 => "low",
+    _ => "high",
+}
+
+// Or patterns in matches operator
+if shape matches { Circle(_) | Square(_) } { ... }
+```
+
 **Nested Sub-Patterns in Tuple/Struct Destructuring:**
 
 Tuple and struct patterns support literal, variant, and enum sub-patterns. These are lowered into guard conditions with appropriate checks:

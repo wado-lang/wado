@@ -2168,6 +2168,8 @@ pub enum TirPattern {
         fields: Vec<TirStructPatternField>,
         has_rest: bool,
     },
+    /// Or pattern: matches if any alternative matches
+    Or(Vec<TirPattern>),
 }
 
 #[derive(Debug, Clone)]

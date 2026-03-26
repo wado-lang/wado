@@ -1,0 +1,33 @@
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+}
+
+fn is_horizontal(d: Direction) -> bool {
+    return match d {
+        East | West => true,
+        North | South => false,
+    };
+}
+
+fn describe(d: Direction) -> String {
+    return match d {
+        North | South => "vertical",
+        East | West => "horizontal",
+    };
+}
+
+export fn run() {
+    assert is_horizontal(Direction::East);
+    assert is_horizontal(Direction::West);
+    assert !is_horizontal(Direction::North);
+    assert !is_horizontal(Direction::South);
+
+    assert describe(Direction::North) == "vertical";
+    assert describe(Direction::East) == "horizontal";
+}
+
+__DATA__
+{"stdout": ""}

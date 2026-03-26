@@ -1653,6 +1653,11 @@ fn collect_types_from_pattern(
                 collect_types_from_pattern(&field.pattern, type_table, reachable);
             }
         }
+        TirPattern::Or(alternatives) => {
+            for p in alternatives {
+                collect_types_from_pattern(p, type_table, reachable);
+            }
+        }
     }
 }
 

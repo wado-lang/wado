@@ -1045,6 +1045,8 @@ pub enum Pattern {
         has_rest: bool,
         span: Span,
     },
+    /// Or pattern: `Red | Blue` or `Some(x) | Other(x)`
+    Or(Vec<Pattern>),
 }
 
 #[derive(Debug, Clone)]

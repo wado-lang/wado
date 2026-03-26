@@ -682,6 +682,21 @@ let result = match opt {
     None => 0,
 };
 
+// Or patterns
+match color {
+    Red | Blue => "cool",
+    Green => "warm",
+}
+
+// Or patterns with bindings (all alternatives must bind the same names)
+match expr {
+    Num(n) | Neg(n) => use(n),
+    Zero => 0,
+}
+
+// Or patterns in matches operator
+if shape matches { Circle(_) | Square(_) } { ... }
+
 // Match with guard
 let label = match value {
     Some(x) && x > 100 => "large",

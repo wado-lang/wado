@@ -5896,6 +5896,15 @@ impl FunctionTranslator<'_, '_> {
                 // Tuple/struct patterns: always irrefutable
                 WirInstr::I32Const(1)
             }
+            TirPattern::Or(alternatives) => {
+                // Or pattern: combine conditions with logical OR
+                let mut result = WirInstr::I32Const(0);
+                for alt in alternatives {
+                    let cond = self.translate_pattern_condition(alt, scrut_local, scrut_type);
+                    result = WirInstr::I32Or(Box::new(result), Box::new(cond));
+                }
+                result
+            }
         }
     }
 
@@ -6275,6 +6284,13 @@ impl FunctionTranslator<'_, '_> {
                             }
                         }
                     }
+                }
+            }
+            TirPattern::Or(alternatives) => {
+                // Or patterns should be desugared before reaching WIR.
+                // Emit bindings from the first alternative as a fallback.
+                if let Some(first) = alternatives.first() {
+                    self.emit_pattern_bindings(first, scrut_local, scrut_type, instrs);
                 }
             }
         }

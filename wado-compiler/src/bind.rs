@@ -548,6 +548,12 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 }
             }
             crate::ast::Pattern::Literal(_) | crate::ast::Pattern::Variant { .. } => {}
+            crate::ast::Pattern::Or(alternatives) => {
+                // Bind variables from the first alternative (all alternatives must bind the same names)
+                if let Some(first) = alternatives.first() {
+                    self.bind_let_pattern_uninit(first, is_mut, is_reactive, span)?;
+                }
+            }
         }
         Ok(())
     }
@@ -575,6 +581,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             crate::ast::Pattern::Struct { fields, .. } => {
                 for field in fields {
                     self.bind_let_pattern(&field.pattern, is_mut, is_reactive, span)?;
+                }
+            }
+            crate::ast::Pattern::Or(alternatives) => {
+                if let Some(first) = alternatives.first() {
+                    self.bind_let_pattern(first, is_mut, is_reactive, span)?;
                 }
             }
             crate::ast::Pattern::Literal(_) | crate::ast::Pattern::Variant { .. } => {
@@ -1050,6 +1061,12 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             }
             crate::ast::Pattern::Literal(_) | crate::ast::Pattern::Wildcard => {
                 // No variables introduced
+            }
+            crate::ast::Pattern::Or(alternatives) => {
+                // Bind variables from the first alternative (all alternatives must bind the same names)
+                if let Some(first) = alternatives.first() {
+                    self.bind_pattern(first, span)?;
+                }
             }
         }
         Ok(())

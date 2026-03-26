@@ -388,6 +388,11 @@ impl Monomorphizer {
                     self.substitute_types_in_pattern(&mut field.pattern, substitution, type_table);
                 }
             }
+            TirPattern::Or(alternatives) => {
+                for p in alternatives {
+                    self.substitute_types_in_pattern(p, substitution, type_table);
+                }
+            }
         }
     }
 }

@@ -440,6 +440,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 });
                 false
             }
+            Pattern::Or(_) => {
+                let _ = self.logger.error(TypeError::InvalidPattern {
+                    message: "refutable pattern in `let` binding: or-patterns may not match; use `if let` or `match` instead".to_string(),
+                    span,
+                });
+                false
+            }
         }
     }
 
@@ -671,6 +678,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             ast::Pattern::Wildcard => TirPattern::Wildcard,
             ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
+                // Refutable pattern: error was already emitted by check_irrefutable_pattern.
+                TirPattern::Wildcard
+            }
+            ast::Pattern::Or(_) => {
                 // Refutable pattern: error was already emitted by check_irrefutable_pattern.
                 TirPattern::Wildcard
             }
@@ -1250,6 +1261,82 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     fields: tir_fields,
                     has_rest: *has_rest,
                 }
+            }
+            Pattern::Or(alternatives) => {
+                let mut resolved = Vec::with_capacity(alternatives.len());
+
+                // Resolve first alternative normally
+                if let Some(first_alt) = alternatives.first() {
+                    let first = self.resolve_if_pattern_inner(
+                        first_alt,
+                        scrutinee_type,
+                        ctx,
+                        span,
+                        ref_binding,
+                    );
+                    let first_bindings = collect_pattern_bindings_with_index(&first);
+                    resolved.push(first);
+
+                    // Resolve subsequent alternatives and remap their local indices
+                    // to match the first alternative's bindings
+                    for (i, alt) in alternatives.iter().enumerate().skip(1) {
+                        let alt_resolved = self.resolve_if_pattern_inner(
+                            alt,
+                            scrutinee_type,
+                            ctx,
+                            span,
+                            ref_binding,
+                        );
+                        let alt_bindings = collect_pattern_bindings_with_index(&alt_resolved);
+
+                        // Validate same names and types
+                        let first_names: Vec<(&str, crate::tir::TypeId)> = first_bindings
+                            .iter()
+                            .map(|(n, _, t)| (n.as_str(), *t))
+                            .collect();
+                        let alt_names: Vec<(&str, crate::tir::TypeId)> = alt_bindings
+                            .iter()
+                            .map(|(n, _, t)| (n.as_str(), *t))
+                            .collect();
+
+                        if first_names == alt_names {
+                            // Remap local indices in the alternative to match the first
+                            let mut remapped = alt_resolved;
+                            for (first_bind, alt_bind) in
+                                first_bindings.iter().zip(alt_bindings.iter())
+                            {
+                                if first_bind.1 != alt_bind.1 {
+                                    remap_pattern_local(&mut remapped, alt_bind.1, first_bind.1);
+                                }
+                            }
+                            resolved.push(remapped);
+                        } else {
+                            let fn_: Vec<&str> = first_names.iter().map(|(n, _)| *n).collect();
+                            let an: Vec<&str> = alt_names.iter().map(|(n, _)| *n).collect();
+                            let _ = self.logger.error(TypeError::InvalidPattern {
+                                message: format!(
+                                    "or-pattern alternatives must bind the same names with the same types: \
+                                     alternative 1 binds {:?}, but alternative {} binds {:?}",
+                                    fn_, i + 1, an,
+                                ),
+                                span,
+                            });
+                            resolved.push(alt_resolved);
+                        }
+                    }
+
+                    // Update scope entries to use the first alternative's local indices
+                    // so the arm body resolves names to the correct locals.
+                    for (name, local_index, _type_id) in &first_bindings {
+                        if let Some(scope) = ctx.scopes.last_mut()
+                            && let Some(var) = scope.get_mut(name)
+                        {
+                            var.index = *local_index;
+                        }
+                    }
+                }
+
+                TirPattern::Or(resolved)
             }
         }
     }
@@ -1891,5 +1978,83 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Resolve a continue statement
     pub(super) fn resolve_continue(&mut self, continue_stmt: &ContinueStmt) -> TirStmt {
         TirStmt::new(TirStmtKind::Continue, continue_stmt.span)
+    }
+}
+
+/// Collect binding names, local indices, and types from a TIR pattern for or-pattern validation.
+fn collect_pattern_bindings_with_index(
+    pattern: &TirPattern,
+) -> Vec<(String, u32, crate::tir::TypeId)> {
+    let mut bindings = Vec::new();
+    collect_pattern_bindings_with_index_inner(pattern, &mut bindings);
+    bindings.sort_by(|a, b| a.0.cmp(&b.0));
+    bindings
+}
+
+fn collect_pattern_bindings_with_index_inner(
+    pattern: &TirPattern,
+    out: &mut Vec<(String, u32, crate::tir::TypeId)>,
+) {
+    match pattern {
+        TirPattern::Binding {
+            name,
+            local_index,
+            type_id,
+        } => {
+            out.push((name.clone(), *local_index, *type_id));
+        }
+        TirPattern::Tuple(patterns) => {
+            for p in patterns {
+                collect_pattern_bindings_with_index_inner(p, out);
+            }
+        }
+        TirPattern::Variant { bindings, .. } => {
+            for p in bindings {
+                collect_pattern_bindings_with_index_inner(p, out);
+            }
+        }
+        TirPattern::Struct { fields, .. } => {
+            for f in fields {
+                collect_pattern_bindings_with_index_inner(&f.pattern, out);
+            }
+        }
+        TirPattern::Or(alternatives) => {
+            if let Some(first) = alternatives.first() {
+                collect_pattern_bindings_with_index_inner(first, out);
+            }
+        }
+        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } => {}
+    }
+}
+
+/// Remap a specific `local_index` in a pattern to a new value.
+fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) {
+    match pattern {
+        TirPattern::Binding { local_index, .. } => {
+            if *local_index == from {
+                *local_index = to;
+            }
+        }
+        TirPattern::Tuple(patterns) => {
+            for p in patterns {
+                remap_pattern_local(p, from, to);
+            }
+        }
+        TirPattern::Variant { bindings, .. } => {
+            for p in bindings {
+                remap_pattern_local(p, from, to);
+            }
+        }
+        TirPattern::Struct { fields, .. } => {
+            for f in fields {
+                remap_pattern_local(&mut f.pattern, from, to);
+            }
+        }
+        TirPattern::Or(alternatives) => {
+            for p in alternatives {
+                remap_pattern_local(p, from, to);
+            }
+        }
+        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } => {}
     }
 }

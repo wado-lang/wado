@@ -1722,6 +1722,20 @@ impl Parser {
     }
 
     fn parse_pattern(&mut self) -> ParseResult<Pattern> {
+        let first = self.parse_pattern_atom()?;
+        if self.check(&TokenKind::Pipe) {
+            let mut alternatives = vec![first];
+            while self.check(&TokenKind::Pipe) {
+                self.advance();
+                alternatives.push(self.parse_pattern_atom()?);
+            }
+            Ok(Pattern::Or(alternatives))
+        } else {
+            Ok(first)
+        }
+    }
+
+    fn parse_pattern_atom(&mut self) -> ParseResult<Pattern> {
         if self.check(&TokenKind::Mut) {
             self.advance();
             let name = self.consume_ident()?;

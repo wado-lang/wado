@@ -1,0 +1,18 @@
+variant Shape {
+    Circle(f64),
+    Square(f64),
+    Triangle(f64),
+}
+
+fn is_round_or_square(s: Shape) -> bool {
+    return s matches { Circle(_) | Square(_) };
+}
+
+export fn run() {
+    assert is_round_or_square(Shape::Circle(1.0));
+    assert is_round_or_square(Shape::Square(2.0));
+    assert !is_round_or_square(Shape::Triangle(3.0));
+}
+
+__DATA__
+{"stdout": ""}

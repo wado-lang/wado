@@ -2269,6 +2269,14 @@ impl<'a> Unparser<'a> {
                 }
                 self.output.push_str(" }");
             }
+            Pattern::Or(alternatives) => {
+                for (i, p) in alternatives.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(" | ");
+                    }
+                    self.unparse_pattern(p);
+                }
+            }
         }
     }
 
@@ -2337,6 +2345,14 @@ impl<'a> Unparser<'a> {
                     self.output.push_str("..");
                 }
                 self.output.push_str(" }");
+            }
+            Pattern::Or(alternatives) => {
+                for (i, p) in alternatives.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(" | ");
+                    }
+                    self.unparse_let_pattern(p);
+                }
             }
         }
     }
@@ -3269,6 +3285,14 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
             }
             output.push_str(" }");
         }
+        Pattern::Or(alternatives) => {
+            for (i, p) in alternatives.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(" | ");
+                }
+                unparse_pattern_into(p, output);
+            }
+        }
     }
 }
 
@@ -3967,6 +3991,14 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push_str(" }");
             }
+            TirPattern::Or(alternatives) => {
+                for (i, p) in alternatives.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(" | ");
+                    }
+                    self.unparse_tir_pattern(p);
+                }
+            }
         }
     }
 
@@ -4497,6 +4529,14 @@ impl<'a> TirUnparser<'a> {
                     }
                 }
                 self.output.push_str(" }");
+            }
+            TirPattern::Or(alternatives) => {
+                for (i, p) in alternatives.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(" | ");
+                    }
+                    self.unparse_pattern(p);
+                }
             }
         }
     }
