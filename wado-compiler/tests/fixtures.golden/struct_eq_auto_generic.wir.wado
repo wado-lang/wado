@@ -98,8 +98,6 @@ type "functype/Pair<i32>^Ord::cmp" = fn(ref Pair<i32>, ref Pair<i32>) -> enum:Or
 
 type "functype/Pair<i32>^Inspect::inspect" = fn(ref Pair<i32>, ref Formatter);
 
-type "functype/Pair<i32>^Eq::eq" = fn(ref Pair<i32>, ref Pair<i32>) -> bool;
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
@@ -170,18 +168,22 @@ fn run() {
     let __local_33: ref Formatter;
     let __local_34: ref String;
     let __local_35: ref Formatter;
-    let __local_40: ref Formatter;
-    let __local_48: ref Formatter;
-    let __local_56: ref Formatter;
-    let __local_64: ref Formatter;
-    let __local_72: ref Formatter;
-    let __local_80: ref Formatter;
+    let __local_42: ref Formatter;
+    let __local_52: ref Formatter;
+    let __local_60: ref Formatter;
+    let __local_68: ref Formatter;
+    let __local_76: ref Formatter;
+    let __local_84: ref Formatter;
     a = Pair<i32> { first: 1, second: 2 };
     b = Pair<i32> { first: 1, second: 2 };
     c = Pair<i32> { first: 1, second: 3 };
     __v0_3 = a;
     __v1_4 = b;
-    __cond_5 = Pair<i32>^Eq::eq(__v0_3, __v1_4);
+    __cond_5 = if __v0_3.first == __v1_4.first -> i32 {
+        __v0_3.second == __v1_4.second;
+    } else {
+        0;
+    };
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_24 = String { repr: builtin::array_new<u8>(132), used: 0 };
@@ -196,8 +198,8 @@ fn run() {
             String::append(__local_24, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/struct_eq_auto_generic.wado"), used: 56 });
             String::append_char(__local_24, 58);
             __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
-            __local_40 = __local_25;
-            i32::fmt_decimal(13, __local_40);
+            __local_42 = __local_25;
+            i32::fmt_decimal(13, __local_42);
             String::append(__local_24, String { repr: array.new_data<u8>("
 condition: a == b
 "), used: 19 });
@@ -219,7 +221,11 @@ condition: a == b
     };
     __v0_6 = a;
     __v1_7 = c;
-    __cond_8 = Pair<i32>^Eq::eq(__v0_6, __v1_7) == 0;
+    __cond_8 = if __v0_6.first == __v1_7.first -> i32 {
+        __v0_6.second == __v1_7.second;
+    } else {
+        0;
+    } == 0;
     if __cond_8 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_26 = String { repr: builtin::array_new<u8>(132), used: 0 };
@@ -234,8 +240,8 @@ condition: a == b
             String::append(__local_26, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/struct_eq_auto_generic.wado"), used: 56 });
             String::append_char(__local_26, 58);
             __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_26 };
-            __local_48 = __local_27;
-            i32::fmt_decimal(14, __local_48);
+            __local_52 = __local_27;
+            i32::fmt_decimal(14, __local_52);
             String::append(__local_26, String { repr: array.new_data<u8>("
 condition: a != c
 "), used: 19 });
@@ -272,8 +278,8 @@ condition: a != c
             String::append(__local_28, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/struct_eq_auto_generic.wado"), used: 56 });
             String::append_char(__local_28, 58);
             __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_28 };
-            __local_56 = __local_29;
-            i32::fmt_decimal(17, __local_56);
+            __local_60 = __local_29;
+            i32::fmt_decimal(17, __local_60);
             String::append(__local_28, String { repr: array.new_data<u8>("
 condition: a < c
 "), used: 18 });
@@ -310,8 +316,8 @@ condition: a < c
             String::append(__local_30, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/struct_eq_auto_generic.wado"), used: 56 });
             String::append_char(__local_30, 58);
             __local_31 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_30 };
-            __local_64 = __local_31;
-            i32::fmt_decimal(18, __local_64);
+            __local_68 = __local_31;
+            i32::fmt_decimal(18, __local_68);
             String::append(__local_30, String { repr: array.new_data<u8>("
 condition: c > a
 "), used: 18 });
@@ -351,8 +357,8 @@ condition: c > a
             String::append(__local_32, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/struct_eq_auto_generic.wado"), used: 56 });
             String::append_char(__local_32, 58);
             __local_33 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_32 };
-            __local_72 = __local_33;
-            i32::fmt_decimal(24, __local_72);
+            __local_76 = __local_33;
+            i32::fmt_decimal(24, __local_76);
             String::append(__local_32, String { repr: array.new_data<u8>("
 condition: s1 == s2
 "), used: 21 });
@@ -391,8 +397,8 @@ condition: s1 == s2
             String::append(__local_34, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/struct_eq_auto_generic.wado"), used: 56 });
             String::append_char(__local_34, 58);
             __local_35 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_34 };
-            __local_80 = __local_35;
-            i32::fmt_decimal(25, __local_80);
+            __local_84 = __local_35;
+            i32::fmt_decimal(25, __local_84);
             String::append(__local_34, String { repr: array.new_data<u8>("
 condition: s1 != s3
 "), used: 21 });
@@ -426,13 +432,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l7: loop {
+            l9: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l7;
+                continue l9;
             };
         };
     };
@@ -547,13 +553,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l14: loop {
+            l16: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l14;
+                continue l16;
             };
         };
     };
@@ -570,14 +576,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l18: loop {
+                l20: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l18;
+                    continue l20;
                 };
             };
         };
@@ -679,7 +685,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l29: loop {
+            l31: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -687,7 +693,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l29;
+                continue l31;
             };
         };
     };
@@ -827,18 +833,6 @@ fn Pair<i32>^Inspect::inspect(self, f) {
     String::append(f.buf, s_19);
 }
 
-fn Pair<i32>^Eq::eq(self, other) {
-    return if __inline_i32_Eq__eq_0: block -> bool {
-        break __inline_i32_Eq__eq_0: self.first == other.first;
-    } -> i32 {
-        __inline_i32_Eq__eq_1: block -> bool {
-            break __inline_i32_Eq__eq_1: self.second == other.second;
-        };
-    } else {
-        0;
-    };
-}
-
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref String;
@@ -846,13 +840,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l45: loop {
+            l46: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l45;
+                continue l46;
             };
         };
     };
@@ -955,8 +949,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b64: block {
-        l65: loop {
+    b65: block {
+        l66: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -981,9 +975,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b64;
+                break b65;
             };
-            continue l65;
+            continue l66;
         };
     };
     String::append_char(f.buf, 34);
