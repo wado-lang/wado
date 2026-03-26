@@ -180,26 +180,32 @@ impl G4Parser {
     fn parse_postfix(&mut self, elem: Element) -> Result<Element, ParseError> {
         if self.is_kind(G4Token::Star) {
             self.advance();
-            if self.is_kind(G4Token::Question) {
+            let ng = if self.is_kind(G4Token::Question) {
                 self.advance();
-            }
+                true
+            } else {
+                false
+            };
             return Result::<Element, ParseError>::Ok(
-                Element::Repeat(RepeatElement { kind: RepeatKind::Star, element: elem }),
+                Element::Repeat(RepeatElement { kind: RepeatKind::Star, element: elem, non_greedy: ng }),
             );
         }
         if self.is_kind(G4Token::Plus) {
             self.advance();
-            if self.is_kind(G4Token::Question) {
+            let ng = if self.is_kind(G4Token::Question) {
                 self.advance();
-            }
+                true
+            } else {
+                false
+            };
             return Result::<Element, ParseError>::Ok(
-                Element::Repeat(RepeatElement { kind: RepeatKind::Plus, element: elem }),
+                Element::Repeat(RepeatElement { kind: RepeatKind::Plus, element: elem, non_greedy: ng }),
             );
         }
         if self.is_kind(G4Token::Question) {
             self.advance();
             return Result::<Element, ParseError>::Ok(
-                Element::Repeat(RepeatElement { kind: RepeatKind::Optional, element: elem }),
+                Element::Repeat(RepeatElement { kind: RepeatKind::Optional, element: elem, non_greedy: false }),
             );
         }
         return Result::<Element, ParseError>::Ok(elem);

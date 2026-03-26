@@ -915,9 +915,9 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
         if grp_kind == TK_PLUS {
             let tok = p.expect(TK_PLUS, "PLUS")?;
         } else if grp_kind == TK_MINUS {
-            let tok = p.expect(TK_MINUS, "MINUS")?;
+            let tok_2 = p.expect(TK_MINUS, "MINUS")?;
         }
-        let tok = parse_multiplying_expression(p)?;
+        let tok_3 = parse_multiplying_expression(p)?;
     }
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode {
         span: Span::new(start, p.last_end()),
@@ -933,9 +933,9 @@ fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionN
         if grp_kind == TK_TIMES {
             let tok = p.expect(TK_TIMES, "TIMES")?;
         } else if grp_kind == TK_DIV {
-            let tok = p.expect(TK_DIV, "DIV")?;
+            let tok_2 = p.expect(TK_DIV, "DIV")?;
         }
-        let tok = parse_pow_expression(p)?;
+        let tok_3 = parse_pow_expression(p)?;
     }
     return Result::<MultiplyingExpressionNode, ParseError>::Ok(MultiplyingExpressionNode {
         span: Span::new(start, p.last_end()),

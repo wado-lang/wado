@@ -958,6 +958,7 @@ unreachable();            // trap
 
 // core:cli
 use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
+use { log_stdout, log_stderr } from "core:cli";  // no effect required (debug only)
 
 // core:collections - TreeMap, TreeSet
 use { TreeMap, TreeSet } from "core:collections";
@@ -1086,6 +1087,17 @@ let icon = #include_bytes("./icon.png");   // include file as Array<u8>
 ```
 
 Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
+
+## Debugging
+
+```wado
+use { log_stdout, log_stderr } from "core:cli";
+
+log_stdout(`value = {x}`);   // prints to stdout without Stdout effect
+log_stderr(`value = {x}`);   // prints to stderr without Stderr effect
+```
+
+`log_stdout` and `log_stderr` bypass the effect system. They are intended for temporary debugging output that can be called from any function regardless of its effect declarations.
 
 ## Attributes
 

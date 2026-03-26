@@ -1,0 +1,18 @@
+// Minimal reproduction of &fn type parameter syntax
+// Wado should support function references as parameters
+
+fn apply(f: &fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+fn double(n: i32) -> i32 {
+    return n * 2;
+}
+
+test "function reference parameter" {
+    let result = apply(&double, 21);
+    assert result == 42;
+}
+
+__DATA__
+{"test": {}, "TODO": true}

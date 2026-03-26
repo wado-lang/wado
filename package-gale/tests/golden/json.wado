@@ -582,14 +582,13 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACE {
-        let saved = p.pos;
-        let r_0 = parse_obj_bt_0(p);
-        if let Err(_) = r_0 {
-            p.pos = saved;
-        } else {
-            return r_0;
+        if p.peek_kind() == TK_LIT_LBRACE {
+            if p.peek_at(1) == TK_STRING {
+                return parse_obj_bt_0(p);
+            } else if p.peek_at(1) == TK_LIT_RBRACE {
+                return parse_obj_bt_1(p);
+            }
         }
-        return parse_obj_bt_1(p);
     }
     return Result::<ObjNode, ParseError>::Err(ParseError::new(
         "expected obj",
@@ -643,14 +642,13 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACKET {
-        let saved = p.pos;
-        let r_0 = parse_arr_bt_0(p);
-        if let Err(_) = r_0 {
-            p.pos = saved;
-        } else {
-            return r_0;
+        if p.peek_kind() == TK_LIT_LBRACKET {
+            if p.peek_at(1) == TK_STRING || p.peek_at(1) == TK_NUMBER || p.peek_at(1) == TK_LIT_LBRACE || p.peek_at(1) == TK_LIT_LBRACKET || p.peek_at(1) == TK_LIT_TRUE || p.peek_at(1) == TK_LIT_FALSE || p.peek_at(1) == TK_LIT_NULL {
+                return parse_arr_bt_0(p);
+            } else if p.peek_at(1) == TK_LIT_RBRACKET {
+                return parse_arr_bt_1(p);
+            }
         }
-        return parse_arr_bt_1(p);
     }
     return Result::<ArrNode, ParseError>::Err(ParseError::new(
         "expected arr",
