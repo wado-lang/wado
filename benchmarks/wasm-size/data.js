@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774524288258,
+  "lastUpdate": 1774527945317,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7628,6 +7628,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ae365535abd4b88f180f46277c69bca98ecf2f13"
         },
         "date": 1774524288170,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f2950ea18db85f8862000647d5170a202cce7290",
+          "message": "Merge pull request #699 from wado-lang/claude/refactor-gale-wadopoet-ypKUX\n\nRefactor code generation to use CodeWriter abstraction",
+          "timestamp": "2026-03-26T21:23:21+09:00",
+          "tree_id": "a54371617df9b53d855da95ded6253db4349e748",
+          "url": "https://github.com/wado-lang/wado/commit/f2950ea18db85f8862000647d5170a202cce7290"
+        },
+        "date": 1774527945116,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
