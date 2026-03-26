@@ -86,7 +86,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | BlockFusion     | `optimize/labeled_block_fusion.rs`   | Labeled block fusion                                        |
 | StoreLoadFwd    | `optimize/store_load_forward.rs`     | Store-load forwarding for literal values                    |
 | TmplHoist       | `optimize/tmpl_hoist.rs`             | Template buffer hoisting out of loops                       |
-| WasmPlan        | `wasm_plan.rs`                       | `ComponentPlan` types and `build_component_plan`            |
+| ComponentPlan   | `wir_build/component_plan.rs`        | `ComponentPlan` types and `build_component_plan`            |
 | Stdlib          | `stdlib.rs`                          | Embedded core library sources                               |
 | CompilerHost    | `compiler_host.rs`                   | I/O abstraction for the compiler                            |
 | Logger          | `logger.rs`                          | Diagnostic logging with timestamps                          |
