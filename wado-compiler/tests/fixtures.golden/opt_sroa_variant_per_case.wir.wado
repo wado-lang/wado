@@ -157,7 +157,7 @@ fn use_payload(x) {
     let __sroa_result_case1_payload_0: ref null String;
     multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = make_payload(x);
     if __sroa_result_discriminant == 0 {
-        p = ref.as_non_null(__sroa_result_case0_payload_0);
+        p = __sroa_result_case0_payload_0;
         return p.value;
     };
     return -1;
@@ -170,7 +170,7 @@ fn use_err_branch(x) {
     let __sroa_result_case1_payload_0: ref null String;
     multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = make_payload(x);
     if __sroa_result_discriminant == 1 {
-        msg = ref.as_non_null(__sroa_result_case1_payload_0);
+        msg = __sroa_result_case1_payload_0;
         return msg;
     };
     return String { repr: array.new_data<u8>("ok"), used: 2 };
@@ -238,14 +238,14 @@ fn run() {
             String::append_char(__local_16, 32);
             String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado"), used: 59 });
             String::append_char(__local_16, 58);
-            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
+            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
             __local_36 = __local_17;
             i32::fmt_decimal(65, __local_36);
             String::append(__local_16, String { repr: array.new_data<u8>("
 condition: try_divide(10, 2) == 5
 "), used: 35 });
             String::append(__local_16, String { repr: array.new_data<u8>("try_divide(10, 2): "), used: 19 });
-            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
+            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
             __local_41 = __local_17;
             i32::fmt_decimal(__v0_0, __local_41);
             String::append_char(__local_16, 10);
@@ -268,14 +268,14 @@ condition: try_divide(10, 2) == 5
             String::append_char(__local_18, 32);
             String::append(__local_18, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado"), used: 59 });
             String::append_char(__local_18, 58);
-            __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
+            __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
             __local_47 = __local_19;
             i32::fmt_decimal(66, __local_47);
             String::append(__local_18, String { repr: array.new_data<u8>("
 condition: try_divide(10, 0) == -1
 "), used: 36 });
             String::append(__local_18, String { repr: array.new_data<u8>("try_divide(10, 0): "), used: 19 });
-            __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
+            __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
             __local_52 = __local_19;
             i32::fmt_decimal(__v0_2, __local_52);
             String::append_char(__local_18, 10);
@@ -298,14 +298,14 @@ condition: try_divide(10, 0) == -1
             String::append_char(__local_20, 32);
             String::append(__local_20, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado"), used: 59 });
             String::append_char(__local_20, 58);
-            __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
+            __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
             __local_58 = __local_21;
             i32::fmt_decimal(67, __local_58);
             String::append(__local_20, String { repr: array.new_data<u8>("
 condition: try_divide(100, 10) == 10
 "), used: 38 });
             String::append(__local_20, String { repr: array.new_data<u8>("try_divide(100, 10): "), used: 21 });
-            __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
+            __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
             __local_63 = __local_21;
             i32::fmt_decimal(__v0_4, __local_63);
             String::append_char(__local_20, 10);
@@ -328,14 +328,14 @@ condition: try_divide(100, 10) == 10
             String::append_char(__local_22, 32);
             String::append(__local_22, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado"), used: 59 });
             String::append_char(__local_22, 58);
-            __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_22) };
+            __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
             __local_69 = __local_23;
             i32::fmt_decimal(70, __local_69);
             String::append(__local_22, String { repr: array.new_data<u8>("
 condition: use_payload(5) == 10
 "), used: 33 });
             String::append(__local_22, String { repr: array.new_data<u8>("use_payload(5): "), used: 16 });
-            __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_22) };
+            __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
             __local_74 = __local_23;
             i32::fmt_decimal(__v0_6, __local_74);
             String::append_char(__local_22, 10);
@@ -358,14 +358,14 @@ condition: use_payload(5) == 10
             String::append_char(__local_24, 32);
             String::append(__local_24, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado"), used: 59 });
             String::append_char(__local_24, 58);
-            __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_24) };
+            __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
             __local_80 = __local_25;
             i32::fmt_decimal(71, __local_80);
             String::append(__local_24, String { repr: array.new_data<u8>("
 condition: use_payload(0) == 0
 "), used: 32 });
             String::append(__local_24, String { repr: array.new_data<u8>("use_payload(0): "), used: 16 });
-            __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_24) };
+            __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
             __local_85 = __local_25;
             i32::fmt_decimal(__v0_8, __local_85);
             String::append_char(__local_24, 10);
@@ -388,14 +388,14 @@ condition: use_payload(0) == 0
             String::append_char(__local_26, 32);
             String::append(__local_26, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado"), used: 59 });
             String::append_char(__local_26, 58);
-            __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_26) };
+            __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_26 };
             __local_91 = __local_27;
             i32::fmt_decimal(72, __local_91);
             String::append(__local_26, String { repr: array.new_data<u8>("
 condition: use_payload(-1) == -1
 "), used: 34 });
             String::append(__local_26, String { repr: array.new_data<u8>("use_payload(-1): "), used: 17 });
-            __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_26) };
+            __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_26 };
             __local_96 = __local_27;
             i32::fmt_decimal(__v0_10, __local_96);
             String::append_char(__local_26, 10);
@@ -418,14 +418,14 @@ condition: use_payload(-1) == -1
             String::append_char(__local_28, 32);
             String::append(__local_28, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado"), used: 59 });
             String::append_char(__local_28, 58);
-            __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
+            __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_28 };
             __local_102 = __local_29;
             i32::fmt_decimal(75, __local_102);
             String::append(__local_28, String { repr: array.new_data<u8>("
 condition: use_err_branch(-1) == \"negative\"
 "), used: 45 });
             String::append(__local_28, String { repr: array.new_data<u8>("use_err_branch(-1): "), used: 20 });
-            __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_28) };
+            __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_28 };
             String^Inspect::inspect(__v0_12, __local_29);
             String::append_char(__local_28, 10);
             break __tmpl: __local_28;
@@ -447,14 +447,14 @@ condition: use_err_branch(-1) == \"negative\"
             String::append_char(__local_30, 32);
             String::append(__local_30, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado"), used: 59 });
             String::append_char(__local_30, 58);
-            __local_31 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_30) };
+            __local_31 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_30 };
             __local_109 = __local_31;
             i32::fmt_decimal(76, __local_109);
             String::append(__local_30, String { repr: array.new_data<u8>("
 condition: use_err_branch(5) == \"ok\"
 "), used: 38 });
             String::append(__local_30, String { repr: array.new_data<u8>("use_err_branch(5): "), used: 19 });
-            __local_31 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_30) };
+            __local_31 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_30 };
             String^Inspect::inspect(__v0_14, __local_31);
             String::append_char(__local_30, 10);
             break __tmpl: __local_30;
@@ -913,7 +913,7 @@ fn String^Inspect::inspect(self, f) {
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };

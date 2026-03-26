@@ -507,14 +507,14 @@ fn handle(request) {
             String::append_char(__local_13, 32);
             String::append(__local_13, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-response-ops.wado"), used: 51 });
             String::append_char(__local_13, 58);
-            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
+            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
             __local_173 = __local_14;
             i32::fmt_decimal(26, __local_173);
             String::append(__local_13, String { repr: array.new_data<u8>("
 condition: default_status == 200
 "), used: 34 });
             String::append(__local_13, String { repr: array.new_data<u8>("default_status: "), used: 16 });
-            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
+            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
             __local_178 = __local_14;
             i32::fmt_decimal(default_status & 65535, __local_178);
             __local_184 = String { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
@@ -543,14 +543,14 @@ condition: default_status == 200
             String::append_char(__local_15, 32);
             String::append(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-response-ops.wado"), used: 51 });
             String::append_char(__local_15, 58);
-            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
+            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
             __local_188 = __local_16;
             i32::fmt_decimal(33, __local_188);
             String::append(__local_15, String { repr: array.new_data<u8>("
 condition: new_status == 404
 "), used: 30 });
             String::append(__local_15, String { repr: array.new_data<u8>("new_status: "), used: 12 });
-            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
+            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
             __local_193 = __local_16;
             i32::fmt_decimal(new_status & 65535, __local_193);
             __local_199 = String { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
@@ -1134,7 +1134,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

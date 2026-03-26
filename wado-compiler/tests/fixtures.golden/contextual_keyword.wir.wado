@@ -130,14 +130,14 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_8 = String { repr: builtin::array_new<u8>(31), used: 0 };
         String::append(__local_8, String { repr: array.new_data<u8>("flags + type = "), used: 15 });
-        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
         i32::fmt_decimal(30, __local_9);
         break __tmpl: __local_8;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_10 = String { repr: builtin::array_new<u8>(36), used: 0 };
         String::append(__local_10, String { repr: array.new_data<u8>("test_param result = "), used: 20 });
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         i32::fmt_decimal(30, __local_11);
         break __tmpl: __local_10;
     });
@@ -145,7 +145,7 @@ fn run() with Stdout {
         __local_4 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_4;
     };
-    __iter_6 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
+    __iter_6 = "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: 3, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -156,7 +156,7 @@ fn run() with Stdout {
                 "core:cli/println"(__tmpl: block -> ref String {
                     __local_12 = String { repr: builtin::array_new<u8>(31), used: 0 };
                     String::append(__local_12, String { repr: array.new_data<u8>("for-of flags = "), used: 15 });
-                    __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                    __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                     i32::fmt_decimal(flags, __local_13);
                     break __tmpl: __local_12;
                 });

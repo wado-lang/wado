@@ -154,11 +154,11 @@ fn trait_default_calls_default() with Stdout {
     let __sroa_item_name: ref String;
     __sroa_item_name = String { repr: array.new_data<u8>("Widget"), used: 6 };
     "core:cli/println"(__sroa_item_name);
-    "core:cli/println"(Item^Describable::short_desc(ref.as_non_null(__sroa_item_name)));
+    "core:cli/println"(Item^Describable::short_desc(__sroa_item_name));
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(29), used: 0 };
         String::append(__local_3, String { repr: array.new_data<u8>("Description: "), used: 13 });
-        String::append(__local_3, Item^Describable::short_desc(ref.as_non_null(__sroa_item_name)));
+        String::append(__local_3, Item^Describable::short_desc(__sroa_item_name));
         break __tmpl: __local_3;
     });
 }
@@ -174,12 +174,12 @@ fn trait_default_count() with Stdout {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_0;
     };
-    iter = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 5, index: 0 };
+    iter = "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: 5, index: 0 };
     drop(ArrayIter<i32>^Iterator::next(iter));
     remaining = ArrayIter<i32>^Iterator::count(iter);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
         i32::fmt_decimal(remaining, __local_5);
         break __tmpl: __local_4;
     });
@@ -508,7 +508,7 @@ fn Robot^Greet::name(self) {
         String::append_char(__local_1, 111);
         String::append_char(__local_1, 116);
         String::append_char(__local_1, 45);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         i32::fmt_decimal(self, __local_2);
         break __tmpl: __local_1;
     };

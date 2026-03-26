@@ -161,13 +161,13 @@ fn coerce_float_literal_f32_binary() with Stdout {
     let __local_5: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         f32::fmt_into(inf_f32, __local_3);
         break __tmpl: __local_2;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
         f32::fmt_into(-inf_f32, __local_5);
         break __tmpl: __local_4;
     });
@@ -179,7 +179,7 @@ fn coerce_float_literal_f32_const() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(24), used: 0 };
         String::append(__local_1, String { repr: array.new_data<u8>("f32 PI: "), used: 8 });
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         f32::fmt_into(3.1415927_f32, __local_2);
         break __tmpl: __local_1;
     });

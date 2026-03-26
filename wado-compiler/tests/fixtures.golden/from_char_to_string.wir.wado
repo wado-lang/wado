@@ -161,7 +161,7 @@ fn run() with Stdout {
             String::append_char(__local_12, 32);
             String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/from_char_to_string.wado"), used: 53 });
             String::append_char(__local_12, 58);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             __local_25 = __local_13;
             i32::fmt_decimal(7, __local_25);
             String::append(__local_12, String { repr: array.new_data<u8>("
@@ -170,7 +170,7 @@ condition: s == \"A\"
             String::append_char(__local_12, 115);
             String::append_char(__local_12, 58);
             String::append_char(__local_12, 32);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             String^Inspect::inspect(__v0_2, __local_13);
             String::append_char(__local_12, 10);
             break __tmpl: __local_12;
@@ -197,7 +197,7 @@ condition: s == \"A\"
             String::append_char(__local_14, 32);
             String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/from_char_to_string.wado"), used: 53 });
             String::append_char(__local_14, 58);
-            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
+            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
             __local_35 = __local_15;
             i32::fmt_decimal(11, __local_35);
             String::append(__local_14, String { repr: array.new_data<u8>("
@@ -207,7 +207,7 @@ condition: s2 == \"🦀\"
             String::append_char(__local_14, 50);
             String::append_char(__local_14, 58);
             String::append_char(__local_14, 32);
-            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
+            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
             String^Inspect::inspect(__v0_6, __local_15);
             String::append_char(__local_14, 10);
             break __tmpl: __local_14;
@@ -234,14 +234,14 @@ condition: s2 == \"🦀\"
             String::append_char(__local_16, 32);
             String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/from_char_to_string.wado"), used: 53 });
             String::append_char(__local_16, 58);
-            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
+            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
             __local_46 = __local_17;
             i32::fmt_decimal(15, __local_46);
             String::append(__local_16, String { repr: array.new_data<u8>("
 condition: s3.len() == 1
 "), used: 26 });
             String::append(__local_16, String { repr: array.new_data<u8>("s3.len(): "), used: 10 });
-            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
+            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
             __local_51 = __local_17;
             i32::fmt_decimal(__v0_10, __local_51);
             String::append_char(__local_16, 10);
@@ -738,7 +738,7 @@ fn String^Inspect::inspect(self, f) {
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };

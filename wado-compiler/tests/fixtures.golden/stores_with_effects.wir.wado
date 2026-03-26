@@ -122,11 +122,11 @@ fn store_and_log(data) with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(41), used: 0 };
         String::append(__local_1, String { repr: array.new_data<u8>("Storing data with value: "), used: 25 });
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         i32::fmt_decimal(data.value, __local_2);
         break __tmpl: __local_1;
     });
-    return Container { data: ref.as_non_null(data) };
+    return Container { data: data };
 }
 
 fn run() with Stdout {
@@ -155,14 +155,14 @@ fn run() with Stdout {
             String::append_char(__local_4, 32);
             String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/stores_with_effects.wado"), used: 53 });
             String::append_char(__local_4, 58);
-            __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
+            __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
             __local_10 = __local_5;
             i32::fmt_decimal(21, __local_10);
             String::append(__local_4, String { repr: array.new_data<u8>("
 condition: c.data.value == 99
 "), used: 31 });
             String::append(__local_4, String { repr: array.new_data<u8>("c.data.value: "), used: 14 });
-            __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
+            __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
             __local_15 = __local_5;
             i32::fmt_decimal(__v0, __local_15);
             String::append_char(__local_4, 10);

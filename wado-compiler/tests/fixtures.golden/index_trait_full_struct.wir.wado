@@ -150,17 +150,17 @@ fn run() with Stdout {
     c = __inline_Container__from_values_2: block -> ref Container {
         __local_15 = __inline_Value__new_3: block -> ref Value {
             __local_19 = String { repr: array.new_data<u8>("a"), used: 1 };
-            break __inline_Value__new_3: Value { n: 10, tag: ref.as_non_null(__local_19) };
+            break __inline_Value__new_3: Value { n: 10, tag: __local_19 };
         };
         __local_16 = __inline_Value__new_4: block -> ref Value {
             __local_21 = String { repr: array.new_data<u8>("b"), used: 1 };
-            break __inline_Value__new_4: Value { n: 20, tag: ref.as_non_null(__local_21) };
+            break __inline_Value__new_4: Value { n: 20, tag: __local_21 };
         };
         __local_17 = __inline_Value__new_5: block -> ref Value {
             __local_23 = String { repr: array.new_data<u8>("c"), used: 1 };
-            break __inline_Value__new_5: Value { n: 30, tag: ref.as_non_null(__local_23) };
+            break __inline_Value__new_5: Value { n: 30, tag: __local_23 };
         };
-        break __inline_Container__from_values_2: Container { v0: ref.as_non_null(__local_15), v1: ref.as_non_null(__local_16), v2: ref.as_non_null(__local_17), read_count: 0, write_count: 0 };
+        break __inline_Container__from_values_2: Container { v0: __local_15, v1: __local_16, v2: __local_17, read_count: 0, write_count: 0 };
     };
     v0 = Container^Index::index(c, 0);
     "core:cli/println"(__tmpl: block -> ref String {
@@ -218,7 +218,7 @@ fn run() with Stdout {
     });
     Container^IndexAssign::index_assign(c, 2, __inline_Value__new_14: block -> ref Value {
         __local_35 = String { repr: array.new_data<u8>("replaced"), used: 8 };
-        break __inline_Value__new_14: Value { n: 999, tag: ref.as_non_null(__local_35) };
+        break __inline_Value__new_14: Value { n: 999, tag: __local_35 };
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_8 = String { repr: builtin::array_new<u8>(31), used: 0 };
@@ -235,7 +235,7 @@ fn run() with Stdout {
         String::append_char(__local_9, 108);
         String::append_char(__local_9, 58);
         String::append_char(__local_9, 32);
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         i32::fmt_decimal((c.v0.n + c.v1.n) + c.v2.n, __local_10);
         break __tmpl: __local_9;
     });
@@ -543,7 +543,7 @@ fn Value::describe(self) {
         __local_1 = String { repr: builtin::array_new<u8>(33), used: 0 };
         String::append(__local_1, self.tag);
         String::append_char(__local_1, 58);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         i32::fmt_decimal(self.n, __local_2);
         break __tmpl: __local_1;
     };
@@ -562,11 +562,11 @@ fn Container::stats(self) {
         String::append_char(__local_1, 100);
         String::append_char(__local_1, 115);
         String::append_char(__local_1, 61);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         __local_6 = __local_2;
         i32::fmt_decimal(self.read_count, __local_6);
         String::append(__local_1, String { repr: array.new_data<u8>(", writes="), used: 9 });
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         __local_11 = __local_2;
         i32::fmt_decimal(self.write_count, __local_11);
         break __tmpl: __local_1;
@@ -597,11 +597,11 @@ fn Container^IndexMut::index_mut(self, idx) {
 fn Container^IndexAssign::index_assign(self, idx, value) {
     self.write_count = self.write_count + 1;
     if idx == 0 {
-        self.v0 = ref.as_non_null(value);
+        self.v0 = value;
     } else if idx == 1 {
-        self.v1 = ref.as_non_null(value);
+        self.v1 = value;
     } else {
-        self.v2 = ref.as_non_null(value);
+        self.v2 = value;
     };
 }
 

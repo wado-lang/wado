@@ -123,7 +123,7 @@ fn run() with Stdout, Environment {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(27), used: 0 };
         String::append(__local_1, String { repr: array.new_data<u8>("args.len = "), used: 11 });
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         i32::fmt_decimal(arguments.used, __local_2);
         break __tmpl: __local_1;
     });
@@ -161,7 +161,7 @@ fn __cm_binding__Environment_get_arguments() {
                 __local_7 = builtin::load_i32(__elem_addr);
                 __local_8 = builtin::load_i32(__elem_addr + 4);
                 __local_9 = "core:internal/memory_to_gc_array"(__local_7, __local_8);
-                break __inline_memory_to_gc_string_1: String { repr: ref.as_non_null(__local_9), used: __local_8 };
+                break __inline_memory_to_gc_string_1: String { repr: __local_9, used: __local_8 };
             });
             drop("mem/realloc"(builtin::load_i32(__elem_addr), builtin::load_i32(__elem_addr + 4), 1, 0));
             __i = __i + 1;

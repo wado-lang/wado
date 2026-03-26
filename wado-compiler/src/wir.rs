@@ -1700,22 +1700,25 @@ impl WirInstr {
 
     /// Returns true if this instruction is guaranteed to produce a non-null
     /// reference at the Wasm level. Used to skip redundant `RefAsNonNull` wrappers.
-    ///
-    /// NOTE: `LocalGet`, `GlobalGet`, `StructGet`, and `ArrayGet` are excluded even when
-    /// their `result_ty` is non-null, because the codegen may emit nullable Wasm types
-    /// for these (e.g., locals are declared nullable for Wasm defaultability). The WIR
-    /// `RefAsNonNull(...)` wrapper is the canonical way to request the codegen to narrow.
     pub fn is_nonnull_result(&self) -> bool {
-        matches!(
-            self,
-            Self::StructNew { .. }
-                | Self::ArrayNew { .. }
-                | Self::ArrayNewDefault { .. }
-                | Self::ArrayNewData { .. }
-                | Self::ArrayNewFixed { .. }
-                | Self::RefAsNonNull(_)
-                | Self::RefI31(_)
-        )
+        match self {
+            Self::LocalGet { result_ty, .. }
+            | Self::GlobalGet { result_ty, .. }
+            | Self::StructGet { result_ty, .. }
+            | Self::ArrayGet { result_ty, .. }
+            | Self::ArrayGetS { result_ty, .. }
+            | Self::ArrayGetU { result_ty, .. } => result_ty.is_nonnull_ref(),
+            _ => matches!(
+                self,
+                Self::StructNew { .. }
+                    | Self::ArrayNew { .. }
+                    | Self::ArrayNewDefault { .. }
+                    | Self::ArrayNewData { .. }
+                    | Self::ArrayNewFixed { .. }
+                    | Self::RefAsNonNull(_)
+                    | Self::RefI31(_)
+            ),
+        }
     }
 
     /// Visit all child instructions of this node (non-recursive).

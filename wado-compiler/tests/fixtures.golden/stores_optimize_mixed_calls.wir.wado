@@ -129,7 +129,7 @@ fn run() with Stdout {
     let __local_45: ref Formatter;
     b = Point { x: 30, y: 40 };
     drop(30);
-    drop(Ref { p: ref.as_non_null(b) });
+    drop(Ref { p: b });
     __v0 = b.x;
     __cond = __v0 == 30;
     if __cond == 0 {
@@ -145,7 +145,7 @@ fn run() with Stdout {
             String::append_char(__local_8, 32);
             String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/stores_optimize_mixed_calls.wado"), used: 61 });
             String::append_char(__local_8, 58);
-            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
             __local_29 = __local_9;
             i32::fmt_decimal(36, __local_29);
             String::append(__local_8, String { repr: array.new_data<u8>("
@@ -156,7 +156,7 @@ condition: b.x == 30
             String::append_char(__local_8, 120);
             String::append_char(__local_8, 58);
             String::append_char(__local_8, 32);
-            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
             __local_34 = __local_9;
             i32::fmt_decimal(__v0, __local_34);
             String::append_char(__local_8, 10);
@@ -166,11 +166,11 @@ condition: b.x == 30
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_10 = String { repr: builtin::array_new<u8>(33), used: 0 };
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         __local_40 = __local_11;
         i32::fmt_decimal(10, __local_40);
         String::append_char(__local_10, 32);
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         __local_45 = __local_11;
         i32::fmt_decimal(b.x, __local_45);
         break __tmpl: __local_10;

@@ -170,7 +170,7 @@ fn run() with Stdout {
             String::append_char(__local_4, 50);
             String::append_char(__local_4, 58);
             String::append_char(__local_4, 32);
-            __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
+            __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
             i32::fmt_decimal(v, __local_5);
             break __tmpl: __local_4;
         });
@@ -183,7 +183,7 @@ fn run() with Stdout {
     let __sroa_r2_case1_payload_0: ref null "core:serde/DeserializeError";
     multivalue_bind [__sroa_r2_discriminant, __sroa_r2_case0_payload_0, __sroa_r2_case1_payload_0] = "core/json/from_string<String>"(String { repr: array.new_data<u8>("\"hello\""), used: 7 });
     if __sroa_r2_discriminant == 0 {
-        v2 = ref.as_non_null(__sroa_r2_case0_payload_0);
+        v2 = __sroa_r2_case0_payload_0;
         "core:cli/println"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(24), used: 0 };
             String::append_char(__local_6, 115);
@@ -220,13 +220,13 @@ fn "core/json/from_string<String>"(input) {
     let e: ref "core:serde/DeserializeError";
     let __local_9: ref String;
     let __local_10: i64;
-    de = "core:json/JsonDeserializer" { input: ref.as_non_null(input), pos: 0 };
+    de = "core:json/JsonDeserializer" { input: input, pos: 0 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null String;
     let __sroa_r_case1_payload_0: ref null "core:serde/DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/JsonDeserializer::read_json_string"(de);
     if __sroa_r_discriminant == 0 {
-        v = ref.as_non_null(__sroa_r_case0_payload_0);
+        v = __sroa_r_case0_payload_0;
         "core:json/JsonDeserializer::skip_whitespace"(de);
         if de.pos < __inline_String__len_2: block -> i32 {
             __local_9 = de.input;
@@ -237,11 +237,11 @@ fn "core/json/from_string<String>"(input) {
                 break __inline_DeserializeError__trailing_3: "core:serde/DeserializeError" { kind: 7, message: String { repr: array.new_data<u8>("trailing data after value"), used: 25 }, offset: __local_10 };
             });
         };
-        return 0; ref.as_non_null(v); ref.null none;
+        return 0; v; ref.null none;
     };
     if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_case1_payload_0);
-        return 1; ref.null none; ref.as_non_null(e);
+        e = __sroa_r_case1_payload_0;
+        return 1; ref.null none; e;
     };
     "core:internal/unreachable"();
     unreachable;
@@ -253,7 +253,7 @@ fn "core/json/from_string<i32>"(input) {
     let e: ref "core:serde/DeserializeError";
     let __local_9: ref String;
     let __local_10: i64;
-    de = "core:json/JsonDeserializer" { input: ref.as_non_null(input), pos: 0 };
+    de = "core:json/JsonDeserializer" { input: input, pos: 0 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: i32;
     let __sroa_r_case1_payload_0: ref null "core:serde/DeserializeError";
@@ -273,7 +273,7 @@ fn "core/json/from_string<i32>"(input) {
         return 0; v; ref.null none;
     };
     if __sroa_r_discriminant == 1 {
-        e = ref.as_non_null(__sroa_r_case1_payload_0);
+        e = __sroa_r_case1_payload_0;
         return 1; 0; ref.as_non_null(e);
     };
     "core:internal/unreachable"();
@@ -1260,7 +1260,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                         String::append_char(result_8, c_14);
                     };
                     if __sroa_r_discriminant == 1 {
-                        e = ref.as_non_null(__sroa_r_case1_payload_0);
+                        e = __sroa_r_case1_payload_0;
                         self.pos = _hfs_pos_98;
                         return 1; ref.null none; ref.as_non_null(e);
                     };
@@ -1276,7 +1276,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                             break __tmpl: __local_32;
                         };
                         __local_73 = builtin::i64_extend_i32_s(_hfs_pos_98);
-                        break __inline_DeserializeError__malformed_21: "core:serde/DeserializeError" { kind: 6, message: ref.as_non_null(__local_72), offset: __local_73 };
+                        break __inline_DeserializeError__malformed_21: "core:serde/DeserializeError" { kind: 6, message: __local_72, offset: __local_73 };
                     });
                 };
                 _hfs_pos_98 = _hfs_pos_98 + 1;

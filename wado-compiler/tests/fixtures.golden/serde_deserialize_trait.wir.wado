@@ -175,12 +175,12 @@ fn run() with Stdout {
             String::append_char(__local_7, 50);
             String::append_char(__local_7, 58);
             String::append_char(__local_7, 32);
-            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
             i32::fmt_decimal(v_2, __local_8);
             break __tmpl: __local_7;
         });
     };
-    s = Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(d.str_val) };
+    s = Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: d.str_val };
     if ref.test Result<String,DeserializeError>::Ok(s) {
         v_4 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(s).payload_0);
         "core:cli/println"(__tmpl: block -> ref String {

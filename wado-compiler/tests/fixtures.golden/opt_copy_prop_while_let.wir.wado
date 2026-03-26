@@ -153,7 +153,7 @@ fn sum_iter(items) {
     let it: ref Iterator;
     let sum: i32;
     let v: i32;
-    it = Iterator { items: ref.as_non_null(items), pos: 0 };
+    it = Iterator { items: items, pos: 0 };
     sum = 0;
     b2: block {
         l3: loop {
@@ -187,7 +187,7 @@ fn count_positive(items) {
     let count: i32;
     let v: i32;
     let __local_5: ref String;
-    it = Iterator { items: ref.as_non_null(items), pos: 0 };
+    it = Iterator { items: items, pos: 0 };
     count = 0;
     b7: block {
         l8: loop {
@@ -200,7 +200,7 @@ fn count_positive(items) {
                 let __sroa_result_payload_0: ref null String;
                 multivalue_bind [__sroa_result_discriminant, __sroa_result_payload_0] = classify(v);
                 if __sroa_result_discriminant == 0 {
-                    __local_5 = ref.as_non_null(__sroa_result_payload_0);
+                    __local_5 = __sroa_result_payload_0;
                     if String^Eq::eq(__local_5, String { repr: array.new_data<u8>("positive"), used: 8 }) {
                         count = count + 1;
                     };
@@ -223,7 +223,7 @@ fn cross_sum(a, b) {
     let va: i32;
     let it_b: ref Iterator;
     let vb: i32;
-    it_a = Iterator { items: ref.as_non_null(a), pos: 0 };
+    it_a = Iterator { items: a, pos: 0 };
     sum = 0;
     b13: block {
         l14: loop {
@@ -232,7 +232,7 @@ fn cross_sum(a, b) {
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = iter_next(it_a);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 va = __sroa___pattern_temp_0_payload_0;
-                it_b = Iterator { items: ref.as_non_null(b), pos: 0 };
+                it_b = Iterator { items: b, pos: 0 };
                 b16: block {
                     l17: loop {
                         let __sroa___pattern_temp_1_discriminant: i32;
@@ -310,14 +310,14 @@ fn run() {
             String::append_char(__local_18, 32);
             String::append(__local_18, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado"), used: 57 });
             String::append_char(__local_18, 58);
-            __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
+            __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
             __local_43 = __local_19;
             i32::fmt_decimal(83, __local_43);
             String::append(__local_18, String { repr: array.new_data<u8>("
 condition: sum_iter(items) == 15
 "), used: 34 });
             String::append(__local_18, String { repr: array.new_data<u8>("sum_iter(items): "), used: 17 });
-            __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_18) };
+            __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
             __local_48 = __local_19;
             i32::fmt_decimal(__v0_2, __local_48);
             String::append_char(__local_18, 10);
@@ -344,14 +344,14 @@ condition: sum_iter(items) == 15
             String::append_char(__local_20, 32);
             String::append(__local_20, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado"), used: 57 });
             String::append_char(__local_20, 58);
-            __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
+            __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
             __local_57 = __local_21;
             i32::fmt_decimal(85, __local_57);
             String::append(__local_20, String { repr: array.new_data<u8>("
 condition: sum_iter(empty) == 0
 "), used: 33 });
             String::append(__local_20, String { repr: array.new_data<u8>("sum_iter(empty): "), used: 17 });
-            __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_20) };
+            __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
             __local_62 = __local_21;
             i32::fmt_decimal(__v0_6, __local_62);
             String::append_char(__local_20, 10);
@@ -378,14 +378,14 @@ condition: sum_iter(empty) == 0
             String::append_char(__local_22, 32);
             String::append(__local_22, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado"), used: 57 });
             String::append_char(__local_22, 58);
-            __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_22) };
+            __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
             __local_83 = __local_23;
             i32::fmt_decimal(89, __local_83);
             String::append(__local_22, String { repr: array.new_data<u8>("
 condition: count_positive(mixed) == 3
 "), used: 39 });
             String::append(__local_22, String { repr: array.new_data<u8>("count_positive(mixed): "), used: 23 });
-            __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_22) };
+            __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
             __local_88 = __local_23;
             i32::fmt_decimal(__v0_10, __local_88);
             String::append_char(__local_22, 10);
@@ -416,14 +416,14 @@ condition: count_positive(mixed) == 3
             String::append_char(__local_24, 32);
             String::append(__local_24, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado"), used: 57 });
             String::append_char(__local_24, 58);
-            __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_24) };
+            __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
             __local_110 = __local_25;
             i32::fmt_decimal(94, __local_110);
             String::append(__local_24, String { repr: array.new_data<u8>("
 condition: cross_sum(a, b) == 180
 "), used: 35 });
             String::append(__local_24, String { repr: array.new_data<u8>("cross_sum(a, b): "), used: 17 });
-            __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_24) };
+            __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
             __local_115 = __local_25;
             i32::fmt_decimal(__v0_16, __local_115);
             String::append_char(__local_24, 10);

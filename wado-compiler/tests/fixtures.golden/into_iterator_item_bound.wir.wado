@@ -129,7 +129,7 @@ fn run() with Stdout {
     s = sum_bytes<Array<u8>>(arr);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
         i32::fmt_decimal(s, __local_4);
         break __tmpl: __local_3;
     });
@@ -151,7 +151,7 @@ fn sum_bytes<Array<u8>>(items) {
     let iter: ref "core:allocator/ArrayIter<u8>";
     let b: u8;
     total = 0;
-    iter = "core:allocator/ArrayIter<u8>" { repr: ref.as_non_null(items.repr), used: items.used, index: 0 };
+    iter = "core:allocator/ArrayIter<u8>" { repr: items.repr, used: items.used, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

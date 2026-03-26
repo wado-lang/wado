@@ -44,6 +44,12 @@ pub(super) fn optimize_nullable_refs(module: &mut WirModule) {
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
             transform_body(body, &module.types, &vci, &nullable_map);
+            // Sync LocalGet.result_ty from DeclareLocal types. The WIR builder sets
+            // result_ty via local_wir_type() which uses an off-by-N index into
+            // tir_func.local_types, producing stale/wrong types for non-param locals.
+            // After NullableRef updates DeclareLocal types correctly, this fixes the
+            // discrepancy so is_nonnull_result() sees accurate types.
+            sync_local_get_types(body);
         }
     }
 
@@ -246,6 +252,64 @@ fn transform_body(
 ) {
     for instr in body.iter_mut() {
         transform_instr(instr, types, vci, nullable_map);
+    }
+}
+
+/// Synchronize `result_ty` in all `LocalGet` instructions with the corresponding `DeclareLocal`.
+///
+/// `local_wir_type()` in `translate.rs` uses relative indexing into `tir_func.local_types`
+/// (subtracting `param_count`), but `local_types` stores entries for all locals including
+/// params. This off-by-N mismatch causes `LocalGet.result_ty` to reflect the wrong TIR type.
+/// After `NullableRef` transforms `DeclareLocal` types correctly, this pass re-derives
+/// `result_ty` from the (now correct) `DeclareLocal` declarations.
+fn sync_local_get_types(body: &mut [WirInstr]) {
+    let mut local_types: IndexMap<String, WirType> = IndexMap::default();
+    for instr in body.iter() {
+        if let WirInstr::DeclareLocal { name, ty } = instr {
+            local_types.insert(name.clone(), ty.clone());
+        }
+    }
+    if local_types.is_empty() {
+        return;
+    }
+    for instr in body.iter_mut() {
+        sync_local_get_in_instr(instr, &local_types);
+    }
+}
+
+fn sync_local_get_in_instr(instr: &mut WirInstr, local_types: &IndexMap<String, WirType>) {
+    match instr {
+        WirInstr::LocalGet { name, result_ty } => {
+            if let Some(ty) = local_types.get(name.as_str()) {
+                *result_ty = ty.clone();
+            }
+        }
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            for child in body.iter_mut() {
+                sync_local_get_in_instr(child, local_types);
+            }
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            sync_local_get_in_instr(condition, local_types);
+            for child in then_body.iter_mut() {
+                sync_local_get_in_instr(child, local_types);
+            }
+            if let Some(eb) = else_body {
+                for child in eb.iter_mut() {
+                    sync_local_get_in_instr(child, local_types);
+                }
+            }
+        }
+        _ => {
+            instr.for_each_boxed_child_mut(&mut |child| {
+                sync_local_get_in_instr(child, local_types);
+            });
+        }
     }
 }
 
@@ -458,7 +522,7 @@ fn transform_instr(
             type_id,
             field_name,
             expr,
-            ..
+            result_ty,
         } => {
             if field_name.starts_with("payload_")
                 && let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())
@@ -471,6 +535,12 @@ fn transform_instr(
                 return;
             }
             transform_instr(expr, types, vci, nullable_map);
+            // Update result_ty to reflect the field's current type after substitution.
+            if let Some(WirTypeDef::Struct(st)) = types.get(type_id.index() as usize)
+                && let Some(field) = st.fields.iter().find(|f| f.name == *field_name)
+            {
+                *result_ty = field.ty.clone();
+            }
         }
 
         // StructSet: strip RefAsNonNull from value if the target field type became nullable.
@@ -518,6 +588,45 @@ fn transform_instr(
                     *instr = inner_inner;
                 }
                 _ => {}
+            }
+        }
+
+        // Keep result_ty up-to-date for get instructions after NullableRef substitution.
+        WirInstr::LocalGet { result_ty, .. } | WirInstr::GlobalGet { result_ty, .. } => {
+            substitute_type(result_ty, nullable_map);
+            // Also handle case struct types — same substitution as DeclareLocal special case.
+            // e.g., `__cast_N: Ref { CaseStruct, non-null }` becomes `nullable_payload` after
+            // NullableRef, so result_ty must reflect this to avoid stale is_nonnull_result().
+            if let WirType::Ref { type_id, .. } = result_ty
+                && let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())
+                && let Some(&(payload_case, ref nullable_payload)) = nullable_map.get(&variant_idx)
+                && case_idx == payload_case
+            {
+                *result_ty = nullable_payload.clone();
+            }
+        }
+        WirInstr::ArrayGet {
+            array,
+            index,
+            result_ty,
+            type_id,
+        }
+        | WirInstr::ArrayGetS {
+            array,
+            index,
+            result_ty,
+            type_id,
+        }
+        | WirInstr::ArrayGetU {
+            array,
+            index,
+            result_ty,
+            type_id,
+        } => {
+            transform_instr(array, types, vci, nullable_map);
+            transform_instr(index, types, vci, nullable_map);
+            if let Some(WirTypeDef::Array(at)) = types.get(type_id.index() as usize) {
+                *result_ty = at.element_type.clone();
             }
         }
 

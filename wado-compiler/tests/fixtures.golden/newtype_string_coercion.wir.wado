@@ -115,7 +115,7 @@ fn greet(name) {
         String::append_char(__local_1, 111);
         String::append_char(__local_1, 44);
         String::append_char(__local_1, 32);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         __local_8 = __local_2;
         String^Inspect::inspect(name, __local_8);
         __local_10 = String { repr: array.new_data<u8>(" as Name"), used: 8 };
@@ -143,7 +143,7 @@ fn run() with Stdout {
         String::append_char(__local_4, 108);
         String::append_char(__local_4, 111);
         String::append_char(__local_4, 32);
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_4) };
+        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
         Formatter::pad(__local_5, x);
         break __tmpl: __local_4;
     };
@@ -445,7 +445,7 @@ fn String^Inspect::inspect(self, f) {
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
