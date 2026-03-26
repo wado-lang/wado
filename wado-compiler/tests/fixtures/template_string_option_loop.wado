@@ -1,0 +1,25 @@
+// Template string wrapped in Option inside a loop overwrites all previous values.
+// When a template string result is stored as Option::Some(s) and appended to an
+// array in a loop, all elements end up pointing to the last iteration's value.
+
+struct Case {
+    payload: Option<String>,
+}
+
+export fn run() {
+    let mut cases: Array<Case> = [];
+    let base = "Expr";
+    let labels: Array<String> = ["BinOp", "Pass"];
+    for let mut i = 0; i < labels.len(); i += 1 {
+        let s = `{base}{labels[i]}`;
+        cases.append(Case { payload: Option::<String>::Some(s) });
+    }
+
+    let p0 = cases[0].payload.unwrap();
+    let p1 = cases[1].payload.unwrap();
+    assert p0 == "ExprBinOp", `expected ExprBinOp, got {p0}`;
+    assert p1 == "ExprPass", `expected ExprPass, got {p1}`;
+}
+
+__DATA__
+{"stdout": ""}
