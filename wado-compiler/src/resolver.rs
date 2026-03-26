@@ -141,7 +141,7 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Cached flat set of all known type names for fast `is_known_type_name` lookups.
     known_type_names_cache: IndexSet<String>,
     /// Anonymous structs created during expression resolution.
-    /// Flushed into the TirModule at the end of resolve_module.
+    /// Flushed into the `TirModule` at the end of `resolve_module`.
     pending_anonymous_structs: Vec<crate::tir::TirStruct>,
     /// Cache for `find_indexing_trait_impl` results.
     /// Key: (`struct_name`, `base_type_id`, `trait_base_name`, `method_name`, `assoc_type_name`)
