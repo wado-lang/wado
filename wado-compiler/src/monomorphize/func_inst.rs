@@ -1219,22 +1219,15 @@ impl Monomorphizer {
                     );
                 }
 
-                // Capture the is_type_param_receiver flag before substitution clears it
-                let was_type_param_receiver = method_func
-                    .method_info
-                    .as_ref()
-                    .is_some_and(|i| i.is_type_param_receiver);
-                let trait_name_before = method_func
-                    .method_info
-                    .as_ref()
-                    .and_then(|i| i.trait_name.clone());
-                let method_name_before = method_func
-                    .method_info
-                    .as_ref()
-                    .map(|i| i.method_name.clone());
+                // Capture trait info before substitution clears is_type_param_receiver
+                let type_param_trait_info = method_func.method_info.as_ref().and_then(|i| {
+                    if i.is_type_param_receiver {
+                        Some((i.trait_name.clone(), i.method_name.clone()))
+                    } else {
+                        None
+                    }
+                });
 
-                // Update the method func name if receiver type contains type params
-                // e.g., Array<T>::len -> Array<i32>::len when T->i32
                 self.resolve_method_call_substitution(
                     method_func,
                     receiver.type_id,
@@ -1242,9 +1235,9 @@ impl Monomorphizer {
                     type_table,
                 );
 
-                // When a type-param-receiver trait method resolves to a primitive type,
-                // convert to a direct binary operation (primitives use Wasm instructions).
-                if was_type_param_receiver {
+                // Primitives use direct Wasm instructions, not trait methods.
+                // Convert back to a binary op when monomorphization concretized to a primitive.
+                if let Some((trait_name_before, method_name_before)) = type_param_trait_info {
                     let mut recv_inner = receiver.type_id;
                     while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
                         type_table.get(recv_inner).clone()
@@ -1254,7 +1247,7 @@ impl Monomorphizer {
                     if type_table.is_primitive_like(recv_inner)
                         && let Some(binary_op) = trait_method_to_binary_op(
                             trait_name_before.as_deref(),
-                            method_name_before.as_deref().unwrap_or(""),
+                            &method_name_before,
                         )
                     {
                         // Unwrap receiver: &T -> T (strip the Ref wrapper)
@@ -3296,10 +3289,8 @@ impl Monomorphizer {
     }
 }
 
-/// Lower a comparison operator on a non-primitive type to a trait method call.
-///
-/// Returns `Some(new_kind)` if the binary expression should be replaced,
-/// or `None` if it should remain as is (for primitives).
+/// Convert `==`/`!=`/`<`/`>`/`<=`/`>=` on Struct/Variant/GenericInstance types to
+/// `Eq::eq` / `Ord::cmp` method calls. Returns `None` for primitives.
 fn try_lower_comparison(
     trait_method_locations: &IndexMap<String, ModuleSource>,
     current_module_source: &ModuleSource,
