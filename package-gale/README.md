@@ -12,27 +12,21 @@ Existing parser generators couple grammar and runtime in ways that cause mainten
 
 Gale's answer: generate a **single self-contained `.wado` file** that inlines the runtime. No external dependency, no version drift. Each generated file carries the exact runtime snapshot used at generation time.
 
+Target-language-dependent elements in `.g4` files (action blocks, semantic predicates, `superClass`, `@header`/`@members`) are warned and skipped, so real-world grammars work without manual cleanup.
+
 See [WEP: Gale — Grammar Adaptive LL Engine](../docs/wep-2026-03-02-gale.md) for full design rationale.
-
-## Related WEPs
-
-- [WEP: Gale](../docs/wep-2026-03-02-gale.md) — full design and architecture
-- [WEP: Compile-Time File Inclusion](../docs/wep-2026-03-02-include-str.md) — `#include_str` used to inline the runtime
 
 ## Usage
 
 ```sh
 # Generate parser from grammar (outputs to stdout)
-wado run src/main.wado gen grammar.g4
+gale gen grammar.g4
 
 # Write to file
-wado run src/main.wado gen grammar.g4 --output grammar_parser.wado
+gale gen grammar.g4 --output grammar_parser.wado
 
-# Inspect grammar IR (debugging)
-wado run src/main.wado dump grammar.g4
-
-# Inspect .g4 token stream
-wado run src/main.wado dump grammar.g4 --tokens
+# Run via wado (development)
+wado run package-gale/src/main.wado gen grammar.g4
 ```
 
 ## Project Structure
@@ -40,32 +34,45 @@ wado run src/main.wado dump grammar.g4 --tokens
 ```
 package-gale/
   wado.toml              — package manifest
+  docs/
+    antlr4-grammars.md   — ANTLR4 grammar format reference
   tests/
-    grammars/            — real-world .g4 input grammars for integration/golden tests
+    grammars/            — .g4 input grammars for e2e/golden tests
     golden/              — expected generated output (golden fixtures)
   src/
-    main.wado            — CLI entry point
+    main.wado            — CLI entry point (gen subcommand)
     main_test.wado       — smoke test for the public API
     ir.wado              — GrammarIR: typed grammar representation
     ir_test.wado
     runtime.wado         — Span, Token, ParseError (inlined into generated files)
     runtime_test.wado
     generator.wado       — GrammarIR → .wado source (inlines runtime via #include_str)
-    generator_test.wado  — includes golden tests
+    generator_test.wado  — golden tests against tests/golden/
+    lexer_gen.wado       — lexer function code generation
+    parser_gen.wado      — parser function code generation
+    gen_util.wado        — shared code generation utilities
+    wadopoet.wado        — Wado source code builder (like JavaPoet)
+    wadopoet_test.wado
     g4/
       token.wado         — G4Token enum and helpers
       lexer.wado         — tokenize .g4 source text
       lexer_test.wado
       parser.wado        — recursive descent parser: tokens → GrammarIR
       parser_test.wado
+      integration_test.wado — parse real-world .g4 grammars
 ```
 
 ## Implementation Status
 
-| Phase | Description                                          | Status      |
-| ----- | ---------------------------------------------------- | ----------- |
-| 0     | Project scaffold, runtime types                      | Done        |
-| 1     | G4 lexer and parser                                  | Done        |
-| 2     | Code generation (CST types, visitor, walk functions) | In progress |
-| 2     | Lexer function generation (`fn tokenize`)            | Planned     |
-| 2     | Recursive descent parser function generation         | Planned     |
+| Phase | Description | Status |
+| ----- | --- | --- |
+| 0 | Project scaffold, runtime types | Done |
+| 1 | G4 lexer and parser | Done |
+| 2 | Code generation (CST types, visitor, walk functions) | Done |
+| 2 | Lexer function generation (`fn tokenize`) | In progress |
+| 2 | Recursive descent parser function generation | Planned |
+
+## Related WEPs
+
+- [WEP: Gale](../docs/wep-2026-03-02-gale.md) — full design and architecture
+- [WEP: Compile-Time File Inclusion](../docs/wep-2026-03-02-include-str.md) — `#include_str` used to inline the runtime
