@@ -837,6 +837,54 @@ fn test_format_float_negative_exponent_preserved() {
 }
 
 #[test]
+fn test_format_deref_index_preserves_parens() {
+    // (*p)[i] must keep parens — *p[i] means *(p[i])
+    let source = r#"fn foo(data: &Array<i32>) -> i32 {
+    return (*data)[0];
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("(*data)[0]"),
+        "deref-index parens must be preserved: {}",
+        formatted
+    );
+    // Idempotency
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_deref_field_preserves_parens() {
+    // (*p).field must keep parens — *p.field means *(p.field)
+    let source = r#"fn foo(p: &Point) -> i32 {
+    return (*p).x;
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("(*p).x"),
+        "deref-field parens must be preserved: {}",
+        formatted
+    );
+}
+
+#[test]
+fn test_format_deref_method_preserves_parens() {
+    // (*p).method() must keep parens
+    let source = r#"fn foo(data: &Array<i32>) -> i32 {
+    return (*data).len();
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("(*data).len()"),
+        "deref-method parens must be preserved: {}",
+        formatted
+    );
+}
+
+#[test]
 fn test_format_idempotent_all_fixtures() {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
 

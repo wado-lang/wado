@@ -2004,16 +2004,30 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_field_access(&mut self, f: &FieldAccessExpr) {
-        self.unparse_expr(&f.expr);
+        self.unparse_postfix_base(&f.expr);
         self.output.push('.');
         self.output.push_str(&f.field);
     }
 
     fn unparse_index(&mut self, i: &IndexExpr) {
-        self.unparse_expr(&i.expr);
+        self.unparse_postfix_base(&i.expr);
         self.output.push('[');
         self.unparse_expr(&i.index);
         self.output.push(']');
+    }
+
+    /// Emit a postfix base expression, wrapping in parens if needed.
+    /// Prefix unary ops (*, -, !, &, ~) bind looser than postfix ops ([], ., ()),
+    /// so `(*p)[i]` must keep parens — `*p[i]` would mean `*(p[i])`.
+    fn unparse_postfix_base(&mut self, expr: &Expr) {
+        let needs_parens = matches!(expr, Expr::Unary(_));
+        if needs_parens {
+            self.output.push('(');
+        }
+        self.unparse_expr(expr);
+        if needs_parens {
+            self.output.push(')');
+        }
     }
 
     fn unparse_block_expr(&mut self, b: &Block) {

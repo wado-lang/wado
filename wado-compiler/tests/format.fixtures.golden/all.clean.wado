@@ -447,6 +447,12 @@ fn ref_cast_parens(x: i32) {
     let _ = &(x as i64);
 }
 
+/// Deref with postfix: (*p)[i] and (*p).field must keep parens
+fn deref_postfix_parens(data: &Array<i32>, p: &Array<i32>) {
+    let _ = (*data)[0];
+    let _ = (*p)[1];
+}
+
 /// World: blank lines between import blocks are preserved
 pub world TestWorld {
     import Foo {
