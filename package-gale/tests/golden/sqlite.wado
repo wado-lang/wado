@@ -8205,7 +8205,7 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
 
 fn parse_expr_lr_4(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let lit___ = p.expect(TK_LIT_PIPEPIPE, "'||'")?;
-    let expr_2 = parse_expr(p)?;
+    let expr_2 = parse_expr_prec(p, 15)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt4(ExprAlt4 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -8216,7 +8216,7 @@ fn parse_expr_lr_4(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 
 fn parse_expr_lr_5(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let op_tok = p.advance();
-    let expr_2 = parse_expr(p)?;
+    let expr_2 = parse_expr_prec(p, 14)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt5(ExprAlt5 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -8226,7 +8226,7 @@ fn parse_expr_lr_5(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 
 fn parse_expr_lr_6(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let op_tok = p.advance();
-    let expr_2 = parse_expr(p)?;
+    let expr_2 = parse_expr_prec(p, 13)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt6(ExprAlt6 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -8236,7 +8236,7 @@ fn parse_expr_lr_6(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 
 fn parse_expr_lr_7(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let op_tok = p.advance();
-    let expr_2 = parse_expr(p)?;
+    let expr_2 = parse_expr_prec(p, 12)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt7(ExprAlt7 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -8246,7 +8246,7 @@ fn parse_expr_lr_7(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 
 fn parse_expr_lr_8(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let op_tok = p.advance();
-    let expr_2 = parse_expr(p)?;
+    let expr_2 = parse_expr_prec(p, 11)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt8(ExprAlt8 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -8256,7 +8256,7 @@ fn parse_expr_lr_8(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 
 fn parse_expr_lr_9(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let op_tok = p.advance();
-    let expr_2 = parse_expr(p)?;
+    let expr_2 = parse_expr_prec(p, 10)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt9(ExprAlt9 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -8333,7 +8333,7 @@ fn parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
 
 fn parse_expr_lr_11(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let k_and = p.expect(TK_K_AND, "K_AND")?;
-    let expr_2 = parse_expr(p)?;
+    let expr_2 = parse_expr_prec(p, 8)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt11(ExprAlt11 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -8344,7 +8344,7 @@ fn parse_expr_lr_11(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
 
 fn parse_expr_lr_12(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let k_or = p.expect(TK_K_OR, "K_OR")?;
-    let expr_2 = parse_expr(p)?;
+    let expr_2 = parse_expr_prec(p, 7)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt12(ExprAlt12 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -8372,7 +8372,7 @@ fn parse_expr_lr_17(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
         null
     };
     let op_tok = p.advance();
-    let expr_2 = parse_expr(p)?;
+    let expr_2 = parse_expr_prec(p, 5)?;
     if p.peek_kind() == TK_K_ESCAPE {
         let tok = p.expect(TK_K_ESCAPE, "K_ESCAPE")?;
         let tok_2 = parse_expr(p)?;
@@ -8409,7 +8409,7 @@ fn parse_expr_lr_19(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
     } else {
         null
     };
-    let expr_2 = parse_expr(p)?;
+    let expr_2 = parse_expr_prec(p, 3)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt19(ExprAlt19 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -8427,9 +8427,9 @@ fn parse_expr_lr_20(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
         null
     };
     let k_between = p.expect(TK_K_BETWEEN, "K_BETWEEN")?;
-    let expr_2 = parse_expr(p)?;
+    let expr_2 = parse_expr_prec(p, 8)?;
     let k_and = p.expect(TK_K_AND, "K_AND")?;
-    let expr_3 = parse_expr(p)?;
+    let expr_3 = parse_expr_prec(p, 8)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt20(ExprAlt20 {
         span: Span::new(start, p.last_end()),
         expr: left,
@@ -8441,64 +8441,156 @@ fn parse_expr_lr_20(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
     }));
 }
 
-fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn parse_expr_prec(p: &mut Parser, min_prec: i32) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let mut result = parse_expr_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_PIPEPIPE {
-            result = parse_expr_lr_4(p, result, start)?;
+            if 14 >= min_prec {
+                result = parse_expr_lr_4(p, result, start)?;
+            } else {
+                break;
+            }
         } else if suffix_kind == TK_LIT_STAR || suffix_kind == TK_LIT_SLASH || suffix_kind == TK_LIT__ {
-            result = parse_expr_lr_5(p, result, start)?;
+            if 13 >= min_prec {
+                result = parse_expr_lr_5(p, result, start)?;
+            } else {
+                break;
+            }
         } else if suffix_kind == TK_LIT_PLUS || suffix_kind == TK_LIT_MINUS {
-            result = parse_expr_lr_6(p, result, start)?;
+            if 12 >= min_prec {
+                result = parse_expr_lr_6(p, result, start)?;
+            } else {
+                break;
+            }
         } else if suffix_kind == TK_LIT_LTLT || suffix_kind == TK_LIT_GTGT || suffix_kind == TK_LIT_AMP || suffix_kind == TK_LIT_PIPE {
-            result = parse_expr_lr_7(p, result, start)?;
+            if 11 >= min_prec {
+                result = parse_expr_lr_7(p, result, start)?;
+            } else {
+                break;
+            }
         } else if suffix_kind == TK_LIT_LT || suffix_kind == TK_LIT_LTEQ || suffix_kind == TK_LIT_GT || suffix_kind == TK_LIT_GTEQ {
-            result = parse_expr_lr_8(p, result, start)?;
+            if 10 >= min_prec {
+                result = parse_expr_lr_8(p, result, start)?;
+            } else {
+                break;
+            }
         } else if suffix_kind == TK_LIT_EQ || suffix_kind == TK_LIT_EQEQ || suffix_kind == TK_LIT_BANGEQ || suffix_kind == TK_LIT_LTGT {
-            result = parse_expr_lr_9(p, result, start)?;
+            if 9 >= min_prec {
+                result = parse_expr_lr_9(p, result, start)?;
+            } else {
+                break;
+            }
         } else if suffix_kind == TK_K_NOT || suffix_kind == TK_K_IN || suffix_kind == TK_K_LIKE || suffix_kind == TK_K_GLOB || suffix_kind == TK_K_REGEXP || suffix_kind == TK_K_MATCH || suffix_kind == TK_K_ISNULL || suffix_kind == TK_K_NOTNULL || suffix_kind == TK_K_BETWEEN {
             if suffix_kind == TK_K_IN {
-                result = parse_expr_lr_10(p, result, start)?;
-            } else if suffix_kind == TK_K_LIKE {
-                result = parse_expr_lr_17(p, result, start)?;
-            } else if suffix_kind == TK_K_GLOB {
-                result = parse_expr_lr_17(p, result, start)?;
-            } else if suffix_kind == TK_K_REGEXP {
-                result = parse_expr_lr_17(p, result, start)?;
-            } else if suffix_kind == TK_K_MATCH {
-                result = parse_expr_lr_17(p, result, start)?;
-            } else if suffix_kind == TK_K_ISNULL {
-                result = parse_expr_lr_18(p, result, start)?;
-            } else if suffix_kind == TK_K_NOTNULL {
-                result = parse_expr_lr_18(p, result, start)?;
-            } else if suffix_kind == TK_K_BETWEEN {
-                result = parse_expr_lr_20(p, result, start)?;
-            } else if suffix_kind == TK_K_NOT {
-                if p.peek_at(1) == TK_K_IN {
+                if 8 >= min_prec {
                     result = parse_expr_lr_10(p, result, start)?;
-                } else if p.peek_at(1) == TK_K_LIKE || p.peek_at(1) == TK_K_GLOB || p.peek_at(1) == TK_K_REGEXP || p.peek_at(1) == TK_K_MATCH {
+                } else {
+                    break;
+                }
+            } else if suffix_kind == TK_K_LIKE {
+                if 4 >= min_prec {
                     result = parse_expr_lr_17(p, result, start)?;
-                } else if p.peek_at(1) == TK_K_NULL {
+                } else {
+                    break;
+                }
+            } else if suffix_kind == TK_K_GLOB {
+                if 4 >= min_prec {
+                    result = parse_expr_lr_17(p, result, start)?;
+                } else {
+                    break;
+                }
+            } else if suffix_kind == TK_K_REGEXP {
+                if 4 >= min_prec {
+                    result = parse_expr_lr_17(p, result, start)?;
+                } else {
+                    break;
+                }
+            } else if suffix_kind == TK_K_MATCH {
+                if 4 >= min_prec {
+                    result = parse_expr_lr_17(p, result, start)?;
+                } else {
+                    break;
+                }
+            } else if suffix_kind == TK_K_ISNULL {
+                if 3 >= min_prec {
                     result = parse_expr_lr_18(p, result, start)?;
                 } else {
+                    break;
+                }
+            } else if suffix_kind == TK_K_NOTNULL {
+                if 3 >= min_prec {
+                    result = parse_expr_lr_18(p, result, start)?;
+                } else {
+                    break;
+                }
+            } else if suffix_kind == TK_K_BETWEEN {
+                if 1 >= min_prec {
                     result = parse_expr_lr_20(p, result, start)?;
+                } else {
+                    break;
+                }
+            } else if suffix_kind == TK_K_NOT {
+                if p.peek_at(1) == TK_K_IN {
+                    if 8 >= min_prec {
+                        result = parse_expr_lr_10(p, result, start)?;
+                    } else {
+                        break;
+                    }
+                } else if p.peek_at(1) == TK_K_LIKE || p.peek_at(1) == TK_K_GLOB || p.peek_at(1) == TK_K_REGEXP || p.peek_at(1) == TK_K_MATCH {
+                    if 4 >= min_prec {
+                        result = parse_expr_lr_17(p, result, start)?;
+                    } else {
+                        break;
+                    }
+                } else if p.peek_at(1) == TK_K_NULL {
+                    if 3 >= min_prec {
+                        result = parse_expr_lr_18(p, result, start)?;
+                    } else {
+                        break;
+                    }
+                } else {
+                    if 1 >= min_prec {
+                        result = parse_expr_lr_20(p, result, start)?;
+                    } else {
+                        break;
+                    }
                 }
             }
         } else if suffix_kind == TK_K_AND {
-            result = parse_expr_lr_11(p, result, start)?;
+            if 7 >= min_prec {
+                result = parse_expr_lr_11(p, result, start)?;
+            } else {
+                break;
+            }
         } else if suffix_kind == TK_K_OR {
-            result = parse_expr_lr_12(p, result, start)?;
+            if 6 >= min_prec {
+                result = parse_expr_lr_12(p, result, start)?;
+            } else {
+                break;
+            }
         } else if suffix_kind == TK_K_COLLATE {
-            result = parse_expr_lr_16(p, result, start)?;
+            if 5 >= min_prec {
+                result = parse_expr_lr_16(p, result, start)?;
+            } else {
+                break;
+            }
         } else if suffix_kind == TK_K_IS {
-            result = parse_expr_lr_19(p, result, start)?;
+            if 2 >= min_prec {
+                result = parse_expr_lr_19(p, result, start)?;
+            } else {
+                break;
+            }
         } else {
             break;
         }
     }
     return Result::<ExprNode, ParseError>::Ok(result);
+}
+
+fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
+    return parse_expr_prec(p, 0);
 }
 
 fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, ParseError> {
