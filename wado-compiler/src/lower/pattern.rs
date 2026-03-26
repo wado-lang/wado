@@ -1826,12 +1826,11 @@ impl<'a> PatternLowerer<'a> {
                 };
 
                 // Generate binding statements for the payload.
-                // Skip for unit-type wildcards: there is no real payload to extract,
-                // and the VariantPayload WIR translation would emit a struct.get
-                // that leaves a dangling value on the wasm stack.
+                // Skip when the binding is a wildcard — there is no variable to
+                // extract into, and the VariantPayload WIR translation would emit
+                // a struct.get from the wrong case type in or-patterns.
                 if let Some(binding) = bindings.first()
-                    && !(*payload_type == TypeTable::UNIT
-                        && matches!(binding, TirPattern::Wildcard))
+                    && !matches!(binding, TirPattern::Wildcard)
                 {
                     let case_index = variant_type_name
                         .as_ref()
@@ -2071,22 +2070,43 @@ impl<'a> PatternLowerer<'a> {
                 )
             }
             TirPattern::Or(alternatives) => {
-                // Or pattern: combine conditions with logical OR, use first alternative's bindings
+                // Or pattern: combine conditions with logical OR
                 let mut or_conditions: Vec<TirExpr> = Vec::new();
+                let mut alt_cond_bindings: Vec<(TirExpr, Vec<TirStmt>)> = Vec::new();
                 for alt in alternatives {
-                    let (cond, _) = self.pattern_to_condition_and_bindings(
+                    let (cond, bindings) = self.pattern_to_condition_and_bindings(
                         alt,
                         scrutinee.clone(),
                         span,
                         type_table,
                     );
-                    or_conditions.push(cond);
+                    or_conditions.push(cond.clone());
+                    alt_cond_bindings.push((cond, bindings));
                 }
-                // Emit bindings from the first alternative (all alternatives bind the same names)
-                if let Some(first) = alternatives.first() {
-                    let (_, first_bindings) =
-                        self.pattern_to_condition_and_bindings(first, scrutinee, span, type_table);
-                    binding_stmts.extend(first_bindings);
+                // If any alternative has bindings, generate conditional extraction:
+                // if alt1_cond { alt1_bindings } else if alt2_cond { alt2_bindings } ...
+                let has_bindings = alt_cond_bindings.iter().any(|(_, b)| !b.is_empty());
+                if has_bindings {
+                    // Build nested if-else from the last to the first
+                    let mut else_block: Option<TirBlock> = None;
+                    for (cond, bindings) in alt_cond_bindings.into_iter().rev() {
+                        if bindings.is_empty() && else_block.is_none() {
+                            continue;
+                        }
+                        let then_block = TirBlock::new(bindings, span);
+                        let if_stmt = TirStmt::new(
+                            TirStmtKind::If {
+                                condition: cond,
+                                then_block: then_block.clone(),
+                                else_block,
+                            },
+                            span,
+                        );
+                        else_block = Some(TirBlock::new(vec![if_stmt], span));
+                    }
+                    if let Some(block) = else_block {
+                        binding_stmts.extend(block.stmts);
+                    }
                 }
                 let combined = or_conditions
                     .into_iter()

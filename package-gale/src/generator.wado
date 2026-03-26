@@ -8,7 +8,7 @@ use {
 } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
-use { CodeWriter, StructSpec, VariantSpec } from "./wadopoet.wado";
+use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 
 pub fn generate(grammar: &Grammar) -> String {
     let mut w = CodeWriter::new();
@@ -34,16 +34,16 @@ fn gen_runtime(w: &mut CodeWriter) {
 }
 
 fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
-    let mut v = VariantSpec::new("TokenKind");
-    v.set_pub();
+    let mut e = EnumSpec::new("TokenKind");
+    e.set_pub();
     for let rule of lexer_rules {
         if !rule.is_fragment {
-            v.add_case(&rule.name);
+            e.add_member(&rule.name);
         }
     }
-    v.add_case("Eof");
-    v.add_case("Error");
-    v.emit(w);
+    e.add_member("Eof");
+    e.add_member("Error");
+    e.emit(w);
     w.blank();
 }
 
@@ -165,11 +165,7 @@ fn element_to_field(elem: &Element) -> Option<Field> {
     if let Repeat(rep) = *elem {
         if let Some(inner) = element_to_field(&rep.element) {
             let field = match rep.kind {
-                Star => Field {
-                    name: `{inner.name}_list`,
-                    type_str: `Array<{inner.type_str}>`,
-                },
-                Plus => Field {
+                Star | Plus => Field {
                     name: `{inner.name}_list`,
                     type_str: `Array<{inner.type_str}>`,
                 },

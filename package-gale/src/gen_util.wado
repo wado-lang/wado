@@ -57,19 +57,21 @@ pub fn escape_string(s: &String) -> String {
     let mut result = String::with_capacity(s.len() + 2);
     result.append_char('"');
     for let c of s.chars() {
-        if c == '"' { result.append("\\\""); }
-        else if c == '\\' { result.append("\\\\"); }
-        else if c == '\n' { result.append("\\n"); }
-        else if c == '\r' { result.append("\\r"); }
-        else if c == '\t' { result.append("\\t"); }
-        else {
-            let code = c as i32;
-            if code >= 32 && code < 127 {
-                result.append_char(c);
-            } else {
-                result.append(`\\u\{{code:x}\}`);
-            }
-        }
+        match c {
+            '"' => result.append("\\\""),
+            '\\' => result.append("\\\\"),
+            '\n' => result.append("\\n"),
+            '\r' => result.append("\\r"),
+            '\t' => result.append("\\t"),
+            _ => {
+                let code = c as i32;
+                if code >= 32 && code < 127 {
+                    result.append_char(c);
+                } else {
+                    result.append(`\\u\{{code:x}\}`);
+                }
+            },
+        };
     }
     result.append_char('"');
     return result;
@@ -152,33 +154,35 @@ pub fn literal_const_name(text: &String) -> String {
     for let c of text.chars() {
         if c.is_ascii_lowercase() {
             result.append_char(c.to_ascii_uppercase());
-        } else if c.is_ascii_uppercase() {
+        } else if c.is_ascii_uppercase() || c >= '0' && c <= '9' {
             result.append_char(c);
-        } else if c >= '0' && c <= '9' {
-            result.append_char(c);
-        } else if c == '{' { result.append("LBRACE"); }
-        else if c == '}' { result.append("RBRACE"); }
-        else if c == '[' { result.append("LBRACKET"); }
-        else if c == ']' { result.append("RBRACKET"); }
-        else if c == '(' { result.append("LPAREN"); }
-        else if c == ')' { result.append("RPAREN"); }
-        else if c == ':' { result.append("COLON"); }
-        else if c == ',' { result.append("COMMA"); }
-        else if c == '.' { result.append("DOT"); }
-        else if c == ';' { result.append("SEMI"); }
-        else if c == '+' { result.append("PLUS"); }
-        else if c == '-' { result.append("MINUS"); }
-        else if c == '*' { result.append("STAR"); }
-        else if c == '/' { result.append("SLASH"); }
-        else if c == '=' { result.append("EQ"); }
-        else if c == '<' { result.append("LT"); }
-        else if c == '>' { result.append("GT"); }
-        else if c == '!' { result.append("BANG"); }
-        else if c == '&' { result.append("AMP"); }
-        else if c == '|' { result.append("PIPE"); }
-        else if c == '^' { result.append("CARET"); }
-        else if c == '~' { result.append("TILDE"); }
-        else { result.append_char('_'); }
+        } else {
+            match c {
+                '{' => result.append("LBRACE"),
+                '}' => result.append("RBRACE"),
+                '[' => result.append("LBRACKET"),
+                ']' => result.append("RBRACKET"),
+                '(' => result.append("LPAREN"),
+                ')' => result.append("RPAREN"),
+                ':' => result.append("COLON"),
+                ',' => result.append("COMMA"),
+                '.' => result.append("DOT"),
+                ';' => result.append("SEMI"),
+                '+' => result.append("PLUS"),
+                '-' => result.append("MINUS"),
+                '*' => result.append("STAR"),
+                '/' => result.append("SLASH"),
+                '=' => result.append("EQ"),
+                '<' => result.append("LT"),
+                '>' => result.append("GT"),
+                '!' => result.append("BANG"),
+                '&' => result.append("AMP"),
+                '|' => result.append("PIPE"),
+                '^' => result.append("CARET"),
+                '~' => result.append("TILDE"),
+                _ => result.append_char('_'),
+            };
+        }
     }
     return result;
 }

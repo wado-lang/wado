@@ -106,8 +106,6 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Article^Summary::summary" = fn(ref Article) -> ref String;
 
-type "functype/ArrayIter<i32>^Iterator::count" = fn(ref "core:allocator/ArrayIter<i32>") -> i32;
-
 type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
@@ -170,13 +168,29 @@ fn trait_default_count() with Stdout {
     let remaining: i32;
     let __local_4: ref String;
     let __local_5: ref Formatter;
+    let __local_22: i32;
+    let __local_23: ref Option<i32>;
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_0;
     };
     iter = "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: 5, index: 0 };
     drop(ArrayIter<i32>^Iterator::next(iter));
-    remaining = ArrayIter<i32>^Iterator::count(iter);
+    remaining = __inline_ArrayIter_i32__Iterator__count_10: block -> i32 {
+        __local_22 = 0;
+        b0: block {
+            l1: loop {
+                __local_23 = ArrayIter<i32>^Iterator::next(iter);
+                if ref.test Option<i32>::Some(__local_23) {
+                    __local_22 = __local_22 + 1;
+                } else {
+                    break b0;
+                };
+                continue l1;
+            };
+        };
+        break __inline_ArrayIter_i32__Iterator__count_10: __local_22;
+    };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
@@ -264,13 +278,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l2: loop {
+            l5: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l2;
+                continue l5;
             };
         };
     };
@@ -350,13 +364,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l8: loop {
+            l11: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l8;
+                continue l11;
             };
         };
     };
@@ -373,14 +387,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l12: loop {
+                l15: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l12;
+                    continue l15;
                 };
             };
         };
@@ -553,25 +567,6 @@ fn Article^Summary::summary(self) {
         String::append(__local_1, self.content);
         break __tmpl: __local_1;
     };
-}
-
-fn ArrayIter<i32>^Iterator::count(self) {
-    let n: i32;
-    let __pattern_temp_0: ref Option<i32>;
-    n = 0;
-    b23: block {
-        l24: loop {
-            __pattern_temp_0 = ArrayIter<i32>^Iterator::next(self);
-            if ref.test Option<i32>::Some(__pattern_temp_0) {
-                drop(ref.cast Option<i32>::Some(__pattern_temp_0).payload_0);
-                n = n + 1;
-            } else {
-                break b23;
-            };
-            continue l24;
-        };
-    };
-    return n;
 }
 
 fn ArrayIter<i32>^Iterator::next(self) {

@@ -2926,11 +2926,31 @@ impl Parser {
         // Expect =>
         self.expect(&TokenKind::FatArrow)?;
 
-        // Parse arm body - either a block or an expression
+        // Parse arm body - either a block, a return statement, or an expression
         let body = if self.check(&TokenKind::LBrace) {
             // Block body: `{ ... }`
             let block = self.parse_block()?;
             Expr::Block(Box::new(block))
+        } else if self.check(&TokenKind::Return) {
+            // Return in match arm: `return expr` — wrap in a synthetic block.
+            // The comma/closing brace terminates the arm; no semicolon needed.
+            let ret_start = self.peek().span;
+            self.advance(); // consume 'return'
+            let value = if self.check(&TokenKind::Comma) || self.check(&TokenKind::RBrace) {
+                None
+            } else {
+                Some(self.parse_expr()?)
+            };
+            let ret_end = value.as_ref().map_or(ret_start, super::ast::Expr::span);
+            let ret_span = ret_start.merge(&ret_end);
+            let ret_stmt = Stmt::Return(ReturnStmt {
+                value,
+                span: ret_span,
+            });
+            Expr::Block(Box::new(Block {
+                stmts: vec![ret_stmt],
+                span: ret_span,
+            }))
         } else {
             // Expression body: `expr`
             self.parse_expr()?

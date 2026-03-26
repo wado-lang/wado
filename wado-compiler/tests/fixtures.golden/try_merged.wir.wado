@@ -396,7 +396,6 @@ condition: msg.message == \"3000000000 out of range for i32\"
     let __sroa_r3_case1_payload_0: ref null ConvertError;
     multivalue_bind [__sroa_r3_discriminant, __sroa_r3_case0_payload_0, __sroa_r3_case1_payload_0] = u32^TryFrom<i32>::try_from(-1);
     if __sroa_r3_discriminant == 1 {
-        drop(__sroa_r3_case1_payload_0);
     } else {
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Err for negative -> u32"), used: 32 });
         unreachable;
@@ -484,7 +483,6 @@ condition: n == 200 as u8
     let __sroa_r6_case1_payload_0: ref null ConvertError;
     multivalue_bind [__sroa_r6_discriminant, __sroa_r6_case0_payload_0, __sroa_r6_case1_payload_0] = u8^TryFrom<u32>::try_from(300);
     if __sroa_r6_discriminant == 1 {
-        drop(__sroa_r6_case1_payload_0);
     } else {
         "core:internal/panic"(String { repr: array.new_data<u8>("expected Err for 300 -> u8"), used: 26 });
         unreachable;

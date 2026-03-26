@@ -1,0 +1,52 @@
+fn lookup(key: String) -> String {
+    return match key {
+        "a" => "alpha",
+        "b" => "beta",
+        _ => {
+            return "unknown";
+        },
+    };
+}
+
+fn classify(n: i32) -> String {
+    let label = match n {
+        1 => {
+            return "one";
+        },
+        2 => {
+            return "two";
+        },
+        _ => "other",
+    };
+    return label;
+}
+
+fn classify_inline(n: i32) -> String {
+    let label = match n {
+        1 => {
+            return "one";
+        },
+        2 => {
+            return "two";
+        },
+        _ => "other",
+    };
+    return label;
+}
+
+export fn run() {
+    assert lookup("a") == "alpha";
+    assert lookup("b") == "beta";
+    assert lookup("z") == "unknown";
+
+    assert classify(1) == "one";
+    assert classify(2) == "two";
+    assert classify(3) == "other";
+
+    assert classify_inline(1) == "one";
+    assert classify_inline(2) == "two";
+    assert classify_inline(3) == "other";
+}
+
+__DATA__
+{"stdout": ""}

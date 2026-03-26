@@ -290,16 +290,22 @@ impl char {
     /// Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
     pub fn is_hexdigit(&self) -> bool {
         let c = *self;
-        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
     }
 
     /// Returns the numeric value of an ASCII hexadecimal digit (0–15).
     /// Panics if the character is not a valid hex digit.
     pub fn hex_digit_value(&self) -> i32 {
         let c = *self;
-        if c >= '0' && c <= '9' { return c as i32 - '0' as i32; }
-        if c >= 'a' && c <= 'f' { return c as i32 - 'a' as i32 + 10; }
-        if c >= 'A' && c <= 'F' { return c as i32 - 'A' as i32 + 10; }
+        if c >= '0' && c <= '9' {
+            return c as i32 - '0' as i32;
+        }
+        if c >= 'a' && c <= 'f' {
+            return c as i32 - 'a' as i32 + 10;
+        }
+        if c >= 'A' && c <= 'F' {
+            return c as i32 - 'A' as i32 + 10;
+        }
         panic("char::hex_digit_value: not a hex digit");
     }
 }
@@ -1453,40 +1459,64 @@ impl Inspect for f64 {
 }
 
 impl InspectAlt for bool {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 impl InspectAlt for char {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 impl InspectAlt for i8 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 impl InspectAlt for u8 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 impl InspectAlt for i16 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 impl InspectAlt for u16 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 impl InspectAlt for i32 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 impl InspectAlt for u32 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 impl InspectAlt for i64 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 impl InspectAlt for u64 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 impl InspectAlt for f32 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 impl InspectAlt for f64 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 
 impl LowerExp for f32 {
@@ -2321,74 +2351,117 @@ impl Default for char {
 }
 
 impl From<i8> for i16 {
-    pub fn from(value: i8) -> i16 { return value as i16; }
+    pub fn from(value: i8) -> i16 {
+        return value as i16;
+    }
 }
 impl From<i8> for i32 {
-    pub fn from(value: i8) -> i32 { return value as i32; }
+    pub fn from(value: i8) -> i32 {
+        return value as i32;
+    }
 }
 impl From<i8> for i64 {
-    pub fn from(value: i8) -> i64 { return value as i64; }
+    pub fn from(value: i8) -> i64 {
+        return value as i64;
+    }
 }
 impl From<i16> for i32 {
-    pub fn from(value: i16) -> i32 { return value as i32; }
+    pub fn from(value: i16) -> i32 {
+        return value as i32;
+    }
 }
 impl From<i16> for i64 {
-    pub fn from(value: i16) -> i64 { return value as i64; }
+    pub fn from(value: i16) -> i64 {
+        return value as i64;
+    }
 }
 impl From<i32> for i64 {
-    pub fn from(value: i32) -> i64 { return value as i64; }
+    pub fn from(value: i32) -> i64 {
+        return value as i64;
+    }
 }
 impl From<u8> for u16 {
-    pub fn from(value: u8) -> u16 { return value as u16; }
+    pub fn from(value: u8) -> u16 {
+        return value as u16;
+    }
 }
 impl From<u8> for u32 {
-    pub fn from(value: u8) -> u32 { return value as u32; }
+    pub fn from(value: u8) -> u32 {
+        return value as u32;
+    }
 }
 impl From<u8> for u64 {
-    pub fn from(value: u8) -> u64 { return value as u64; }
+    pub fn from(value: u8) -> u64 {
+        return value as u64;
+    }
 }
 impl From<u8> for i16 {
-    pub fn from(value: u8) -> i16 { return value as i16; }
+    pub fn from(value: u8) -> i16 {
+        return value as i16;
+    }
 }
 impl From<u8> for i32 {
-    pub fn from(value: u8) -> i32 { return value as i32; }
+    pub fn from(value: u8) -> i32 {
+        return value as i32;
+    }
 }
 impl From<u8> for i64 {
-    pub fn from(value: u8) -> i64 { return value as i64; }
+    pub fn from(value: u8) -> i64 {
+        return value as i64;
+    }
 }
 impl From<u16> for u32 {
-    pub fn from(value: u16) -> u32 { return value as u32; }
+    pub fn from(value: u16) -> u32 {
+        return value as u32;
+    }
 }
 impl From<u16> for u64 {
-    pub fn from(value: u16) -> u64 { return value as u64; }
+    pub fn from(value: u16) -> u64 {
+        return value as u64;
+    }
 }
 impl From<u16> for i32 {
-    pub fn from(value: u16) -> i32 { return value as i32; }
+    pub fn from(value: u16) -> i32 {
+        return value as i32;
+    }
 }
 impl From<u16> for i64 {
-    pub fn from(value: u16) -> i64 { return value as i64; }
+    pub fn from(value: u16) -> i64 {
+        return value as i64;
+    }
 }
 impl From<u32> for u64 {
-    pub fn from(value: u32) -> u64 { return value as u64; }
+    pub fn from(value: u32) -> u64 {
+        return value as u64;
+    }
 }
 impl From<u32> for i64 {
-    pub fn from(value: u32) -> i64 { return value as i64; }
+    pub fn from(value: u32) -> i64 {
+        return value as i64;
+    }
 }
 impl From<f32> for f64 {
-    pub fn from(value: f32) -> f64 { return value as f64; }
+    pub fn from(value: f32) -> f64 {
+        return value as f64;
+    }
 }
 impl From<bool> for bool {
-    pub fn from(value: bool) -> bool { return value; }
+    pub fn from(value: bool) -> bool {
+        return value;
+    }
 }
 impl From<bool> for i32 {
     pub fn from(value: bool) -> i32 {
-        if value { return 1; }
+        if value {
+            return 1;
+        }
         return 0;
     }
 }
 
 impl TryFrom<i64> for i32 {
     type Error = ConvertError;
+
     pub fn try_from(value: i64) -> Result<i32, ConvertError> {
         if value < i32::MIN as i64 || value > i32::MAX as i64 {
             return Result::<i32, ConvertError>::Err(ConvertError::new(`{value} out of range for i32`));
@@ -2399,6 +2472,7 @@ impl TryFrom<i64> for i32 {
 
 impl TryFrom<i64> for i16 {
     type Error = ConvertError;
+
     pub fn try_from(value: i64) -> Result<i16, ConvertError> {
         if value < i16::MIN as i64 || value > i16::MAX as i64 {
             return Result::<i16, ConvertError>::Err(ConvertError::new(`{value} out of range for i16`));
@@ -2409,6 +2483,7 @@ impl TryFrom<i64> for i16 {
 
 impl TryFrom<i64> for i8 {
     type Error = ConvertError;
+
     pub fn try_from(value: i64) -> Result<i8, ConvertError> {
         if value < i8::MIN as i64 || value > i8::MAX as i64 {
             return Result::<i8, ConvertError>::Err(ConvertError::new(`{value} out of range for i8`));
@@ -2419,6 +2494,7 @@ impl TryFrom<i64> for i8 {
 
 impl TryFrom<i32> for i16 {
     type Error = ConvertError;
+
     pub fn try_from(value: i32) -> Result<i16, ConvertError> {
         if value < i16::MIN as i32 || value > i16::MAX as i32 {
             return Result::<i16, ConvertError>::Err(ConvertError::new(`{value} out of range for i16`));
@@ -2429,6 +2505,7 @@ impl TryFrom<i32> for i16 {
 
 impl TryFrom<i32> for i8 {
     type Error = ConvertError;
+
     pub fn try_from(value: i32) -> Result<i8, ConvertError> {
         if value < i8::MIN as i32 || value > i8::MAX as i32 {
             return Result::<i8, ConvertError>::Err(ConvertError::new(`{value} out of range for i8`));
@@ -2439,6 +2516,7 @@ impl TryFrom<i32> for i8 {
 
 impl TryFrom<i16> for i8 {
     type Error = ConvertError;
+
     pub fn try_from(value: i16) -> Result<i8, ConvertError> {
         if value < i8::MIN as i16 || value > i8::MAX as i16 {
             return Result::<i8, ConvertError>::Err(ConvertError::new(`{value} out of range for i8`));
@@ -2449,6 +2527,7 @@ impl TryFrom<i16> for i8 {
 
 impl TryFrom<i32> for u32 {
     type Error = ConvertError;
+
     pub fn try_from(value: i32) -> Result<u32, ConvertError> {
         if value < 0 {
             return Result::<u32, ConvertError>::Err(ConvertError::new(`{value} out of range for u32`));
@@ -2459,6 +2538,7 @@ impl TryFrom<i32> for u32 {
 
 impl TryFrom<i64> for u64 {
     type Error = ConvertError;
+
     pub fn try_from(value: i64) -> Result<u64, ConvertError> {
         if value < 0 {
             return Result::<u64, ConvertError>::Err(ConvertError::new(`{value} out of range for u64`));
@@ -2469,6 +2549,7 @@ impl TryFrom<i64> for u64 {
 
 impl TryFrom<i64> for u32 {
     type Error = ConvertError;
+
     pub fn try_from(value: i64) -> Result<u32, ConvertError> {
         if value < 0 || value > u32::MAX as i64 {
             return Result::<u32, ConvertError>::Err(ConvertError::new(`{value} out of range for u32`));
@@ -2479,6 +2560,7 @@ impl TryFrom<i64> for u32 {
 
 impl TryFrom<u64> for i64 {
     type Error = ConvertError;
+
     pub fn try_from(value: u64) -> Result<i64, ConvertError> {
         if value > i64::MAX as u64 {
             return Result::<i64, ConvertError>::Err(ConvertError::new(`{value} out of range for i64`));
@@ -2489,6 +2571,7 @@ impl TryFrom<u64> for i64 {
 
 impl TryFrom<u64> for u32 {
     type Error = ConvertError;
+
     pub fn try_from(value: u64) -> Result<u32, ConvertError> {
         if value > u32::MAX as u64 {
             return Result::<u32, ConvertError>::Err(ConvertError::new(`{value} out of range for u32`));
@@ -2499,6 +2582,7 @@ impl TryFrom<u64> for u32 {
 
 impl TryFrom<u32> for u16 {
     type Error = ConvertError;
+
     pub fn try_from(value: u32) -> Result<u16, ConvertError> {
         if value > u16::MAX as u32 {
             return Result::<u16, ConvertError>::Err(ConvertError::new(`{value} out of range for u16`));
@@ -2509,6 +2593,7 @@ impl TryFrom<u32> for u16 {
 
 impl TryFrom<u32> for u8 {
     type Error = ConvertError;
+
     pub fn try_from(value: u32) -> Result<u8, ConvertError> {
         if value > u8::MAX as u32 {
             return Result::<u8, ConvertError>::Err(ConvertError::new(`{value} out of range for u8`));
@@ -2519,6 +2604,7 @@ impl TryFrom<u32> for u8 {
 
 impl TryFrom<u16> for u8 {
     type Error = ConvertError;
+
     pub fn try_from(value: u16) -> Result<u8, ConvertError> {
         if value > u8::MAX as u16 {
             return Result::<u16, ConvertError>::Err(ConvertError::new(`{value} out of range for u8`));
@@ -2529,6 +2615,7 @@ impl TryFrom<u16> for u8 {
 
 impl TryFrom<i64> for f32 {
     type Error = ConvertError;
+
     pub fn try_from(value: i64) -> Result<f32, ConvertError> {
         let f = value as f32;
         if f as i64 != value {
@@ -2540,6 +2627,7 @@ impl TryFrom<i64> for f32 {
 
 impl TryFrom<i64> for f64 {
     type Error = ConvertError;
+
     pub fn try_from(value: i64) -> Result<f64, ConvertError> {
         let f = value as f64;
         if f as i64 != value {
@@ -2551,6 +2639,7 @@ impl TryFrom<i64> for f64 {
 
 impl TryFrom<u64> for f64 {
     type Error = ConvertError;
+
     pub fn try_from(value: u64) -> Result<f64, ConvertError> {
         if value > 9007199254740992 as u64 {
             return Result::<f64, ConvertError>::Err(ConvertError::new(`{value} cannot be exactly represented as f64`));
@@ -2561,6 +2650,7 @@ impl TryFrom<u64> for f64 {
 
 impl TryFrom<u64> for f32 {
     type Error = ConvertError;
+
     pub fn try_from(value: u64) -> Result<f32, ConvertError> {
         if value > 16777216 as u64 {
             return Result::<f32, ConvertError>::Err(ConvertError::new(`{value} cannot be exactly represented as f32`));

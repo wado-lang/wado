@@ -341,7 +341,6 @@ fn run() with Stdout, Stderr, Preopens {
     };
     unlink_missing = __cm_binding__Descriptor_unlink_file_at(dir, String { repr: array.new_data<u8>("nonexistent_file.txt"), used: 20 });
     if ref.test Result<unit,ErrorCode>::Err(unlink_missing) {
-        drop(ref.cast Result<unit,ErrorCode>::Err(unlink_missing).payload_0);
         "core:cli/println"(String { repr: array.new_data<u8>("unlink: nonexistent file returns error (correct)"), used: 48 });
     } else {
         "core:cli/eprintln"(String { repr: array.new_data<u8>("unlink: nonexistent file should return error"), used: 44 });

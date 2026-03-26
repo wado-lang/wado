@@ -233,10 +233,7 @@ test "inspect empty object" {
 }
 
 test "pretty-print object" {
-    let v = Value::Object(obj([
-        ["name", Value::String("Alice")],
-        ["age", Value::Number(30.0)],
-    ]));
+    let v = Value::Object(obj([["name", Value::String("Alice")], ["age", Value::Number(30.0)]]));
     assert `{v:#?}` == "{
   \"name\": \"Alice\",
   \"age\": 30.0,
@@ -244,9 +241,7 @@ test "pretty-print object" {
 }
 
 test "pretty-print nested" {
-    let v = Value::Object(obj([
-        ["items", Value::Array([Value::Number(1.0), Value::Number(2.0)])],
-    ]));
+    let v = Value::Object(obj([["items", Value::Array([Value::Number(1.0), Value::Number(2.0)])]]));
     assert `{v:#?}` == "{
   \"items\": [
     1.0,

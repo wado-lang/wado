@@ -283,8 +283,7 @@ fn gen_char_class(
                 w.write(` || chars[pos] >= {escape_char(range.start)} && chars[pos] <= {escape_char(range.end)}`);
             }
         }
-        let fa = *fail_action;
-        w.write(` \{ {fa}; \}\n`);
+        w.write(` \{ {*fail_action}; \}\n`);
     } else {
         w.write("if !(false");
         for let range of cc.ranges {
@@ -294,8 +293,7 @@ fn gen_char_class(
                 w.write(` || chars[pos] >= {escape_char(range.start)} && chars[pos] <= {escape_char(range.end)}`);
             }
         }
-        let fa = *fail_action;
-        w.write(`) \{ {fa}; \}\n`);
+        w.write(`) \{ {*fail_action}; \}\n`);
     }
     w.line("pos += 1;");
 }

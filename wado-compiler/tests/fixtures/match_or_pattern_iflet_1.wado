@@ -1,0 +1,38 @@
+variant Shape {
+    Circle(f64),
+    Square(f64),
+    Point,
+}
+
+fn is_sized(s: Shape) -> bool {
+    if let Circle(_) | Square(_) = s { return true; }
+    return false;
+}
+
+variant Expr {
+    Num(i32),
+    Neg(i32),
+    Zero,
+}
+
+fn get_value(e: Expr) -> i32 {
+    if let Num(n) | Neg(n) = e {
+        return n;
+    }
+    return 0;
+}
+
+export fn run() {
+    // Or-pattern with wildcards (no bindings)
+    assert is_sized(Shape::Circle(1.0));
+    assert is_sized(Shape::Square(2.0));
+    assert !is_sized(Shape::Point);
+
+    // Or-pattern with bindings
+    assert get_value(Expr::Num(42)) == 42;
+    assert get_value(Expr::Neg(-5)) == -5;
+    assert get_value(Expr::Zero) == 0;
+}
+
+__DATA__
+{"stdout": ""}

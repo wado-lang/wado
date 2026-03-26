@@ -155,18 +155,22 @@ fn classify(n) {
         if __local_1 > 0 {
             __local_1 = n;
             return String { repr: array.new_data<u8>("positive"), used: 8 };
+            unreachable;
         } else {
             block {
                 __local_2 = n;
                 if __local_2 < 0 {
                     __local_2 = n;
                     return String { repr: array.new_data<u8>("negative"), used: 8 };
+                    unreachable;
                 } else {
                     return String { repr: array.new_data<u8>("zero"), used: 4 };
+                    unreachable;
                 };
             };
         };
     };
+    unreachable;
 }
 
 fn classify_builder(x) {
@@ -674,6 +678,7 @@ fn __test_5_never_type() {
             5;
         } else if __match_scrut_0 == 0 -> i32 {
             break __inline_first_non_negative_2: 10;
+            unreachable;
         } else {
             unreachable;
         };
@@ -713,6 +718,7 @@ condition: first_non_negative(5, 10) == 5
             -1;
         } else if __match_scrut_1 == 0 -> i32 {
             break __inline_first_non_negative_10: 10;
+            unreachable;
         } else {
             unreachable;
         };
