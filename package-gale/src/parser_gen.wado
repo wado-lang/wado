@@ -1253,6 +1253,54 @@ fn gen_lr_suffix_helpers(
     }
 }
 
+fn compute_lr_second_token(
+    shared_token: &String,
+    elements: &Array<Element>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> Array<String> {
+    // Find what token follows the shared_token in this alternative's suffix.
+    // Walk suffix elements (starting at index 1) to find the shared token,
+    // then return the first set of the next element.
+    for let mut i = 1; i < elements.len(); i += 1 {
+        let elem = &elements[i];
+        // Check if this element contains the shared token
+        let mut visiting: Array<String> = [];
+        let elem_first = first_of_element(elem, all_rules, lit_tokens, &mut visiting);
+        if !array_contains_str(&elem_first, shared_token) { continue; }
+
+        // This element matches the shared token. Check if it's an Optional that wraps it.
+        if is_nullable(elem) {
+            // The shared token is inside an optional (e.g. K_NOT?).
+            // The "second token" is the next element after the optional.
+            if i + 1 < elements.len() {
+                return first_of_elements_from(elements, i + 1, all_rules, lit_tokens);
+            }
+        }
+
+        // The shared token is inside a Group (e.g. (K_ISNULL | K_NOTNULL | K_NOT K_NULL)).
+        // Find the alternative within the group that starts with shared_token,
+        // and return the first set of its second element.
+        if let Group(alts) = *elem {
+            for let mut a = 0; a < alts.len(); a += 1 {
+                let alt = &alts[a];
+                if alt.elements.len() < 1 { continue; }
+                let mut v2: Array<String> = [];
+                let alt_first = first_of_element(&alt.elements[0], all_rules, lit_tokens, &mut v2);
+                if array_contains_str(&alt_first, shared_token) && alt.elements.len() >= 2 {
+                    return first_of_elements_from(&alt.elements, 1, all_rules, lit_tokens);
+                }
+            }
+        }
+
+        // Fallback: return next element's first set
+        if i + 1 < elements.len() {
+            return first_of_elements_from(elements, i + 1, all_rules, lit_tokens);
+        }
+    }
+    return [];
+}
+
 fn gen_lr_suffix_dispatch(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -1376,7 +1424,7 @@ fn gen_lr_suffix_dispatch(
                             w.end();
                         }
                     } else {
-                        let second = first_of_elements_from(&alt.elements, 2, all_rules, lit_tokens);
+                        let second = compute_lr_second_token(shared_tk, &alt.elements, all_rules, lit_tokens);
                         let sub_cond = kind_check_str(&second, "p.peek_at(1)");
                         if sub_first {
                             w.begin(`if {sub_cond}`);
