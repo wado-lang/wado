@@ -205,7 +205,7 @@ fn run() {
             String::append_char(__local_9, 32);
             String::append(__local_9, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado"), used: 62 });
             String::append_char(__local_9, 58);
-            __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
+            __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
             __local_16 = __local_10;
             i32::fmt_decimal(21, __local_16);
             String::append(__local_9, String { repr: array.new_data<u8>("
@@ -214,13 +214,13 @@ condition: a == b
             String::append_char(__local_9, 97);
             String::append_char(__local_9, 58);
             String::append_char(__local_9, 32);
-            __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
+            __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
             ApproxFloat^Inspect::inspect(__v0_3.value, __local_10);
             String::append_char(__local_9, 10);
             String::append_char(__local_9, 98);
             String::append_char(__local_9, 58);
             String::append_char(__local_9, 32);
-            __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
+            __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
             ApproxFloat^Inspect::inspect(__v1_4.value, __local_10);
             String::append_char(__local_9, 10);
             break __tmpl: __local_9;
@@ -243,7 +243,7 @@ condition: a == b
             String::append_char(__local_11, 32);
             String::append(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/struct_eq_auto_user_override.wado"), used: 62 });
             String::append_char(__local_11, 58);
-            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
+            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
             __local_24 = __local_12;
             i32::fmt_decimal(22, __local_24);
             String::append(__local_11, String { repr: array.new_data<u8>("
@@ -252,13 +252,13 @@ condition: a != c
             String::append_char(__local_11, 97);
             String::append_char(__local_11, 58);
             String::append_char(__local_11, 32);
-            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
+            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
             ApproxFloat^Inspect::inspect(__v0_6.value, __local_12);
             String::append_char(__local_11, 10);
             String::append_char(__local_11, 99);
             String::append_char(__local_11, 58);
             String::append_char(__local_11, 32);
-            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
+            __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
             ApproxFloat^Inspect::inspect(__v1_7.value, __local_12);
             String::append_char(__local_11, 10);
             break __tmpl: __local_11;
@@ -1377,7 +1377,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1597,7 +1597,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

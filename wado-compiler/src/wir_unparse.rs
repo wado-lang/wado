@@ -709,7 +709,7 @@ impl<'a> WirUnparser<'a> {
                 let ty_str = self.fmt_type(ty);
                 self.write(&format!("let {name}: {ty_str}"));
             }
-            WirInstr::LocalGet { name } => {
+            WirInstr::LocalGet { name, .. } => {
                 self.write(name);
             }
             WirInstr::LocalSet { name, value } => {
@@ -724,7 +724,7 @@ impl<'a> WirUnparser<'a> {
             }
 
             // Globals
-            WirInstr::GlobalGet { name } => {
+            WirInstr::GlobalGet { name, .. } => {
                 self.write(&name.display);
             }
             WirInstr::GlobalSet { name, value } => {
@@ -1456,6 +1456,7 @@ impl<'a> WirUnparser<'a> {
                 type_id,
                 array,
                 index,
+                ..
             } => {
                 let elem = self.array_elem_type_str(type_id);
                 self.write(&format!("builtin::array_get<{elem}>("));
@@ -1468,6 +1469,7 @@ impl<'a> WirUnparser<'a> {
                 type_id,
                 array,
                 index,
+                ..
             } => {
                 let elem = self.array_elem_type_str(type_id);
                 self.write(&format!("array.get_s<{elem}>("));
@@ -1480,6 +1482,7 @@ impl<'a> WirUnparser<'a> {
                 type_id,
                 array,
                 index,
+                ..
             } => {
                 let elem = self.array_elem_type_str(type_id);
                 let fname = if elem == "u8" {
@@ -2209,12 +2212,12 @@ impl<'a> WirUnparser<'a> {
             return None;
         }
         if let WirInstr::I32Eq(a, b) = cond {
-            if let WirInstr::LocalGet { name } = a.as_ref()
+            if let WirInstr::LocalGet { name, .. } = a.as_ref()
                 && name == decl_name
             {
                 return Some(WirInstr::I32Eq(value.clone(), b.clone()));
             }
-            if let WirInstr::LocalGet { name } = b.as_ref()
+            if let WirInstr::LocalGet { name, .. } = b.as_ref()
                 && name == decl_name
             {
                 return Some(WirInstr::I32Eq(a.clone(), value.clone()));

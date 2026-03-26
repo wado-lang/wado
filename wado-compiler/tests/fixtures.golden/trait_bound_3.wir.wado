@@ -113,7 +113,7 @@ fn trait_bound_method_on_type_param_chain() with Stdout {
     let __local_3: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_0 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_1 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_0) };
+        __local_1 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
         i32::fmt_decimal(__inline_i32_ToNum__to_num_0: block -> i32 {
             break __inline_i32_ToNum__to_num_0: 10;
         } + __inline_i32_ToNum__to_num_1: block -> i32 {
@@ -123,7 +123,7 @@ fn trait_bound_method_on_type_param_chain() with Stdout {
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(__inline_bool_ToNum__to_num_2: block -> i32 {
             if 1 {
                 break __inline_bool_ToNum__to_num_2: 1;
@@ -168,7 +168,7 @@ fn describe<Player>(x) {
         String::append(__local_1, x.player_name);
         String::append_char(__local_1, 58);
         String::append_char(__local_1, 32);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         i32::fmt_decimal(x.player_score, __local_2);
         break __tmpl: __local_1;
     };
@@ -371,7 +371,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

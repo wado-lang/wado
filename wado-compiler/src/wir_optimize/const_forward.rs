@@ -81,13 +81,13 @@ fn collect_aliased_in_instr(
         // RefAsNonNull of a LocalGet: address taken — but suppress if inside
         // a non-stores call argument (the reference doesn't persist).
         WirInstr::RefAsNonNull(inner) => {
-            if !in_non_stores_arg && let WirInstr::LocalGet { name } = inner.as_ref() {
+            if !in_non_stores_arg && let WirInstr::LocalGet { name, .. } = inner.as_ref() {
                 aliased.insert(name.clone());
             }
         }
         // LocalSet from another local: both are aliases of the same GC object.
         WirInstr::LocalSet { name, value } => {
-            if let WirInstr::LocalGet { name: source } = value.as_ref() {
+            if let WirInstr::LocalGet { name: source, .. } = value.as_ref() {
                 aliased.insert(name.clone());
                 aliased.insert(source.clone());
             }
@@ -165,7 +165,7 @@ impl<'a> FieldKnowledge<'a> {
                 return false;
             }
             // If the stored value references the reassigned local, invalidate it
-            if let WirInstr::LocalGet { name: source } = val
+            if let WirInstr::LocalGet { name: source, .. } = val
                 && source == local_name
             {
                 return false;
@@ -236,12 +236,12 @@ fn update_knowledge_from_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>)
                     }
                 }
                 // LocalGet: copy knowledge from source local
-                WirInstr::LocalGet { name: source } => {
+                WirInstr::LocalGet { name: source, .. } => {
                     copy_field_knowledge(known, source, name);
                 }
                 // ValueCopy of a LocalGet: copy knowledge
                 WirInstr::ValueCopy { expr, .. } => {
-                    if let WirInstr::LocalGet { name: source } = expr.as_ref() {
+                    if let WirInstr::LocalGet { name: source, .. } = expr.as_ref() {
                         copy_field_knowledge(known, source, name);
                     }
                 }
@@ -252,7 +252,7 @@ fn update_knowledge_from_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>)
         WirInstr::StructSet {
             field_name, expr, ..
         } => {
-            if let WirInstr::LocalGet { name } = expr.as_ref() {
+            if let WirInstr::LocalGet { name, .. } = expr.as_ref() {
                 known.invalidate_field(name, field_name);
             }
         }
@@ -261,11 +261,11 @@ fn update_knowledge_from_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>)
         WirInstr::Call { args, .. } | WirInstr::CallRef { args, .. } => {
             for arg in args {
                 match arg {
-                    WirInstr::LocalGet { name } => {
+                    WirInstr::LocalGet { name, .. } => {
                         known.invalidate_local(name);
                     }
                     WirInstr::RefAsNonNull(inner) => {
-                        if let WirInstr::LocalGet { name } = inner.as_ref() {
+                        if let WirInstr::LocalGet { name, .. } = inner.as_ref() {
                             known.invalidate_local(name);
                         }
                     }
@@ -343,7 +343,7 @@ fn try_forward_struct_gets(instr: &mut WirInstr, known: &FieldKnowledge<'_>) -> 
     if let WirInstr::StructGet {
         field_name, expr, ..
     } = instr
-        && let WirInstr::LocalGet { name } = expr.as_ref()
+        && let WirInstr::LocalGet { name, .. } = expr.as_ref()
         && let Some(const_val) = known.get(name, field_name)
     {
         *instr = const_val.clone();
@@ -361,7 +361,7 @@ fn extract_block_result_local(body: &[WirInstr]) -> Option<String> {
     let len = body.len();
     if len >= 2
         && let WirInstr::Br { depth: 0 } = &body[len - 1]
-        && let WirInstr::LocalGet { name } = &body[len - 2]
+        && let WirInstr::LocalGet { name, .. } = &body[len - 2]
     {
         return Some(name.clone());
     }
@@ -371,7 +371,7 @@ fn extract_block_result_local(body: &[WirInstr]) -> Option<String> {
     {
         let slen = seq.len();
         if let WirInstr::Br { depth: 0 } = &seq[slen - 1]
-            && let WirInstr::LocalGet { name } = &seq[slen - 2]
+            && let WirInstr::LocalGet { name, .. } = &seq[slen - 2]
         {
             return Some(name.clone());
         }
@@ -505,7 +505,7 @@ fn invalidate_locals_modified_in_instr(instr: &WirInstr, known: &mut FieldKnowle
         WirInstr::StructSet {
             expr, field_name, ..
         } => {
-            if let WirInstr::LocalGet { name } = expr.as_ref() {
+            if let WirInstr::LocalGet { name, .. } = expr.as_ref() {
                 known.invalidate_field(name, field_name);
             }
         }

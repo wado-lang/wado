@@ -115,7 +115,7 @@ fn run() with Stdout {
         String::append_char(__local_1, 32);
         String::append_char(__local_1, 58);
         String::append_char(__local_1, 32);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_1) };
+        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         i32::fmt_decimal(15, __local_2);
         break __tmpl: __local_1;
     });
@@ -126,7 +126,7 @@ fn run() with Stdout {
         String::append_char(__local_3, 32);
         String::append_char(__local_3, 58);
         String::append_char(__local_3, 32);
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
         i32::fmt_decimal(12, __local_4);
         break __tmpl: __local_3;
     });
@@ -137,7 +137,7 @@ fn run() with Stdout {
         String::append_char(__local_5, 32);
         String::append_char(__local_5, 58);
         String::append_char(__local_5, 32);
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         i32::fmt_decimal(24, __local_6);
         break __tmpl: __local_5;
     });
@@ -148,7 +148,7 @@ fn run() with Stdout {
         String::append_char(__local_7, 32);
         String::append_char(__local_7, 58);
         String::append_char(__local_7, 32);
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         i32::fmt_decimal(6, __local_8);
         break __tmpl: __local_7;
     });
@@ -159,7 +159,7 @@ fn run() with Stdout {
         String::append_char(__local_9, 32);
         String::append_char(__local_9, 58);
         String::append_char(__local_9, 32);
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         i32::fmt_decimal(2, __local_10);
         break __tmpl: __local_9;
     });
@@ -373,7 +373,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

@@ -104,28 +104,28 @@ fn run() with Stdout {
     c = Maybe<i32>::Just { discriminant: 0, payload_0: 7 };
     d = Maybe<i32> { 1 };
     e = Maybe<i32> { 1 };
-    if Maybe<i32>^Eq::eq(ref.as_non_null(a), ref.as_non_null(b)) {
+    if Maybe<i32>^Eq::eq(a, b) {
         "core:cli/println"(String { repr: array.new_data<u8>("Just(42) == Just(42)"), used: 20 });
     };
-    if Maybe<i32>^Eq::eq(ref.as_non_null(a), ref.as_non_null(c)) == 0 {
+    if Maybe<i32>^Eq::eq(a, c) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("Just(42) != Just(7)"), used: 19 });
     };
-    if Maybe<i32>^Eq::eq(ref.as_non_null(a), ref.as_non_null(d)) == 0 {
+    if Maybe<i32>^Eq::eq(a, d) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("Just(42) != Nothing"), used: 19 });
     };
-    if Maybe<i32>^Eq::eq(ref.as_non_null(d), ref.as_non_null(e)) {
+    if Maybe<i32>^Eq::eq(d, e) {
         "core:cli/println"(String { repr: array.new_data<u8>("Nothing == Nothing"), used: 18 });
     };
-    if Maybe<i32>^Eq::eq(ref.as_non_null(a), ref.as_non_null(c)) == 0 {
+    if Maybe<i32>^Eq::eq(a, c) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("!= works"), used: 8 });
     };
     x = Option<i32>::Some { discriminant: 0, payload_0: 10 };
     y = Option<i32>::Some { discriminant: 0, payload_0: 10 };
     z = Option<i32> { 1 };
-    if Option<i32>^Eq::eq(ref.as_non_null(x), ref.as_non_null(y)) {
+    if Option<i32>^Eq::eq(x, y) {
         "core:cli/println"(String { repr: array.new_data<u8>("Some(10) == Some(10)"), used: 20 });
     };
-    if Option<i32>^Eq::eq(ref.as_non_null(x), ref.as_non_null(z)) == 0 {
+    if Option<i32>^Eq::eq(x, z) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("Some(10) != None"), used: 16 });
     };
 }

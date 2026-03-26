@@ -208,11 +208,11 @@ fn run() with Stdout {
     };
     ser = JsonSerializer { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
     shape = Shape::Circle { discriminant: 0, payload_0: 5 };
-    drop(Shape^Serialize::serialize<JsonSerializer>(ref.as_non_null(shape), ser));
+    drop(Shape^Serialize::serialize<JsonSerializer>(shape, ser));
     "core:cli/println"(ser.buf);
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
     shape2 = Shape { 1 };
-    drop(Shape^Serialize::serialize<JsonSerializer>(ref.as_non_null(shape2), ser));
+    drop(Shape^Serialize::serialize<JsonSerializer>(shape2, ser));
     "core:cli/println"(ser.buf);
 }
 
@@ -1229,7 +1229,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn f64::fmt_into(self, f) {
@@ -1415,7 +1415,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::append_byte_filled(self, byte, n) {
@@ -1457,7 +1457,7 @@ fn String::concat(a, b) {
     repr = builtin::array_new<u8>(total);
     builtin::array_copy<u8>(repr, 0, a.repr, 0, len_a);
     builtin::array_copy<u8>(repr, len_a, b.repr, 0, len_b);
-    return String { repr: ref.as_non_null(repr), used: total };
+    return String { repr: repr, used: total };
 }
 
 fn JsonSerializer^Serializer::serialize_f64(self, v) {
@@ -1465,7 +1465,7 @@ fn JsonSerializer^Serializer::serialize_f64(self, v) {
     let __local_3: ref Formatter;
     String::append(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_2) };
+        __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         f64::fmt_into(v, __local_3);
         break __tmpl: __local_2;
     });
@@ -1486,7 +1486,7 @@ fn JsonSerializer^Serializer::serialize_unit_variant(self, type_name, variant_na
 
 fn JsonSerializer^Serializer::begin_variant(self, type_name, variant_name, disc) {
     String::append(self.buf, String::concat(String::concat(String::concat(String { repr: array.new_data<u8>("{\""), used: 2 }, variant_name), String { repr: array.new_data<u8>("\""), used: 1 }), String { repr: array.new_data<u8>(":"), used: 1 }));
-    return Result<JsonVariantSerializer,SerializeError>::Ok { discriminant: 0, payload_0: JsonVariantSerializer { ser: ref.as_non_null(self) } };
+    return Result<JsonVariantSerializer,SerializeError>::Ok { discriminant: 0, payload_0: JsonVariantSerializer { ser: self } };
 }
 
 fn Shape^Serialize::serialize<JsonSerializer>(self, s) {

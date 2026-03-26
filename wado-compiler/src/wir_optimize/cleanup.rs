@@ -31,7 +31,7 @@ fn eliminate_dead_locals(body: &mut [WirInstr]) {
 
 fn collect_local_uses(instr: &WirInstr, used: &mut IndexSet<String>) {
     match instr {
-        WirInstr::LocalGet { name } => {
+        WirInstr::LocalGet { name, .. } => {
             used.insert(name.clone());
         }
         WirInstr::LocalSet { name, value } => {
@@ -143,7 +143,9 @@ fn cleanup_instr(instr: &mut WirInstr) {
             instr.for_each_boxed_child_mut(&mut |child| cleanup_instr(child));
         }
     }
-    // Elide redundant RefAsNonNull wrapping a non-null-producing instruction.
+    // Elide redundant RefAsNonNull when the inner expression is already non-null.
+    // `is_nonnull_result()` checks result_ty on LocalGet/GlobalGet/StructGet/ArrayGet,
+    // as well as StructNew/ArrayNew/etc.
     if let WirInstr::RefAsNonNull(inner) = instr
         && inner.is_nonnull_result()
     {

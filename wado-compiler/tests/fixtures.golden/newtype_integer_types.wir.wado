@@ -134,7 +134,7 @@ fn run() with Stdout {
         String::append_char(__local_6, 114);
         String::append_char(__local_6, 58);
         String::append_char(__local_6, 32);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         __local_24 = __local_7;
         i32::fmt_decimal(42, __local_24);
         __local_30 = String { repr: array.new_data<u8>(" as UserId"), used: 10 };
@@ -149,7 +149,7 @@ fn run() with Stdout {
         String::append_char(__local_8, 101);
         String::append_char(__local_8, 58);
         String::append_char(__local_8, 32);
-        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+        __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
         __local_36 = __local_9;
         i64::fmt_decimal(1706500000_i64, __local_36);
         __local_42 = String { repr: array.new_data<u8>(" as Timestamp"), used: 13 };
@@ -165,7 +165,7 @@ fn run() with Stdout {
         String::append_char(__local_10, 116);
         String::append_char(__local_10, 58);
         String::append_char(__local_10, 32);
-        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         __local_48 = __local_11;
         u32::fmt_decimal(100, __local_48);
         __local_54 = String { repr: array.new_data<u8>(" as Count"), used: 9 };
@@ -175,7 +175,7 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_12 = String { repr: builtin::array_new<u8>(27), used: 0 };
         String::append(__local_12, String { repr: array.new_data<u8>("next_user: "), used: 11 });
-        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
         __local_60 = __local_13;
         i32::fmt_decimal(43, __local_60);
         __local_66 = String { repr: array.new_data<u8>(" as UserId"), used: 10 };
@@ -191,7 +191,7 @@ fn run() with Stdout {
         String::append_char(__local_14, 114);
         String::append_char(__local_14, 58);
         String::append_char(__local_14, 32);
-        __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_14) };
+        __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
         __local_72 = __local_15;
         i64::fmt_decimal(1706501000_i64, __local_72);
         __local_78 = String { repr: array.new_data<u8>(" as Timestamp"), used: 13 };
@@ -206,7 +206,7 @@ fn run() with Stdout {
         String::append_char(__local_16, 101);
         String::append_char(__local_16, 58);
         String::append_char(__local_16, 32);
-        __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_16) };
+        __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
         __local_84 = __local_17;
         u32::fmt_decimal(150, __local_84);
         __local_90 = String { repr: array.new_data<u8>(" as Count"), used: 9 };
@@ -482,7 +482,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

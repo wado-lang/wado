@@ -182,7 +182,7 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(31), used: 0 };
         String::append(__local_7, String { repr: array.new_data<u8>("sum of meters: "), used: 15 });
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         __local_20 = __local_8;
         f64::inspect_into(1500, __local_20);
         __local_24 = String { repr: array.new_data<u8>(" as Meters"), used: 10 };
@@ -197,7 +197,7 @@ fn run() with Stdout {
         String::append_char(__local_9, 119);
         String::append_char(__local_9, 58);
         String::append_char(__local_9, 32);
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         f64::fmt_into(raw, __local_10);
         break __tmpl: __local_9;
     });
@@ -205,7 +205,7 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(26), used: 0 };
         String::append(__local_11, String { repr: array.new_data<u8>("from_raw: "), used: 10 });
-        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
+        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
         __local_34 = __local_12;
         f64::inspect_into(from_raw, __local_34);
         __local_38 = String { repr: array.new_data<u8>(" as Meters"), used: 10 };
@@ -216,7 +216,7 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_13 = String { repr: builtin::array_new<u8>(27), used: 0 };
         String::append(__local_13, String { repr: array.new_data<u8>("km_from_m: "), used: 11 });
-        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
+        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
         __local_44 = __local_14;
         f64::inspect_into(km_from_m, __local_44);
         __local_48 = String { repr: array.new_data<u8>(" as Kilometers"), used: 14 };
@@ -1324,7 +1324,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn f64::fmt_into(self, f) {
@@ -1591,7 +1591,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::append_byte_filled(self, byte, n) {

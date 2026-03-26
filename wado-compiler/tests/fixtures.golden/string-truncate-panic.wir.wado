@@ -316,7 +316,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -405,7 +405,7 @@ fn String::truncate_bytes(self, byte_len) {
             String::append_char(__local_10, 32);
             String::append(__local_10, String { repr: array.new_data<u8>("core:prelude/string.wado"), used: 24 });
             String::append_char(__local_10, 58);
-            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             __local_17 = __local_11;
             i32::fmt_decimal(357, __local_17);
             String::append_char(__local_10, 58);
@@ -415,7 +415,7 @@ fn String::truncate_bytes(self, byte_len) {
 condition: byte_len >= 0
 "), used: 26 });
             String::append(__local_10, String { repr: array.new_data<u8>("byte_len: "), used: 10 });
-            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             __local_22 = __local_11;
             i32::fmt_decimal(byte_len, __local_22);
             String::append_char(__local_10, 10);
@@ -443,7 +443,7 @@ condition: byte_len >= 0
                 String::append_char(__local_12, 32);
                 String::append(__local_12, String { repr: array.new_data<u8>("core:prelude/string.wado"), used: 24 });
                 String::append_char(__local_12, 58);
-                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                 __local_28 = __local_13;
                 i32::fmt_decimal(362, __local_28);
                 String::append_char(__local_12, 58);
@@ -455,12 +455,12 @@ condition: b < 0x80 || b >= 0xC0
                 String::append_char(__local_12, 98);
                 String::append_char(__local_12, 58);
                 String::append_char(__local_12, 32);
-                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                 __local_33 = __local_13;
                 i32::fmt_decimal(b, __local_33);
                 String::append_char(__local_12, 10);
                 String::append(__local_12, String { repr: array.new_data<u8>("b < 0x80: "), used: 10 });
-                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                 __local_38 = __local_13;
                 Formatter::pad(__local_38, if __v1 -> ref String {
                     String { repr: array.new_data<u8>("true"), used: 4 };
@@ -471,12 +471,12 @@ condition: b < 0x80 || b >= 0xC0
                 String::append_char(__local_12, 98);
                 String::append_char(__local_12, 58);
                 String::append_char(__local_12, 32);
-                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                 __local_43 = __local_13;
                 i32::fmt_decimal(b, __local_43);
                 String::append_char(__local_12, 10);
                 String::append(__local_12, String { repr: array.new_data<u8>("b >= 0xC0: "), used: 11 });
-                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                 __local_48 = __local_13;
                 Formatter::pad(__local_48, if __v3 -> ref String {
                     String { repr: array.new_data<u8>("true"), used: 4 };

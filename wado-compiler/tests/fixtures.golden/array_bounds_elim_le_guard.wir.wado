@@ -120,7 +120,7 @@ fn run() with Stdout {
     arr = __inline_Array_i32___filled_2: block -> ref Array<i32> {
         __local_10 = builtin::array_new<i32>(11);
         builtin::array_fill<i32>(__local_10, 0, 0, 11);
-        break __inline_Array_i32___filled_2: Array<i32> { repr: ref.as_non_null(__local_10), used: 11 };
+        break __inline_Array_i32___filled_2: Array<i32> { repr: __local_10, used: 11 };
     };
     __for_0: block {
         i_2 = 0;
@@ -158,7 +158,7 @@ fn run() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         i32::fmt_decimal(sum, __local_6);
         break __tmpl: __local_5;
     });
@@ -372,7 +372,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

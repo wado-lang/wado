@@ -156,7 +156,7 @@ fn run() with Stdout {
         __local_3 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append_char(__local_3, 97);
         String::append_char(__local_3, 61);
-        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_3) };
+        __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
         u128::fmt_decimal(__sroa_b_a, __local_4);
         break __tmpl: __local_3;
     });
@@ -164,7 +164,7 @@ fn run() with Stdout {
         __local_5 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append_char(__local_5, 98);
         String::append_char(__local_5, 61);
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         i128::fmt_decimal(__sroa_b_b, __local_6);
         break __tmpl: __local_5;
     });
@@ -174,7 +174,7 @@ fn run() with Stdout {
         __local_7 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append_char(__local_7, 120);
         String::append_char(__local_7, 61);
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         u128::fmt_decimal(x, __local_8);
         break __tmpl: __local_7;
     });
@@ -182,7 +182,7 @@ fn run() with Stdout {
         __local_9 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append_char(__local_9, 121);
         String::append_char(__local_9, 61);
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         i128::fmt_decimal(y, __local_10);
         break __tmpl: __local_9;
     });
@@ -361,7 +361,7 @@ fn u128::div_rem(self, divisor) {
         unreachable;
     };
     if u128^Ord::cmp(self, divisor) == 0 {
-        return "tuple/[u128, u128]" { 0: u128 { low: 0_i64, high: 0_i64 }, 1: ref.as_non_null(self) };
+        return "tuple/[u128, u128]" { 0: u128 { low: 0_i64, high: 0_i64 }, 1: self };
     };
     if __inline_u128_Eq__eq_1: block -> bool {
         __local_7 = self;
@@ -396,7 +396,7 @@ fn u128::div_rem(self, divisor) {
             continue l13;
         };
     };
-    return "tuple/[u128, u128]" { 0: ref.as_non_null(quotient), 1: ref.as_non_null(remainder) };
+    return "tuple/[u128, u128]" { 0: quotient, 1: remainder };
 }
 
 fn u128::get_bit(self, i) {
@@ -686,7 +686,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
