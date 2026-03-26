@@ -85,7 +85,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | FieldScalarize  | `optimize/field_scalarize.rs`        | Hot field scalarization from GC structs                     |
 | BlockFusion     | `optimize/labeled_block_fusion.rs`   | Labeled block fusion                                        |
 | StoreLoadFwd    | `optimize/store_load_forward.rs`     | Store-load forwarding for literal values                    |
-| CondImplication | `optimize/condition_implication.rs`   | Condition implication from dominating guards                 |
+| CondImplication | `optimize/condition_implication.rs`  | Condition implication from dominating guards                |
 | TmplHoist       | `optimize/tmpl_hoist.rs`             | Template buffer hoisting out of loops                       |
 | ComponentPlan   | `wir_build/component_plan.rs`        | `ComponentPlan` types and `build_component_plan`            |
 | Stdlib          | `stdlib.rs`                          | Embedded core library sources                               |
