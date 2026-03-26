@@ -2359,7 +2359,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Register field info so field access works
         let field_info = super::types::StructFieldInfo {
-            module_source: module_source,
+            module_source,
             fields: resolved_fields
                 .iter()
                 .map(|f| (f.name.clone(), f.value.type_id, true))
