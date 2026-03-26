@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774557750607,
+  "lastUpdate": 1774558490246,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7823,6 +7823,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8bdae8133119a5ec85d98a41f3fef5734ef283a9"
         },
         "date": 1774557750393,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "733d7924efa8f4c9e3275c817b78369526791c50",
+          "message": "Merge pull request #704 from wado-lang/claude/refactor-wasm-plan-Uujgu\n\nMove ComponentPlan to wir_build module",
+          "timestamp": "2026-03-27T05:52:20+09:00",
+          "tree_id": "e2ce9c9bc291b045a2349c0c79340259707ab2c7",
+          "url": "https://github.com/wado-lang/wado/commit/733d7924efa8f4c9e3275c817b78369526791c50"
+        },
+        "date": 1774558490161,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
