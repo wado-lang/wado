@@ -54,22 +54,22 @@ mise run update-gale-golden
 
 ### Test Grammars (`tests/grammars/`)
 
-| File | Language | Notes |
-| --- | --- | --- |
-| `JSON.g4` | JSON | Combined grammar. Clean (no actions). |
-| `sexpression.g4` | S-expression | Combined grammar. Clean. |
-| `calculator.g4` | Calculator | Combined grammar. Clean. |
-| `SQLite.g4` | SQLite | Combined grammar. Large, clean. |
-| `css3Lexer.g4` | CSS3 | Split lexer. Clean. |
-| `css3Parser.g4` | CSS3 | Split parser. Clean. |
-| `HTMLLexer.g4` | HTML | Split lexer. Clean. |
-| `HTMLParser.g4` | HTML | Split parser. Clean. |
-| `ANTLRv4Lexer.g4` | ANTLR4 | Split lexer. Has action blocks and `superClass`. |
-| `ANTLRv4Parser.g4` | ANTLR4 | Split parser. Clean. |
-| `RustLexer.g4` | Rust | Split lexer. Has semantic predicates and `superClass`. |
-| `RustParser.g4` | Rust | Split parser. Has semantic predicates and `superClass`. |
-| `TypeScriptLexer.g4` | TypeScript | Split lexer. Has semantic predicates and `superClass`. |
-| `TypeScriptParser.g4` | TypeScript | Split parser. Has many semantic predicates and `superClass`. |
+| File                  | Language     | Notes                                                        |
+| --------------------- | ------------ | ------------------------------------------------------------ |
+| `JSON.g4`             | JSON         | Combined grammar. Clean (no actions).                        |
+| `sexpression.g4`      | S-expression | Combined grammar. Clean.                                     |
+| `calculator.g4`       | Calculator   | Combined grammar. Clean.                                     |
+| `SQLite.g4`           | SQLite       | Combined grammar. Large, clean.                              |
+| `css3Lexer.g4`        | CSS3         | Split lexer. Clean.                                          |
+| `css3Parser.g4`       | CSS3         | Split parser. Clean.                                         |
+| `HTMLLexer.g4`        | HTML         | Split lexer. Clean.                                          |
+| `HTMLParser.g4`       | HTML         | Split parser. Clean.                                         |
+| `ANTLRv4Lexer.g4`     | ANTLR4       | Split lexer. Has action blocks and `superClass`.             |
+| `ANTLRv4Parser.g4`    | ANTLR4       | Split parser. Clean.                                         |
+| `RustLexer.g4`        | Rust         | Split lexer. Has semantic predicates and `superClass`.       |
+| `RustParser.g4`       | Rust         | Split parser. Has semantic predicates and `superClass`.      |
+| `TypeScriptLexer.g4`  | TypeScript   | Split lexer. Has semantic predicates and `superClass`.       |
+| `TypeScriptParser.g4` | TypeScript   | Split parser. Has many semantic predicates and `superClass`. |
 
 **Clean** grammars (JSON, sexpression, calculator, SQLite, CSS3, HTML) contain no target-language-dependent elements and should be fully parseable and code-generatable.
 

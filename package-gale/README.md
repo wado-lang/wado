@@ -61,6 +61,7 @@ package-gale/
       parser_test.wado
       integration_test.wado — parse real-world .g4 grammars
 ```
+
 ## Related WEPs
 
 - [WEP: Gale](../docs/wep-2026-03-02-gale.md) — full design and architecture
