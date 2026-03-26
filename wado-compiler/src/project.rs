@@ -14,7 +14,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{FunctionId, ModuleSource};
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
-use crate::wasm_plan::ComponentPlan;
+use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
 
 /// A Wado project ready for code generation.
@@ -67,7 +67,7 @@ pub struct Project {
     /// Used by `optimize_dce` to override the builtin registry's single-`i32` signature.
     pub task_return_flat_params: Option<Vec<TypeId>>,
 
-    /// Component Model structure plan. Populated by the `wasm_plan` phase.
+    /// Component Model structure plan. Populated by `wir_build::plan_project`.
     pub component_plan: Option<ComponentPlan>,
 }
 

@@ -1,10 +1,7 @@
-//! Wasm plan — Component Model planning types and builder.
+//! Component Model planning types and builder.
 //!
-//! Contains `ComponentPlan` and related structs used by `wir_build` and `codegen`.
-//! The planning logic (formerly the standalone `wasm_plan` pipeline phase) now runs
-//! inside `wir_build::plan_project`, called at the start of the WIR pipeline.
-//!
-//! Type-ordering utilities (topological sort) have moved to `wir_build::types`.
+//! Contains `ComponentPlan` and related structs that describe the Component Model
+//! structure. Built by `wir_build::plan_project`, consumed by `codegen`.
 
 use crate::ast::Type;
 use crate::project::Project;
@@ -12,7 +9,7 @@ use crate::world_registry::WorldExportInfo;
 
 /// Plan for the Component Model structure.
 ///
-/// Computed by `wasm_plan`, consumed by codegen. Contains all the structural
+/// Computed by `wir_build::component_plan`, consumed by codegen. Contains all the structural
 /// decisions about what the component needs, so codegen can focus on encoding.
 ///
 /// Canonical intrinsics (e.g., "stream-read", "task-return") are NOT stored here.

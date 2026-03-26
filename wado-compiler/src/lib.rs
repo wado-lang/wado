@@ -30,7 +30,6 @@ pub mod tir;
 pub mod tir_visitor;
 pub mod token;
 pub mod unparse;
-pub mod wasm_plan;
 pub mod wir;
 pub mod wir_build;
 pub mod wir_optimize;
