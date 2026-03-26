@@ -44,12 +44,6 @@ pub(super) fn optimize_nullable_refs(module: &mut WirModule) {
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
             transform_body(body, &module.types, &vci, &nullable_map);
-            // Sync LocalGet.result_ty from DeclareLocal types. The WIR builder sets
-            // result_ty via local_wir_type() which uses an off-by-N index into
-            // tir_func.local_types, producing stale/wrong types for non-param locals.
-            // After NullableRef updates DeclareLocal types correctly, this fixes the
-            // discrepancy so is_nonnull_result() sees accurate types.
-            sync_local_get_types(body);
         }
     }
 
@@ -252,64 +246,6 @@ fn transform_body(
 ) {
     for instr in body.iter_mut() {
         transform_instr(instr, types, vci, nullable_map);
-    }
-}
-
-/// Synchronize `result_ty` in all `LocalGet` instructions with the corresponding `DeclareLocal`.
-///
-/// `local_wir_type()` in `translate.rs` uses relative indexing into `tir_func.local_types`
-/// (subtracting `param_count`), but `local_types` stores entries for all locals including
-/// params. This off-by-N mismatch causes `LocalGet.result_ty` to reflect the wrong TIR type.
-/// After `NullableRef` transforms `DeclareLocal` types correctly, this pass re-derives
-/// `result_ty` from the (now correct) `DeclareLocal` declarations.
-fn sync_local_get_types(body: &mut [WirInstr]) {
-    let mut local_types: IndexMap<String, WirType> = IndexMap::default();
-    for instr in body.iter() {
-        if let WirInstr::DeclareLocal { name, ty } = instr {
-            local_types.insert(name.clone(), ty.clone());
-        }
-    }
-    if local_types.is_empty() {
-        return;
-    }
-    for instr in body.iter_mut() {
-        sync_local_get_in_instr(instr, &local_types);
-    }
-}
-
-fn sync_local_get_in_instr(instr: &mut WirInstr, local_types: &IndexMap<String, WirType>) {
-    match instr {
-        WirInstr::LocalGet { name, result_ty } => {
-            if let Some(ty) = local_types.get(name.as_str()) {
-                *result_ty = ty.clone();
-            }
-        }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            for child in body.iter_mut() {
-                sync_local_get_in_instr(child, local_types);
-            }
-        }
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            sync_local_get_in_instr(condition, local_types);
-            for child in then_body.iter_mut() {
-                sync_local_get_in_instr(child, local_types);
-            }
-            if let Some(eb) = else_body {
-                for child in eb.iter_mut() {
-                    sync_local_get_in_instr(child, local_types);
-                }
-            }
-        }
-        _ => {
-            instr.for_each_boxed_child_mut(&mut |child| {
-                sync_local_get_in_instr(child, local_types);
-            });
-        }
     }
 }
 

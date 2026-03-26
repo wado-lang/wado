@@ -2448,7 +2448,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -2619,7 +2619,7 @@ fn Array<Fn<1,i32>>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Array<i32>::append(self, value) {
@@ -2661,7 +2661,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn ArrayIter<i32>^Iterator::next(self) {
@@ -2682,15 +2682,15 @@ fn __Closure_5::__call(self) {
     let __local_41: ref Formatter;
     return __tmpl: block -> ref String {
         __local_26 = String { repr: builtin::array_new<u8>(50), used: 0 };
-        __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_26) };
+        __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_26 };
         __local_31 = __local_27;
         i32::fmt_decimal(self.__capture_0, __local_31);
         String::append_char(__local_26, 44);
-        __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_26) };
+        __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_26 };
         __local_36 = __local_27;
         i32::fmt_decimal(self.__capture_1, __local_36);
         String::append_char(__local_26, 44);
-        __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_26) };
+        __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_26 };
         __local_41 = __local_27;
         i32::fmt_decimal(self.__capture_2, __local_41);
         break __tmpl: __local_26;

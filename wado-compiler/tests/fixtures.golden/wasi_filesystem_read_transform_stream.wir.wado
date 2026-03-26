@@ -466,7 +466,7 @@ fn "core:internal/cm_stream_read_u8"(handle, max) {  // from core:internal
     count = result >> 4;
     arr = "core:internal/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
-    return Array<u8> { repr: ref.as_non_null(arr), used: count };
+    return Array<u8> { repr: arr, used: count };
 }
 
 fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
@@ -552,7 +552,7 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Array<u8>::append(self, value) {
@@ -594,7 +594,7 @@ fn Array<u8>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 export fn __cm_export__run as "run"

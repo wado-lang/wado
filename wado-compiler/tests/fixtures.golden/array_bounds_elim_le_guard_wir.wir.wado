@@ -118,7 +118,7 @@ fn sum_le(limit) {
         __local_4 = limit + 1;
         __local_6 = builtin::array_new<i32>(__local_4);
         builtin::array_fill<i32>(__local_6, 0, 1, __local_4);
-        break __inline_Array_i32___filled_0: Array<i32> { repr: ref.as_non_null(__local_6), used: __local_4 };
+        break __inline_Array_i32___filled_0: Array<i32> { repr: __local_6, used: __local_4 };
     };
     sum = 0;
     __for_0: block {
@@ -360,7 +360,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

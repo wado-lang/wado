@@ -6798,7 +6798,7 @@ fn fixed_width(f, n) {
             String::append_char(__local_13, 32);
             String::append(__local_13, String { repr: array.new_data<u8>("core:prelude/fpfmt.wado"), used: 23 });
             String::append_char(__local_13, 58);
-            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
+            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
             __local_18 = __local_14;
             i32::fmt_decimal(289, __local_18);
             String::append_char(__local_13, 58);
@@ -6810,7 +6810,7 @@ condition: n <= 18
             String::append_char(__local_13, 110);
             String::append_char(__local_13, 58);
             String::append_char(__local_13, 32);
-            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
+            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
             __local_23 = __local_14;
             i32::fmt_decimal(n, __local_23);
             String::append_char(__local_13, 10);
@@ -7879,7 +7879,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn u128::fmt_base(self, f, base, upper, prefix) {
@@ -8772,7 +8772,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {

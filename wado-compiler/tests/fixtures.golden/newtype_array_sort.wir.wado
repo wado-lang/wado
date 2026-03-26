@@ -502,7 +502,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -566,7 +566,7 @@ fn Array<i32>::sorted(self) {
     n = self.used;
     new_repr = builtin::array_new<i32>(n);
     builtin::array_copy<i32>(new_repr, 0, self.repr, 0, n);
-    copy = Array<i32> { repr: ref.as_non_null(new_repr), used: n };
+    copy = Array<i32> { repr: new_repr, used: n };
     Array<i32>::sort_by$__Closure_0(copy, __Closure_0 {  });
     return copy;
 }
@@ -610,7 +610,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Array<i32>::sort_by$__Closure_0(self, cmp) {

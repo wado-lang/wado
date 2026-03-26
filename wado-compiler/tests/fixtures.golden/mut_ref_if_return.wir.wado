@@ -286,7 +286,7 @@ fn parse_root(p) {
             String::append(__local_8, __tmpl: block -> ref String {
                 __local_6 = String { repr: builtin::array_new<u8>(40), used: 0 };
                 String::append(__local_6, String { repr: array.new_data<u8>("expected pos=1, got pos="), used: 24 });
-                __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
+                __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
                 i32::fmt_decimal(p.pos, __local_7);
                 break __tmpl: __local_6;
             });
@@ -551,7 +551,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -689,7 +689,7 @@ fn Array<Token>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Formatter::write_char_n(self, c, n) {

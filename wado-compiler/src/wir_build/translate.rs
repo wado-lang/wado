@@ -349,8 +349,9 @@ impl FunctionTranslator<'_, '_> {
             let type_id = self.tir_func.params[index as usize].type_id;
             self.wir_type(type_id)
         } else if !self.tir_func.local_types.is_empty() {
-            let local_idx = index as usize - param_count;
-            if let Some(&type_id) = self.tir_func.local_types.get(local_idx) {
+            // local_types is indexed absolutely (entries 0..param_count are params,
+            // entries param_count.. are non-param locals), matching DeclareLocal generation.
+            if let Some(&type_id) = self.tir_func.local_types.get(index as usize) {
                 self.wir_type(type_id)
             } else {
                 WirType::I32

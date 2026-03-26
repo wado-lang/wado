@@ -2489,7 +2489,7 @@ fn Array<u64>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -2695,7 +2695,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -2749,7 +2749,7 @@ fn String::concat(a, b) {
     repr = builtin::array_new<u8>(total);
     builtin::array_copy<u8>(repr, 0, a.repr, 0, len_a);
     builtin::array_copy<u8>(repr, len_a, b.repr, 0, len_b);
-    return String { repr: ref.as_non_null(repr), used: total };
+    return String { repr: repr, used: total };
 }
 
 fn String^Eq::eq(self, other) {
@@ -2923,7 +2923,7 @@ fn Array<i32>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Array<String>::append(self, value) {
@@ -2965,7 +2965,7 @@ fn Array<String>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Formatter::write_char_n(self, c, n) {
