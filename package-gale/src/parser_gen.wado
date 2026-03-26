@@ -323,11 +323,38 @@ fn gen_alt_elements(
                 } else {
                     gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
                 }
+            } else if rep.non_greedy {
+                let follow = first_of_elements_from(elements, i + 1, all_rules, lit_tokens);
+                let follow_second = compute_follow_second(elements, i + 1, all_rules, lit_tokens);
+                gen_repeat_non_greedy(w, &rep, all_rules, lit_tokens, &follow, &follow_second, &mut name_counts);
             } else {
                 gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
             }
         } else {
             gen_element(w, elem, all_rules, lit_tokens, true, &mut name_counts);
+        }
+    }
+}
+
+fn gen_elements_with_non_greedy(
+    w: &mut CodeWriter,
+    elements: &Array<Element>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    name_counts: &mut Array<[String, i32]>,
+) {
+    for let mut i = 0; i < elements.len(); i += 1 {
+        let elem = &elements[i];
+        if let Repeat(rep) = *elem {
+            if rep.non_greedy {
+                let follow = first_of_elements_from(elements, i + 1, all_rules, lit_tokens);
+                let follow_second = compute_follow_second(elements, i + 1, all_rules, lit_tokens);
+                gen_repeat_non_greedy(w, &rep, all_rules, lit_tokens, &follow, &follow_second, name_counts);
+            } else {
+                gen_element(w, elem, all_rules, lit_tokens, false, name_counts);
+            }
+        } else {
+            gen_element(w, elem, all_rules, lit_tokens, false, name_counts);
         }
     }
 }
@@ -456,6 +483,135 @@ fn gen_repeat(
             gen_optional_with_backtrack(w, inner, all_rules, lit_tokens, &first, name_counts);
         }
     }
+}
+
+fn compute_follow_second(
+    elements: &Array<Element>,
+    follow_start: i32,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> Array<String> {
+    // Compute first set of the 2nd token of the follow element.
+    // For patterns like (',' table_constraint)*, the follow's inner group is [',' table_constraint].
+    // We want first(table_constraint), not first(',').
+    if follow_start >= elements.len() { return []; }
+    let follow_elem = &elements[follow_start];
+    if let Repeat(rep) = *follow_elem {
+        if let Group(alts) = rep.element {
+            if alts.len() == 1 && alts[0].elements.len() >= 2 {
+                return first_of_elements_from(&alts[0].elements, 1, all_rules, lit_tokens);
+            }
+        }
+    }
+    return [];
+}
+
+fn compute_non_greedy_condition(
+    inner: &Element,
+    follow_first: &Array<String>,
+    follow_second: &Array<String>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> String {
+    let mut visiting: Array<String> = [];
+    let raw_first = first_of_element(inner, all_rules, lit_tokens, &mut visiting);
+    let continue_first = subtract_sets(&raw_first, follow_first);
+
+    if continue_first.len() > 0 {
+        // Check if the subtracted set is still very broad (inner matches almost anything).
+        // For cases like `name+?` where name matches all keywords, lookahead can't
+        // distinguish names from constraint keywords. Use minimum match (don't loop).
+        let mut visiting2: Array<String> = [];
+        let inner_first_full = first_of_element(inner, all_rules, lit_tokens, &mut visiting2);
+        if continue_first.len() > 20 && inner_first_full.len() > 20 {
+            // Very broad first set — match minimum (1 for +?, 0 for *?)
+            return "false";
+        }
+        return first_check_str(&continue_first);
+    }
+
+    // First sets completely overlap (e.g. both start with ',').
+    // Use 2-token lookahead with follow_second to disambiguate.
+    // For (',' column_def)*? followed by (',' table_constraint)*:
+    //   peek(0) == ',' for both, peek(1) distinguishes column_def from table_constraint.
+    if let Group(alts) = *inner {
+        if alts.len() == 1 && alts[0].elements.len() >= 2 && follow_second.len() > 0 {
+            let inner_second_first = first_of_elements_from(&alts[0].elements, 1, all_rules, lit_tokens);
+            let second_continue = subtract_sets(&inner_second_first, follow_second);
+            if second_continue.len() > 0 {
+                let peek0_cond = first_check_str(&raw_first);
+                let peek1_cond = kind_check_str(&second_continue, "p.peek_at(1)");
+                return `({peek0_cond}) && ({peek1_cond})`;
+            }
+        }
+    }
+
+    // Fallback: can't disambiguate, don't loop (match minimum)
+    return "false";
+}
+
+fn gen_repeat_non_greedy(
+    w: &mut CodeWriter,
+    rep: &RepeatElement,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    follow_first: &Array<String>,
+    follow_second: &Array<String>,
+    name_counts: &mut Array<[String, i32]>,
+) {
+    let inner = &rep.element;
+    let is_plus = if let Plus = rep.kind { true } else { false };
+    let while_cond = compute_non_greedy_condition(inner, follow_first, follow_second, all_rules, lit_tokens);
+
+    if has_field(inner) {
+        let field_info = element_field_info(inner);
+        if is_plus {
+            let mut nc: Array<[String, i32]> = [];
+            gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+            let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
+            w.line(`let mut {list_name}: Array<{field_info.1}> = [{field_info.0}];`);
+            if while_cond != "false" {
+                w.begin(`while {while_cond}`);
+                let mut nc2: Array<[String, i32]> = [];
+                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc2);
+                w.line(`{list_name}.append({field_info.0});`);
+                w.end();
+            }
+        } else {
+            let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
+            w.line(`let mut {list_name}: Array<{field_info.1}> = [];`);
+            if while_cond != "false" {
+                w.begin(`while {while_cond}`);
+                let mut nc: Array<[String, i32]> = [];
+                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+                w.line(`{list_name}.append({field_info.0});`);
+                w.end();
+            }
+        }
+    } else {
+        if is_plus {
+            gen_element(w, inner, all_rules, lit_tokens, false, name_counts);
+        }
+        if while_cond != "false" {
+            w.begin(`while {while_cond}`);
+            let mut nc: Array<[String, i32]> = [];
+            gen_element(w, inner, all_rules, lit_tokens, false, &mut nc);
+            w.end();
+        }
+    }
+}
+
+fn union_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let mut i = 0; i < a.len(); i += 1 {
+        result.append(a[i]);
+    }
+    for let mut i = 0; i < b.len(); i += 1 {
+        if !array_contains_str(&result, &b[i]) {
+            result.append(b[i]);
+        }
+    }
+    return result;
 }
 
 fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
@@ -854,9 +1010,7 @@ fn gen_consume_group(
 ) {
     if alts.len() == 0 { return; }
     if alts.len() == 1 {
-        for let elem of alts[0].elements {
-            gen_element(w, &elem, all_rules, lit_tokens, false, name_counts);
-        }
+        gen_elements_with_non_greedy(w, &alts[0].elements, all_rules, lit_tokens, name_counts);
         return;
     }
 
@@ -891,10 +1045,7 @@ fn gen_consume_group(
 
         if group.len() == 1 {
             let alt_idx = group[0];
-            let mut nc: Array<[String, i32]> = [];
-            for let elem of alts[alt_idx].elements {
-                gen_element(w, &elem, all_rules, lit_tokens, false, &mut nc);
-            }
+            gen_elements_with_non_greedy(w, &alts[alt_idx].elements, all_rules, lit_tokens, name_counts);
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_element_count(&mut sorted_group, alts);
