@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774527945317,
+  "lastUpdate": 1774528403585,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7667,6 +7667,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f2950ea18db85f8862000647d5170a202cce7290"
         },
         "date": 1774527945116,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1ff0f5c78477fdfc0edb9fe94c4552c7eb0c1cce",
+          "message": "Merge pull request #700 from wado-lang/claude/increase-alert-thresholds-Vbw5q\n\nIncrease benchmark alert threshold from 130% to 150%",
+          "timestamp": "2026-03-26T21:31:00+09:00",
+          "tree_id": "d7a88412552ea47f87af2a607c6b5f154b6cf336",
+          "url": "https://github.com/wado-lang/wado/commit/1ff0f5c78477fdfc0edb9fe94c4552c7eb0c1cce"
+        },
+        "date": 1774528403381,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
