@@ -7,8 +7,8 @@ use crate::ast::{self, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern,
-    TirStmt, TirStmtKind, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -2018,23 +2018,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // Handle implicit struct literals (name is None)
+        // Handle implicit struct literals (name is None) — anonymous struct inference
         let Some(name) = &struct_lit.name else {
-            // Implicit struct literal without type context - error
-            let _ = self.logger.error(TypeError::TypeMismatch {
-                expected: "named struct literal (e.g., Point { x: 1, y: 2 })".into(),
-                found: "implicit struct literal without type context".into(),
-                span: struct_lit.span,
-            });
-            // Return a dummy expression with unknown type
-            return TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: 0,
-                    repr: "0".into(),
-                },
-                TypeTable::UNKNOWN,
-                struct_lit.span,
-            );
+            return self.resolve_anonymous_struct_literal(struct_lit, ctx);
         };
 
         // Look up the struct in the symbol table to resolve imports/aliases
@@ -2312,6 +2298,108 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 struct_type,
                 struct_name: mangled_struct_name,
                 fields,
+            },
+            struct_type,
+            struct_lit.span,
+        )
+    }
+
+    /// Resolve an anonymous struct literal `{ x: 1, y: 2 }` by inferring a struct type
+    /// from the field names and types.
+    fn resolve_anonymous_struct_literal(
+        &mut self,
+        struct_lit: &ast::StructLiteralExpr,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        // Resolve all field expressions first
+        let mut resolved_fields: Vec<TirStructField> = Vec::new();
+        for (index, field) in struct_lit.fields.iter().enumerate() {
+            let value = self.resolve_expr(&field.value, ctx, None);
+            resolved_fields.push(TirStructField {
+                name: field.name.clone(),
+                value,
+                field_index: index as u32,
+            });
+        }
+
+        // Generate a deterministic name from field names and types
+        let anon_name = {
+            let mut parts = Vec::new();
+            for f in &resolved_fields {
+                let type_name = self.type_table.borrow().type_name(f.value.type_id);
+                parts.push(format!("{}:{}", f.name, type_name));
+            }
+            format!("__anon_{{{}}}", parts.join(","))
+        };
+
+        let module_source = self.current_module_source.clone();
+
+        // Check if this anonymous struct type already exists (structural equivalence)
+        if let Some(existing_type) = self
+            .type_table
+            .borrow()
+            .find_struct_type(&anon_name, &module_source)
+        {
+            return TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type: existing_type,
+                    struct_name: anon_name,
+                    fields: resolved_fields,
+                },
+                existing_type,
+                struct_lit.span,
+            );
+        }
+
+        // Register the new anonymous struct type
+        let struct_type = self
+            .type_table
+            .borrow_mut()
+            .make_struct(anon_name.clone(), module_source.clone());
+
+        // Register field info so field access works
+        let field_info = super::types::StructFieldInfo {
+            module_source,
+            fields: resolved_fields
+                .iter()
+                .map(|f| (f.name.clone(), f.value.type_id, true))
+                .collect(),
+            type_param_bounds: Vec::new(),
+            type_param_type_ids: Vec::new(),
+        };
+        self.struct_fields.insert(anon_name.clone(), field_info);
+
+        // Create TirStruct definition for codegen
+        let tir_fields: Vec<TirField> = resolved_fields
+            .iter()
+            .enumerate()
+            .map(|(i, f)| TirField {
+                name: f.name.clone(),
+                is_pub: true,
+                type_id: f.value.type_id,
+                index: i as u32,
+                span: struct_lit.span,
+                is_hidden: false,
+                serde_rename: None,
+                serde_default: false,
+            })
+            .collect();
+
+        self.pending_anonymous_structs.push(TirStruct {
+            name: anon_name.clone(),
+            is_pub: false,
+            type_params: Vec::new(),
+            monomorph_info: None,
+            fields: tir_fields,
+            span: struct_lit.span,
+            serde_rename_all: None,
+        });
+
+        TirExpr::new(
+            TirExprKind::StructLiteral {
+                struct_type,
+                struct_name: anon_name,
+                fields: resolved_fields,
             },
             struct_type,
             struct_lit.span,

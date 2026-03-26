@@ -1,4 +1,4 @@
-// Error: implicit struct literal without type annotation
+// Anonymous struct literal (was previously an error, now supported)
 
 use { println, Stdout } from "core:cli";
 
@@ -8,9 +8,9 @@ struct Point {
 }
 
 export fn run() with Stdout {
-    let p = { x: 1, y: 2 };  // Error: no type context
-    println(`test`);
+    let p = { x: 1, y: 2 };  // Anonymous struct (no longer an error)
+    println(`{p.x}, {p.y}`);
 }
 
 __DATA__
-{"compile_error": "implicit struct literal without type context"}
+{"stdout": "1, 2\n"}

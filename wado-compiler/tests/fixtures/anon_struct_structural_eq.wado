@@ -1,0 +1,13 @@
+// Anonymous structs with same shape are the same type
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let a = { x: 1, y: 2 };
+    let b = { x: 3, y: 4 };
+    // If both have the same type, we can assign b to a variable typed from a
+    let c = if true { a } else { b };
+    println(`{c.x}, {c.y}`);
+}
+
+__DATA__
+{"stdout": "1, 2\n"}
