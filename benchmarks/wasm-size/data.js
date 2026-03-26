@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774562733606,
+  "lastUpdate": 1774562747346,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7940,6 +7940,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a74bb9ec08526f33506aed1161fcd43f84582ad0"
         },
         "date": 1774562733388,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "765ea5a8bf3113648e36c01a5cefa54d6b33d274",
+          "message": "Merge pull request #707 from wado-lang/claude/add-pipe-pattern-matching-WcOXD\n\nAdd support for or-patterns in match expressions",
+          "timestamp": "2026-03-27T07:03:27+09:00",
+          "tree_id": "554c75a0a623290465c904ee14126c8409d72fcc",
+          "url": "https://github.com/wado-lang/wado/commit/765ea5a8bf3113648e36c01a5cefa54d6b33d274"
+        },
+        "date": 1774562747216,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
