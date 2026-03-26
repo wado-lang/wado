@@ -1,3 +1,6 @@
+// Source: https://github.com/antlr/grammars-v4/blob/master/antlr/antlr4/ANTLRv4Parser.g4
+// License: BSD 3-Clause (see below)
+
 /*
  * [The "BSD license"]
  *  Copyright (c) 2012-2014 Terence Parr
