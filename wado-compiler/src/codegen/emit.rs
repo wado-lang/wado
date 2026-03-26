@@ -984,7 +984,7 @@ impl<'a> WirEmitter<'a> {
             WirInstr::DeclareLocal { .. } => {
                 // Already handled in pre-allocation
             }
-            WirInstr::LocalGet { name } => {
+            WirInstr::LocalGet { name, .. } => {
                 let idx = self.resolve_local(name);
                 f.instruction(&Instruction::LocalGet(idx));
                 // Ref-type locals are nullable in Wasm (for defaultability).
@@ -1006,7 +1006,7 @@ impl<'a> WirEmitter<'a> {
                     f.instruction(&Instruction::RefAsNonNull);
                 }
             }
-            WirInstr::GlobalGet { name } => {
+            WirInstr::GlobalGet { name, .. } => {
                 let idx = self.resolve_global(&name.fq);
                 f.instruction(&Instruction::GlobalGet(idx));
                 // Nullable globals (lazy-init) produce (ref null $T) from global.get.
@@ -1628,6 +1628,7 @@ impl<'a> WirEmitter<'a> {
                 type_id,
                 field_name,
                 expr,
+                ..
             } => {
                 self.emit_instr(f, expr);
                 let wasm_idx = self.resolve_type_index(type_id.index());
@@ -1712,6 +1713,7 @@ impl<'a> WirEmitter<'a> {
                 type_id,
                 array,
                 index,
+                ..
             } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, index);
@@ -1753,7 +1755,7 @@ impl<'a> WirEmitter<'a> {
             WirInstr::RefAsNonNull(o) => {
                 // If inner is a LocalGet for a ref_local, that handler already
                 // emits ref.as_non_null — don't emit it again (would double-wrap).
-                if let WirInstr::LocalGet { name } = o.as_ref()
+                if let WirInstr::LocalGet { name, .. } = o.as_ref()
                     && self.ref_locals.contains(name.as_str())
                 {
                     self.emit_instr(f, o);
@@ -2041,6 +2043,7 @@ impl<'a> WirEmitter<'a> {
                 type_id,
                 array,
                 index,
+                ..
             } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, index);
@@ -2051,6 +2054,7 @@ impl<'a> WirEmitter<'a> {
                 type_id,
                 array,
                 index,
+                ..
             } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, index);

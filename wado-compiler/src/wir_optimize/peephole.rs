@@ -55,7 +55,7 @@ fn propagate_copies_in_body(instrs: &mut Vec<WirInstr>) {
 
     for instr in instrs.iter() {
         if let WirInstr::LocalSet { name, value } = instr
-            && let WirInstr::LocalGet { name: source } = value.as_ref()
+            && let WirInstr::LocalGet { name: source, .. } = value.as_ref()
             && (name.starts_with("__match_scrut_") || name.starts_with("__pattern_temp_"))
         {
             copies.insert(name.clone(), source.clone());
@@ -69,7 +69,7 @@ fn propagate_copies_in_body(instrs: &mut Vec<WirInstr>) {
     // Replace uses of alias with source, and nop the copy instruction
     for instr in instrs.iter_mut() {
         if let WirInstr::LocalSet { name, value } = instr
-            && let WirInstr::LocalGet { name: _ } = value.as_ref()
+            && let WirInstr::LocalGet { name: _, .. } = value.as_ref()
             && copies.contains_key(name.as_str())
         {
             *instr = WirInstr::Nop;
@@ -81,7 +81,7 @@ fn propagate_copies_in_body(instrs: &mut Vec<WirInstr>) {
 
 fn rename_locals_in_instr(instr: &mut WirInstr, copies: &IndexMap<String, String>) {
     match instr {
-        WirInstr::LocalGet { name } => {
+        WirInstr::LocalGet { name, .. } => {
             if let Some(source) = copies.get(name.as_str()) {
                 *name = source.clone();
             }
@@ -518,9 +518,9 @@ fn uses_of_var_are_reads_only(instr: &WirInstr, var_name: &str) -> bool {
                     !instr_contains_local_get(value, var_name)
                 }
                 // LocalGet(var) stored into another local: creates alias but OK if read-only
-                WirInstr::LocalGet { name } if name == var_name => true,
+                WirInstr::LocalGet { name, .. } if name == var_name => true,
                 // RefAsNonNull(LocalGet(var)) — extraction, safe
-                WirInstr::RefAsNonNull(inner) if matches!(inner.as_ref(), WirInstr::LocalGet { name } if name == var_name) => {
+                WirInstr::RefAsNonNull(inner) if matches!(inner.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name) => {
                     true
                 }
                 _ => !instr_contains_local_get(value, var_name),
@@ -549,12 +549,12 @@ fn uses_of_var_are_reads_only(instr: &WirInstr, var_name: &str) -> bool {
                 || condition_is_safe_use(condition, var_name)
         }
         // LocalGet: reading the variable is always safe.
-        WirInstr::LocalGet { name } if name == var_name => true,
+        WirInstr::LocalGet { name, .. } if name == var_name => true,
         // Br carrying a value: check if the value mentions var
         WirInstr::Br { .. } => !instr_contains_local_get(instr, var_name),
         // StructSet on the variable — mutation!
         WirInstr::StructSet { expr, .. } => {
-            !matches!(expr.as_ref(), WirInstr::LocalGet { name } if name == var_name)
+            !matches!(expr.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name)
                 && !instr_contains_local_get(instr, var_name)
         }
         // Any other instruction: var must not appear
@@ -570,10 +570,10 @@ fn condition_is_safe_use(cond: &WirInstr, var_name: &str) -> bool {
             let check_inner = |inner: &WirInstr| -> bool {
                 matches!(inner,
                     WirInstr::RefIsNull(inner_inner)
-                    if matches!(inner_inner.as_ref(), WirInstr::LocalGet { name } if name == var_name)
+                    if matches!(inner_inner.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name)
                 ) || matches!(inner,
                     WirInstr::RefTest { expr, .. }
-                    if matches!(expr.as_ref(), WirInstr::LocalGet { name } if name == var_name)
+                    if matches!(expr.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name)
                 )
             };
             check_inner(lhs)
@@ -582,11 +582,11 @@ fn condition_is_safe_use(cond: &WirInstr, var_name: &str) -> bool {
                     && !instr_contains_local_get(rhs, var_name))
         }
         WirInstr::RefIsNull(inner) => {
-            matches!(inner.as_ref(), WirInstr::LocalGet { name } if name == var_name)
+            matches!(inner.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name)
                 || !instr_contains_local_get(inner, var_name)
         }
         WirInstr::RefTest { expr, .. } => {
-            matches!(expr.as_ref(), WirInstr::LocalGet { name } if name == var_name)
+            matches!(expr.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name)
                 || !instr_contains_local_get(expr, var_name)
         }
         _ => !instr_contains_local_get(cond, var_name),
@@ -596,7 +596,7 @@ fn condition_is_safe_use(cond: &WirInstr, var_name: &str) -> bool {
 /// Check if a WIR expression is fresh by tracing `LocalGet` through definitions.
 fn is_fresh_via_defs(instr: &WirInstr, defs: &IndexMap<String, FreshDef>) -> bool {
     match instr {
-        WirInstr::LocalGet { name } => defs.get(name.as_str()) == Some(&FreshDef::Fresh),
+        WirInstr::LocalGet { name, .. } => defs.get(name.as_str()) == Some(&FreshDef::Fresh),
         WirInstr::RefAsNonNull(inner) => is_fresh_via_defs(inner, defs),
         WirInstr::StructGet { expr, .. } => is_fresh_via_defs(expr, defs),
         WirInstr::RefCast { expr, .. } => is_fresh_via_defs(expr, defs),
@@ -708,7 +708,7 @@ fn is_safe_condition_use(instr: &WirInstr, var_name: &str) -> bool {
     match instr {
         // ref.test T(var) — discriminant check, read-only.
         WirInstr::RefTest { expr, .. } | WirInstr::RefIsNull(expr) => {
-            if let WirInstr::LocalGet { name } = expr.as_ref()
+            if let WirInstr::LocalGet { name, .. } = expr.as_ref()
                 && name == var_name
             {
                 return true;
@@ -725,7 +725,7 @@ fn is_safe_condition_use(instr: &WirInstr, var_name: &str) -> bool {
 
 /// Returns `true` if `var_name` appears as a `LocalGet` anywhere in `instr`.
 fn instr_contains_local_get(instr: &WirInstr, var_name: &str) -> bool {
-    if let WirInstr::LocalGet { name } = instr {
+    if let WirInstr::LocalGet { name, .. } = instr {
         return name == var_name;
     }
     let mut found = false;
@@ -745,7 +745,7 @@ fn instr_contains_local_get(instr: &WirInstr, var_name: &str) -> bool {
 /// - `StructGet(RefCast(StructGet(LocalGet(var))))`
 fn expr_roots_at_var(expr: &WirInstr, var_name: &str) -> bool {
     match expr {
-        WirInstr::LocalGet { name } => name == var_name,
+        WirInstr::LocalGet { name, .. } => name == var_name,
         WirInstr::StructGet { expr: inner, .. } | WirInstr::RefCast { expr: inner, .. } => {
             expr_roots_at_var(inner, var_name)
         }
@@ -812,7 +812,7 @@ fn block_result_is_fresh(body: &[WirInstr]) -> bool {
         None => return false,
     };
     match result_instr {
-        Some(WirInstr::LocalGet { name }) => {
+        Some(WirInstr::LocalGet { name, .. }) => {
             // Trace back: find what this local was set to within the block.
             find_local_set_value(body, name).is_some_and(is_fresh_wir_value)
         }
@@ -1009,7 +1009,7 @@ fn match_field_get(
     else {
         return None;
     };
-    let WirInstr::LocalGet { name: gn } = expr.as_ref() else {
+    let WirInstr::LocalGet { name: gn, .. } = expr.as_ref() else {
         return None;
     };
     if gn != temp_name {

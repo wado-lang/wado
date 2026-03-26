@@ -428,6 +428,7 @@ fn transform_instr(
                 type_id,
                 field_name,
                 expr: inner,
+                ..
             } = lhs.as_ref()
                 && field_name == "discriminant"
                 && let Some(&(payload_case, _)) = nullable_map.get(&type_id.index())
@@ -457,6 +458,7 @@ fn transform_instr(
             type_id,
             field_name,
             expr,
+            result_ty,
         } => {
             if field_name.starts_with("payload_")
                 && let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())
@@ -469,6 +471,12 @@ fn transform_instr(
                 return;
             }
             transform_instr(expr, types, vci, nullable_map);
+            // Update result_ty to reflect the field's current type after substitution.
+            if let Some(WirTypeDef::Struct(st)) = types.get(type_id.index() as usize)
+                && let Some(field) = st.fields.iter().find(|f| f.name == *field_name)
+            {
+                *result_ty = field.ty.clone();
+            }
         }
 
         // StructSet: strip RefAsNonNull from value if the target field type became nullable.
@@ -516,6 +524,45 @@ fn transform_instr(
                     *instr = inner_inner;
                 }
                 _ => {}
+            }
+        }
+
+        // Keep result_ty up-to-date for get instructions after NullableRef substitution.
+        WirInstr::LocalGet { result_ty, .. } | WirInstr::GlobalGet { result_ty, .. } => {
+            substitute_type(result_ty, nullable_map);
+            // Also handle case struct types — same substitution as DeclareLocal special case.
+            // e.g., `__cast_N: Ref { CaseStruct, non-null }` becomes `nullable_payload` after
+            // NullableRef, so result_ty must reflect this to avoid stale is_nonnull_result().
+            if let WirType::Ref { type_id, .. } = result_ty
+                && let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())
+                && let Some(&(payload_case, ref nullable_payload)) = nullable_map.get(&variant_idx)
+                && case_idx == payload_case
+            {
+                *result_ty = nullable_payload.clone();
+            }
+        }
+        WirInstr::ArrayGet {
+            array,
+            index,
+            result_ty,
+            type_id,
+        }
+        | WirInstr::ArrayGetS {
+            array,
+            index,
+            result_ty,
+            type_id,
+        }
+        | WirInstr::ArrayGetU {
+            array,
+            index,
+            result_ty,
+            type_id,
+        } => {
+            transform_instr(array, types, vci, nullable_map);
+            transform_instr(index, types, vci, nullable_map);
+            if let Some(WirTypeDef::Array(at)) = types.get(type_id.index() as usize) {
+                *result_ty = at.element_type.clone();
             }
         }
 

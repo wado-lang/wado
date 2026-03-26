@@ -92,16 +92,16 @@ fn run() with Stdout {
     c3 = Color::Blue { discriminant: 2, payload_0: 42 };
     c4 = Color::Blue { discriminant: 2, payload_0: 42 };
     c5 = Color::Blue { discriminant: 2, payload_0: 7 };
-    if Color^Eq::eq(ref.as_non_null(c1), ref.as_non_null(c2)) {
+    if Color^Eq::eq(c1, c2) {
         "core:cli/println"(String { repr: array.new_data<u8>("red == red"), used: 10 });
     };
-    if Color^Eq::eq(ref.as_non_null(c1), ref.as_non_null(c3)) == 0 {
+    if Color^Eq::eq(c1, c3) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("red != blue"), used: 11 });
     };
-    if Color^Eq::eq(ref.as_non_null(c3), ref.as_non_null(c4)) {
+    if Color^Eq::eq(c3, c4) {
         "core:cli/println"(String { repr: array.new_data<u8>("blue(42) == blue(42)"), used: 20 });
     };
-    if Color^Eq::eq(ref.as_non_null(c3), ref.as_non_null(c5)) == 0 {
+    if Color^Eq::eq(c3, c5) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("blue(42) != blue(7)"), used: 19 });
     };
 }

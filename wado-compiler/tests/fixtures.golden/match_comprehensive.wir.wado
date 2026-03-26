@@ -202,11 +202,11 @@ fn match_with_struct() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(43), used: 0 };
         String::append(__local_5, String { repr: array.new_data<u8>("destruct: "), used: 10 });
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         __local_14 = __local_6;
         i32::fmt_decimal(x, __local_14);
         String::append_char(__local_5, 44);
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         __local_19 = __local_6;
         i32::fmt_decimal(y, __local_19);
         break __tmpl: __local_5;
@@ -223,11 +223,11 @@ fn match_with_struct() with Stdout {
         String::append_char(__local_7, 101);
         String::append_char(__local_7, 58);
         String::append_char(__local_7, 32);
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         __local_25 = __local_8;
         i32::fmt_decimal(a, __local_25);
         String::append_char(__local_7, 44);
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         __local_30 = __local_8;
         i32::fmt_decimal(b, __local_30);
         break __tmpl: __local_7;
@@ -254,7 +254,7 @@ fn match_option_chained() with Stdout {
             String::append_char(__local_7, 116);
             String::append_char(__local_7, 58);
             String::append_char(__local_7, 32);
-            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
             i32::fmt_decimal(n, __local_8);
             break __tmpl: __local_7;
         });
@@ -333,7 +333,7 @@ fn match_variant_comprehensive() with Stdout {
         __local_0 = Array<Tree> { repr: array.new_fixed<ref Tree>(Tree::Leaf { discriminant: 0, payload_0: 1 }, Tree::Node { discriminant: 1, payload_0: "tuple/[i32, i32]" { 0: 10, 1: 20 } }, Tree { 2 }, Tree::Leaf { discriminant: 0, payload_0: 99 }), used: 4 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<Tree>" { repr: ref.as_non_null(trees.repr), used: 4, index: 0 };
+    __iter_2 = "core:allocator/ArrayIter<Tree>" { repr: trees.repr, used: 4, index: 0 };
     b8: block {
         l9: loop {
             __pattern_temp_0 = ArrayIter<Tree>^Iterator::next(__iter_2);
@@ -352,7 +352,7 @@ fn match_variant_comprehensive() with Stdout {
                         __tmpl: block -> ref String {
                             __local_8 = String { repr: builtin::array_new<u8>(28), used: 0 };
                             String::append(__local_8, String { repr: array.new_data<u8>("small leaf("), used: 11 });
-                            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_8) };
+                            __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
                             i32::fmt_decimal(__local_4, __local_9);
                             String::append_char(__local_8, 41);
                             break __tmpl: __local_8;
@@ -368,7 +368,7 @@ fn match_variant_comprehensive() with Stdout {
                             String::append_char(__local_10, 97);
                             String::append_char(__local_10, 102);
                             String::append_char(__local_10, 40);
-                            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+                            __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
                             __local_35 = "core:internal/Box<i32>" { value: __local_5 };
                             i32::fmt_decimal(__local_35.value, __local_11);
                             String::append_char(__local_10, 41);
@@ -385,12 +385,12 @@ fn match_variant_comprehensive() with Stdout {
                             String::append_char(__local_12, 100);
                             String::append_char(__local_12, 101);
                             String::append_char(__local_12, 40);
-                            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                             __local_41 = "core:internal/Box<i32>" { value: __local_6.0 };
                             __local_42 = __local_13;
                             i32::fmt_decimal(__local_41.value, __local_42);
                             String::append_char(__local_12, 44);
-                            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                             __local_46 = "core:internal/Box<i32>" { value: __local_6.1 };
                             __local_47 = __local_13;
                             i32::fmt_decimal(__local_46.value, __local_47);
@@ -413,7 +413,7 @@ fn match_variant_comprehensive() with Stdout {
                         String::append_char(__local_10, 97);
                         String::append_char(__local_10, 102);
                         String::append_char(__local_10, 40);
-                        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_10) };
+                        __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
                         __local_35 = "core:internal/Box<i32>" { value: __local_5 };
                         i32::fmt_decimal(__local_35.value, __local_11);
                         String::append_char(__local_10, 41);
@@ -430,12 +430,12 @@ fn match_variant_comprehensive() with Stdout {
                         String::append_char(__local_12, 100);
                         String::append_char(__local_12, 101);
                         String::append_char(__local_12, 40);
-                        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                         __local_41 = "core:internal/Box<i32>" { value: __local_6.0 };
                         __local_42 = __local_13;
                         i32::fmt_decimal(__local_41.value, __local_42);
                         String::append_char(__local_12, 44);
-                        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_12) };
+                        __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                         __local_46 = "core:internal/Box<i32>" { value: __local_6.1 };
                         __local_47 = __local_13;
                         i32::fmt_decimal(__local_46.value, __local_47);
@@ -471,7 +471,7 @@ fn match_in_loop() with Stdout {
         break __seq_lit: __local_0;
     };
     sum = 0;
-    __iter_3 = "core:allocator/ArrayIter<Option<i32>>" { repr: ref.as_non_null(items.repr), used: 5, index: 0 };
+    __iter_3 = "core:allocator/ArrayIter<Option<i32>>" { repr: items.repr, used: 5, index: 0 };
     b19: block {
         l20: loop {
             __pattern_temp_0 = ArrayIter<Option<i32>>^Iterator::next(__iter_3);
@@ -498,7 +498,7 @@ fn match_in_loop() with Stdout {
         String::append_char(__local_6, 117);
         String::append_char(__local_6, 109);
         String::append_char(__local_6, 61);
-        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_6) };
+        __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         i32::fmt_decimal(sum, __local_7);
         break __tmpl: __local_6;
     });
@@ -526,7 +526,7 @@ fn matches_operator() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(25), used: 0 };
         String::append(__local_5, String { repr: array.new_data<u8>("is_some: "), used: 9 });
-        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         Formatter::pad(__local_6, if let __match_scrut_0: ref Option<i32>; __match_scrut_0 = val; if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
             let __cast_1: ref Option<i32>::Some;
             __cast_1 = ref.cast Option<i32>::Some(__match_scrut_0);
@@ -543,7 +543,7 @@ fn matches_operator() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(25), used: 0 };
         String::append(__local_7, String { repr: array.new_data<u8>("is_none: "), used: 9 });
-        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_7) };
+        __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         Formatter::pad(__local_8, if let __match_scrut_1: ref Option<i32>; __match_scrut_1 = val; if __match_scrut_1.discriminant == 1 -> bool {
             1;
         } else {
@@ -566,7 +566,7 @@ fn matches_operator() with Stdout {
         String::append_char(__local_9, 103);
         String::append_char(__local_9, 58);
         String::append_char(__local_9, 32);
-        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_9) };
+        __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         Formatter::pad(__local_10, if let __match_scrut_2: ref Option<i32>; __match_scrut_2 = big; if ref.test Option<i32>::Some(__match_scrut_2) -> bool {
             let __cast_2: ref Option<i32>::Some;
             __cast_2 = ref.cast Option<i32>::Some(__match_scrut_2);
@@ -584,7 +584,7 @@ fn matches_operator() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(26), used: 0 };
         String::append(__local_11, String { repr: array.new_data<u8>("is_small: "), used: 10 });
-        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_11) };
+        __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
         Formatter::pad(__local_12, if let __match_scrut_3: ref Option<i32>; __match_scrut_3 = big; if ref.test Option<i32>::Some(__match_scrut_3) -> bool {
             let __cast_3: ref Option<i32>::Some;
             __cast_3 = ref.cast Option<i32>::Some(__match_scrut_3);
@@ -603,7 +603,7 @@ fn matches_operator() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_13 = String { repr: builtin::array_new<u8>(25), used: 0 };
         String::append(__local_13, String { repr: array.new_data<u8>("is_leaf: "), used: 9 });
-        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_13) };
+        __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
         Formatter::pad(__local_14, if let __match_scrut_4: ref Tree; __match_scrut_4 = tree; if ref.test Tree::Leaf(__match_scrut_4) -> bool {
             let __cast_4: ref Tree::Leaf;
             __cast_4 = ref.cast Tree::Leaf(__match_scrut_4);
@@ -620,7 +620,7 @@ fn matches_operator() with Stdout {
     "core:cli/println"(__tmpl: block -> ref String {
         __local_15 = String { repr: builtin::array_new<u8>(26), used: 0 };
         String::append(__local_15, String { repr: array.new_data<u8>("is_empty: "), used: 10 });
-        __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_15) };
+        __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
         Formatter::pad(__local_16, if let __match_scrut_5: ref Tree; __match_scrut_5 = tree; if __match_scrut_5.discriminant == 2 -> bool {
             1;
         } else {
@@ -647,7 +647,7 @@ fn if_let_with_else() with Stdout {
         __local_0 = Array<Option<i32>> { repr: array.new_fixed<ref Option<i32>>(Option<i32>::Some { discriminant: 0, payload_0: 10 }, Option<i32> { 1 }, Option<i32>::Some { discriminant: 0, payload_0: 30 }), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<Option<i32>>" { repr: ref.as_non_null(values.repr), used: 3, index: 0 };
+    __iter_2 = "core:allocator/ArrayIter<Option<i32>>" { repr: values.repr, used: 3, index: 0 };
     b36: block {
         l37: loop {
             __pattern_temp_0 = ArrayIter<Option<i32>>^Iterator::next(__iter_2);
@@ -661,7 +661,7 @@ fn if_let_with_else() with Stdout {
                         String::append_char(__local_5, 111);
                         String::append_char(__local_5, 116);
                         String::append_char(__local_5, 32);
-                        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: ref.as_non_null(__local_5) };
+                        __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                         i32::fmt_decimal(n, __local_6);
                         break __tmpl: __local_5;
                     });
@@ -898,7 +898,7 @@ fn String::grow(self, min_capacity) {
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn String::internal_reserve_uninit(self, n) {
@@ -962,7 +962,7 @@ fn ArrayIter<Option<i32>>^Iterator::next(self) {
     };
     item = builtin::array_get<ref Option<i32>>(self.repr, self.index);
     self.index = self.index + 1;
-    return ref.as_non_null(item);
+    return item;
 }
 
 fn Array<Option<i32>>::append(self, value) {
@@ -1004,7 +1004,7 @@ fn Array<Option<i32>>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn ArrayIter<Tree>^Iterator::next(self) {
@@ -1014,7 +1014,7 @@ fn ArrayIter<Tree>^Iterator::next(self) {
     };
     item = builtin::array_get<ref Tree>(self.repr, self.index);
     self.index = self.index + 1;
-    return ref.as_non_null(item);
+    return item;
 }
 
 fn Array<Tree>::append(self, value) {
@@ -1056,7 +1056,7 @@ fn Array<Tree>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 fn Formatter::write_char_n(self, c, n) {

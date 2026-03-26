@@ -958,6 +958,7 @@ pub enum WirInstr {
     /// `local.get` by name.
     LocalGet {
         name: String,
+        result_ty: WirType,
     },
     /// `local.set` by name.
     LocalSet {
@@ -974,6 +975,7 @@ pub enum WirInstr {
     /// `global.get` by name.
     GlobalGet {
         name: WirName,
+        result_ty: WirType,
     },
     /// `global.set` by name.
     GlobalSet {
@@ -1376,6 +1378,7 @@ pub enum WirInstr {
         type_id: WirTypeId,
         field_name: String,
         expr: Box<WirInstr>,
+        result_ty: WirType,
     },
     /// `struct.set` with type ID and field name (field index resolved by emitter).
     StructSet {
@@ -1409,16 +1412,19 @@ pub enum WirInstr {
         type_id: WirTypeId,
         array: Box<WirInstr>,
         index: Box<WirInstr>,
+        result_ty: WirType,
     },
     ArrayGetS {
         type_id: WirTypeId,
         array: Box<WirInstr>,
         index: Box<WirInstr>,
+        result_ty: WirType,
     },
     ArrayGetU {
         type_id: WirTypeId,
         array: Box<WirInstr>,
         index: Box<WirInstr>,
+        result_ty: WirType,
     },
     ArraySet {
         type_id: WirTypeId,
@@ -1693,18 +1699,26 @@ impl WirInstr {
     }
 
     /// Returns true if this instruction is guaranteed to produce a non-null
-    /// reference. Used to skip redundant `RefAsNonNull` wrappers.
+    /// reference at the Wasm level. Used to skip redundant `RefAsNonNull` wrappers.
     pub fn is_nonnull_result(&self) -> bool {
-        matches!(
-            self,
-            Self::StructNew { .. }
-                | Self::ArrayNew { .. }
-                | Self::ArrayNewDefault { .. }
-                | Self::ArrayNewData { .. }
-                | Self::ArrayNewFixed { .. }
-                | Self::RefAsNonNull(_)
-                | Self::RefI31(_)
-        )
+        match self {
+            Self::LocalGet { result_ty, .. }
+            | Self::GlobalGet { result_ty, .. }
+            | Self::StructGet { result_ty, .. }
+            | Self::ArrayGet { result_ty, .. }
+            | Self::ArrayGetS { result_ty, .. }
+            | Self::ArrayGetU { result_ty, .. } => result_ty.is_nonnull_ref(),
+            _ => matches!(
+                self,
+                Self::StructNew { .. }
+                    | Self::ArrayNew { .. }
+                    | Self::ArrayNewDefault { .. }
+                    | Self::ArrayNewData { .. }
+                    | Self::ArrayNewFixed { .. }
+                    | Self::RefAsNonNull(_)
+                    | Self::RefI31(_)
+            ),
+        }
     }
 
     /// Visit all child instructions of this node (non-recursive).

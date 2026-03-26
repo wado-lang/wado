@@ -271,7 +271,7 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
     let mut seq = Vec::with_capacity(elements.len() + 3);
     seq.push(WirInstr::DeclareLocal {
         name: arr_local.clone(),
-        ty: raw_ref_type,
+        ty: raw_ref_type.clone(),
     });
     seq.push(WirInstr::LocalSet {
         name: arr_local.clone(),
@@ -285,12 +285,16 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
             type_id: type_id.clone(),
             array: Box::new(WirInstr::LocalGet {
                 name: arr_local.clone(),
+                result_ty: raw_ref_type.clone(),
             }),
             index: Box::new(WirInstr::I32Const(i32::try_from(i).unwrap_or(0))),
             value: Box::new(elem),
         });
     }
-    seq.push(WirInstr::LocalGet { name: arr_local });
+    seq.push(WirInstr::LocalGet {
+        name: arr_local,
+        result_ty: raw_ref_type,
+    });
 
     *instr = WirInstr::Seq(seq);
 }
@@ -591,7 +595,7 @@ fn try_match_append_sequence(
         let mut j = consumed;
         while j < instrs.len() {
             if let WirInstr::LocalSet { name, value } = &instrs[j] {
-                if let WirInstr::LocalGet { name: src_name } = value.as_ref() {
+                if let WirInstr::LocalGet { name: src_name, .. } = value.as_ref() {
                     flat_aliases.push((name.clone(), src_name.clone()));
                 } else {
                     flat_value_bindings.push((name.clone(), *value.clone()));
@@ -636,7 +640,10 @@ fn resolve_value_binding(
     value_bindings: &[(String, WirInstr)],
     aliases: &[(String, String)],
 ) -> WirInstr {
-    if let WirInstr::LocalGet { name } = instr {
+    if let WirInstr::LocalGet {
+        name, result_ty, ..
+    } = instr
+    {
         for (binding_name, binding_value) in value_bindings {
             if binding_name == name {
                 return binding_value.clone();
@@ -647,6 +654,7 @@ fn resolve_value_binding(
         if resolved != name {
             return WirInstr::LocalGet {
                 name: resolved.to_string(),
+                result_ty: result_ty.clone(),
             };
         }
     }
@@ -718,7 +726,7 @@ fn extract_call_from_block(
     let mut value_bindings = Vec::new();
     for preceding in &body[..body.len() - 1] {
         if let WirInstr::LocalSet { name, value } = preceding {
-            if let WirInstr::LocalGet { name: src_name } = value.as_ref() {
+            if let WirInstr::LocalGet { name: src_name, .. } = value.as_ref() {
                 aliases.push((name.clone(), src_name.clone()));
             } else {
                 value_bindings.push((name.clone(), *value.clone()));
@@ -742,7 +750,7 @@ fn receiver_matches_with_aliases(
     match &init_info.access_path {
         ArrayAccessPath::Direct => {
             // Receiver should be LocalGet { name } where name resolves to init_info.local_name
-            if let WirInstr::LocalGet { name } = receiver {
+            if let WirInstr::LocalGet { name, .. } = receiver {
                 resolve_alias(name, aliases) == init_info.local_name
             } else {
                 false
@@ -754,7 +762,7 @@ fn receiver_matches_with_aliases(
                 if type_id.index() != *outer_type_idx {
                     return false;
                 }
-                if let WirInstr::LocalGet { name } = expr.as_ref() {
+                if let WirInstr::LocalGet { name, .. } = expr.as_ref() {
                     resolve_alias(name, aliases) == init_info.local_name
                 } else {
                     false

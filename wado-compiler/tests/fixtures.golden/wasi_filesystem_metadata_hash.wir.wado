@@ -283,9 +283,9 @@ fn __cm_binding__Preopens_get_directories() {
                 __local_9 = builtin::load_i32(__elem_addr + 4);
                 __local_10 = builtin::load_i32((__elem_addr + 4) + 4);
                 __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
-                break __inline_memory_to_gc_string_1: String { repr: ref.as_non_null(__local_11), used: __local_10 };
+                break __inline_memory_to_gc_string_1: String { repr: __local_11, used: __local_10 };
             };
-            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: ref.as_non_null(__lifted_result_7) });
+            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
             continue l12;
@@ -344,7 +344,7 @@ fn __cm_binding__Descriptor_metadata_hash(self) {
         __lifted_result_5 = builtin::load_i64(__async_outptr + 8);
         __lifted_result_6 = builtin::load_i64((__async_outptr + 8) + 8);
         __struct_result = "wasi:filesystem/types.wado/MetadataHashValue" { lower: __lifted_result_5, upper: __lifted_result_6 };
-        __result_val = Result<MetadataHashValue,ErrorCode>::Ok { discriminant: 0, payload_0: ref.as_non_null(__struct_result) };
+        __result_val = Result<MetadataHashValue,ErrorCode>::Ok { discriminant: 0, payload_0: __struct_result };
     } else {
         __result_val = Result<MetadataHashValue,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_u8(__async_outptr + 8) };
     };
@@ -371,7 +371,7 @@ fn __cm_binding__Descriptor_metadata_hash_at(self, path_flags, path) {
         __lifted_result_8 = builtin::load_i64(__async_outptr + 8);
         __lifted_result_9 = builtin::load_i64((__async_outptr + 8) + 8);
         __struct_result = "wasi:filesystem/types.wado/MetadataHashValue" { lower: __lifted_result_8, upper: __lifted_result_9 };
-        __result_val = Result<MetadataHashValue,ErrorCode>::Ok { discriminant: 0, payload_0: ref.as_non_null(__struct_result) };
+        __result_val = Result<MetadataHashValue,ErrorCode>::Ok { discriminant: 0, payload_0: __struct_result };
     } else {
         __result_val = Result<MetadataHashValue,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_u8(__async_outptr + 8) };
     };
@@ -625,7 +625,7 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
             };
         };
     };
-    self.repr = ref.as_non_null(new_repr);
+    self.repr = new_repr;
 }
 
 export fn __cm_export__run as "run"
