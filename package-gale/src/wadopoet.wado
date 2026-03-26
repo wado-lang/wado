@@ -81,6 +81,18 @@ impl CodeWriter {
         self.fresh_line = true;
     }
 
+    /// Close the current block and open a new one: "} opener {".
+    /// Useful for else-if chains: `w.else_begin("else if cond")`.
+    pub fn else_begin(&mut self, opener: &String) {
+        self.indent_level -= 1;
+        self.write_indent();
+        self.buf.append("} ");
+        self.buf.append(opener);
+        self.buf.append(" {\n");
+        self.fresh_line = true;
+        self.indent_level += 1;
+    }
+
     /// Increase indentation level manually.
     pub fn indent(&mut self) {
         self.indent_level += 1;
