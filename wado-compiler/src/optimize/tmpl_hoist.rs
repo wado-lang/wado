@@ -387,11 +387,13 @@ fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
         }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
+                collect_local_refs(elem, escaping);
                 collect_escaping_in_expr(elem, escaping);
             }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
+                collect_local_refs(p, escaping);
                 collect_escaping_in_expr(p, escaping);
             }
         }

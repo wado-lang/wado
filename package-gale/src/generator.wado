@@ -60,7 +60,8 @@ fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule) {
     } else {
         let all_labeled = all_alternatives_labeled(&rule.alternatives);
         let base = strip_suffix(&type_name, "Node");
-        w.begin(`pub variant {type_name}`);
+        let mut v = VariantSpec::new(&type_name);
+        v.set_pub();
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
             let alt = &rule.alternatives[i];
             let case_name = if all_labeled {
@@ -69,9 +70,9 @@ fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule) {
                 `Alt{i}`
             };
             let struct_name = `{base}{case_name}`;
-            w.line(`{case_name}({struct_name}),`);
+            v.add_case_with_payload(&case_name, &struct_name);
         }
-        w.end();
+        v.emit(w);
         w.blank();
 
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
