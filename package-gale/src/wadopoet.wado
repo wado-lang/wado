@@ -1,0 +1,503 @@
+/// WadoPoet — KotlinPoet-style code generation for Wado.
+///
+/// Hybrid design: `CodeWriter` handles indentation and blocks;
+/// builder specs (`StructSpec`, `VariantSpec`, `FnSpec`, etc.)
+/// provide type-safe declaration construction.
+///
+/// Function bodies remain string-based via `CodeWriter` — the same
+/// pragmatic split as JavaPoet/KotlinPoet's `CodeBlock`.
+
+pub struct CodeWriter {
+    buf: String,
+    indent_level: i32,
+    fresh_line: bool,
+    id_counter: i32,
+}
+
+impl CodeWriter {
+    pub fn new() -> CodeWriter {
+        return CodeWriter {
+            buf: String::with_capacity(4096),
+            indent_level: 0,
+            fresh_line: true,
+            id_counter: 0,
+        };
+    }
+
+    /// Write text with auto-indentation at line starts.
+    pub fn write(&mut self, text: &String) {
+        for let c of text.chars() {
+            if c == '\n' {
+                self.buf.append_char('\n');
+                self.fresh_line = true;
+            } else {
+                if self.fresh_line {
+                    self.write_indent();
+                    self.fresh_line = false;
+                }
+                self.buf.append_char(c);
+            }
+        }
+    }
+
+    /// Write a complete line (auto-indented, with trailing newline).
+    pub fn line(&mut self, text: &String) {
+        self.write_indent();
+        self.buf.append(text);
+        self.buf.append_char('\n');
+        self.fresh_line = true;
+    }
+
+    /// Emit a blank line.
+    pub fn blank(&mut self) {
+        self.buf.append_char('\n');
+        self.fresh_line = true;
+    }
+
+    /// Begin a block: emits "opener {" and increases indentation.
+    pub fn begin(&mut self, opener: &String) {
+        self.write_indent();
+        self.buf.append(opener);
+        self.buf.append(" {\n");
+        self.fresh_line = true;
+        self.indent_level += 1;
+    }
+
+    /// End a block: decreases indentation and emits "}".
+    pub fn end(&mut self) {
+        self.indent_level -= 1;
+        self.write_indent();
+        self.buf.append("}\n");
+        self.fresh_line = true;
+    }
+
+    /// End a block with a trailing suffix, e.g. "," or "\n".
+    pub fn end_with(&mut self, suffix: &String) {
+        self.indent_level -= 1;
+        self.write_indent();
+        self.buf.append_char('}');
+        self.buf.append(suffix);
+        self.buf.append_char('\n');
+        self.fresh_line = true;
+    }
+
+    /// Increase indentation level manually.
+    pub fn indent(&mut self) {
+        self.indent_level += 1;
+    }
+
+    /// Decrease indentation level manually.
+    pub fn dedent(&mut self) {
+        self.indent_level -= 1;
+    }
+
+    /// Generate a unique ID (replaces manual counter threading).
+    pub fn next_id(&mut self) -> i32 {
+        let id = self.id_counter;
+        self.id_counter += 1;
+        return id;
+    }
+
+    /// Append raw text with no indentation handling.
+    pub fn raw(&mut self, text: &String) {
+        self.buf.append(text);
+        if text.len() > 0 {
+            let chars: Array<char> = text.chars().collect();
+            self.fresh_line = chars[chars.len() - 1] == '\n';
+        }
+    }
+
+    /// Return the generated code. Asserts that indentation is balanced.
+    pub fn to_string(&self) -> String {
+        assert self.indent_level == 0, `CodeWriter: unbalanced indentation (level={self.indent_level})`;
+        return self.buf;
+    }
+
+    fn write_indent(&mut self) {
+        for let mut i = 0; i < self.indent_level; i += 1 {
+            self.buf.append("    ");
+        }
+    }
+}
+
+pub struct FieldSpec {
+    pub name: String,
+    pub type_str: String,
+    pub is_pub: bool,
+}
+
+impl FieldSpec {
+    pub fn new(name: &String, type_str: &String) -> FieldSpec {
+        return FieldSpec { name: *name, type_str: *type_str, is_pub: false };
+    }
+
+    pub fn new_pub(name: &String, type_str: &String) -> FieldSpec {
+        return FieldSpec { name: *name, type_str: *type_str, is_pub: true };
+    }
+}
+
+pub struct StructSpec {
+    pub name: String,
+    fields: Array<FieldSpec>,
+    is_pub: bool,
+}
+
+impl StructSpec {
+    pub fn new(name: &String) -> StructSpec {
+        return StructSpec { name: *name, fields: [], is_pub: false };
+    }
+
+    pub fn set_pub(&mut self) -> &mut StructSpec with stores[self] {
+        self.is_pub = true;
+        return self;
+    }
+
+    pub fn add_field(&mut self, name: &String, type_str: &String) -> &mut StructSpec with stores[self] {
+        self.fields.append(FieldSpec::new(name, type_str));
+        return self;
+    }
+
+    pub fn add_pub_field(&mut self, name: &String, type_str: &String) -> &mut StructSpec with stores[self] {
+        self.fields.append(FieldSpec::new_pub(name, type_str));
+        return self;
+    }
+
+    pub fn add_field_spec(&mut self, field: FieldSpec) -> &mut StructSpec with stores[self] {
+        self.fields.append(field);
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        let prefix = if self.is_pub { "pub " } else { "" };
+        w.begin(`{prefix}struct {self.name}`);
+        for let field of &self.fields {
+            let vis = if field.is_pub { "pub " } else { "" };
+            w.line(`{vis}{field.name}: {field.type_str},`);
+        }
+        w.end();
+    }
+}
+
+pub struct VariantCase {
+    pub name: String,
+    pub payload: Option<String>,
+}
+
+pub struct VariantSpec {
+    pub name: String,
+    cases: Array<VariantCase>,
+    is_pub: bool,
+}
+
+impl VariantSpec {
+    pub fn new(name: &String) -> VariantSpec {
+        return VariantSpec { name: *name, cases: [], is_pub: false };
+    }
+
+    pub fn set_pub(&mut self) -> &mut VariantSpec with stores[self] {
+        self.is_pub = true;
+        return self;
+    }
+
+    pub fn add_case(&mut self, name: &String) -> &mut VariantSpec with stores[self] {
+        self.cases.append(VariantCase { name: *name, payload: null });
+        return self;
+    }
+
+    pub fn add_case_with_payload(&mut self, name: &String, payload: &String) -> &mut VariantSpec with stores[self] {
+        self.cases.append(VariantCase {
+            name: *name,
+            payload: Option::<String>::Some(*payload),
+        });
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        let prefix = if self.is_pub { "pub " } else { "" };
+        w.begin(`{prefix}variant {self.name}`);
+        for let case of &self.cases {
+            if let Some(p) = &case.payload {
+                w.line(`{case.name}({*p}),`);
+            } else {
+                w.line(`{case.name},`);
+            }
+        }
+        w.end();
+    }
+}
+
+pub struct EnumSpec {
+    pub name: String,
+    members: Array<String>,
+    is_pub: bool,
+}
+
+impl EnumSpec {
+    pub fn new(name: &String) -> EnumSpec {
+        return EnumSpec { name: *name, members: [], is_pub: false };
+    }
+
+    pub fn set_pub(&mut self) -> &mut EnumSpec with stores[self] {
+        self.is_pub = true;
+        return self;
+    }
+
+    pub fn add_member(&mut self, name: &String) -> &mut EnumSpec with stores[self] {
+        self.members.append(*name);
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        let prefix = if self.is_pub { "pub " } else { "" };
+        w.begin(`{prefix}enum {self.name}`);
+        for let member of &self.members {
+            w.line(`{*member},`);
+        }
+        w.end();
+    }
+}
+
+pub struct FlagsSpec {
+    pub name: String,
+    members: Array<String>,
+    is_pub: bool,
+}
+
+impl FlagsSpec {
+    pub fn new(name: &String) -> FlagsSpec {
+        return FlagsSpec { name: *name, members: [], is_pub: false };
+    }
+
+    pub fn set_pub(&mut self) -> &mut FlagsSpec with stores[self] {
+        self.is_pub = true;
+        return self;
+    }
+
+    pub fn add_member(&mut self, name: &String) -> &mut FlagsSpec with stores[self] {
+        self.members.append(*name);
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        let prefix = if self.is_pub { "pub " } else { "" };
+        w.begin(`{prefix}flags {self.name}`);
+        for let member of &self.members {
+            w.line(`{*member},`);
+        }
+        w.end();
+    }
+}
+
+pub struct ParamSpec {
+    pub name: String,
+    pub type_str: String,
+    pub is_mut: bool,
+}
+
+impl ParamSpec {
+    pub fn new(name: &String, type_str: &String) -> ParamSpec {
+        return ParamSpec { name: *name, type_str: *type_str, is_mut: false };
+    }
+
+    pub fn new_mut(name: &String, type_str: &String) -> ParamSpec {
+        return ParamSpec { name: *name, type_str: *type_str, is_mut: true };
+    }
+}
+
+pub struct FnSpec {
+    pub name: String,
+    params: Array<ParamSpec>,
+    return_type: Option<String>,
+    is_pub: bool,
+    receiver: Option<String>,
+}
+
+impl FnSpec {
+    pub fn new(name: &String) -> FnSpec {
+        return FnSpec {
+            name: *name,
+            params: [],
+            return_type: null,
+            is_pub: false,
+            receiver: null,
+        };
+    }
+
+    pub fn set_pub(&mut self) -> &mut FnSpec with stores[self] {
+        self.is_pub = true;
+        return self;
+    }
+
+    pub fn set_receiver(&mut self, recv: &String) -> &mut FnSpec with stores[self] {
+        self.receiver = Option::<String>::Some(*recv);
+        return self;
+    }
+
+    pub fn add_param(&mut self, name: &String, type_str: &String) -> &mut FnSpec with stores[self] {
+        self.params.append(ParamSpec::new(name, type_str));
+        return self;
+    }
+
+    pub fn add_mut_param(&mut self, name: &String, type_str: &String) -> &mut FnSpec with stores[self] {
+        self.params.append(ParamSpec::new_mut(name, type_str));
+        return self;
+    }
+
+    pub fn add_param_spec(&mut self, param: ParamSpec) -> &mut FnSpec with stores[self] {
+        self.params.append(param);
+        return self;
+    }
+
+    pub fn set_return_type(&mut self, type_str: &String) -> &mut FnSpec with stores[self] {
+        self.return_type = Option::<String>::Some(*type_str);
+        return self;
+    }
+
+    /// Emit the function signature as a `begin` block (opens `{`).
+    /// Caller writes the body via `w`, then calls `w.end()`.
+    pub fn emit_begin(&self, w: &mut CodeWriter) {
+        w.begin(&self.signature());
+    }
+
+    /// Build the full signature string.
+    pub fn signature(&self) -> String {
+        let mut sig = String::with_capacity(64);
+        if self.is_pub {
+            sig.append("pub ");
+        }
+        sig.append(`fn {self.name}(`);
+        let mut first = true;
+        if let Some(recv) = &self.receiver {
+            sig.append(*recv);
+            first = false;
+        }
+        for let param of &self.params {
+            if !first {
+                sig.append(", ");
+            }
+            if param.is_mut {
+                sig.append("mut ");
+            }
+            sig.append(`{param.name}: {param.type_str}`);
+            first = false;
+        }
+        sig.append(")");
+        if let Some(ret) = &self.return_type {
+            sig.append(` -> {*ret}`);
+        }
+        return sig;
+    }
+}
+
+pub struct GlobalSpec {
+    pub name: String,
+    type_str: String,
+    initializer: String,
+    is_pub: bool,
+    is_mut: bool,
+}
+
+impl GlobalSpec {
+    pub fn new(name: &String, type_str: &String, initializer: &String) -> GlobalSpec {
+        return GlobalSpec {
+            name: *name,
+            type_str: *type_str,
+            initializer: *initializer,
+            is_pub: false,
+            is_mut: false,
+        };
+    }
+
+    pub fn set_pub(&mut self) -> &mut GlobalSpec with stores[self] {
+        self.is_pub = true;
+        return self;
+    }
+
+    pub fn set_mut(&mut self) -> &mut GlobalSpec with stores[self] {
+        self.is_mut = true;
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        let vis = if self.is_pub { "pub " } else { "" };
+        let mutability = if self.is_mut { "mut " } else { "" };
+        w.line(`{vis}global {mutability}{self.name}: {self.type_str} = {self.initializer};`);
+    }
+}
+
+pub struct TraitSpec {
+    name: String,
+    associated_types: Array<String>,
+    methods: Array<FnSpec>,
+    is_pub: bool,
+}
+
+impl TraitSpec {
+    pub fn new(name: &String) -> TraitSpec {
+        return TraitSpec {
+            name: *name,
+            associated_types: [],
+            methods: [],
+            is_pub: false,
+        };
+    }
+
+    pub fn set_pub(&mut self) -> &mut TraitSpec with stores[self] {
+        self.is_pub = true;
+        return self;
+    }
+
+    pub fn add_associated_type(&mut self, name: &String) -> &mut TraitSpec with stores[self] {
+        self.associated_types.append(*name);
+        return self;
+    }
+
+    pub fn add_method(&mut self, method: FnSpec) -> &mut TraitSpec with stores[self] {
+        self.methods.append(method);
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        let prefix = if self.is_pub { "pub " } else { "" };
+        w.begin(`{prefix}trait {self.name}`);
+        for let assoc of &self.associated_types {
+            w.line(`type {*assoc};`);
+        }
+        if self.associated_types.len() > 0 && self.methods.len() > 0 {
+            w.blank();
+        }
+        for let mut i = 0; i < self.methods.len(); i += 1 {
+            if i > 0 {
+                w.blank();
+            }
+            w.line(`{self.methods[i].signature()};`);
+        }
+        w.end();
+    }
+}
+
+pub struct ImplSpec {
+    type_name: String,
+    trait_name: Option<String>,
+}
+
+impl ImplSpec {
+    pub fn new(type_name: &String) -> ImplSpec {
+        return ImplSpec { type_name: *type_name, trait_name: null };
+    }
+
+    pub fn new_trait(trait_name: &String, type_name: &String) -> ImplSpec {
+        return ImplSpec {
+            type_name: *type_name,
+            trait_name: Option::<String>::Some(*trait_name),
+        };
+    }
+
+    pub fn emit_begin(&self, w: &mut CodeWriter) {
+        if let Some(t) = &self.trait_name {
+            w.begin(`impl {*t} for {self.type_name}`);
+        } else {
+            w.begin(`impl {self.type_name}`);
+        }
+    }
+}

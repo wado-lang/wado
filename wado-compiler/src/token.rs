@@ -124,7 +124,7 @@ pub enum TokenKind {
 
 impl TokenKind {
     /// Returns the identifier name for tokens that can act as identifiers.
-    /// This includes regular identifiers and contextual keywords (`flags`, `type`)
+    /// This includes regular identifiers and contextual keywords (`flags`, `type`, `of`)
     /// which are only keywords at declaration start but can be used as identifiers elsewhere.
     #[must_use]
     pub fn as_ident_name(&self) -> Option<&str> {
@@ -133,6 +133,8 @@ impl TokenKind {
             // Contextual keywords: only keywords at declaration start
             Self::Flags => Some("flags"),
             Self::Type => Some("type"),
+            // `of` is only a keyword after `for let <pattern>`, valid as identifier elsewhere
+            Self::Of => Some("of"),
             // `from` appears in `use { x } from "mod"` but is also valid as a type/trait name
             Self::From => Some("from"),
             _ => None,

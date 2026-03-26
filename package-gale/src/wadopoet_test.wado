@@ -1,0 +1,503 @@
+use {
+    CodeWriter, FieldSpec, StructSpec, VariantSpec, EnumSpec, FlagsSpec,
+    ParamSpec, FnSpec, GlobalSpec, TraitSpec, ImplSpec,
+} from "./wadopoet.wado";
+
+// ---------------------------------------------------------------------------
+// CodeWriter tests
+// ---------------------------------------------------------------------------
+
+test "empty writer" {
+    let w = CodeWriter::new();
+    assert w.to_string() == "";
+}
+
+test "single line" {
+    let mut w = CodeWriter::new();
+    w.line("let x = 42;");
+    assert w.to_string() == "let x = 42;\n";
+}
+
+test "multiple lines" {
+    let mut w = CodeWriter::new();
+    w.line("let x = 1;");
+    w.line("let y = 2;");
+    assert w.to_string() == "let x = 1;\nlet y = 2;\n";
+}
+
+test "blank line" {
+    let mut w = CodeWriter::new();
+    w.line("let x = 1;");
+    w.blank();
+    w.line("let y = 2;");
+    assert w.to_string() == "let x = 1;\n\nlet y = 2;\n";
+}
+
+test "begin/end block" {
+    let mut w = CodeWriter::new();
+    w.begin("struct Foo");
+    w.line("x: i32,");
+    w.line("y: i32,");
+    w.end();
+    let expected = "struct Foo {\n    x: i32,\n    y: i32,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "nested blocks" {
+    let mut w = CodeWriter::new();
+    w.begin("impl Foo");
+    w.begin("fn bar(&self) -> i32");
+    w.line("return self.x;");
+    w.end();
+    w.end();
+    let expected = "impl Foo {\n    fn bar(&self) -> i32 {\n        return self.x;\n    }\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "end_with suffix" {
+    let mut w = CodeWriter::new();
+    w.begin("variant Shape");
+    w.begin("Circle");
+    w.line("radius: f64,");
+    w.end_with(",");
+    w.end();
+    let expected = "variant Shape {\n    Circle {\n        radius: f64,\n    },\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "write with embedded newlines" {
+    let mut w = CodeWriter::new();
+    w.begin("fn foo()");
+    w.write("let x = 1;\nlet y = 2;\n");
+    w.end();
+    let expected = "fn foo() {\n    let x = 1;\n    let y = 2;\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "raw bypasses indentation" {
+    let mut w = CodeWriter::new();
+    w.raw("// raw header\n");
+    w.begin("fn foo()");
+    w.line("return 1;");
+    w.end();
+    let expected = "// raw header\nfn foo() {\n    return 1;\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "next_id generates unique ids" {
+    let mut w = CodeWriter::new();
+    let a = w.next_id();
+    let b = w.next_id();
+    let c = w.next_id();
+    assert a == 0;
+    assert b == 1;
+    assert c == 2;
+}
+
+test "manual indent/dedent" {
+    let mut w = CodeWriter::new();
+    w.line("outer");
+    w.indent();
+    w.line("inner");
+    w.dedent();
+    w.line("outer again");
+    assert w.to_string() == "outer\n    inner\nouter again\n";
+}
+
+// ---------------------------------------------------------------------------
+// StructSpec tests
+// ---------------------------------------------------------------------------
+
+test "StructSpec basic" {
+    let mut s = StructSpec::new("Point");
+    s.add_field("x", "i32");
+    s.add_field("y", "i32");
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    let expected = "struct Point {\n    x: i32,\n    y: i32,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "StructSpec pub with pub fields" {
+    let mut s = StructSpec::new("Token");
+    s.set_pub();
+    s.add_pub_field("kind", "i32");
+    s.add_pub_field("text", "String");
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    let expected = "pub struct Token {\n    pub kind: i32,\n    pub text: String,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "StructSpec mixed visibility fields" {
+    let mut s = StructSpec::new("Config");
+    s.set_pub();
+    s.add_pub_field("name", "String");
+    s.add_field("secret", "i32");
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    let expected = "pub struct Config {\n    pub name: String,\n    secret: i32,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "StructSpec with FieldSpec" {
+    let mut s = StructSpec::new("Foo");
+    s.add_field_spec(FieldSpec::new_pub("x", "f64"));
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    assert w.to_string() == "struct Foo {\n    pub x: f64,\n}\n";
+}
+
+// ---------------------------------------------------------------------------
+// FlagsSpec tests
+// ---------------------------------------------------------------------------
+
+test "FlagsSpec basic" {
+    let mut f = FlagsSpec::new("Perms");
+    f.set_pub();
+    f.add_member("Read");
+    f.add_member("Write");
+    f.add_member("Execute");
+
+    let mut w = CodeWriter::new();
+    f.emit(&mut w);
+    let expected = "pub flags Perms {\n    Read,\n    Write,\n    Execute,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "FlagsSpec private" {
+    let mut f = FlagsSpec::new("Mode");
+    f.add_member("A");
+    f.add_member("B");
+
+    let mut w = CodeWriter::new();
+    f.emit(&mut w);
+    let expected = "flags Mode {\n    A,\n    B,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+// ---------------------------------------------------------------------------
+// VariantSpec tests
+// ---------------------------------------------------------------------------
+
+test "VariantSpec unit cases" {
+    let mut v = VariantSpec::new("TokenKind");
+    v.set_pub();
+    v.add_case("Number");
+    v.add_case("String");
+    v.add_case("Eof");
+
+    let mut w = CodeWriter::new();
+    v.emit(&mut w);
+    let expected = "pub variant TokenKind {\n    Number,\n    String,\n    Eof,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "VariantSpec with payloads" {
+    let mut v = VariantSpec::new("Shape");
+    v.add_case_with_payload("Circle", "f64");
+    v.add_case_with_payload("Rect", "[f64, f64]");
+    v.add_case("Point");
+
+    let mut w = CodeWriter::new();
+    v.emit(&mut w);
+    let expected = "variant Shape {\n    Circle(f64),\n    Rect([f64, f64]),\n    Point,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+// ---------------------------------------------------------------------------
+// EnumSpec tests
+// ---------------------------------------------------------------------------
+
+test "EnumSpec basic" {
+    let mut e = EnumSpec::new("Color");
+    e.set_pub();
+    e.add_member("Red");
+    e.add_member("Green");
+    e.add_member("Blue");
+
+    let mut w = CodeWriter::new();
+    e.emit(&mut w);
+    let expected = "pub enum Color {\n    Red,\n    Green,\n    Blue,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+// ---------------------------------------------------------------------------
+// FnSpec tests
+// ---------------------------------------------------------------------------
+
+test "FnSpec simple" {
+    let mut f = FnSpec::new("add");
+    f.add_param("a", "i32");
+    f.add_param("b", "i32");
+    f.set_return_type("i32");
+
+    let mut w = CodeWriter::new();
+    f.emit_begin(&mut w);
+    w.line("return a + b;");
+    w.end();
+    let expected = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "FnSpec with receiver" {
+    let mut f = FnSpec::new("len");
+    f.set_pub();
+    f.set_receiver("&self");
+    f.set_return_type("i32");
+
+    assert f.signature() == "pub fn len(&self) -> i32";
+}
+
+test "FnSpec with mut param" {
+    let mut f = FnSpec::new("process");
+    f.add_mut_param("n", "i32");
+
+    assert f.signature() == "fn process(mut n: i32)";
+}
+
+test "FnSpec no return type" {
+    let mut f = FnSpec::new("reset");
+    f.set_receiver("&mut self");
+
+    let mut w = CodeWriter::new();
+    f.emit_begin(&mut w);
+    w.line("self.x = 0;");
+    w.end();
+    let expected = "fn reset(&mut self) {\n    self.x = 0;\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "FnSpec signature string" {
+    let mut f = FnSpec::new("transform");
+    f.set_pub();
+    f.set_receiver("&self");
+    f.add_param("input", "&String");
+    f.add_param("scale", "f64");
+    f.set_return_type("String");
+
+    let sig = f.signature();
+    assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String", `got: {sig}`;
+}
+
+// ---------------------------------------------------------------------------
+// GlobalSpec tests
+// ---------------------------------------------------------------------------
+
+test "GlobalSpec basic" {
+    let g = GlobalSpec::new("TK_EOF", "i32", "0");
+
+    let mut w = CodeWriter::new();
+    g.emit(&mut w);
+    assert w.to_string() == "global TK_EOF: i32 = 0;\n";
+}
+
+test "GlobalSpec pub mut" {
+    let mut g = GlobalSpec::new("COUNTER", "i32", "0");
+    g.set_pub();
+    g.set_mut();
+
+    let mut w = CodeWriter::new();
+    g.emit(&mut w);
+    assert w.to_string() == "pub global mut COUNTER: i32 = 0;\n";
+}
+
+// ---------------------------------------------------------------------------
+// Integration: composing specs with CodeWriter
+// ---------------------------------------------------------------------------
+
+test "struct + impl + fn composition" {
+    let mut w = CodeWriter::new();
+
+    // struct Lexer { chars: Array<char>, pos: i32, }
+    let mut s = StructSpec::new("Lexer");
+    s.add_field("chars", "Array<char>");
+    s.add_field("pos", "i32");
+    s.emit(&mut w);
+    w.blank();
+
+    // impl Lexer { fn new(...) -> Lexer { ... } }
+    w.begin("impl Lexer");
+
+    let mut f = FnSpec::new("new");
+    f.add_param("input", "&String");
+    f.set_return_type("Lexer");
+    f.emit_begin(&mut w);
+    w.line("return Lexer { chars: input.chars().collect(), pos: 0 };");
+    w.end();
+    w.blank();
+
+    let mut f2 = FnSpec::new("at_end");
+    f2.set_receiver("&self");
+    f2.set_return_type("bool");
+    f2.emit_begin(&mut w);
+    w.line("return self.pos >= self.chars.len();");
+    w.end();
+
+    w.end();
+
+    let expected = "struct Lexer {\n    chars: Array<char>,\n    pos: i32,\n}\n\nimpl Lexer {\n    fn new(input: &String) -> Lexer {\n        return Lexer { chars: input.chars().collect(), pos: 0 };\n    }\n\n    fn at_end(&self) -> bool {\n        return self.pos >= self.chars.len();\n    }\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "variant + global composition" {
+    let mut w = CodeWriter::new();
+
+    let mut v = VariantSpec::new("TokenKind");
+    v.set_pub();
+    v.add_case("Number");
+    v.add_case("Eof");
+    v.add_case("Error");
+    v.emit(&mut w);
+    w.blank();
+
+    GlobalSpec::new("TK_Number", "i32", "0").emit(&mut w);
+    GlobalSpec::new("TK_EOF", "i32", "1").emit(&mut w);
+    GlobalSpec::new("TK_ERROR", "i32", "2").emit(&mut w);
+
+    let expected = "pub variant TokenKind {\n    Number,\n    Eof,\n    Error,\n}\n\nglobal TK_Number: i32 = 0;\nglobal TK_EOF: i32 = 1;\nglobal TK_ERROR: i32 = 2;\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "chaining builder methods" {
+    let mut s = StructSpec::new("Pair");
+    s.set_pub().add_pub_field("first", "i32").add_pub_field("second", "i32");
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    let expected = "pub struct Pair {\n    pub first: i32,\n    pub second: i32,\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+// ---------------------------------------------------------------------------
+// TraitSpec tests
+// ---------------------------------------------------------------------------
+
+test "TraitSpec simple" {
+    let mut t = TraitSpec::new("Greet");
+    t.set_pub();
+    let mut m = FnSpec::new("greet");
+    m.set_receiver("&self");
+    m.set_return_type("String");
+    t.add_method(m);
+
+    let mut w = CodeWriter::new();
+    t.emit(&mut w);
+    let expected = "pub trait Greet {\n    fn greet(&self) -> String;\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "TraitSpec with associated type" {
+    let mut t = TraitSpec::new("Container");
+    t.add_associated_type("Item");
+    let mut m = FnSpec::new("get");
+    m.set_receiver("&self");
+    m.set_return_type("Self::Item");
+    t.add_method(m);
+
+    let mut w = CodeWriter::new();
+    t.emit(&mut w);
+    let expected = "trait Container {\n    type Item;\n\n    fn get(&self) -> Self::Item;\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "TraitSpec multiple methods" {
+    let mut t = TraitSpec::new("ReadWrite");
+    let mut m1 = FnSpec::new("read");
+    m1.set_receiver("&self");
+    m1.set_return_type("String");
+    t.add_method(m1);
+    let mut m2 = FnSpec::new("write");
+    m2.set_receiver("&mut self");
+    m2.add_param("data", "&String");
+    t.add_method(m2);
+
+    let mut w = CodeWriter::new();
+    t.emit(&mut w);
+    let expected = "trait ReadWrite {\n    fn read(&self) -> String;\n\n    fn write(&mut self, data: &String);\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "TraitSpec with multiple associated types" {
+    let mut t = TraitSpec::new("Map");
+    t.add_associated_type("Key");
+    t.add_associated_type("Value");
+
+    let mut w = CodeWriter::new();
+    t.emit(&mut w);
+    let expected = "trait Map {\n    type Key;\n    type Value;\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+// ---------------------------------------------------------------------------
+// ImplSpec tests
+// ---------------------------------------------------------------------------
+
+test "ImplSpec basic" {
+    let mut w = CodeWriter::new();
+    let i = ImplSpec::new("Point");
+    i.emit_begin(&mut w);
+    let mut f = FnSpec::new("origin");
+    f.set_return_type("Point");
+    f.emit_begin(&mut w);
+    w.line("return Point { x: 0, y: 0 };");
+    w.end();
+    w.end();
+    let expected = "impl Point {\n    fn origin() -> Point {\n        return Point { x: 0, y: 0 };\n    }\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "ImplSpec trait impl" {
+    let mut w = CodeWriter::new();
+    let i = ImplSpec::new_trait("Eq", "Point");
+    i.emit_begin(&mut w);
+    let mut f = FnSpec::new("eq");
+    f.set_receiver("&self");
+    f.add_param("other", "&Self");
+    f.set_return_type("bool");
+    f.emit_begin(&mut w);
+    w.line("return self.x == other.x && self.y == other.y;");
+    w.end();
+    w.end();
+    let expected = "impl Eq for Point {\n    fn eq(&self, other: &Self) -> bool {\n        return self.x == other.x && self.y == other.y;\n    }\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
+
+test "full trait + impl composition" {
+    let mut w = CodeWriter::new();
+
+    // trait
+    let mut t = TraitSpec::new("Summary");
+    t.set_pub();
+    let mut m = FnSpec::new("title");
+    m.set_receiver("&self");
+    m.set_return_type("String");
+    t.add_method(m);
+    t.emit(&mut w);
+    w.blank();
+
+    // struct
+    let mut s = StructSpec::new("Article");
+    s.set_pub();
+    s.add_pub_field("name", "String");
+    s.emit(&mut w);
+    w.blank();
+
+    // impl trait for struct
+    let i = ImplSpec::new_trait("Summary", "Article");
+    i.emit_begin(&mut w);
+    let mut f = FnSpec::new("title");
+    f.set_receiver("&self");
+    f.set_return_type("String");
+    f.emit_begin(&mut w);
+    w.line("return self.name;");
+    w.end();
+    w.end();
+
+    let expected = "pub trait Summary {\n    fn title(&self) -> String;\n}\n\npub struct Article {\n    pub name: String,\n}\n\nimpl Summary for Article {\n    fn title(&self) -> String {\n        return self.name;\n    }\n}\n";
+    assert w.to_string() == expected, `got: {w.to_string()}`;
+}
