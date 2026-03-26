@@ -140,6 +140,9 @@ pub struct Resolver<'a, H: CompilerHost> {
     included_files: &'a IndexMap<[String; 2], Vec<u8>>,
     /// Cached flat set of all known type names for fast `is_known_type_name` lookups.
     known_type_names_cache: IndexSet<String>,
+    /// Anonymous structs created during expression resolution.
+    /// Flushed into the TirModule at the end of resolve_module.
+    pending_anonymous_structs: Vec<crate::tir::TirStruct>,
     /// Cache for `find_indexing_trait_impl` results.
     /// Key: (`struct_name`, `base_type_id`, `trait_base_name`, `method_name`, `assoc_type_name`)
     indexing_trait_cache: IndexMap<
@@ -208,6 +211,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             indexing_trait_cache: IndexMap::default(),
             trait_check_stack: RefCell::new(Vec::new()),
             method_info_cache: IndexMap::default(),
+            pending_anonymous_structs: Vec::new(),
         }
     }
 
@@ -676,6 +680,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Preserve data section
         if let Some(data) = module.data_section() {
             tir_module = tir_module.with_data_section(Some(data.to_string()));
+        }
+
+        // Add anonymous structs created during expression resolution
+        for anon_struct in self.pending_anonymous_structs.drain(..) {
+            tir_module.add_struct(anon_struct);
         }
 
         // Preserve wasm_module attribute

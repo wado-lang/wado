@@ -674,6 +674,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 indexing_trait_cache: IndexMap::default(),
                 trait_check_stack: RefCell::new(Vec::new()),
                 method_info_cache: IndexMap::default(),
+                pending_anonymous_structs: Vec::new(),
             };
             // known_type_names_cache is pre-computed globally; no per-module rebuild needed
 
