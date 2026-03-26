@@ -66,17 +66,6 @@ package-gale/
 | ----- | ---------------------------------------------------- | ----------- |
 | 0     | Project scaffold, runtime types                      | Done        |
 | 1     | G4 lexer and parser                                  | Done        |
-| 2     | Code generation (CST types, visitor, walk functions) | Done        |
-| 2     | Lexer function generation (`fn tokenize`)            | Done        |
-| 2     | Recursive descent parser function generation         | Done        |
-
-## Generated Parser Characteristics
-
-Each generated parser is a **predictive recursive-descent parser** with these properties:
-
-- **Lexer**: maximal-munch tokenizer generated from lexer rules, with keyword priority over identifiers and `-> channel(HIDDEN)` / `-> skip` support.
-- **Parser**: top-down recursive-descent with LL(k) static prediction. Each parse rule becomes a function returning a typed CST node.
-- **Left recursion**: handled via precedence climbing. Binary operators are parsed in a loop with `min_prec` gating, and conflict-aware `min_prec` computation resolves ambiguities like `BETWEEN expr AND expr` vs binary `AND`.
-- **Prediction engine**: overlapping alternatives are disambiguated by a static k-token lookahead decision tree (up to depth 5). When static prediction cannot resolve, the generator falls back to ordered backtracking.
-- **Non-greedy repeats**: `+?` and `*?` use follow-set subtraction and 2-token lookahead to implement minimal-match semantics.
-- **Self-contained**: the runtime (Span, Token, ParseError, Parser) is inlined into every generated file via `#include_str`.
+| 2     | Code generation (CST types, visitor, walk functions) | In progress |
+| 2     | Lexer function generation (`fn tokenize`)            | Planned     |
+| 2     | Recursive descent parser function generation         | Planned     |
