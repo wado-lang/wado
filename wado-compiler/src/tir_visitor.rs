@@ -112,6 +112,11 @@ pub trait TirMutVisitor {
                     self.visit_pattern(&mut field.pattern);
                 }
             }
+            TirPattern::Or(alternatives) => {
+                for p in alternatives {
+                    self.visit_pattern(p);
+                }
+            }
         }
     }
 

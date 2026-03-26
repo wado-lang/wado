@@ -1270,6 +1270,12 @@ impl<'a> PatternLowerer<'a> {
                 // Literal/Enum patterns don't bind anything, just evaluate for side effects
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
             }
+            TirPattern::Or(alternatives) => {
+                // Or patterns in let-destructure: use first alternative's bindings
+                if let Some(first) = alternatives.first() {
+                    self.lower_pattern_to_lets(first, is_mut, value, span, out, type_table);
+                }
+            }
         }
     }
 
@@ -1521,6 +1527,12 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Literal(_) | TirPattern::Enum { .. } => {
                 // Just evaluate for side effects (no bindings)
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
+            }
+            TirPattern::Or(alternatives) => {
+                // Or patterns in lets: use first alternative's bindings
+                if let Some(first) = alternatives.first() {
+                    self.lower_pattern_to_lets(first, is_mut, value, span, out, type_table);
+                }
             }
         }
     }
@@ -2058,6 +2070,42 @@ impl<'a> PatternLowerer<'a> {
                     binding_stmts,
                 )
             }
+            TirPattern::Or(alternatives) => {
+                // Or pattern: combine conditions with logical OR, use first alternative's bindings
+                let mut or_conditions: Vec<TirExpr> = Vec::new();
+                for alt in alternatives {
+                    let (cond, _) = self.pattern_to_condition_and_bindings(
+                        alt,
+                        scrutinee.clone(),
+                        span,
+                        type_table,
+                    );
+                    or_conditions.push(cond);
+                }
+                // Emit bindings from the first alternative (all alternatives bind the same names)
+                if let Some(first) = alternatives.first() {
+                    let (_, first_bindings) =
+                        self.pattern_to_condition_and_bindings(first, scrutinee, span, type_table);
+                    binding_stmts.extend(first_bindings);
+                }
+                let combined = or_conditions
+                    .into_iter()
+                    .reduce(|acc, cond| {
+                        TirExpr::new(
+                            TirExprKind::Binary {
+                                op: TirBinaryOp::Or,
+                                left: Box::new(acc),
+                                right: Box::new(cond),
+                            },
+                            TypeTable::BOOL,
+                            span,
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span)
+                    });
+                (combined, binding_stmts)
+            }
         }
     }
 
@@ -2090,6 +2138,24 @@ impl<'a> PatternLowerer<'a> {
                     }
                     self.lower_expr(&mut arm.body, type_table);
                 }
+
+                // Expand or-patterns: `A | B => body` becomes `A => body, B => body`
+                let mut expanded_arms = Vec::new();
+                for arm in arms.drain(..) {
+                    if let TirPattern::Or(alternatives) = arm.pattern {
+                        for alt in alternatives {
+                            expanded_arms.push(TirMatchArm {
+                                pattern: alt,
+                                guard: arm.guard.clone(),
+                                body: arm.body.clone(),
+                                span: arm.span,
+                            });
+                        }
+                    } else {
+                        expanded_arms.push(arm);
+                    }
+                }
+                *arms = expanded_arms;
 
                 // Match ergonomics: insert deref if scrutinee is Ref/MutRef
                 while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =

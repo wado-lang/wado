@@ -285,6 +285,9 @@ fn desugar_pattern(p: &Pattern) -> Pattern {
             has_rest: *has_rest,
             span: *span,
         },
+        Pattern::Or(alternatives) => {
+            Pattern::Or(alternatives.iter().map(desugar_pattern).collect())
+        }
     }
 }
 

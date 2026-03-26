@@ -1619,6 +1619,12 @@ impl ClosureLowerer {
                     .collect(),
                 has_rest: *has_rest,
             },
+            TirPattern::Or(alternatives) => TirPattern::Or(
+                alternatives
+                    .iter()
+                    .map(|p| self.transform_closure_body_pattern(p))
+                    .collect(),
+            ),
         }
     }
 

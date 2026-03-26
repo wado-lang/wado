@@ -1476,10 +1476,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some(enum_info) = self.enum_cases.get(name) {
                     let all_cases: IndexSet<&str> =
                         enum_info.cases.iter().map(|c| c.name.as_str()).collect();
-                    let covered: IndexSet<&str> = arms
-                        .iter()
-                        .filter_map(|arm| Self::enum_case_name(&arm.pattern))
-                        .collect();
+                    let covered: IndexSet<&str> = {
+                        let mut names = Vec::new();
+                        for arm in arms {
+                            Self::collect_enum_case_names(&arm.pattern, &mut names);
+                        }
+                        names.into_iter().collect()
+                    };
                     let missing: Vec<&&str> = all_cases.difference(&covered).collect();
                     if !missing.is_empty() {
                         let missing_names: Vec<String> =
@@ -1503,18 +1506,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
             ResolvedType::Primitive(crate::tir::PrimitiveType::Bool) => {
-                let has_true = arms.iter().any(|arm| {
-                    matches!(
-                        &arm.pattern,
-                        TirPattern::Literal(crate::tir::TirLiteralPattern::Bool(true))
-                    )
-                });
-                let has_false = arms.iter().any(|arm| {
-                    matches!(
-                        &arm.pattern,
-                        TirPattern::Literal(crate::tir::TirLiteralPattern::Bool(false))
-                    )
-                });
+                let has_true = arms
+                    .iter()
+                    .any(|arm| Self::pattern_contains_bool(&arm.pattern, true));
+                let has_false = arms
+                    .iter()
+                    .any(|arm| Self::pattern_contains_bool(&arm.pattern, false));
                 if !has_true || !has_false {
                     let mut missing = Vec::new();
                     if !has_true {
@@ -1543,10 +1540,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Some(variant_info) = self.variant_cases.get(variant_name) {
             let all_cases: IndexSet<&str> =
                 variant_info.cases.iter().map(|c| c.name.as_str()).collect();
-            let covered: IndexSet<&str> = arms
-                .iter()
-                .filter_map(|arm| Self::variant_case_name(&arm.pattern))
-                .collect();
+            let covered: IndexSet<&str> = {
+                let mut names = Vec::new();
+                for arm in arms {
+                    Self::collect_variant_case_names(&arm.pattern, &mut names);
+                }
+                names.into_iter().collect()
+            };
             let missing: Vec<&&str> = all_cases.difference(&covered).collect();
             if !missing.is_empty() {
                 let missing_names: Vec<String> = missing.iter().map(|s| (*s).to_string()).collect();
@@ -1562,20 +1562,44 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     fn is_catch_all_pattern(pattern: &TirPattern) -> bool {
-        matches!(pattern, TirPattern::Wildcard | TirPattern::Binding { .. })
-    }
-
-    fn enum_case_name(pattern: &TirPattern) -> Option<&str> {
         match pattern {
-            TirPattern::Enum { case_name, .. } => Some(case_name),
-            _ => None,
+            TirPattern::Wildcard | TirPattern::Binding { .. } => true,
+            TirPattern::Or(alternatives) => alternatives.iter().any(Self::is_catch_all_pattern),
+            _ => false,
         }
     }
 
-    fn variant_case_name(pattern: &TirPattern) -> Option<&str> {
+    fn collect_enum_case_names<'a>(pattern: &'a TirPattern, out: &mut Vec<&'a str>) {
         match pattern {
-            TirPattern::Variant { variant_name, .. } => Some(variant_name),
-            _ => None,
+            TirPattern::Enum { case_name, .. } => out.push(case_name),
+            TirPattern::Or(alternatives) => {
+                for alt in alternatives {
+                    Self::collect_enum_case_names(alt, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_variant_case_names<'a>(pattern: &'a TirPattern, out: &mut Vec<&'a str>) {
+        match pattern {
+            TirPattern::Variant { variant_name, .. } => out.push(variant_name),
+            TirPattern::Or(alternatives) => {
+                for alt in alternatives {
+                    Self::collect_variant_case_names(alt, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn pattern_contains_bool(pattern: &TirPattern, value: bool) -> bool {
+        match pattern {
+            TirPattern::Literal(crate::tir::TirLiteralPattern::Bool(b)) => *b == value,
+            TirPattern::Or(alternatives) => alternatives
+                .iter()
+                .any(|p| Self::pattern_contains_bool(p, value)),
+            _ => false,
         }
     }
 

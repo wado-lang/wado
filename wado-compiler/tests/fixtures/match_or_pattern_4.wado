@@ -1,0 +1,15 @@
+variant Value {
+    Int(i32),
+    Float(f64),
+    Text(String),
+}
+
+fn extract_number(v: Value) -> f64 {
+    return match v {
+        Int(n) | Float(n) => n as f64,
+        Text(_) => 0.0,
+    };
+}
+
+__DATA__
+{"compile_error": "or-pattern alternatives must bind the same names with the same types"}

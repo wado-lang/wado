@@ -1494,6 +1494,12 @@ fn remap_pattern(
                 .collect(),
             has_rest: *has_rest,
         },
+        TirPattern::Or(alternatives) => TirPattern::Or(
+            alternatives
+                .iter()
+                .map(|p| remap_pattern(p, param_to_local, local_offset, param_count))
+                .collect(),
+        ),
     }
 }
 

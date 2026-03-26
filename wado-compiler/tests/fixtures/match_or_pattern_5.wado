@@ -1,0 +1,24 @@
+variant Expr {
+    Num(i32),
+    Neg(i32),
+    Zero,
+}
+
+fn abs_value(e: Expr) -> i32 {
+    return match e {
+        Num(n) | Neg(n) => {
+            if n < 0 { return -n; }
+            return n;
+        },
+        Zero => 0,
+    };
+}
+
+export fn run() {
+    assert abs_value(Expr::Num(5)) == 5;
+    assert abs_value(Expr::Neg(-3)) == 3;
+    assert abs_value(Expr::Zero) == 0;
+}
+
+__DATA__
+{"stdout": ""}
