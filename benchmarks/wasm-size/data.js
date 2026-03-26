@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774483138877,
+  "lastUpdate": 1774520058617,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7550,6 +7550,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5497d0e0cbca89159bcd0dffe555ae3be0c42cf5"
         },
         "date": 1774483138651,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e00fa45226a3b2fc3711a9d49014740f03347207",
+          "message": "Merge pull request #694 from wado-lang/claude/remove-as-non-null-iuVb6\n\nRemove unnecessary ref.as_non_null() calls in generated code",
+          "timestamp": "2026-03-26T19:11:42+09:00",
+          "tree_id": "28396e4f236542b3e01da14490f141f7243838bb",
+          "url": "https://github.com/wado-lang/wado/commit/e00fa45226a3b2fc3711a9d49014740f03347207"
+        },
+        "date": 1774520058412,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
