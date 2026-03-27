@@ -22,7 +22,7 @@ pub(super) fn propagate_trivial_copies(module: &mut WirModule) {
     }
 }
 
-fn propagate_copies_in_body(instrs: &mut Vec<WirInstr>) {
+fn propagate_copies_in_body(instrs: &mut [WirInstr]) {
     // Recurse into nested blocks first (bottom-up)
     for instr in instrs.iter_mut() {
         match instr {

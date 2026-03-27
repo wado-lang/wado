@@ -43,92 +43,317 @@ fn build_prediction(
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
 ) -> PredictionNode {
-    if alt_indices.len() == 1 {
-        return PredictionNode::Leaf(alt_indices[0]);
+    // Build initial SLL configs: one per alternative, at element position 0.
+    let mut configs: Array<SllConfig> = [];
+    for let mut i = 0; i < alt_indices.len(); i += 1 {
+        configs.append(SllConfig {
+            alt_index: alt_indices[i],
+            elements: alt_elements[i],
+            pos: 0,
+        });
     }
-    if depth >= max_depth {
-        let mut bt_copy: Array<i32> = [];
-        for let ai of alt_indices { bt_copy.append(*ai); }
-        return PredictionNode::Backtrack(bt_copy);
+    let tree = build_sll_node(&configs, 0, max_depth, all_rules, lit_tokens);
+    return strip_dead_consume(tree);
+}
+
+/// Strip Consume nodes whose child is a Backtrack — fall back to
+/// Backtrack from the original position rather than consuming then failing.
+fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
+    if let Consume(c) = node {
+        let child = strip_dead_consume(c.child);
+        if let Backtrack(_) = child {
+            // Consuming prefix didn't help — return Backtrack with original alts.
+            return child;
+        }
+        return PredictionNode::Consume(ConsumeNode { element: c.element, child });
+    }
+    if let Dispatch(d) = node {
+        let mut new_branches: Array<PredictionBranch> = [];
+        for let b of d.branches {
+            new_branches.append(PredictionBranch {
+                tokens: b.tokens,
+                child: strip_dead_consume(b.child),
+            });
+        }
+        return PredictionNode::Dispatch(PredictionDispatch { depth: d.depth, branches: new_branches });
+    }
+    return node;
+}
+
+struct SllConfig {
+    alt_index: i32,
+    elements: Array<Element>,
+    pos: i32,
+}
+
+fn sll_config_clone(c: &SllConfig) -> SllConfig {
+    return SllConfig {
+        alt_index: c.alt_index,
+        elements: c.elements,
+        pos: c.pos,
+    };
+}
+
+/// Advance config past nullable elements at current position.
+/// Also handles rule-end: if pos >= len, the config is "completed".
+fn sll_closure(configs: &Array<SllConfig>) -> Array<SllConfig> {
+    let mut result: Array<SllConfig> = [];
+    for let c of configs {
+        let mut cur = sll_config_clone(c);
+        // Skip nullable elements (Optional, Star) at current position.
+        while cur.pos < cur.elements.len() && is_nullable(&cur.elements[cur.pos]) {
+            cur.pos += 1;
+        }
+        result.append(cur);
+    }
+    return result;
+}
+
+/// Compute FIRST set of the current element in a config.
+fn sll_config_first(
+    c: &SllConfig,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> Array<String> {
+    if c.pos >= c.elements.len() { return []; }
+    let mut visiting: Array<String> = [];
+    return first_of_element(&c.elements[c.pos], all_rules, lit_tokens, &mut visiting);
+}
+
+/// Advance a config by one token. For terminals, advance pos.
+/// For RuleRef, expand into the rule's alternatives (entering the rule).
+fn sll_advance(
+    c: &SllConfig,
+    token: &String,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> Array<SllConfig> {
+    return sll_advance_inner(c, token, all_rules, lit_tokens, 0);
+}
+
+fn sll_advance_inner(
+    c: &SllConfig,
+    token: &String,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    inline_depth: i32,
+) -> Array<SllConfig> {
+    // Limit inline expansion depth to prevent explosion from recursive rules.
+    if inline_depth > 2 { return []; }
+    if c.pos >= c.elements.len() { return []; }
+    let elem = &c.elements[c.pos];
+
+    // Terminal: if token matches, advance past this element.
+    if let TokenRef(name) = *elem {
+        if `TK_{name}` == *token {
+            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1 }];
+        }
+        return [];
+    }
+    if let Literal(text) = *elem {
+        if literal_const_name(&text) == *token {
+            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1 }];
+        }
+        return [];
     }
 
-    // Try common-prefix consumption: if all alternatives start with the same
-    // fixed token (TokenRef or Literal), consume it and recurse on suffixes.
-    // This does NOT increment depth — shared tokens don't cost prediction budget.
-    let common = find_common_prefix_element(alt_elements);
-    if let Some(elem) = common {
-        let mut suffix_elements: Array<Array<Element>> = [];
-        let mut suffix_firsts: Array<Array<String>> = [];
-        for let mut i = 0; i < alt_indices.len(); i += 1 {
-            let suffix = elements_suffix(&alt_elements[i], 1);
-            let mut visiting: Array<String> = [];
-            suffix_firsts.append(first_of_elements(
-                &suffix, all_rules, lit_tokens, &mut visiting,
-            ));
-            suffix_elements.append(suffix);
+    // RuleRef: advance past only if the rule always consumes exactly one token.
+    // Multi-token rules can't be safely skipped because token position wouldn't
+    // correspond to element position.
+    if let RuleRef(name) = *elem {
+        let mut visiting: Array<String> = [];
+        let rule_first = first_of_rule(&name, all_rules, lit_tokens, &mut visiting);
+        if !array_contains_str(&rule_first, token) {
+            return [];
         }
-        let child = build_prediction(
-            alt_indices, &suffix_firsts, &suffix_elements,
-            depth, max_depth, all_rules, lit_tokens,
-        );
+        let mut st_visiting: Array<String> = [];
+        if rule_is_single_token(&name, all_rules, &mut st_visiting) {
+            // Single-token rule: safe to advance, element position == token position.
+            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1 }];
+        }
+        // Multi-token rule: token matches FIRST but we can't advance past it.
+        // Return config with pos = -1 as a sentinel meaning "opaque match".
+        return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1 }];
+    }
+
+    // Group: treat as consuming one token if the token is in FIRST(group).
+    if let Group(alts) = *elem {
+        let mut group_first: Array<String> = [];
+        for let alt of alts {
+            let mut visiting: Array<String> = [];
+            let af = first_of_alt(&alt, all_rules, lit_tokens, &mut visiting);
+            for let tk of af {
+                if !array_contains_str(&group_first, &tk) {
+                    group_first.append(tk);
+                }
+            }
+        }
+        if array_contains_str(&group_first, token) {
+            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1 }];
+        }
+        return [];
+    }
+
+    // Repeat: treat as consuming the inner element.
+    if let Repeat(rep) = *elem {
+        let mut inner_first: Array<String> = [];
+        let mut visiting: Array<String> = [];
+        inner_first = first_of_element(&rep.element, all_rules, lit_tokens, &mut visiting);
+        if array_contains_str(&inner_first, token) {
+            // Advance past the repeat element (simplified: treat as consuming 1 token).
+            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1 }];
+        }
+        return [];
+    }
+
+    // Label: unwrap.
+    if let Label(lab) = *elem {
+        let unwrapped = SllConfig {
+            alt_index: c.alt_index,
+            elements: replace_element_at(&c.elements, c.pos, &lab.element),
+            pos: c.pos,
+        };
+        return sll_advance_inner(&unwrapped, token, all_rules, lit_tokens, inline_depth);
+    }
+
+    return [];
+}
+
+fn replace_element_at(elements: &Array<Element>, pos: i32, replacement: &Element) -> Array<Element> {
+    let mut result: Array<Element> = [];
+    for let mut i = 0; i < elements.len(); i += 1 {
+        if i == pos {
+            result.append(*replacement);
+        } else {
+            result.append(elements[i]);
+        }
+    }
+    return result;
+}
+
+/// Collect unique alt indices from configs.
+fn sll_unique_alts(configs: &Array<SllConfig>) -> Array<i32> {
+    let mut alts: Array<i32> = [];
+    for let c of configs {
+        if !array_contains_i32(&alts, c.alt_index) {
+            alts.append(c.alt_index);
+        }
+    }
+    return alts;
+}
+
+/// Deduplicate configs: merge configs with the same (alt_index) that reach
+/// the same prediction outcome. For SLL, two configs with the same alt_index
+/// are equivalent for prediction purposes.
+fn sll_dedup_by_alt(configs: &Array<SllConfig>) -> Array<SllConfig> {
+    let mut seen_alts: Array<i32> = [];
+    let mut result: Array<SllConfig> = [];
+    for let c of configs {
+        if !array_contains_i32(&seen_alts, c.alt_index) {
+            seen_alts.append(c.alt_index);
+            result.append(sll_config_clone(c));
+        }
+    }
+    return result;
+}
+
+fn build_sll_node(
+    configs: &Array<SllConfig>,
+    depth: i32,
+    max_depth: i32,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> PredictionNode {
+    let closed = sll_closure(configs);
+
+    // Guard: if too many configs, fall back to backtracking to avoid explosion.
+    if closed.len() > 200 {
+        let alts = sll_unique_alts(&closed);
+        return PredictionNode::Backtrack(alts);
+    }
+
+    // Check unique alternatives.
+    let alts = sll_unique_alts(&closed);
+    if alts.len() == 1 {
+        return PredictionNode::Leaf(alts[0]);
+    }
+    if alts.len() == 0 || depth >= max_depth {
+        return PredictionNode::Backtrack(alts);
+    }
+
+    // Check for common prefix: if all configs are at a terminal element
+    // that is the same across all configs, emit Consume.
+    let common = sll_find_common_terminal(&closed);
+    if let Some(elem) = common {
+        // Advance all configs past this shared terminal.
+        let mut advanced: Array<SllConfig> = [];
+        for let c of closed {
+            advanced.append(SllConfig {
+                alt_index: c.alt_index,
+                elements: c.elements,
+                pos: c.pos + 1,
+            });
+        }
+        let child = build_sll_node(&advanced, depth, max_depth, all_rules, lit_tokens);
         return PredictionNode::Consume(ConsumeNode { element: elem, child });
     }
 
-    // Dispatch: use depth-based lookahead on original elements.
-    // compute_deeper_first skips `depth` fixed tokens and returns FIRST of
-    // the next position. Elements are NOT modified — depth tracks position.
-    let mut depth_firsts: Array<Array<String>> = [];
-    for let mut i = 0; i < alt_indices.len(); i += 1 {
-        if depth == 0 {
-            depth_firsts.append(first_sets[i]);
-        } else {
-            depth_firsts.append(compute_deeper_first(&alt_elements[i], depth, all_rules, lit_tokens));
-        }
-    }
-
-    // If any alt has empty deeper first set at depth > 0, can't disambiguate further.
-    if depth > 0 {
-        let mut has_empty = false;
-        for let mut i = 0; i < alt_indices.len(); i += 1 {
-            if depth_firsts[i].len() == 0 { has_empty = true; }
-        }
-        if has_empty {
-            let mut bt_copy: Array<i32> = [];
-            for let ai of alt_indices { bt_copy.append(*ai); }
-            return PredictionNode::Backtrack(bt_copy);
-        }
-    }
-
-    // Collect all tokens across alternatives.
+    // Compute FIRST set for each config.
     let mut all_tokens: Array<String> = [];
-    for let mut i = 0; i < alt_indices.len(); i += 1 {
-        for let tk of depth_firsts[i] {
+    let mut config_firsts: Array<Array<String>> = [];
+    for let c of closed {
+        let first = sll_config_first(&c, all_rules, lit_tokens);
+        config_firsts.append(first);
+        for let tk of first {
             if !array_contains_str(&all_tokens, &tk) {
                 all_tokens.append(tk);
             }
         }
     }
 
+    // Build dispatch branches.
     let mut branches: Array<PredictionBranch> = [];
 
     for let mut t = 0; t < all_tokens.len(); t += 1 {
         let tk = &all_tokens[t];
-        let mut matching_indices: Array<i32> = [];
-        let mut matching_firsts: Array<Array<String>> = [];
-        let mut matching_elements: Array<Array<Element>> = [];
-        for let mut i = 0; i < alt_indices.len(); i += 1 {
-            if array_contains_str(&depth_firsts[i], tk) {
-                matching_indices.append(alt_indices[i]);
-                matching_firsts.append(first_sets[i]);
-                matching_elements.append(alt_elements[i]);
+
+        // Advance all configs that can match this token.
+        let mut next_configs: Array<SllConfig> = [];
+        let mut opaque_alts: Array<i32> = [];
+        for let mut i = 0; i < closed.len(); i += 1 {
+            if array_contains_str(&config_firsts[i], tk) {
+                let advanced = sll_advance(&closed[i], tk, all_rules, lit_tokens);
+                for let a of advanced {
+                    if a.pos == -1 {
+                        // Opaque config: multi-token RuleRef, can't advance past.
+                        if !array_contains_i32(&opaque_alts, a.alt_index) {
+                            opaque_alts.append(a.alt_index);
+                        }
+                    } else {
+                        next_configs.append(a);
+                    }
+                }
             }
         }
 
-        if matching_indices.len() == 1 {
+        if next_configs.len() == 0 && opaque_alts.len() == 0 { continue; }
+
+        // Dedup: keep one config per alt (SLL ignores context).
+        let deduped = sll_dedup_by_alt(&next_configs);
+        let mut next_alts = sll_unique_alts(&deduped);
+        // Add opaque alts (they survive regardless of further lookahead).
+        for let oa of opaque_alts {
+            if !array_contains_i32(&next_alts, oa) {
+                next_alts.append(oa);
+            }
+        }
+
+        if next_alts.len() == 1 {
+            // Resolved: this token uniquely identifies one alternative.
             let mut merged = false;
             for let mut b = 0; b < branches.len(); b += 1 {
                 if let Leaf(idx) = branches[b].child {
-                    if idx == matching_indices[0] {
+                    if idx == next_alts[0] {
                         branches[b].tokens.append(*tk);
                         merged = true;
                     }
@@ -137,12 +362,17 @@ fn build_prediction(
             if !merged {
                 branches.append(PredictionBranch {
                     tokens: [*tk],
-                    child: PredictionNode::Leaf(matching_indices[0]),
+                    child: PredictionNode::Leaf(next_alts[0]),
                 });
             }
         } else {
-            let child = build_prediction(&matching_indices, &matching_firsts, &matching_elements,
-                depth + 1, max_depth, all_rules, lit_tokens);
+            // Still ambiguous: recurse with deeper lookahead.
+            // If opaque alts exist, they can't be resolved further — Backtrack.
+            let child = if opaque_alts.len() > 0 {
+                PredictionNode::Backtrack(next_alts)
+            } else {
+                build_sll_node(&deduped, depth + 1, max_depth, all_rules, lit_tokens)
+            };
             let mut merged = false;
             for let mut b = 0; b < branches.len(); b += 1 {
                 if prediction_node_eq(&branches[b].child, &child) {
@@ -160,11 +390,37 @@ fn build_prediction(
     }
 
     if branches.len() == 0 {
-        let mut bt_copy: Array<i32> = [];
-        for let ai of alt_indices { bt_copy.append(*ai); }
-        return PredictionNode::Backtrack(bt_copy);
+        return PredictionNode::Backtrack(alts);
     }
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
+}
+
+/// Check if all configs are at the same terminal element (for Consume).
+fn sll_find_common_terminal(configs: &Array<SllConfig>) -> Option<Element> {
+    if configs.len() < 2 { return null; }
+    for let c of configs {
+        if c.pos >= c.elements.len() { return null; }
+    }
+    let first_elem = &configs[0].elements[configs[0].pos];
+    if let TokenRef(name) = *first_elem {
+        for let mut i = 1; i < configs.len(); i += 1 {
+            let elem = &configs[i].elements[configs[i].pos];
+            if let TokenRef(other) = *elem {
+                if other != name { return null; }
+            } else { return null; }
+        }
+        return Option::<Element>::Some(*first_elem);
+    }
+    if let Literal(text) = *first_elem {
+        for let mut i = 1; i < configs.len(); i += 1 {
+            let elem = &configs[i].elements[configs[i].pos];
+            if let Literal(other) = *elem {
+                if other != text { return null; }
+            } else { return null; }
+        }
+        return Option::<Element>::Some(*first_elem);
+    }
+    return null;
 }
 
 /// Check if all alternatives start with the same element (TokenRef, Literal, or RuleRef).
@@ -2128,37 +2384,9 @@ fn gen_prediction_code_inner(
                 }
             }
         } else {
-            // Prefix already consumed — inline backtracking on remaining elements.
-            w.line("let saved = p.pos;");
-            let all_labeled = all_alternatives_labeled(alts);
-            for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                let idx = sorted_indices[i];
-                let is_last = i == sorted_indices.len() - 1;
-                let alt = &alts[idx];
-                let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{idx}` };
-                let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
-                if is_last {
-                    gen_alt_body_skip(w, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens, skip);
-                } else {
-                    let bt_label = `bt_inline_{idx}`;
-                    w.begin(`{bt_label}:`);
-                    let mut nc: Array<[String, i32]> = [];
-                    for let mut ei = 0; ei < skip; ei += 1 {
-                        replay_element_names(&alt.elements[ei], &mut nc);
-                    }
-                    for let mut ei = skip; ei < alt.elements.len(); ei += 1 {
-                        gen_element_failable(w, &alt.elements[ei], all_rules, lit_tokens, &"saved", &bt_label, &mut nc);
-                    }
-                    w.line(`return Result::<{*type_name}, ParseError>::Ok({*type_name}::{case_name}({sname} \{`);
-                    w.indent();
-                    w.line("span: Span::new(start, p.last_end()),");
-                    gen_field_assignments(w, &alt.elements);
-                    w.dedent();
-                    w.line("}));");
-                    w.end(); // label
-                    w.line("p.pos = saved;");
-                }
-            }
+            // Prefix already consumed — should not happen.
+            // Consume nodes that lead to Backtrack are stripped at build time.
+            panic("unreachable: Consume leading to Backtrack should have been stripped");
         }
         return;
     }
