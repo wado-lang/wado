@@ -1383,7 +1383,22 @@ impl<'a> Unparser<'a> {
                             self.unparse_expr(expr);
                         }
                         ConditionElement::Expr(expr) => {
+                            // In a let-chain, elements are joined by `&&`.
+                            // If this element is itself a `&&` or `||` expression,
+                            // we must wrap it in parens to preserve the AST structure.
+                            // Without parens, `let PAT = E && (a && b)` would be
+                            // re-parsed as three chain elements instead of two.
+                            let needs_parens = matches!(
+                                expr,
+                                Expr::Binary(b) if matches!(b.op, BinaryOp::And | BinaryOp::Or)
+                            );
+                            if needs_parens {
+                                self.output.push('(');
+                            }
                             self.unparse_expr(expr);
+                            if needs_parens {
+                                self.output.push(')');
+                            }
                         }
                     }
                 }
@@ -3202,7 +3217,17 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
                         unparse_expr_into(expr, output, false);
                     }
                     ConditionElement::Expr(expr) => {
+                        let needs_parens = matches!(
+                            expr,
+                            Expr::Binary(b) if matches!(b.op, BinaryOp::And | BinaryOp::Or)
+                        );
+                        if needs_parens {
+                            output.push('(');
+                        }
                         unparse_expr_into(expr, output, false);
+                        if needs_parens {
+                            output.push(')');
+                        }
                     }
                 }
             }

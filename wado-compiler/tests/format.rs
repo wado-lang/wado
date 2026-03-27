@@ -1695,12 +1695,6 @@ fn test_roundtrip_ast_all_fixtures() {
             continue;
         }
 
-        // Known bug: formatter strips parens in `if let ... && (expr)` / `while let ... && (expr)`
-        // See test_roundtrip_ast_known_paren_stripping_bug for the regression test.
-        if filename == "if_merged.wado" || filename == "while_merged.wado" {
-            continue;
-        }
-
         let formatted = match wado_compiler::format(&source) {
             Ok(f) => f,
             Err(_) => continue,
@@ -1750,19 +1744,13 @@ fn test_roundtrip_ast_all_fixtures() {
     }
 }
 
-/// Known bug: the formatter strips parentheses in `if let ... && (expr)` and
-/// `while let ... && (expr)` conditions, changing the AST structure.
-///
-/// Example: `if let Some(x) = opt && (flag1 && flag2)` becomes
-///          `if let Some(x) = opt && flag1 && flag2`
-///
-/// While semantically equivalent in this case (due to && associativity),
-/// this changes the AST from `Binary(LetAnd, Paren(Binary(...)))` to
-/// `Binary(LetAnd, Binary(LetAnd, ...))`, which violates round-trip AST
-/// equivalence. The formatter should preserve explicit parens in these positions.
+/// Regression test: the formatter must preserve parentheses in `if let ... && (expr)`
+/// and `while let ... && (expr)` conditions. Without parens, the let-chain element
+/// count changes on re-parse (e.g., 2 elements become 3), violating round-trip
+/// AST equivalence.
 #[test]
-#[should_panic(expected = "Formatter changed AST semantics")]
-fn test_roundtrip_ast_known_paren_stripping_bug() {
+fn test_roundtrip_ast_let_chain_paren_preservation() {
+    // if let with && boolean guard containing &&
     assert_format_preserves_ast(
         r#"
 fn test() {
@@ -1770,6 +1758,32 @@ fn test() {
     let flag1 = true;
     let flag2 = true;
     if let Some(x) = opt && (flag1 && flag2) {
+        println(`{x}`);
+    }
+}
+"#,
+    );
+
+    // while let with && guard containing &&
+    assert_format_preserves_ast(
+        r#"
+fn test() {
+    let mut iter = [1, 2, 3].iter();
+    let min = 0;
+    let max = 10;
+    while let Some(v) = iter.next() && (v > min && v < max) {
+        println(`{v}`);
+    }
+}
+"#,
+    );
+
+    // if let with || inside guard
+    assert_format_preserves_ast(
+        r#"
+fn test() {
+    let opt = Option::<i32>::Some(5);
+    if let Some(x) = opt && (x > 10 || x < 0) {
         println(`{x}`);
     }
 }
