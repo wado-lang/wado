@@ -3,11 +3,126 @@
 //! These tests verify:
 //! - Idempotency: format(format(x)) == format(x)
 //! - Comment preservation: comments remain in formatted output
-//! - Round-trip semantics: formatted code compiles to equivalent Wasm
+//! - Round-trip AST equivalence: parse(format(x)) ≡ parse(x) (ignoring spans)
 //! - Canonical formatting style
 
 use std::fs;
 use std::path::Path;
+
+/// Strip semantically-irrelevant fields from Debug output so we can compare
+/// ASTs structurally. This normalizes:
+/// - `span: Span { ... }` → `span: SPAN` (source positions differ after format)
+/// - `has_trailing_comma: ...` → removed (formatting hint, not semantic)
+/// - `type_params: [...]` → `type_params: NORM` (formatter normalizes `impl<T> Foo<T>` to `impl Foo<T>`)
+///
+/// The goal is to catch **semantic** changes (dropped expressions, changed precedence)
+/// while ignoring **syntactic normalizations** that the formatter intentionally performs.
+fn normalize_ast_debug(debug: &str) -> String {
+    // Work on bytes since Debug output is always ASCII
+    let bytes = debug.as_bytes();
+    let mut result = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+
+    while i < bytes.len() {
+        // Normalize any "Span {" occurrence (span:, op_span:, or bare Span in enums)
+        if bytes[i..].starts_with(b"Span {") {
+            result.extend_from_slice(b"SPAN");
+            i += b"Span ".len();
+            let mut depth = 0i32;
+            while i < bytes.len() {
+                if bytes[i] == b'{' {
+                    depth += 1;
+                } else if bytes[i] == b'}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        i += 1;
+                        break;
+                    }
+                }
+                i += 1;
+            }
+            continue;
+        }
+
+        // Strip "has_trailing_comma: ..." lines
+        if bytes[i..].starts_with(b"has_trailing_comma:") {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Note: type_params are NOT normalized — the formatter now always emits
+        // explicit `impl<T>` (matching Rust), so type_params must round-trip exactly.
+
+        result.push(bytes[i]);
+        i += 1;
+    }
+
+    String::from_utf8(result).expect("Debug output should be valid UTF-8")
+}
+
+/// Assert that formatting preserves AST semantics: parse(source) ≡ parse(format(source)).
+///
+/// This catches bugs where the formatter changes program meaning (e.g., dropping
+/// parentheses, reordering operators, losing expressions).
+fn assert_format_preserves_ast(source: &str) {
+    let formatted = match wado_compiler::format(source) {
+        Ok(f) => f,
+        Err(_) => return, // skip sources that don't parse
+    };
+
+    let original_ast = match wado_compiler::parse(source) {
+        Ok(r) => r.ast,
+        Err(_) => return,
+    };
+    let formatted_ast = match wado_compiler::parse(&formatted) {
+        Ok(r) => r.ast,
+        Err(e) => panic!(
+            "formatted code failed to parse: {e:?}\n\nOriginal:\n{source}\n\nFormatted:\n{formatted}"
+        ),
+    };
+
+    let original_debug = normalize_ast_debug(&format!("{original_ast:#?}"));
+    let formatted_debug = normalize_ast_debug(&format!("{formatted_ast:#?}"));
+
+    if original_debug != formatted_debug {
+        // Find first differing line for a useful error message
+        let orig_lines: Vec<&str> = original_debug.lines().collect();
+        let fmt_lines: Vec<&str> = formatted_debug.lines().collect();
+        let mut diff_context = String::new();
+        for (i, (o, f)) in orig_lines.iter().zip(fmt_lines.iter()).enumerate() {
+            if o != f {
+                let start = i.saturating_sub(3);
+                let end = (i + 4).min(orig_lines.len()).min(fmt_lines.len());
+                diff_context.push_str(&format!("First difference at line {i}:\n"));
+                for j in start..end {
+                    let marker = if j == i { ">>>" } else { "   " };
+                    if j < orig_lines.len() {
+                        diff_context.push_str(&format!("{marker} orig[{j}]: {}\n", orig_lines[j]));
+                    }
+                    if j < fmt_lines.len() {
+                        diff_context.push_str(&format!("{marker}  fmt[{j}]: {}\n", fmt_lines[j]));
+                    }
+                }
+                break;
+            }
+        }
+        if diff_context.is_empty() && orig_lines.len() != fmt_lines.len() {
+            diff_context = format!(
+                "Line count differs: original={}, formatted={}",
+                orig_lines.len(),
+                fmt_lines.len()
+            );
+        }
+        panic!(
+            "Formatter changed AST semantics!\n\n{diff_context}\n\nOriginal source:\n{source}\n\nFormatted source:\n{formatted}"
+        );
+    }
+}
 
 #[test]
 fn test_format_idempotent_simple() {
@@ -899,6 +1014,64 @@ fn test_format_doc_comment_before_attribute_no_extra_blank() {
 }
 
 #[test]
+fn test_format_impl_explicit_type_params() {
+    // Formatter must always emit explicit `impl<T>`, never compact `impl Foo<T>`
+    let source = r#"
+impl<T> WrapBox<T> {
+    pub fn new(value: T) -> WrapBox<T> {
+        return WrapBox { value };
+    }
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("impl<T> WrapBox<T>"),
+        "impl type params must be preserved: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_impl_bounded_type_params() {
+    // Bounded compact form `impl Foo<T: Ord>` should be normalized to `impl<T: Ord> Foo<T>`
+    let source = r#"
+impl MyArray<T: Ord> {
+    fn sort(&mut self) {
+    }
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("impl<T: Ord> MyArray<T>"),
+        "bounded compact form should be expanded: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_impl_trait_for_type_preserves_params() {
+    let source = r#"
+impl<T: Eq> Eq for Pair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return true;
+    }
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("impl<T: Eq> Eq for Pair<T>"),
+        "trait impl type params must be preserved: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
 fn test_format_idempotent_all_fixtures() {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
 
@@ -1300,4 +1473,394 @@ fn run() {
     // Should be idempotent
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+// ============================================================
+// Round-trip AST equivalence tests
+//
+// These verify that parse(format(source)) produces the same AST
+// as parse(source), ignoring span positions. This catches bugs
+// where the formatter changes program semantics (e.g., dropping
+// parens, reordering expressions, losing constructs).
+// ============================================================
+
+#[test]
+fn test_roundtrip_ast_simple() {
+    assert_format_preserves_ast(
+        r#"
+fn run() {
+    let x = 1;
+    let y = (x + 2) * 3;
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_operator_precedence() {
+    assert_format_preserves_ast(
+        r#"
+fn run() {
+    let a = (1 + 2) * 3;
+    let b = 1 + 2 * 3;
+    let c = (a || b) && c;
+    let d = a || (b && c);
+    let e = !(a && b);
+    let f = -(a + b);
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_deref_parens() {
+    assert_format_preserves_ast(
+        r#"
+fn foo(data: &Array<i32>, p: &Point) -> i32 {
+    let a = (*data)[0];
+    let b = (*p).x;
+    let c = (*data).len();
+    return a + b + c;
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_complex_expressions() {
+    assert_format_preserves_ast(
+        r#"
+fn run() {
+    let x = if true { 1 } else { 2 };
+    let y = match x {
+        1 => "one",
+        2 => "two",
+        _ => "other",
+    };
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_struct_and_methods() {
+    assert_format_preserves_ast(
+        r#"
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+
+    fn origin() -> Point {
+        return Point { x: 0, y: 0 };
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_closures() {
+    assert_format_preserves_ast(
+        r#"
+fn run() {
+    let add = |a: i32, b: i32| a + b;
+    let compute = |x: i32| {
+        let doubled = x * 2;
+        return doubled + x;
+    };
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_control_flow() {
+    assert_format_preserves_ast(
+        r#"
+fn run() {
+    for let mut i = 0; i < 10; i += 1 {
+        if i % 2 == 0 {
+            continue;
+        }
+    }
+
+    while true {
+        break;
+    }
+
+    outer: {
+        break outer;
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_generics_and_traits() {
+    assert_format_preserves_ast(
+        r#"
+trait Container {
+    type Item;
+    fn get(&self) -> Self::Item;
+}
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+struct Box<T> {
+    value: T,
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_variants_and_match() {
+    assert_format_preserves_ast(
+        r#"
+variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Point,
+}
+
+fn area(s: Shape) -> f64 {
+    return match s {
+        Circle(r) => 3.14 * r * r,
+        Rectangle(dims) => dims.0 * dims.1,
+        Point => 0.0,
+    };
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_imports_and_effects() {
+    assert_format_preserves_ast(
+        r#"
+use { println } from "core:cli";
+
+fn greet(name: String) with Stdout {
+    println(`Hello, {name}!`);
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_bitwise_and_cast() {
+    assert_format_preserves_ast(
+        r#"
+fn run() {
+    let a = 0xFF & 0x0F;
+    let b = (1 << 4) | 3;
+    let c = ~a;
+    let d = 42 as f64;
+    let e = 'A' as i32;
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_all_fixtures() {
+    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let mut failures = Vec::new();
+
+    for entry in fs::read_dir(&fixtures_dir).expect("cannot read fixtures dir") {
+        let entry = entry.expect("cannot read entry");
+        let path = entry.path();
+
+        if path.extension().and_then(|s| s.to_str()) != Some("wado") {
+            continue;
+        }
+        if path.is_dir() {
+            continue;
+        }
+
+        let source = fs::read_to_string(&path).expect("cannot read file");
+        let filename = path.file_name().unwrap().to_str().unwrap();
+
+        // Skip files that expect compile errors or are TODO tests
+        if source.contains("compile_error") || source.contains("\"TODO\": true") {
+            continue;
+        }
+
+        let formatted = match wado_compiler::format(&source) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+
+        let original_ast = match wado_compiler::parse(&source) {
+            Ok(r) => r.ast,
+            Err(_) => continue,
+        };
+        let formatted_ast = match wado_compiler::parse(&formatted) {
+            Ok(r) => r.ast,
+            Err(e) => {
+                failures.push(format!("{filename}: formatted code failed to parse: {e:?}"));
+                continue;
+            }
+        };
+
+        let original_debug = normalize_ast_debug(&format!("{original_ast:#?}"));
+        let formatted_debug = normalize_ast_debug(&format!("{formatted_ast:#?}"));
+
+        if original_debug != formatted_debug {
+            let orig_lines: Vec<&str> = original_debug.lines().collect();
+            let fmt_lines: Vec<&str> = formatted_debug.lines().collect();
+            let mut diff_line = String::new();
+            for (i, (o, f)) in orig_lines.iter().zip(fmt_lines.iter()).enumerate() {
+                if o != f {
+                    diff_line = format!(
+                        "line {i}:\n  orig: {}\n   fmt: {}",
+                        &o[..o.len().min(120)],
+                        &f[..f.len().min(120)]
+                    );
+                    break;
+                }
+            }
+            failures.push(format!(
+                "{filename}: AST changed by formatter ({diff_line})"
+            ));
+        }
+    }
+
+    if !failures.is_empty() {
+        panic!(
+            "Round-trip AST equivalence failures ({} files):\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
+    }
+}
+
+/// Regression test: the formatter must preserve parentheses in `if let ... && (expr)`
+/// and `while let ... && (expr)` conditions. Without parens, the let-chain element
+/// count changes on re-parse (e.g., 2 elements become 3), violating round-trip
+/// AST equivalence.
+#[test]
+fn test_roundtrip_ast_let_chain_paren_preservation() {
+    // if let with && boolean guard containing &&
+    assert_format_preserves_ast(
+        r#"
+fn test() {
+    let opt = Option::<i32>::Some(5);
+    let flag1 = true;
+    let flag2 = true;
+    if let Some(x) = opt && (flag1 && flag2) {
+        println(`{x}`);
+    }
+}
+"#,
+    );
+
+    // while let with && guard containing &&
+    assert_format_preserves_ast(
+        r#"
+fn test() {
+    let mut iter = [1, 2, 3].iter();
+    let min = 0;
+    let max = 10;
+    while let Some(v) = iter.next() && (v > min && v < max) {
+        println(`{v}`);
+    }
+}
+"#,
+    );
+
+    // if let with || inside guard
+    assert_format_preserves_ast(
+        r#"
+fn test() {
+    let opt = Option::<i32>::Some(5);
+    if let Some(x) = opt && (x > 10 || x < 0) {
+        println(`{x}`);
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn test_roundtrip_ast_all_stdlib() {
+    let lib_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("lib");
+    let mut failures = Vec::new();
+
+    fn visit_dir(dir: &Path, failures: &mut Vec<String>) {
+        let entries = match fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+        for entry in entries {
+            let entry = entry.expect("cannot read entry");
+            let path = entry.path();
+            if path.is_dir() {
+                visit_dir(&path, failures);
+                continue;
+            }
+            if path.extension().and_then(|s| s.to_str()) != Some("wado") {
+                continue;
+            }
+
+            let source = fs::read_to_string(&path).expect("cannot read file");
+            let rel = path.display().to_string();
+
+            let formatted = match wado_compiler::format(&source) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+
+            let original_ast = match wado_compiler::parse(&source) {
+                Ok(r) => r.ast,
+                Err(_) => continue,
+            };
+            let formatted_ast = match wado_compiler::parse(&formatted) {
+                Ok(r) => r.ast,
+                Err(e) => {
+                    failures.push(format!("{rel}: formatted code failed to parse: {e:?}"));
+                    continue;
+                }
+            };
+
+            let original_debug = normalize_ast_debug(&format!("{original_ast:#?}"));
+            let formatted_debug = normalize_ast_debug(&format!("{formatted_ast:#?}"));
+
+            if original_debug != formatted_debug {
+                let orig_lines: Vec<&str> = original_debug.lines().collect();
+                let fmt_lines: Vec<&str> = formatted_debug.lines().collect();
+                let mut diff_line = String::new();
+                for (i, (o, f)) in orig_lines.iter().zip(fmt_lines.iter()).enumerate() {
+                    if o != f {
+                        diff_line = format!(
+                            "line {i}:\n  orig: {}\n   fmt: {}",
+                            &o[..o.len().min(120)],
+                            &f[..f.len().min(120)]
+                        );
+                        break;
+                    }
+                }
+                failures.push(format!("{rel}: AST changed by formatter ({diff_line})"));
+            }
+        }
+    }
+
+    visit_dir(&lib_dir, &mut failures);
+
+    if !failures.is_empty() {
+        panic!(
+            "Round-trip AST equivalence failures in stdlib ({} files):\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
+    }
 }

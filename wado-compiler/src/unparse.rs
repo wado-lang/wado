@@ -710,68 +710,22 @@ impl<'a> Unparser<'a> {
 
     /// Output an inherent impl type with type param bounds inlined into type args.
     /// E.g.: `impl<T: Ord> Array<T>` → `impl Array<T: Ord>`
-    fn unparse_impl_inherent_type(&mut self, ty: &Type, type_params: &[crate::ast::GenericParam]) {
-        let Type::Generic(g) = ty else {
-            // No type args to inline into; just output the type normally
-            self.unparse_type(ty);
-            return;
-        };
-
-        self.output.push_str(&g.name);
-        self.output.push('<');
-        for (i, arg) in g.args.iter().enumerate() {
-            if i > 0 {
-                self.output.push_str(", ");
-            }
-            // If this arg is a named type param with bounds, inline the bounds
-            if let Type::Named(n) = arg
-                && let Some(param) = type_params.iter().find(|p| p.name == n.name)
-            {
-                self.output.push_str(&param.name);
-                if !param.bounds.is_empty() {
-                    self.output.push_str(": ");
-                    for (j, bound) in param.bounds.iter().enumerate() {
-                        if j > 0 {
-                            self.output.push_str(" + ");
-                        }
-                        self.output.push_str(&bound.name);
-                        if !bound.assoc_types.is_empty() {
-                            self.output.push('<');
-                            for (k, assoc) in bound.assoc_types.iter().enumerate() {
-                                if k > 0 {
-                                    self.output.push_str(", ");
-                                }
-                                self.output.push_str(&assoc.name);
-                                self.output.push_str(" = ");
-                                self.unparse_type(&assoc.ty);
-                            }
-                            self.output.push('>');
-                        }
-                    }
-                }
-                continue;
-            }
-            self.unparse_type(arg);
-        }
-        self.output.push('>');
-    }
-
     fn unparse_impl(&mut self, i: &ImplBlock) {
         self.write_indent();
         self.output.push_str("impl");
 
+        // Always emit explicit type params: `impl<T> Foo<T>`, not compact `impl Foo<T>`
+        self.unparse_generic_params(&i.type_params);
+
         // Handle `impl Trait for Type` vs `impl Type`
         if let Some(trait_type) = &i.trait_type {
-            // Trait impl: use Rust-style generic params at `impl` level
-            self.unparse_generic_params(&i.type_params);
             self.output.push(' ');
             self.unparse_type(trait_type);
             self.output.push_str(" for ");
             self.unparse_type(&i.ty);
         } else {
-            // Inherent impl: use compact form with bounds inlined in type args
             self.output.push(' ');
-            self.unparse_impl_inherent_type(&i.ty, &i.type_params);
+            self.unparse_type(&i.ty);
         }
 
         if i.is_synthesize_request {
@@ -1429,7 +1383,22 @@ impl<'a> Unparser<'a> {
                             self.unparse_expr(expr);
                         }
                         ConditionElement::Expr(expr) => {
+                            // In a let-chain, elements are joined by `&&`.
+                            // If this element is itself a `&&` or `||` expression,
+                            // we must wrap it in parens to preserve the AST structure.
+                            // Without parens, `let PAT = E && (a && b)` would be
+                            // re-parsed as three chain elements instead of two.
+                            let needs_parens = matches!(
+                                expr,
+                                Expr::Binary(b) if matches!(b.op, BinaryOp::And | BinaryOp::Or)
+                            );
+                            if needs_parens {
+                                self.output.push('(');
+                            }
                             self.unparse_expr(expr);
+                            if needs_parens {
+                                self.output.push(')');
+                            }
                         }
                     }
                 }
@@ -3248,7 +3217,17 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
                         unparse_expr_into(expr, output, false);
                     }
                     ConditionElement::Expr(expr) => {
+                        let needs_parens = matches!(
+                            expr,
+                            Expr::Binary(b) if matches!(b.op, BinaryOp::And | BinaryOp::Or)
+                        );
+                        if needs_parens {
+                            output.push('(');
+                        }
                         unparse_expr_into(expr, output, false);
+                        if needs_parens {
+                            output.push(')');
+                        }
                     }
                 }
             }
