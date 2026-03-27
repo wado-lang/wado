@@ -111,12 +111,16 @@ impl<'a> Unparser<'a> {
         let span = get_item_span(item);
 
         // Emit leading comments (handles blank lines before comments)
-        self.emit_leading_comments(&span);
+        let last_comment_was_doc = self.emit_leading_comments_and_check_doc(&span);
 
         // Emit blank lines before the item itself.
         // Use the first attribute line (if any) to avoid growing blank lines
         // between doc comments and attrs on repeated formatting passes.
-        self.emit_blank_lines_to(get_item_first_line(item));
+        // Skip blank-line insertion when the last leading comment was a doc comment,
+        // because doc comments belong to the item and shouldn't be separated by blank lines.
+        if !last_comment_was_doc {
+            self.emit_blank_lines_to(get_item_first_line(item));
+        }
 
         match item {
             Item::Use(u) => self.unparse_use(u),
@@ -1047,6 +1051,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("world ");
         self.output.push_str(&w.name);
         self.output.push_str(" {\n");
+        self.last_source_line = w.span.line;
 
         self.indent_level += 1;
 
@@ -2536,6 +2541,22 @@ impl<'a> Unparser<'a> {
                 self.last_source_line = comment.span.line;
             }
         }
+    }
+
+    /// Like `emit_leading_comments` but returns whether the last emitted comment was a doc comment.
+    fn emit_leading_comments_and_check_doc(&mut self, span: &Span) -> bool {
+        let mut last_was_doc = false;
+        for comment in self.comments.leading_comments(span) {
+            if self.emitted_comments.insert(comment.span.start) {
+                self.emit_blank_lines_to(comment.span.line);
+                self.write_indent();
+                self.emit_comment(comment);
+                self.output.push('\n');
+                self.last_source_line = comment.span.line;
+                last_was_doc = comment.kind == crate::comment::CommentKind::DocLine;
+            }
+        }
+        last_was_doc
     }
 
     fn emit_trailing_comments(&mut self, span: &Span) {
