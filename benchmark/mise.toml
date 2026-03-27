@@ -209,6 +209,22 @@ echo "=== Wado ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. json_catalog/json_catalog.wado
 """
 
+[tasks.sqlite-parse]
+description = "Run sqlite-parse benchmark (Gale parser vs sqlparser-rs)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Compiling Rust sqlparser-rs benchmark ==="
+cargo build --release --manifest-path sqlite_parse/Cargo.toml --quiet
+
+echo "=== Rust sqlparser-rs ==="
+./sqlite_parse/target/release/sqlite_parse_bench
+
+echo "=== Wado (Gale) ==="
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. sqlite_parse/sqlite_parse.wado
+"""
+
 [tasks.all]
 description = "Run all benchmarks serially"
 run = """
@@ -222,6 +238,7 @@ MISE_JOBS=1 mise run fts
 MISE_JOBS=1 mise run json-twitter
 MISE_JOBS=1 mise run json-canada
 MISE_JOBS=1 mise run json-catalog
+MISE_JOBS=1 mise run sqlite-parse
 """
 
 [tasks.clean]
