@@ -1,6 +1,13 @@
 use {
-    Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement,
-    RepeatKind, LexerRule, LexerAlt,
+    Grammar,
+    ParserRule,
+    Alternative,
+    Element,
+    RepeatElement,
+    LabelElement,
+    RepeatKind,
+    LexerRule,
+    LexerAlt,
 } from "./ir.wado";
 use { generate } from "./generator.wado";
 
@@ -22,11 +29,12 @@ test "generate token kind" {
     let grammar = Grammar {
         name: "Test",
         parser_rules: [],
-        lexer_rules: [
-            LexerRule { name: "NUMBER", is_fragment: false, skip: false, body: [] },
-            LexerRule { name: "DIGIT", is_fragment: true, skip: false, body: [] },
-            LexerRule { name: "WS", is_fragment: false, skip: true, body: [] },
-        ],
+        lexer_rules: [LexerRule { name: "NUMBER", is_fragment: false, skip: false, body: [] }, LexerRule {
+                name: "DIGIT",
+                is_fragment: true,
+                skip: false,
+                body: [],
+            }, LexerRule { name: "WS", is_fragment: false, skip: true, body: [] }],
     };
     let output = generate(&grammar);
     assert str_contains(&output, "pub enum TokenKind {");
@@ -46,10 +54,7 @@ test "generate single-alt struct" {
                 alternatives: [
                     Alternative {
                         label: null,
-                        elements: [
-                            Element::RuleRef("value"),
-                            Element::TokenRef("EOF"),
-                        ],
+                        elements: [Element::RuleRef("value"), Element::TokenRef("EOF")],
                     },
                 ],
             },
@@ -72,17 +77,11 @@ test "generate multi-alt variant with labels" {
                 alternatives: [
                     Alternative {
                         label: Option::<String>::Some("BinOp"),
-                        elements: [
-                            Element::RuleRef("expr"),
-                            Element::TokenRef("PLUS"),
-                            Element::RuleRef("term"),
-                        ],
+                        elements: [Element::RuleRef("expr"), Element::TokenRef("PLUS"), Element::RuleRef("term")],
                     },
                     Alternative {
                         label: Option::<String>::Some("Pass"),
-                        elements: [
-                            Element::RuleRef("term"),
-                        ],
+                        elements: [Element::RuleRef("term")],
                     },
                 ],
             },
@@ -169,11 +168,7 @@ test "generate duplicate field names" {
                 alternatives: [
                     Alternative {
                         label: null,
-                        elements: [
-                            Element::RuleRef("item"),
-                            Element::Literal(","),
-                            Element::RuleRef("item"),
-                        ],
+                        elements: [Element::RuleRef("item"), Element::Literal(","), Element::RuleRef("item")],
                     },
                 ],
             },

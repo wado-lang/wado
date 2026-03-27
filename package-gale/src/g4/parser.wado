@@ -1,8 +1,19 @@
 use { Span, Token, ParseError } from "../runtime.wado";
 use {
-    Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement,
-    RepeatKind, LexerRule, LexerAlt, LexerElement, LexerRepeatElement, LexerNotElement,
-    CharClass, CharRange,
+    Grammar,
+    ParserRule,
+    Alternative,
+    Element,
+    RepeatElement,
+    LabelElement,
+    RepeatKind,
+    LexerRule,
+    LexerAlt,
+    LexerElement,
+    LexerRepeatElement,
+    LexerNotElement,
+    CharClass,
+    CharRange,
 } from "../ir.wado";
 use { G4Token, make_token } from "./token.wado";
 use { tokenize } from "./lexer.wado";
@@ -182,9 +193,9 @@ impl G4Parser {
             self.advance();
             let ng = if self.is_kind(G4Token::Question) {
                 self.advance();
-                true
+                true;
             } else {
-                false
+                false;
             };
             return Result::<Element, ParseError>::Ok(
                 Element::Repeat(RepeatElement { kind: RepeatKind::Star, element: elem, non_greedy: ng }),
@@ -194,9 +205,9 @@ impl G4Parser {
             self.advance();
             let ng = if self.is_kind(G4Token::Question) {
                 self.advance();
-                true
+                true;
             } else {
-                false
+                false;
             };
             return Result::<Element, ParseError>::Ok(
                 Element::Repeat(RepeatElement { kind: RepeatKind::Plus, element: elem, non_greedy: ng }),
@@ -284,8 +295,7 @@ impl G4Parser {
         if self.is_kind(G4Token::StringLit) {
             let tok = self.advance();
             let text = tok.text;
-            let is_dot_dot = self.is_kind(G4Token::Dot)
-                && self.peek_kind_at(1) == G4Token::Dot as i32;
+            let is_dot_dot = self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Dot as i32;
             if is_dot_dot && text.len() == 1 {
                 self.advance();
                 self.advance();
@@ -391,7 +401,7 @@ fn resolve_char(chars: &Array<char>, pos: &mut i32) -> char {
             for let mut i = 0; i < 4; i += 1 {
                 val = val * 16 + advance_char(chars, pos).hex_digit_value();
             }
-            char::from_i32(val).unwrap()
+            char::from_i32(val).unwrap();
         },
         _ => ec,
     };
