@@ -1640,7 +1640,20 @@ impl<'a> Unparser<'a> {
                 }
                 self.output.push('\n');
                 self.write_indent();
-                self.unparse_expr(elem);
+                // Force single-line formatting for each [k, v] pair so that
+                // key and value always stay together on one line.
+                if let Expr::TupleLiteral(inner) = elem {
+                    self.output.push('[');
+                    for (j, inner_elem) in inner.elements.iter().enumerate() {
+                        if j > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.unparse_expr(inner_elem);
+                    }
+                    self.output.push(']');
+                } else {
+                    self.unparse_expr(elem);
+                }
             }
             self.output.push(',');
             self.output.push('\n');
