@@ -25,6 +25,22 @@ fn effective_start_line(attrs: &[Attribute], span_line: usize) -> usize {
         .map_or(span_line, |attr| attr.span.line.min(span_line))
 }
 
+fn contains_call(expr: &Expr) -> bool {
+    match expr {
+        Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => true,
+        Expr::Binary(e) => contains_call(&e.left) || contains_call(&e.right),
+        Expr::Unary(e) => contains_call(&e.expr),
+        Expr::Cast(e) => contains_call(&e.expr),
+        Expr::TupleLiteral(e) => e.elements.iter().any(contains_call),
+        Expr::StructLiteral(e) => e.fields.iter().any(|f| contains_call(&f.value)),
+        Expr::Index(e) => contains_call(&e.expr) || contains_call(&e.index),
+        Expr::FieldAccess(e) => contains_call(&e.expr),
+        Expr::TryOp(e) => contains_call(&e.expr),
+        Expr::Spread(e, _) => contains_call(e),
+        _ => false,
+    }
+}
+
 pub struct Unparser<'a> {
     comments: &'a CommentMap,
     output: String,
@@ -1664,6 +1680,29 @@ impl<'a> Unparser<'a> {
 
         // Rollback for multi-line formatting
         self.rollback(snap);
+
+        // If any element contains a function/method call, use one-element-per-line
+        // instead of fill-style to keep complex expressions readable.
+        let has_call = tuple_lit.elements.iter().any(contains_call);
+
+        if has_call {
+            self.output.push('[');
+            self.indent_level += 1;
+            for (i, elem) in tuple_lit.elements.iter().enumerate() {
+                if i > 0 {
+                    self.output.push(',');
+                }
+                self.output.push('\n');
+                self.write_indent();
+                self.unparse_expr(elem);
+            }
+            self.output.push(',');
+            self.output.push('\n');
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push(']');
+            return;
+        }
 
         // Fill-style: pack elements onto lines up to MAX_LINE_WIDTH
         self.output.push('[');
