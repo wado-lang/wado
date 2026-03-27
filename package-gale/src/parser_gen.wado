@@ -38,15 +38,7 @@ struct PredictionBranch {
     child: PredictionNode,
 }
 
-fn build_prediction(
-    alt_indices: &Array<i32>,
-    first_sets: &Array<Array<String>>,
-    alt_elements: &Array<Array<Element>>,
-    depth: i32,
-    max_depth: i32,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> PredictionNode {
+fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>, alt_elements: &Array<Array<Element>>, depth: i32, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> PredictionNode {
     // Build initial SLL configs: one per alternative, at element position 0.
     let mut configs: Array<SllConfig> = [];
     for let mut i = 0; i < alt_indices.len(); i += 1 {
@@ -118,36 +110,27 @@ fn _sll_closure_unused(configs: &Array<SllConfig>) -> Array<SllConfig> {
 
 /// Compute FIRST set of the current position in a config.
 /// Includes tokens from nullable elements that were skipped by closure.
-fn sll_config_first(
-    c: &SllConfig,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> Array<String> {
-    if c.pos < 0 || c.pos >= c.elements.len() { return []; }
+fn sll_config_first(c: &SllConfig, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<String> {
+    if c.pos < 0 || c.pos >= c.elements.len() {
+        return [];
+    }
     return first_of_elements_from(&c.elements, c.pos, all_rules, lit_tokens);
 }
 
 /// Advance a config by one token. For terminals, advance pos.
 /// For RuleRef, expand into the rule's alternatives (entering the rule).
-fn sll_advance(
-    c: &SllConfig,
-    token: &String,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> Array<SllConfig> {
+fn sll_advance(c: &SllConfig, token: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<SllConfig> {
     return sll_advance_inner(c, token, all_rules, lit_tokens, 0);
 }
 
-fn sll_advance_inner(
-    c: &SllConfig,
-    token: &String,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    inline_depth: i32,
-) -> Array<SllConfig> {
+fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, inline_depth: i32) -> Array<SllConfig> {
     // Limit inline expansion depth to prevent explosion from recursive rules.
-    if inline_depth > 2 { return []; }
-    if c.pos < 0 || c.pos >= c.elements.len() { return []; }
+    if inline_depth > 2 {
+        return [];
+    }
+    if c.pos < 0 || c.pos >= c.elements.len() {
+        return [];
+    }
     let elem = &c.elements[c.pos];
 
     // Nullable element (Optional, Star): either match its inner or skip it.
@@ -310,13 +293,7 @@ fn sll_dedup_by_alt(configs: &Array<SllConfig>) -> Array<SllConfig> {
     return result;
 }
 
-fn build_sll_node(
-    configs: &Array<SllConfig>,
-    depth: i32,
-    max_depth: i32,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> PredictionNode {
+fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> PredictionNode {
     let closed = sll_closure(configs);
 
     // Guard: if too many configs, fall back to backtracking to avoid explosion.
@@ -389,7 +366,9 @@ fn build_sll_node(
             }
         }
 
-        if next_configs.len() == 0 && opaque_alts.len() == 0 { continue; }
+        if next_configs.len() == 0 && opaque_alts.len() == 0 {
+            continue;
+        }
 
         // Dedup: keep one config per alt (SLL ignores context).
         let deduped = sll_dedup_by_alt(&next_configs);
@@ -422,9 +401,9 @@ fn build_sll_node(
             // Still ambiguous: recurse with deeper lookahead.
             // If opaque alts exist, they can't be resolved further — Backtrack.
             let child = if opaque_alts.len() > 0 {
-                PredictionNode::Backtrack(next_alts)
+                PredictionNode::Backtrack(next_alts);
             } else {
-                build_sll_node(&deduped, depth + 1, max_depth, all_rules, lit_tokens)
+                build_sll_node(&deduped, depth + 1, max_depth, all_rules, lit_tokens);
             };
             let mut merged = false;
             for let mut b = 0; b < branches.len(); b += 1 {
@@ -450,17 +429,25 @@ fn build_sll_node(
 
 /// Check if all configs are at the same terminal element (for Consume).
 fn sll_find_common_terminal(configs: &Array<SllConfig>) -> Option<Element> {
-    if configs.len() < 2 { return null; }
+    if configs.len() < 2 {
+        return null;
+    }
     for let c of configs {
-        if c.pos >= c.elements.len() { return null; }
+        if c.pos >= c.elements.len() {
+            return null;
+        }
     }
     let first_elem = &configs[0].elements[configs[0].pos];
     if let TokenRef(name) = *first_elem {
         for let mut i = 1; i < configs.len(); i += 1 {
             let elem = &configs[i].elements[configs[i].pos];
             if let TokenRef(other) = *elem {
-                if other != name { return null; }
-            } else { return null; }
+                if other != name {
+                    return null;
+                }
+            } else {
+                return null;
+            }
         }
         return Option::<Element>::Some(*first_elem);
     }
@@ -468,8 +455,12 @@ fn sll_find_common_terminal(configs: &Array<SllConfig>) -> Option<Element> {
         for let mut i = 1; i < configs.len(); i += 1 {
             let elem = &configs[i].elements[configs[i].pos];
             if let Literal(other) = *elem {
-                if other != text { return null; }
-            } else { return null; }
+                if other != text {
+                    return null;
+                }
+            } else {
+                return null;
+            }
         }
         return Option::<Element>::Some(*first_elem);
     }
@@ -478,33 +469,49 @@ fn sll_find_common_terminal(configs: &Array<SllConfig>) -> Option<Element> {
 
 /// Check if all alternatives start with the same element (TokenRef, Literal, or RuleRef).
 fn find_common_prefix_element(alt_elements: &Array<Array<Element>>) -> Option<Element> {
-    if alt_elements.len() < 2 { return null; }
+    if alt_elements.len() < 2 {
+        return null;
+    }
     // All alternatives must be non-empty.
     for let elems of alt_elements {
-        if elems.len() == 0 { return null; }
+        if elems.len() == 0 {
+            return null;
+        }
     }
     let first_elem = &alt_elements[0][0];
     if let TokenRef(name) = *first_elem {
         for let mut i = 1; i < alt_elements.len(); i += 1 {
             if let TokenRef(other) = alt_elements[i][0] {
-                if other != name { return null; }
-            } else { return null; }
+                if other != name {
+                    return null;
+                }
+            } else {
+                return null;
+            }
         }
         return Option::<Element>::Some(*first_elem);
     }
     if let Literal(text) = *first_elem {
         for let mut i = 1; i < alt_elements.len(); i += 1 {
             if let Literal(other) = alt_elements[i][0] {
-                if other != text { return null; }
-            } else { return null; }
+                if other != text {
+                    return null;
+                }
+            } else {
+                return null;
+            }
         }
         return Option::<Element>::Some(*first_elem);
     }
     if let RuleRef(name) = *first_elem {
         for let mut i = 1; i < alt_elements.len(); i += 1 {
             if let RuleRef(other) = alt_elements[i][0] {
-                if other != name { return null; }
-            } else { return null; }
+                if other != name {
+                    return null;
+                }
+            } else {
+                return null;
+            }
         }
         return Option::<Element>::Some(*first_elem);
     }
@@ -521,12 +528,7 @@ fn elements_suffix(elements: &Array<Element>, start: i32) -> Array<Element> {
 }
 
 /// Compute first set of a sequence of elements.
-fn first_of_elements(
-    elements: &Array<Element>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    visiting: &mut Array<String>,
-) -> Array<String> {
+fn first_of_elements(elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, visiting: &mut Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
     for let elem of elements {
         let ef = first_of_element(&elem, all_rules, lit_tokens, visiting);
@@ -535,7 +537,9 @@ fn first_of_elements(
                 result.append(tk);
             }
         }
-        if !is_nullable(&elem) { break; }
+        if !is_nullable(&elem) {
+            break;
+        }
     }
     return result;
 }
@@ -562,8 +566,7 @@ fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
     // Consume nodes: check same element kind and recurse on child.
     if let Consume(ca) = *a {
         if let Consume(cb) = *b {
-            return element_eq(&ca.element, &cb.element)
-                && prediction_node_eq(&ca.child, &cb.child);
+            return element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child);
         }
     }
     return false;
@@ -571,10 +574,14 @@ fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
 
 fn element_eq(a: &Element, b: &Element) -> bool {
     if let TokenRef(na) = *a {
-        if let TokenRef(nb) = *b { return na == nb; }
+        if let TokenRef(nb) = *b {
+            return na == nb;
+        }
     }
     if let Literal(ta) = *a {
-        if let Literal(tb) = *b { return ta == tb; }
+        if let Literal(tb) = *b {
+            return ta == tb;
+        }
     }
     return false;
 }
@@ -584,8 +591,15 @@ fn compute_deeper_first(elements: &Array<Element>, depth: i32, all_rules: &Array
     let mut remaining = depth;
     while pos < elements.len() && remaining > 0 {
         let elem = &elements[pos];
-        if let TokenRef(_) | Literal(_) = *elem { remaining -= 1; pos += 1; continue; }
-        if is_nullable(elem) { pos += 1; continue; }
+        if let TokenRef(_) | Literal(_) = *elem {
+            remaining -= 1;
+            pos += 1;
+            continue;
+        }
+        if is_nullable(elem) {
+            pos += 1;
+            continue;
+        }
         // SLL advancement: single-token RuleRef consumes exactly 1 token,
         // so we can safely advance past it and look at the next element.
         if let RuleRef(name) = *elem {
@@ -604,25 +618,29 @@ fn compute_deeper_first(elements: &Array<Element>, depth: i32, all_rules: &Array
 /// Check if a rule always consumes exactly one token.
 /// True when every alternative has exactly one non-nullable element
 /// that is either a terminal (TokenRef/Literal) or a single-token RuleRef.
-fn rule_is_single_token(
-    name: &String,
-    all_rules: &Array<ParserRule>,
-    visiting: &mut Array<String>,
-) -> bool {
-    if array_contains_str(visiting, name) { return false; }
+fn rule_is_single_token(name: &String, all_rules: &Array<ParserRule>, visiting: &mut Array<String>) -> bool {
+    if array_contains_str(visiting, name) {
+        return false;
+    }
     visiting.append(*name);
 
     let mut found = false;
     for let rule of all_rules {
-        if rule.name != *name { continue; }
+        if rule.name != *name {
+            continue;
+        }
         found = true;
         for let alt of rule.alternatives {
             let mut non_nullable_count = 0;
             let mut single_ok = false;
             for let elem of alt.elements {
-                if is_nullable(&elem) { continue; }
+                if is_nullable(&elem) {
+                    continue;
+                }
                 non_nullable_count += 1;
-                if non_nullable_count > 1 { break; }
+                if non_nullable_count > 1 {
+                    break;
+                }
                 if let TokenRef(_) | Literal(_) = elem {
                     single_ok = true;
                 } else if let RuleRef(r) = elem {
@@ -644,7 +662,9 @@ fn rule_is_single_token(
 fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
     let mut new_arr: Array<String> = [];
     for let v of visiting {
-        if *v != *name { new_arr.append(*v); }
+        if *v != *name {
+            new_arr.append(*v);
+        }
     }
     *visiting = new_arr;
 }
@@ -669,7 +689,9 @@ fn count_backtrack_nodes(node: &PredictionNode) -> i32 {
         }
         return count;
     }
-    if let Consume(c) = *node { return count_backtrack_nodes(&c.child); }
+    if let Consume(c) = *node {
+        return count_backtrack_nodes(&c.child);
+    }
     return 0;
 }
 
@@ -684,7 +706,9 @@ fn count_leaf_nodes(node: &PredictionNode) -> i32 {
         }
         return count;
     }
-    if let Consume(c) = *node { return count_leaf_nodes(&c.child); }
+    if let Consume(c) = *node {
+        return count_leaf_nodes(&c.child);
+    }
     return 0;
 }
 
@@ -952,16 +976,7 @@ fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<Str
     }
 }
 
-fn gen_alt_body_skip(
-    w: &mut CodeWriter,
-    type_name: &String,
-    variant_case: Option<String>,
-    struct_name: Option<String>,
-    alt: &Alternative,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    skip: i32,
-) {
+fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, skip: i32) {
     // Parse elements from `skip` onward (prefix already consumed).
     // Replay name counter for consumed elements so dedup_name stays in sync.
     let mut name_counts: Array<[String, i32]> = [];
@@ -1008,13 +1023,7 @@ fn gen_alt_body_skip(
     }
 }
 
-fn gen_multi_alt_body(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    type_name: &String,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) {
+fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
 
     let max_k = 5;
@@ -1807,14 +1816,10 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) 
     }
 }
 
-fn gen_consume_group(
-    w: &mut CodeWriter,
-    alts: &Array<Alternative>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    name_counts: &mut Array<[String, i32]>,
-) {
-    if alts.len() == 0 { return; }
+fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+    if alts.len() == 0 {
+        return;
+    }
     if alts.len() == 1 {
         gen_elements_with_non_greedy(w, &alts[0].elements, all_rules, lit_tokens, name_counts);
         return;
@@ -1877,26 +1882,11 @@ fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Al
     gen_group_prediction_code(w, &tree, alts, all_rules, lit_tokens, name_counts);
 }
 
-fn gen_group_prediction_code(
-    w: &mut CodeWriter,
-    node: &PredictionNode,
-    alts: &Array<Alternative>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_group_prediction_code(w: &mut CodeWriter, node: &PredictionNode, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
     gen_group_prediction_code_skip(w, node, alts, all_rules, lit_tokens, name_counts, 0);
 }
 
-fn gen_group_prediction_code_skip(
-    w: &mut CodeWriter,
-    node: &PredictionNode,
-    alts: &Array<Alternative>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    name_counts: &mut Array<[String, i32]>,
-    skip: i32,
-) {
+fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>, skip: i32) {
     if let Leaf(idx) = *node {
         let elems = &alts[idx].elements;
         for let mut i = skip; i < elems.len(); i += 1 {
@@ -2347,30 +2337,12 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
     w.end();  // loop
 }
 
-fn gen_prediction_code(
-    w: &mut CodeWriter,
-    node: &PredictionNode,
-    fn_name: &String,
-    alts: &Array<Alternative>,
-    type_name: &String,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) {
+fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
     let mut nc: Array<[String, i32]> = [];
     gen_prediction_code_inner(w, node, fn_name, alts, type_name, all_rules, lit_tokens, 0, &mut nc);
 }
 
-fn gen_prediction_code_inner(
-    w: &mut CodeWriter,
-    node: &PredictionNode,
-    fn_name: &String,
-    alts: &Array<Alternative>,
-    type_name: &String,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    skip: i32,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, skip: i32, name_counts: &mut Array<[String, i32]>) {
     if let Leaf(idx) = *node {
         if skip == 0 {
             w.line(`return {*fn_name}_bt_{idx}(p);`);
@@ -2380,7 +2352,16 @@ fn gen_prediction_code_inner(
             let alt = &alts[idx];
             let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{idx}` };
             let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
-            gen_alt_body_skip(w, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens, skip);
+            gen_alt_body_skip(
+                w,
+                type_name,
+                Option::<String>::Some(case_name),
+                Option::<String>::Some(sname),
+                alt,
+                all_rules,
+                lit_tokens,
+                skip,
+            );
         }
         return;
     }
@@ -2426,7 +2407,17 @@ fn gen_prediction_code_inner(
             } else {
                 w.else_begin(`else if {cond}`);
             }
-            gen_prediction_code_inner(w, &branch.child, fn_name, alts, type_name, all_rules, lit_tokens, skip, name_counts);
+            gen_prediction_code_inner(
+                w,
+                &branch.child,
+                fn_name,
+                alts,
+                type_name,
+                all_rules,
+                lit_tokens,
+                skip,
+                name_counts,
+            );
         }
         w.end();
     }
@@ -2900,8 +2891,12 @@ fn alt_sort_priority(alt: &Alternative) -> i32 {
     }
     // Multi-element: check first non-nullable element.
     for let elem of alt.elements {
-        if is_nullable(&elem) { continue; }
-        if let TokenRef(_) | Literal(_) = elem { return 4; }
+        if is_nullable(&elem) {
+            continue;
+        }
+        if let TokenRef(_) | Literal(_) = elem {
+            return 4;
+        }
         break;
     }
     return 2;
