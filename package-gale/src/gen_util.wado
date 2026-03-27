@@ -37,11 +37,21 @@ pub fn to_lower(name: &String) -> String {
 }
 
 pub fn escape_char(c: char) -> String {
-    if c == '\'' { return "'\\''"; }
-    if c == '\\' { return "'\\\\'"; }
-    if c == '\n' { return "'\\n'"; }
-    if c == '\r' { return "'\\r'"; }
-    if c == '\t' { return "'\\t'"; }
+    if c == '\'' {
+        return "'\\''";
+    }
+    if c == '\\' {
+        return "'\\\\'";
+    }
+    if c == '\n' {
+        return "'\\n'";
+    }
+    if c == '\r' {
+        return "'\\r'";
+    }
+    if c == '\t' {
+        return "'\\t'";
+    }
     let code = c as i32;
     if code >= 32 && code < 127 {
         let mut s = String::with_capacity(3);
@@ -71,7 +81,7 @@ pub fn escape_string(s: &String) -> String {
                     result.append(`\\u\{{code:x}\}`);
                 }
             },
-        };
+        }
     }
     result.append_char('"');
     return result;
@@ -84,29 +94,75 @@ pub fn rule_type_name(name: &String) -> String {
 }
 
 pub fn literal_field_name(text: &String) -> String {
-    if *text == "+" { return "plus"; }
-    if *text == "-" { return "minus"; }
-    if *text == "*" { return "star"; }
-    if *text == "/" { return "slash"; }
-    if *text == "%" { return "percent"; }
-    if *text == "=" { return "eq"; }
-    if *text == "!" { return "bang"; }
-    if *text == "<" { return "lt"; }
-    if *text == ">" { return "gt"; }
-    if *text == "&" { return "amp"; }
-    if *text == "|" { return "pipe"; }
-    if *text == "^" { return "caret"; }
-    if *text == "~" { return "tilde"; }
-    if *text == "." { return "dot"; }
-    if *text == "," { return "comma"; }
-    if *text == ":" { return "colon"; }
-    if *text == ";" { return "semicolon"; }
-    if *text == "(" { return "lparen"; }
-    if *text == ")" { return "rparen"; }
-    if *text == "{" { return "lbrace"; }
-    if *text == "}" { return "rbrace"; }
-    if *text == "[" { return "lbracket"; }
-    if *text == "]" { return "rbracket"; }
+    if *text == "+" {
+        return "plus";
+    }
+    if *text == "-" {
+        return "minus";
+    }
+    if *text == "*" {
+        return "star";
+    }
+    if *text == "/" {
+        return "slash";
+    }
+    if *text == "%" {
+        return "percent";
+    }
+    if *text == "=" {
+        return "eq";
+    }
+    if *text == "!" {
+        return "bang";
+    }
+    if *text == "<" {
+        return "lt";
+    }
+    if *text == ">" {
+        return "gt";
+    }
+    if *text == "&" {
+        return "amp";
+    }
+    if *text == "|" {
+        return "pipe";
+    }
+    if *text == "^" {
+        return "caret";
+    }
+    if *text == "~" {
+        return "tilde";
+    }
+    if *text == "." {
+        return "dot";
+    }
+    if *text == "," {
+        return "comma";
+    }
+    if *text == ":" {
+        return "colon";
+    }
+    if *text == ";" {
+        return "semicolon";
+    }
+    if *text == "(" {
+        return "lparen";
+    }
+    if *text == ")" {
+        return "rparen";
+    }
+    if *text == "{" {
+        return "lbrace";
+    }
+    if *text == "}" {
+        return "rbrace";
+    }
+    if *text == "[" {
+        return "lbracket";
+    }
+    if *text == "]" {
+        return "rbracket";
+    }
     let mut result = String::with_capacity(text.len() + 4);
     result.append("lit_");
     for let c of text.chars() {
@@ -181,7 +237,7 @@ pub fn literal_const_name(text: &String) -> String {
                 '^' => result.append("CARET"),
                 '~' => result.append("TILDE"),
                 _ => result.append_char('_'),
-            };
+            }
         }
     }
     return result;

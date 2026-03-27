@@ -25,6 +25,22 @@ fn effective_start_line(attrs: &[Attribute], span_line: usize) -> usize {
         .map_or(span_line, |attr| attr.span.line.min(span_line))
 }
 
+fn contains_call(expr: &Expr) -> bool {
+    match expr {
+        Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => true,
+        Expr::Binary(e) => contains_call(&e.left) || contains_call(&e.right),
+        Expr::Unary(e) => contains_call(&e.expr),
+        Expr::Cast(e) => contains_call(&e.expr),
+        Expr::TupleLiteral(e) => e.elements.iter().any(contains_call),
+        Expr::StructLiteral(e) => e.fields.iter().any(|f| contains_call(&f.value)),
+        Expr::Index(e) => contains_call(&e.expr) || contains_call(&e.index),
+        Expr::FieldAccess(e) => contains_call(&e.expr),
+        Expr::TryOp(e) => contains_call(&e.expr),
+        Expr::Spread(e, _) => contains_call(e),
+        _ => false,
+    }
+}
+
 pub struct Unparser<'a> {
     comments: &'a CommentMap,
     output: String,
@@ -1605,6 +1621,48 @@ impl<'a> Unparser<'a> {
             return;
         }
 
+        // Key-value list heuristic: if all elements are 2-element tuple literals,
+        // always format as one entry per line (Wasm CM associative array pattern).
+        // This check runs before the single-line attempt so kv-lists are never
+        // collapsed onto one line.
+        let is_kv_list = tuple_lit.elements.len() >= 2
+            && tuple_lit
+                .elements
+                .iter()
+                .all(|e| matches!(e, Expr::TupleLiteral(t) if t.elements.len() == 2));
+
+        if is_kv_list {
+            self.output.push('[');
+            self.indent_level += 1;
+            for (i, elem) in tuple_lit.elements.iter().enumerate() {
+                if i > 0 {
+                    self.output.push(',');
+                }
+                self.output.push('\n');
+                self.write_indent();
+                // Force single-line formatting for each [k, v] pair so that
+                // key and value always stay together on one line.
+                if let Expr::TupleLiteral(inner) = elem {
+                    self.output.push('[');
+                    for (j, inner_elem) in inner.elements.iter().enumerate() {
+                        if j > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.unparse_expr(inner_elem);
+                    }
+                    self.output.push(']');
+                } else {
+                    self.unparse_expr(elem);
+                }
+            }
+            self.output.push(',');
+            self.output.push('\n');
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push(']');
+            return;
+        }
+
         // Try single-line first
         let snap = self.snapshot();
         self.output.push('[');
@@ -1623,15 +1681,11 @@ impl<'a> Unparser<'a> {
         // Rollback for multi-line formatting
         self.rollback(snap);
 
-        // Key-value list heuristic: if all elements are 2-element tuple literals,
-        // format as one entry per line (Wasm CM associative array pattern).
-        let is_kv_list = tuple_lit.elements.len() >= 2
-            && tuple_lit
-                .elements
-                .iter()
-                .all(|e| matches!(e, Expr::TupleLiteral(t) if t.elements.len() == 2));
+        // If any element contains a function/method call, use one-element-per-line
+        // instead of fill-style to keep complex expressions readable.
+        let has_call = tuple_lit.elements.iter().any(contains_call);
 
-        if is_kv_list {
+        if has_call {
             self.output.push('[');
             self.indent_level += 1;
             for (i, elem) in tuple_lit.elements.iter().enumerate() {
