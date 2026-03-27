@@ -51,7 +51,7 @@ pub struct TreeMap<K, V> {
     deleted_count: i32,
 }
 
-impl TreeMap<K: Ord, V> {
+impl<K: Ord> TreeMap<K, V> {
     /// Creates a new empty TreeMap.
     pub fn new() -> TreeMap<K, V> {
         return TreeMap {
@@ -378,7 +378,7 @@ pub struct TreeSet<T> {
     inner: TreeMap<T, ()>,
 }
 
-impl TreeSet<T: Ord> {
+impl<T: Ord> TreeSet<T> {
     /// Creates a new empty TreeSet.
     pub fn new() -> TreeSet<T> {
         return TreeSet { inner: TreeMap::<T, ()>::new() };
