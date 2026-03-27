@@ -7179,70 +7179,45 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
     };
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_INSERT {
-        if p.peek_kind() == TK_K_INSERT {
+        let tok = p.expect(TK_K_INSERT, "K_INSERT")?;
+        if p.peek_kind() == TK_K_OR {
+            let tok_2 = p.expect(TK_K_OR, "K_OR")?;
             let saved_pos = p.pos;
             let mut bt_done = false;
             if !bt_done {
                 bt_try: {
-                    let opt_r = p.expect(TK_K_INSERT, "K_INSERT");
+                    let opt_r = p.expect(TK_K_REPLACE, "K_REPLACE");
                     if let Err(_) = opt_r { p.pos = saved_pos; break bt_try; }
-                    let opt_r_2 = p.expect(TK_K_OR, "K_OR");
-                    if let Err(_) = opt_r_2 { p.pos = saved_pos; break bt_try; }
-                    let opt_r_3 = p.expect(TK_K_REPLACE, "K_REPLACE");
-                    if let Err(_) = opt_r_3 { p.pos = saved_pos; break bt_try; }
                     bt_done = true;
                 }
             }
             if !bt_done {
                 bt_try_2: {
-                    let opt_r = p.expect(TK_K_INSERT, "K_INSERT");
+                    let opt_r = p.expect(TK_K_ROLLBACK, "K_ROLLBACK");
                     if let Err(_) = opt_r { p.pos = saved_pos; break bt_try_2; }
-                    let opt_r_2 = p.expect(TK_K_OR, "K_OR");
-                    if let Err(_) = opt_r_2 { p.pos = saved_pos; break bt_try_2; }
-                    let opt_r_3 = p.expect(TK_K_ROLLBACK, "K_ROLLBACK");
-                    if let Err(_) = opt_r_3 { p.pos = saved_pos; break bt_try_2; }
                     bt_done = true;
                 }
             }
             if !bt_done {
                 bt_try_3: {
-                    let opt_r = p.expect(TK_K_INSERT, "K_INSERT");
+                    let opt_r = p.expect(TK_K_ABORT, "K_ABORT");
                     if let Err(_) = opt_r { p.pos = saved_pos; break bt_try_3; }
-                    let opt_r_2 = p.expect(TK_K_OR, "K_OR");
-                    if let Err(_) = opt_r_2 { p.pos = saved_pos; break bt_try_3; }
-                    let opt_r_3 = p.expect(TK_K_ABORT, "K_ABORT");
-                    if let Err(_) = opt_r_3 { p.pos = saved_pos; break bt_try_3; }
                     bt_done = true;
                 }
             }
             if !bt_done {
                 bt_try_4: {
-                    let opt_r = p.expect(TK_K_INSERT, "K_INSERT");
+                    let opt_r = p.expect(TK_K_FAIL, "K_FAIL");
                     if let Err(_) = opt_r { p.pos = saved_pos; break bt_try_4; }
-                    let opt_r_2 = p.expect(TK_K_OR, "K_OR");
-                    if let Err(_) = opt_r_2 { p.pos = saved_pos; break bt_try_4; }
-                    let opt_r_3 = p.expect(TK_K_FAIL, "K_FAIL");
-                    if let Err(_) = opt_r_3 { p.pos = saved_pos; break bt_try_4; }
                     bt_done = true;
                 }
             }
             if !bt_done {
-                bt_try_5: {
-                    let opt_r = p.expect(TK_K_INSERT, "K_INSERT");
-                    if let Err(_) = opt_r { p.pos = saved_pos; break bt_try_5; }
-                    let opt_r_2 = p.expect(TK_K_OR, "K_OR");
-                    if let Err(_) = opt_r_2 { p.pos = saved_pos; break bt_try_5; }
-                    let opt_r_3 = p.expect(TK_K_IGNORE, "K_IGNORE");
-                    if let Err(_) = opt_r_3 { p.pos = saved_pos; break bt_try_5; }
-                    bt_done = true;
-                }
-            }
-            if !bt_done {
-                let tok = p.expect(TK_K_INSERT, "K_INSERT")?;
+                let tok = p.expect(TK_K_IGNORE, "K_IGNORE")?;
             }
         }
     } else if grp_kind == TK_K_REPLACE {
-        let tok = p.expect(TK_K_REPLACE, "K_REPLACE")?;
+        let tok_3 = p.expect(TK_K_REPLACE, "K_REPLACE")?;
     }
     let k_into = p.expect(TK_K_INTO, "K_INTO")?;
     if p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
@@ -7256,25 +7231,25 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
     }
     let table_name = parse_table_name(p)?;
     if p.peek_kind() == TK_LIT_LPAREN {
-        let tok_2 = p.expect(TK_LIT_LPAREN, "'('")?;
-        let tok_3 = parse_column_name(p)?;
+        let tok_4 = p.expect(TK_LIT_LPAREN, "'('")?;
+        let tok_5 = parse_column_name(p)?;
         while p.peek_kind() == TK_LIT_COMMA {
             let tok = p.expect(TK_LIT_COMMA, "','")?;
             let tok_2 = parse_column_name(p)?;
         }
-        let tok_4 = p.expect(TK_LIT_RPAREN, "')'")?;
+        let tok_6 = p.expect(TK_LIT_RPAREN, "')'")?;
     }
     let grp_kind_2 = p.peek_kind();
     if grp_kind_2 == TK_K_VALUES || grp_kind_2 == TK_K_WITH || grp_kind_2 == TK_K_SELECT {
         if p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_SELECT {
-            let tok_5 = parse_select_stmt(p)?;
+            let tok_7 = parse_select_stmt(p)?;
         } else if p.peek_kind() == TK_K_VALUES {
             let saved_pos_2 = p.pos;
             let mut bt_done_2 = false;
             if !bt_done_2 {
-                bt_try_6: {
+                bt_try_5: {
                     let opt_r = parse_select_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_2; break bt_try_6; }
+                    if let Err(_) = opt_r { p.pos = saved_pos_2; break bt_try_5; }
                     bt_done_2 = true;
                 }
             }
@@ -7300,8 +7275,8 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
             }
         }
     } else if grp_kind_2 == TK_K_DEFAULT {
-        let tok_6 = p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
-        let tok_7 = p.expect(TK_K_VALUES, "K_VALUES")?;
+        let tok_8 = p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
+        let tok_9 = p.expect(TK_K_VALUES, "K_VALUES")?;
     }
     return Result::<InsertStmtNode, ParseError>::Ok(InsertStmtNode {
         span: Span::new(start, p.last_end()),
@@ -7667,23 +7642,17 @@ fn parse_update_stmt(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
         opt_bt: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_OR {
-                if p.peek_kind() == TK_K_OR {
-                    if p.peek_at(1) == TK_K_ROLLBACK {
-                        let tok = p.expect(TK_K_OR, "K_OR")?;
-                        let tok_2 = p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
-                    } else if p.peek_at(1) == TK_K_ABORT {
-                        let tok_3 = p.expect(TK_K_OR, "K_OR")?;
-                        let tok_4 = p.expect(TK_K_ABORT, "K_ABORT")?;
-                    } else if p.peek_at(1) == TK_K_REPLACE {
-                        let tok_5 = p.expect(TK_K_OR, "K_OR")?;
-                        let tok_6 = p.expect(TK_K_REPLACE, "K_REPLACE")?;
-                    } else if p.peek_at(1) == TK_K_FAIL {
-                        let tok_7 = p.expect(TK_K_OR, "K_OR")?;
-                        let tok_8 = p.expect(TK_K_FAIL, "K_FAIL")?;
-                    } else if p.peek_at(1) == TK_K_IGNORE {
-                        let tok_9 = p.expect(TK_K_OR, "K_OR")?;
-                        let tok_10 = p.expect(TK_K_IGNORE, "K_IGNORE")?;
-                    }
+                let tok = p.expect(TK_K_OR, "K_OR")?;
+                if p.peek_kind() == TK_K_ROLLBACK {
+                    let tok_2 = p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
+                } else if p.peek_kind() == TK_K_ABORT {
+                    let tok_3 = p.expect(TK_K_ABORT, "K_ABORT")?;
+                } else if p.peek_kind() == TK_K_REPLACE {
+                    let tok_4 = p.expect(TK_K_REPLACE, "K_REPLACE")?;
+                } else if p.peek_kind() == TK_K_FAIL {
+                    let tok_5 = p.expect(TK_K_FAIL, "K_FAIL")?;
+                } else if p.peek_kind() == TK_K_IGNORE {
+                    let tok_6 = p.expect(TK_K_IGNORE, "K_IGNORE")?;
                 }
             }
         }
@@ -7729,23 +7698,17 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
         opt_bt: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_OR {
-                if p.peek_kind() == TK_K_OR {
-                    if p.peek_at(1) == TK_K_ROLLBACK {
-                        let tok = p.expect(TK_K_OR, "K_OR")?;
-                        let tok_2 = p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
-                    } else if p.peek_at(1) == TK_K_ABORT {
-                        let tok_3 = p.expect(TK_K_OR, "K_OR")?;
-                        let tok_4 = p.expect(TK_K_ABORT, "K_ABORT")?;
-                    } else if p.peek_at(1) == TK_K_REPLACE {
-                        let tok_5 = p.expect(TK_K_OR, "K_OR")?;
-                        let tok_6 = p.expect(TK_K_REPLACE, "K_REPLACE")?;
-                    } else if p.peek_at(1) == TK_K_FAIL {
-                        let tok_7 = p.expect(TK_K_OR, "K_OR")?;
-                        let tok_8 = p.expect(TK_K_FAIL, "K_FAIL")?;
-                    } else if p.peek_at(1) == TK_K_IGNORE {
-                        let tok_9 = p.expect(TK_K_OR, "K_OR")?;
-                        let tok_10 = p.expect(TK_K_IGNORE, "K_IGNORE")?;
-                    }
+                let tok = p.expect(TK_K_OR, "K_OR")?;
+                if p.peek_kind() == TK_K_ROLLBACK {
+                    let tok_2 = p.expect(TK_K_ROLLBACK, "K_ROLLBACK")?;
+                } else if p.peek_kind() == TK_K_ABORT {
+                    let tok_3 = p.expect(TK_K_ABORT, "K_ABORT")?;
+                } else if p.peek_kind() == TK_K_REPLACE {
+                    let tok_4 = p.expect(TK_K_REPLACE, "K_REPLACE")?;
+                } else if p.peek_kind() == TK_K_FAIL {
+                    let tok_5 = p.expect(TK_K_FAIL, "K_FAIL")?;
+                } else if p.peek_kind() == TK_K_IGNORE {
+                    let tok_6 = p.expect(TK_K_IGNORE, "K_IGNORE")?;
                 }
             }
         }
@@ -7858,30 +7821,26 @@ fn parse_type_name(p: &mut Parser) -> Result<TypeNameNode, ParseError> {
         opt_bt: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_LIT_LPAREN {
-                if p.peek_kind() == TK_LIT_LPAREN {
-                    if p.peek_at(1) == TK_LIT_PLUS || p.peek_at(1) == TK_LIT_MINUS || p.peek_at(1) == TK_NUMERIC_LITERAL {
-                        let saved_pos = p.pos;
-                        let mut bt_done = false;
-                        if !bt_done {
-                            bt_try: {
-                                let opt_r = p.expect(TK_LIT_LPAREN, "'('");
-                                if let Err(_) = opt_r { p.pos = saved_pos; break bt_try; }
-                                let opt_r_2 = parse_signed_number(p);
-                                if let Err(_) = opt_r_2 { p.pos = saved_pos; break bt_try; }
-                                let opt_r_3 = p.expect(TK_LIT_COMMA, "','");
-                                if let Err(_) = opt_r_3 { p.pos = saved_pos; break bt_try; }
-                                let opt_r_4 = parse_signed_number(p);
-                                if let Err(_) = opt_r_4 { p.pos = saved_pos; break bt_try; }
-                                let opt_r_5 = p.expect(TK_LIT_RPAREN, "')'");
-                                if let Err(_) = opt_r_5 { p.pos = saved_pos; break bt_try; }
-                                bt_done = true;
-                            }
+                let tok = p.expect(TK_LIT_LPAREN, "'('")?;
+                if p.peek_kind() == TK_LIT_PLUS || p.peek_kind() == TK_LIT_MINUS || p.peek_kind() == TK_NUMERIC_LITERAL {
+                    let saved_pos = p.pos;
+                    let mut bt_done = false;
+                    if !bt_done {
+                        bt_try: {
+                            let opt_r = parse_signed_number(p);
+                            if let Err(_) = opt_r { p.pos = saved_pos; break bt_try; }
+                            let opt_r_2 = p.expect(TK_LIT_COMMA, "','");
+                            if let Err(_) = opt_r_2 { p.pos = saved_pos; break bt_try; }
+                            let opt_r_3 = parse_signed_number(p);
+                            if let Err(_) = opt_r_3 { p.pos = saved_pos; break bt_try; }
+                            let opt_r_4 = p.expect(TK_LIT_RPAREN, "')'");
+                            if let Err(_) = opt_r_4 { p.pos = saved_pos; break bt_try; }
+                            bt_done = true;
                         }
-                        if !bt_done {
-                            let tok = p.expect(TK_LIT_LPAREN, "'('")?;
-                            let tok_2 = parse_signed_number(p)?;
-                            let tok_3 = p.expect(TK_LIT_RPAREN, "')'")?;
-                        }
+                    }
+                    if !bt_done {
+                        let tok = parse_signed_number(p)?;
+                        let tok_2 = p.expect(TK_LIT_RPAREN, "')'")?;
                     }
                 }
             }
@@ -8748,26 +8707,23 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
             }
             let grp_kind_3 = p.peek_kind();
             if grp_kind_3 == TK_K_SET {
-                if p.peek_kind() == TK_K_SET {
-                    if p.peek_at(1) == TK_K_NULL {
-                        let tok_4 = p.expect(TK_K_SET, "K_SET")?;
-                        let tok_5 = p.expect(TK_K_NULL, "K_NULL")?;
-                    } else if p.peek_at(1) == TK_K_DEFAULT {
-                        let tok_6 = p.expect(TK_K_SET, "K_SET")?;
-                        let tok_7 = p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
-                    }
+                let tok_4 = p.expect(TK_K_SET, "K_SET")?;
+                if p.peek_kind() == TK_K_NULL {
+                    let tok_5 = p.expect(TK_K_NULL, "K_NULL")?;
+                } else if p.peek_kind() == TK_K_DEFAULT {
+                    let tok_6 = p.expect(TK_K_DEFAULT, "K_DEFAULT")?;
                 }
             } else if grp_kind_3 == TK_K_CASCADE {
-                let tok_8 = p.expect(TK_K_CASCADE, "K_CASCADE")?;
+                let tok_7 = p.expect(TK_K_CASCADE, "K_CASCADE")?;
             } else if grp_kind_3 == TK_K_RESTRICT {
-                let tok_9 = p.expect(TK_K_RESTRICT, "K_RESTRICT")?;
+                let tok_8 = p.expect(TK_K_RESTRICT, "K_RESTRICT")?;
             } else if grp_kind_3 == TK_K_NO {
-                let tok_10 = p.expect(TK_K_NO, "K_NO")?;
-                let tok_11 = p.expect(TK_K_ACTION, "K_ACTION")?;
+                let tok_9 = p.expect(TK_K_NO, "K_NO")?;
+                let tok_10 = p.expect(TK_K_ACTION, "K_ACTION")?;
             }
         } else if grp_kind == TK_K_MATCH {
-            let tok_12 = p.expect(TK_K_MATCH, "K_MATCH")?;
-            let tok_13 = parse_name(p)?;
+            let tok_11 = p.expect(TK_K_MATCH, "K_MATCH")?;
+            let tok_12 = parse_name(p)?;
         }
     }
     if p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_DEFERRABLE && p.peek_at(2) == TK_K_INITIALLY {
@@ -8775,35 +8731,29 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
         let tok_5 = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE")?;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_INITIALLY {
-            if p.peek_kind() == TK_K_INITIALLY {
-                if p.peek_at(1) == TK_K_DEFERRED {
-                    let tok_6 = p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
-                    let tok_7 = p.expect(TK_K_DEFERRED, "K_DEFERRED")?;
-                } else if p.peek_at(1) == TK_K_IMMEDIATE {
-                    let tok_8 = p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
-                    let tok_9 = p.expect(TK_K_IMMEDIATE, "K_IMMEDIATE")?;
-                }
+            let tok_6 = p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
+            if p.peek_kind() == TK_K_DEFERRED {
+                let tok_7 = p.expect(TK_K_DEFERRED, "K_DEFERRED")?;
+            } else if p.peek_kind() == TK_K_IMMEDIATE {
+                let tok_8 = p.expect(TK_K_IMMEDIATE, "K_IMMEDIATE")?;
             }
         }
     } else if p.peek_kind() == TK_K_DEFERRABLE && p.peek_at(1) == TK_K_INITIALLY {
-        let tok_10 = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE")?;
+        let tok_9 = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE")?;
         let grp_kind_2 = p.peek_kind();
         if grp_kind_2 == TK_K_INITIALLY {
-            if p.peek_kind() == TK_K_INITIALLY {
-                if p.peek_at(1) == TK_K_DEFERRED {
-                    let tok_11 = p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
-                    let tok_12 = p.expect(TK_K_DEFERRED, "K_DEFERRED")?;
-                } else if p.peek_at(1) == TK_K_IMMEDIATE {
-                    let tok_13 = p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
-                    let tok_14 = p.expect(TK_K_IMMEDIATE, "K_IMMEDIATE")?;
-                }
+            let tok_10 = p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
+            if p.peek_kind() == TK_K_DEFERRED {
+                let tok_11 = p.expect(TK_K_DEFERRED, "K_DEFERRED")?;
+            } else if p.peek_kind() == TK_K_IMMEDIATE {
+                let tok_12 = p.expect(TK_K_IMMEDIATE, "K_IMMEDIATE")?;
             }
         }
     } else if p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_DEFERRABLE {
-        let tok_15 = p.expect(TK_K_NOT, "K_NOT")?;
-        let tok_16 = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE")?;
+        let tok_13 = p.expect(TK_K_NOT, "K_NOT")?;
+        let tok_14 = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE")?;
     } else if p.peek_kind() == TK_K_DEFERRABLE {
-        let tok_17 = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE")?;
+        let tok_15 = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE")?;
     }
     return Result::<ForeignKeyClauseNode, ParseError>::Ok(ForeignKeyClauseNode {
         span: Span::new(start, p.last_end()),
@@ -9524,15 +9474,14 @@ fn parse_compound_operator(p: &mut Parser) -> Result<CompoundOperatorNode, Parse
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_K_UNION {
-        if p.peek_kind() == TK_K_UNION {
-            let saved = p.pos;
-            let r_1 = parse_compound_operator_bt_1(p);
-            if let Err(_) = r_1 {
-                p.pos = saved;
-            } else {
-                return r_1;
-            }
-            return parse_compound_operator_bt_0(p);
+        let k_union = p.expect(TK_K_UNION, "K_UNION")?;
+        if p.peek_kind() == TK_K_ALL {
+            let k_all = p.expect(TK_K_ALL, "K_ALL")?;
+            return Result::<CompoundOperatorNode, ParseError>::Ok(CompoundOperatorNode::Alt1(CompoundOperatorAlt1 {
+                span: Span::new(start, p.last_end()),
+                k_union,
+                k_all,
+            }));
         }
     }
     if kind == TK_K_INTERSECT {

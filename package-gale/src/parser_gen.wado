@@ -15,7 +15,13 @@ use { log_stderr } from "core:cli";
 variant PredictionNode {
     Leaf(i32),
     Dispatch(PredictionDispatch),
+    Consume(ConsumeNode),
     Backtrack(Array<i32>),
+}
+
+struct ConsumeNode {
+    element: Element,
+    child: PredictionNode,
 }
 
 struct PredictionDispatch {
@@ -46,7 +52,31 @@ fn build_prediction(
         return PredictionNode::Backtrack(bt_copy);
     }
 
-    // Compute first set at `depth` for each alternative (positional: [i] corresponds to alt_indices[i]).
+    // Try common-prefix consumption: if all alternatives start with the same
+    // fixed token (TokenRef or Literal), consume it and recurse on suffixes.
+    // This does NOT increment depth — shared tokens don't cost prediction budget.
+    let common = find_common_prefix_element(alt_elements);
+    if let Some(elem) = common {
+        let mut suffix_elements: Array<Array<Element>> = [];
+        let mut suffix_firsts: Array<Array<String>> = [];
+        for let mut i = 0; i < alt_indices.len(); i += 1 {
+            let suffix = elements_suffix(&alt_elements[i], 1);
+            let mut visiting: Array<String> = [];
+            suffix_firsts.append(first_of_elements(
+                &suffix, all_rules, lit_tokens, &mut visiting,
+            ));
+            suffix_elements.append(suffix);
+        }
+        let child = build_prediction(
+            alt_indices, &suffix_firsts, &suffix_elements,
+            depth, max_depth, all_rules, lit_tokens,
+        );
+        return PredictionNode::Consume(ConsumeNode { element: elem, child });
+    }
+
+    // Dispatch: use depth-based lookahead on original elements.
+    // compute_deeper_first skips `depth` fixed tokens and returns FIRST of
+    // the next position. Elements are NOT modified — depth tracks position.
     let mut depth_firsts: Array<Array<String>> = [];
     for let mut i = 0; i < alt_indices.len(); i += 1 {
         if depth == 0 {
@@ -64,8 +94,8 @@ fn build_prediction(
         }
         if has_empty {
             let mut bt_copy: Array<i32> = [];
-        for let ai of alt_indices { bt_copy.append(*ai); }
-        return PredictionNode::Backtrack(bt_copy);
+            for let ai of alt_indices { bt_copy.append(*ai); }
+            return PredictionNode::Backtrack(bt_copy);
         }
     }
 
@@ -137,6 +167,63 @@ fn build_prediction(
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
 }
 
+/// Check if all alternatives start with the same fixed token (TokenRef or Literal).
+fn find_common_prefix_element(alt_elements: &Array<Array<Element>>) -> Option<Element> {
+    if alt_elements.len() < 2 { return null; }
+    // All alternatives must be non-empty.
+    for let elems of alt_elements {
+        if elems.len() == 0 { return null; }
+    }
+    let first_elem = &alt_elements[0][0];
+    // Only factor out TokenRef and Literal (fixed tokens).
+    if let TokenRef(name) = *first_elem {
+        for let mut i = 1; i < alt_elements.len(); i += 1 {
+            if let TokenRef(other) = alt_elements[i][0] {
+                if other != name { return null; }
+            } else { return null; }
+        }
+        return Option::<Element>::Some(*first_elem);
+    }
+    if let Literal(text) = *first_elem {
+        for let mut i = 1; i < alt_elements.len(); i += 1 {
+            if let Literal(other) = alt_elements[i][0] {
+                if other != text { return null; }
+            } else { return null; }
+        }
+        return Option::<Element>::Some(*first_elem);
+    }
+    return null;
+}
+
+/// Return elements from index `start` onward.
+fn elements_suffix(elements: &Array<Element>, start: i32) -> Array<Element> {
+    let mut result: Array<Element> = [];
+    for let mut i = start; i < elements.len(); i += 1 {
+        result.append(elements[i]);
+    }
+    return result;
+}
+
+/// Compute first set of a sequence of elements.
+fn first_of_elements(
+    elements: &Array<Element>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    visiting: &mut Array<String>,
+) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let elem of elements {
+        let ef = first_of_element(&elem, all_rules, lit_tokens, visiting);
+        for let tk of ef {
+            if !array_contains_str(&result, &tk) {
+                result.append(tk);
+            }
+        }
+        if !is_nullable(&elem) { break; }
+    }
+    return result;
+}
+
 fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
     if let Leaf(ai) = *a {
         if let Leaf(bi) = *b { return ai == bi; }
@@ -149,6 +236,23 @@ fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
             }
             return true;
         }
+    }
+    // Consume nodes: check same element kind and recurse on child.
+    if let Consume(ca) = *a {
+        if let Consume(cb) = *b {
+            return element_eq(&ca.element, &cb.element)
+                && prediction_node_eq(&ca.child, &cb.child);
+        }
+    }
+    return false;
+}
+
+fn element_eq(a: &Element, b: &Element) -> bool {
+    if let TokenRef(na) = *a {
+        if let TokenRef(nb) = *b { return na == nb; }
+    }
+    if let Literal(ta) = *a {
+        if let Literal(tb) = *b { return ta == tb; }
     }
     return false;
 }
@@ -187,6 +291,7 @@ fn count_backtrack_nodes(node: &PredictionNode) -> i32 {
         }
         return count;
     }
+    if let Consume(c) = *node { return count_backtrack_nodes(&c.child); }
     return 0;
 }
 
@@ -199,6 +304,7 @@ fn count_leaf_nodes(node: &PredictionNode) -> i32 {
         }
         return count;
     }
+    if let Consume(c) = *node { return count_leaf_nodes(&c.child); }
     return 0;
 }
 
@@ -452,6 +558,62 @@ fn gen_alt_body(
     lit_tokens: &Array<LitToken>,
 ) {
     gen_alt_elements(w, &alt.elements, all_rules, lit_tokens);
+
+    if let Some(case) = variant_case {
+        let sname = struct_name.unwrap();
+        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
+        w.indent();
+        w.line("span: Span::new(start, p.last_end()),");
+        gen_field_assignments(w, &alt.elements);
+        w.dedent();
+        w.line("}));");
+    } else {
+        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
+        w.indent();
+        w.line("span: Span::new(start, p.last_end()),");
+        gen_field_assignments(w, &alt.elements);
+        w.dedent();
+        w.line("});");
+    }
+}
+
+fn gen_alt_body_skip(
+    w: &mut CodeWriter,
+    type_name: &String,
+    variant_case: Option<String>,
+    struct_name: Option<String>,
+    alt: &Alternative,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    skip: i32,
+) {
+    // Parse elements from `skip` onward (prefix already consumed).
+    // Replay name counter for consumed elements so dedup_name stays in sync.
+    let mut name_counts: Array<[String, i32]> = [];
+    for let mut i = 0; i < skip; i += 1 {
+        replay_element_names(&alt.elements[i], &mut name_counts);
+    }
+    for let mut i = skip; i < alt.elements.len(); i += 1 {
+        let elem = &alt.elements[i];
+        if let Repeat(rep) = *elem {
+            if let Optional = rep.kind {
+                if is_ruleref_optional(&rep.element) {
+                    let follow = first_of_elements_from(&alt.elements, i + 1, all_rules, lit_tokens);
+                    gen_repeat_with_follow(w, &rep, all_rules, lit_tokens, &follow, &mut name_counts);
+                } else {
+                    gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
+                }
+            } else if rep.non_greedy {
+                let follow = first_of_elements_from(&alt.elements, i + 1, all_rules, lit_tokens);
+                let follow_second = compute_follow_second(&alt.elements, i + 1, all_rules, lit_tokens);
+                gen_repeat_non_greedy(w, &rep, all_rules, lit_tokens, &follow, &follow_second, &mut name_counts);
+            } else {
+                gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
+            }
+        } else {
+            gen_element(w, elem, all_rules, lit_tokens, true, &mut name_counts);
+        }
+    }
 
     if let Some(case) = variant_case {
         let sname = struct_name.unwrap();
@@ -1263,6 +1425,41 @@ fn gen_field_assignment(
     }
 }
 
+/// Replay name counting for an element without emitting code.
+/// This advances the dedup counter so subsequent elements get correct suffixes.
+fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) {
+    if let TokenRef(name) = *elem {
+        dedup_name(&to_lower(&name), name_counts);
+        return;
+    }
+    if let Literal(text) = *elem {
+        dedup_name(&literal_field_name(&text), name_counts);
+        return;
+    }
+    if let RuleRef(name) = *elem {
+        dedup_name(&to_snake_case(&name), name_counts);
+        return;
+    }
+    if let Repeat(rep) = *elem {
+        if has_field(&rep.element) {
+            let info = element_field_info(&rep.element);
+            if let Star | Plus = rep.kind {
+                dedup_name(&`{info.0}_list`, name_counts);
+            }
+            if let Optional = rep.kind {
+                dedup_name(&info.0, name_counts);
+            }
+        }
+        return;
+    }
+    if let Label(lab) = *elem {
+        if has_field(&lab.element) {
+            dedup_name(&to_snake_case(&lab.name), name_counts);
+        }
+        return;
+    }
+}
+
 fn gen_consume_group(
     w: &mut CodeWriter,
     alts: &Array<Alternative>,
@@ -1349,8 +1546,37 @@ fn gen_group_prediction_code(
     lit_tokens: &Array<LitToken>,
     name_counts: &mut Array<[String, i32]>,
 ) {
+    gen_group_prediction_code_skip(w, node, alts, all_rules, lit_tokens, name_counts, 0);
+}
+
+fn gen_group_prediction_code_skip(
+    w: &mut CodeWriter,
+    node: &PredictionNode,
+    alts: &Array<Alternative>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    name_counts: &mut Array<[String, i32]>,
+    skip: i32,
+) {
     if let Leaf(idx) = *node {
-        gen_elements_with_non_greedy(w, &alts[idx].elements, all_rules, lit_tokens, name_counts);
+        let elems = &alts[idx].elements;
+        for let mut i = skip; i < elems.len(); i += 1 {
+            let elem = &elems[i];
+            if let Repeat(rep) = *elem {
+                if rep.non_greedy {
+                    let follow = first_of_elements_from(elems, i + 1, all_rules, lit_tokens);
+                    let follow_second = compute_follow_second(elems, i + 1, all_rules, lit_tokens);
+                    gen_repeat_non_greedy(w, &rep, all_rules, lit_tokens, &follow, &follow_second, name_counts);
+                    continue;
+                }
+            }
+            gen_element(w, &elem, all_rules, lit_tokens, false, name_counts);
+        }
+        return;
+    }
+    if let Consume(c) = *node {
+        gen_element(w, &c.element, all_rules, lit_tokens, false, name_counts);
+        gen_group_prediction_code_skip(w, &c.child, alts, all_rules, lit_tokens, name_counts, skip + 1);
         return;
     }
     if let Backtrack(indices) = *node {
@@ -1367,8 +1593,8 @@ fn gen_group_prediction_code(
             if is_last {
                 w.begin(`if !{done_var}`);
                 let mut nc: Array<[String, i32]> = [];
-                for let elem of alt.elements {
-                    gen_element(w, &elem, all_rules, lit_tokens, false, &mut nc);
+                for let mut i = skip; i < alt.elements.len(); i += 1 {
+                    gen_element(w, &alt.elements[i], all_rules, lit_tokens, false, &mut nc);
                 }
                 w.end();
             } else {
@@ -1376,8 +1602,8 @@ fn gen_group_prediction_code(
                 w.begin(`if !{done_var}`);
                 w.begin(`{bt_label}:`);
                 let mut nc: Array<[String, i32]> = [];
-                for let elem of alt.elements {
-                    gen_element_failable(w, &elem, all_rules, lit_tokens, &saved_var, &bt_label, &mut nc);
+                for let mut i = skip; i < alt.elements.len(); i += 1 {
+                    gen_element_failable(w, &alt.elements[i], all_rules, lit_tokens, &saved_var, &bt_label, &mut nc);
                 }
                 w.line(`{done_var} = true;`);
                 w.end(); // label
@@ -1396,7 +1622,7 @@ fn gen_group_prediction_code(
             } else {
                 w.else_begin(`else if {cond}`);
             }
-            gen_group_prediction_code(w, &branch.child, alts, all_rules, lit_tokens, name_counts);
+            gen_group_prediction_code_skip(w, &branch.child, alts, all_rules, lit_tokens, name_counts, skip);
         }
         w.end();
     }
@@ -1779,28 +2005,94 @@ fn gen_prediction_code(
     node: &PredictionNode,
     fn_name: &String,
     alts: &Array<Alternative>,
+    type_name: &String,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+    let mut nc: Array<[String, i32]> = [];
+    gen_prediction_code_inner(w, node, fn_name, alts, type_name, all_rules, lit_tokens, 0, &mut nc);
+}
+
+fn gen_prediction_code_inner(
+    w: &mut CodeWriter,
+    node: &PredictionNode,
+    fn_name: &String,
+    alts: &Array<Alternative>,
+    type_name: &String,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    skip: i32,
+    name_counts: &mut Array<[String, i32]>,
 ) {
     if let Leaf(idx) = *node {
-        w.line(`return {*fn_name}_bt_{idx}(p);`);
+        if skip == 0 {
+            w.line(`return {*fn_name}_bt_{idx}(p);`);
+        } else {
+            // Consumed prefix tokens already — inline the remaining alt body.
+            let all_labeled = all_alternatives_labeled(alts);
+            let alt = &alts[idx];
+            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{idx}` };
+            let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+            gen_alt_body_skip(w, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens, skip);
+        }
+        return;
+    }
+    if let Consume(c) = *node {
+        gen_element(w, &c.element, all_rules, lit_tokens, true, name_counts);
+        gen_prediction_code_inner(w, &c.child, fn_name, alts, type_name, all_rules, lit_tokens, skip + 1, name_counts);
         return;
     }
     if let Backtrack(indices) = *node {
         // Sort by element count for proper ordering (single RuleRef first, etc.)
         let mut sorted_indices = indices.sorted();
         sort_group_by_element_count(&mut sorted_indices, alts);
-        w.line("let saved = p.pos;");
-        for let mut i = 0; i < sorted_indices.len(); i += 1 {
-            let idx = sorted_indices[i];
-            let is_last = i == sorted_indices.len() - 1;
-            if is_last {
-                w.line(`return {*fn_name}_bt_{idx}(p);`);
-            } else {
-                w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
-                w.begin(`if let Err(_) = r_{idx}`);
-                w.line("p.pos = saved;");
-                w.else_begin("else");
-                w.line(`return r_{idx};`);
-                w.end();
+        if skip == 0 {
+            w.line("let saved = p.pos;");
+            for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                let idx = sorted_indices[i];
+                let is_last = i == sorted_indices.len() - 1;
+                if is_last {
+                    w.line(`return {*fn_name}_bt_{idx}(p);`);
+                } else {
+                    w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                    w.begin(`if let Err(_) = r_{idx}`);
+                    w.line("p.pos = saved;");
+                    w.else_begin("else");
+                    w.line(`return r_{idx};`);
+                    w.end();
+                }
+            }
+        } else {
+            // Prefix already consumed — inline backtracking on remaining elements.
+            w.line("let saved = p.pos;");
+            let all_labeled = all_alternatives_labeled(alts);
+            for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                let idx = sorted_indices[i];
+                let is_last = i == sorted_indices.len() - 1;
+                let alt = &alts[idx];
+                let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{idx}` };
+                let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+                if is_last {
+                    gen_alt_body_skip(w, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens, skip);
+                } else {
+                    let bt_label = `bt_inline_{idx}`;
+                    w.begin(`{bt_label}:`);
+                    let mut nc: Array<[String, i32]> = [];
+                    for let mut ei = 0; ei < skip; ei += 1 {
+                        replay_element_names(&alt.elements[ei], &mut nc);
+                    }
+                    for let mut ei = skip; ei < alt.elements.len(); ei += 1 {
+                        gen_element_failable(w, &alt.elements[ei], all_rules, lit_tokens, &"saved", &bt_label, &mut nc);
+                    }
+                    w.line(`return Result::<{*type_name}, ParseError>::Ok({*type_name}::{case_name}({sname} \{`);
+                    w.indent();
+                    w.line("span: Span::new(start, p.last_end()),");
+                    gen_field_assignments(w, &alt.elements);
+                    w.dedent();
+                    w.line("}));");
+                    w.end(); // label
+                    w.line("p.pos = saved;");
+                }
             }
         }
         return;
@@ -1815,7 +2107,7 @@ fn gen_prediction_code(
             } else {
                 w.else_begin(`else if {cond}`);
             }
-            gen_prediction_code(w, &branch.child, fn_name, alts);
+            gen_prediction_code_inner(w, &branch.child, fn_name, alts, type_name, all_rules, lit_tokens, skip, name_counts);
         }
         w.end();
     }
@@ -1873,7 +2165,7 @@ fn gen_multi_alt_body_bt(
                 0, 5, all_rules, lit_tokens);
             let bt_count = count_backtrack_nodes(&tree);
 
-            gen_prediction_code(w, &tree, &fn_name, &rule.alternatives);
+            gen_prediction_code(w, &tree, &fn_name, &rule.alternatives, type_name, all_rules, lit_tokens);
         }
 
         w.end();
