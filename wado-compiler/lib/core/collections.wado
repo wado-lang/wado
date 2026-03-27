@@ -304,7 +304,7 @@ impl TreeMap<K: Ord, V> {
 }
 
 // IndexAssign for map[key] = value
-impl IndexAssign<K> for TreeMap<K: Ord, V> {
+impl<K: Ord> IndexAssign<K> for TreeMap<K, V> {
     type Input = V;
 
     fn index_assign(&mut self, key: K, value: Self::Input) {
@@ -313,7 +313,7 @@ impl IndexAssign<K> for TreeMap<K: Ord, V> {
 }
 
 // IndexValue for map[key] -> V (panics if key not found)
-impl IndexValue<K> for TreeMap<K: Ord, V> {
+impl<K: Ord> IndexValue<K> for TreeMap<K, V> {
     type Output = V;
 
     fn index_value(&self, key: K) -> Self::Output {

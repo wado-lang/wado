@@ -143,16 +143,12 @@ impl G4Lexer {
                 break;
             }
         }
-        let kind = if text == "grammar" {
-            G4Token::Grammar
-        } else if text == "fragment" {
-            G4Token::Fragment
-        } else if text == "skip" {
-            G4Token::Skip
-        } else if text == "channel" {
-            G4Token::Channel
-        } else {
-            G4Token::Identifier
+        let kind = match text {
+            "grammar" => G4Token::Grammar,
+            "fragment" => G4Token::Fragment,
+            "skip" => G4Token::Skip,
+            "channel" => G4Token::Channel,
+            _ => G4Token::Identifier,
         };
         return make_token(kind, text, start, self.pos);
     }

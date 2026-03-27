@@ -111,12 +111,16 @@ impl<'a> Unparser<'a> {
         let span = get_item_span(item);
 
         // Emit leading comments (handles blank lines before comments)
-        self.emit_leading_comments(&span);
+        let last_comment_was_doc = self.emit_leading_comments_and_check_doc(&span);
 
         // Emit blank lines before the item itself.
         // Use the first attribute line (if any) to avoid growing blank lines
         // between doc comments and attrs on repeated formatting passes.
-        self.emit_blank_lines_to(get_item_first_line(item));
+        // Skip blank-line insertion when the last leading comment was a doc comment,
+        // because doc comments belong to the item and shouldn't be separated by blank lines.
+        if !last_comment_was_doc {
+            self.emit_blank_lines_to(get_item_first_line(item));
+        }
 
         match item {
             Item::Use(u) => self.unparse_use(u),
@@ -1047,6 +1051,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("world ");
         self.output.push_str(&w.name);
         self.output.push_str(" {\n");
+        self.last_source_line = w.span.line;
 
         self.indent_level += 1;
 
@@ -2004,16 +2009,30 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_field_access(&mut self, f: &FieldAccessExpr) {
-        self.unparse_expr(&f.expr);
+        self.unparse_postfix_base(&f.expr);
         self.output.push('.');
         self.output.push_str(&f.field);
     }
 
     fn unparse_index(&mut self, i: &IndexExpr) {
-        self.unparse_expr(&i.expr);
+        self.unparse_postfix_base(&i.expr);
         self.output.push('[');
         self.unparse_expr(&i.index);
         self.output.push(']');
+    }
+
+    /// Emit a postfix base expression, wrapping in parens if needed.
+    /// Prefix unary ops (*, -, !, &, ~) bind looser than postfix ops ([], ., ()),
+    /// so `(*p)[i]` must keep parens — `*p[i]` would mean `*(p[i])`.
+    fn unparse_postfix_base(&mut self, expr: &Expr) {
+        let needs_parens = matches!(expr, Expr::Unary(_));
+        if needs_parens {
+            self.output.push('(');
+        }
+        self.unparse_expr(expr);
+        if needs_parens {
+            self.output.push(')');
+        }
     }
 
     fn unparse_block_expr(&mut self, b: &Block) {
@@ -2524,6 +2543,22 @@ impl<'a> Unparser<'a> {
         }
     }
 
+    /// Like `emit_leading_comments` but returns whether the last emitted comment was a doc comment.
+    fn emit_leading_comments_and_check_doc(&mut self, span: &Span) -> bool {
+        let mut last_was_doc = false;
+        for comment in self.comments.leading_comments(span) {
+            if self.emitted_comments.insert(comment.span.start) {
+                self.emit_blank_lines_to(comment.span.line);
+                self.write_indent();
+                self.emit_comment(comment);
+                self.output.push('\n');
+                self.last_source_line = comment.span.line;
+                last_was_doc = comment.kind == crate::comment::CommentKind::DocLine;
+            }
+        }
+        last_was_doc
+    }
+
     fn emit_trailing_comments(&mut self, span: &Span) {
         for comment in self.comments.trailing_comments(span) {
             if self.emitted_comments.insert(comment.span.start) {
@@ -2634,6 +2669,7 @@ fn get_item_first_line(item: &Item) -> usize {
             .as_deref()
             .and_then(|a| a.first().map(|a| a.span.line)),
         Item::Trait(t) => first_attr_line(&t.attrs),
+        Item::TupleTypeDecl(d) => first_attr_line(&d.attrs),
         _ => None,
     };
     attr_line.unwrap_or(item_line).min(item_line)

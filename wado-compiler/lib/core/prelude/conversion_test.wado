@@ -144,6 +144,7 @@ struct EvenNumber {
 
 impl TryFrom<i32> for EvenNumber {
     type Error = ConvertError;
+
     fn try_from(value: i32) -> Result<EvenNumber, ConvertError> {
         if value % 2 != 0 {
             return Result::<EvenNumber, ConvertError>::Err(ConvertError::new(`{value} is not even`));
@@ -183,8 +184,12 @@ test "TryFrom<i32> for u32: negative fails" {
     assert u32::try_from(-100) matches { Err(_) };
 }
 
-struct NetworkError { code: i32 }
-struct TimeoutError { seconds: i32 }
+struct NetworkError {
+    code: i32,
+}
+struct TimeoutError {
+    seconds: i32,
+}
 
 variant ServiceError {
     Network(NetworkError),
@@ -297,6 +302,7 @@ enum Direction {
 
 impl TryFrom<i32> for Direction {
     type Error = ConvertError;
+
     fn try_from(value: i32) -> Result<Direction, ConvertError> {
         return match value {
             0 => Result::<Direction, ConvertError>::Ok(Direction::North),
@@ -353,6 +359,7 @@ impl From<AccessFlags> for u32 {
 
 impl TryFrom<u32> for AccessFlags {
     type Error = ConvertError;
+
     fn try_from(value: u32) -> Result<AccessFlags, ConvertError> {
         if value > 7 as u32 {
             return Result::<AccessFlags, ConvertError>::Err(ConvertError::new(`invalid flags: {value as i32}`));

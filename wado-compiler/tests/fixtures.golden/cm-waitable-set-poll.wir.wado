@@ -543,7 +543,6 @@ fn handle(request) {
     ws = "wasi/waitable-set-new"();
     event = "core:internal/cm_waitable_set_poll"(ws);
     if ref.is_null(event) == 0 {
-        drop(ref.as_non_null(event));
         "wasi/waitable-set-drop"(ws);
         let __pair_temp_1: i64;
         __pair_temp_1 = "wasi/future-new"();

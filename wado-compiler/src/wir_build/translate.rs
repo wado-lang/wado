@@ -5966,6 +5966,8 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Emit pattern bindings (local.set for bound variables).
+    ///
+    /// For or-patterns, conditionally extracts bindings from whichever alternative matched.
     fn emit_pattern_bindings(
         &mut self,
         pattern: &TirPattern,
@@ -6287,10 +6289,30 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             TirPattern::Or(alternatives) => {
-                // Or patterns should be desugared before reaching WIR.
-                // Emit bindings from the first alternative as a fallback.
-                if let Some(first) = alternatives.first() {
-                    self.emit_pattern_bindings(first, scrut_local, scrut_type, instrs);
+                // Or patterns: emit bindings for each alternative, guarded by its condition.
+                // For alternatives with only wildcards (no real bindings), skip entirely.
+                let has_any_bindings = alternatives.iter().any(pattern_has_bindings);
+                if !has_any_bindings {
+                    return;
+                }
+                // Emit conditional binding extraction: check each alternative and
+                // emit bindings from the one that matches.
+                // Build a nested if-else chain from the inside out.
+                let mut result: Option<WirInstr> = None;
+                for alt in alternatives.iter().rev() {
+                    let cond = self.translate_pattern_condition(alt, scrut_local, scrut_type);
+                    let mut body = Vec::new();
+                    self.emit_pattern_bindings(alt, scrut_local, scrut_type, &mut body);
+                    let else_body = result.map(|r| vec![r]);
+                    result = Some(WirInstr::If {
+                        condition: Box::new(cond),
+                        result: None,
+                        then_body: body,
+                        else_body,
+                    });
+                }
+                if let Some(if_instr) = result {
+                    instrs.push(if_instr);
                 }
             }
         }
@@ -6805,5 +6827,18 @@ impl FunctionTranslator<'_, '_> {
                 },
             ],
         )
+    }
+}
+
+fn pattern_has_bindings(pattern: &TirPattern) -> bool {
+    match pattern {
+        TirPattern::Binding { .. } => true,
+        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } => false,
+        TirPattern::Variant { bindings, .. } => bindings.iter().any(pattern_has_bindings),
+        TirPattern::Tuple(subs) => subs.iter().any(pattern_has_bindings),
+        TirPattern::Struct { fields, .. } => {
+            fields.iter().any(|f| pattern_has_bindings(&f.pattern))
+        }
+        TirPattern::Or(alts) => alts.iter().any(pattern_has_bindings),
     }
 }

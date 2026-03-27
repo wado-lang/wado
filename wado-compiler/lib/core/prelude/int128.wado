@@ -292,7 +292,9 @@ impl Inspect for u128 {
 }
 
 impl InspectAlt for u128 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 
 impl Binary for u128 {
@@ -855,7 +857,9 @@ impl Inspect for i128 {
 }
 
 impl InspectAlt for i128 {
-    pub fn inspect_alt(&self, f: &mut Formatter) { self.inspect(f); }
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
 }
 
 impl Binary for i128 {
@@ -1158,32 +1162,49 @@ impl Default for i128 {
 }
 
 impl From<u8> for u128 {
-    pub fn from(value: u8) -> u128 { return value as u128; }
+    pub fn from(value: u8) -> u128 {
+        return value as u128;
+    }
 }
 impl From<u16> for u128 {
-    pub fn from(value: u16) -> u128 { return value as u128; }
+    pub fn from(value: u16) -> u128 {
+        return value as u128;
+    }
 }
 impl From<u32> for u128 {
-    pub fn from(value: u32) -> u128 { return value as u128; }
+    pub fn from(value: u32) -> u128 {
+        return value as u128;
+    }
 }
 impl From<u64> for u128 {
-    pub fn from(value: u64) -> u128 { return value as u128; }
+    pub fn from(value: u64) -> u128 {
+        return value as u128;
+    }
 }
 impl From<i8> for i128 {
-    pub fn from(value: i8) -> i128 { return value as i128; }
+    pub fn from(value: i8) -> i128 {
+        return value as i128;
+    }
 }
 impl From<i16> for i128 {
-    pub fn from(value: i16) -> i128 { return value as i128; }
+    pub fn from(value: i16) -> i128 {
+        return value as i128;
+    }
 }
 impl From<i32> for i128 {
-    pub fn from(value: i32) -> i128 { return value as i128; }
+    pub fn from(value: i32) -> i128 {
+        return value as i128;
+    }
 }
 impl From<i64> for i128 {
-    pub fn from(value: i64) -> i128 { return value as i128; }
+    pub fn from(value: i64) -> i128 {
+        return value as i128;
+    }
 }
 
 impl TryFrom<u128> for u64 {
     type Error = ConvertError;
+
     pub fn try_from(value: u128) -> Result<u64, ConvertError> {
         if value.high() != 0 {
             return Result::<u64, ConvertError>::Err(ConvertError::new("value out of range for u64"));
@@ -1194,6 +1215,7 @@ impl TryFrom<u128> for u64 {
 
 impl TryFrom<i128> for i64 {
     type Error = ConvertError;
+
     pub fn try_from(value: i128) -> Result<i64, ConvertError> {
         let min: i128 = i64::MIN as i128;
         let max: i128 = i64::MAX as i128;
@@ -1206,6 +1228,7 @@ impl TryFrom<i128> for i64 {
 
 impl TryFrom<i128> for f64 {
     type Error = ConvertError;
+
     pub fn try_from(value: i128) -> Result<f64, ConvertError> {
         let max: i128 = 9007199254740992;
         let min: i128 = -9007199254740992;
@@ -1218,6 +1241,7 @@ impl TryFrom<i128> for f64 {
 
 impl TryFrom<i128> for f32 {
     type Error = ConvertError;
+
     pub fn try_from(value: i128) -> Result<f32, ConvertError> {
         let max: i128 = 16777216;
         let min: i128 = -16777216;
@@ -1230,6 +1254,7 @@ impl TryFrom<i128> for f32 {
 
 impl TryFrom<u128> for f64 {
     type Error = ConvertError;
+
     pub fn try_from(value: u128) -> Result<f64, ConvertError> {
         let max: u128 = 9007199254740992;
         if value > max {
@@ -1241,6 +1266,7 @@ impl TryFrom<u128> for f64 {
 
 impl TryFrom<u128> for f32 {
     type Error = ConvertError;
+
     pub fn try_from(value: u128) -> Result<f32, ConvertError> {
         let max: u128 = 16777216;
         if value > max {
