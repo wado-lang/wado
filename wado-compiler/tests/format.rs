@@ -105,8 +105,7 @@ fn assert_format_preserves_ast(source: &str) {
                         diff_context.push_str(&format!("{marker} orig[{j}]: {}\n", orig_lines[j]));
                     }
                     if j < fmt_lines.len() {
-                        diff_context
-                            .push_str(&format!("{marker}  fmt[{j}]: {}\n", fmt_lines[j]));
+                        diff_context.push_str(&format!("{marker}  fmt[{j}]: {}\n", fmt_lines[j]));
                     }
                 }
                 break;
@@ -1736,7 +1735,9 @@ fn test_roundtrip_ast_all_fixtures() {
                     break;
                 }
             }
-            failures.push(format!("{filename}: AST changed by formatter ({diff_line})"));
+            failures.push(format!(
+                "{filename}: AST changed by formatter ({diff_line})"
+            ));
         }
     }
 
