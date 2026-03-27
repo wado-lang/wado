@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774572557307,
+  "lastUpdate": 1774606629545,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8018,6 +8018,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/96eca0834ea3d1923f4177741e1e0a3b01800bbc"
         },
         "date": 1774572557199,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "72d7fc2f04dedd379edcbf1abc0f82cecdec64a0",
+          "message": "Merge pull request #709 from wado-lang/claude/robust-formatter-design-YKPwu\n\nNormalize impl syntax to always emit explicit type params",
+          "timestamp": "2026-03-27T19:14:46+09:00",
+          "tree_id": "11c59d95733f7e9e21625234af7df46e024a34db",
+          "url": "https://github.com/wado-lang/wado/commit/72d7fc2f04dedd379edcbf1abc0f82cecdec64a0"
+        },
+        "date": 1774606629328,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
