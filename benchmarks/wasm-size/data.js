@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774562747346,
+  "lastUpdate": 1774572557307,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -7979,6 +7979,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/765ea5a8bf3113648e36c01a5cefa54d6b33d274"
         },
         "date": 1774562747216,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "96eca0834ea3d1923f4177741e1e0a3b01800bbc",
+          "message": "Merge pull request #708 from wado-lang/claude/refactor-gale-patterns-9dchV\n\nSupport return statements in match expression arms",
+          "timestamp": "2026-03-27T09:46:52+09:00",
+          "tree_id": "ceeaab18838b837993e36932041614f34e54a780",
+          "url": "https://github.com/wado-lang/wado/commit/96eca0834ea3d1923f4177741e1e0a3b01800bbc"
+        },
+        "date": 1774572557199,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
