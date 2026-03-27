@@ -223,9 +223,9 @@ Both implementations parse 184 events and 243 performances from CITM catalog dat
 
 ### SQLite Parsing (13KB, 81 statements x 100 iterations)
 
-| Runtime                               | Time (ms) | Per iteration (us) | Relative |
-| ------------------------------------- | --------- | ------------------ | -------- |
-| Rust (sqlparser-rs, native)           | 182       | 1,825              | 1.00x    |
+| Runtime                                | Time (ms) | Per iteration (us) | Relative |
+| -------------------------------------- | --------- | ------------------ | -------- |
+| Rust (sqlparser-rs, native)            | 182       | 1,825              | 1.00x    |
 | **Wado** (Gale-generated parser, Wasm) | 4,284     | 42,836             | 23.46x   |
 
 Both implementations parse 81 SQL statements per iteration. The Gale parser is auto-generated from ANTLR4's `SQLite.g4` grammar; `sqlparser-rs` is a hand-tuned native Rust parser.
