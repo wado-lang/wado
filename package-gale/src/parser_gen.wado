@@ -38,7 +38,6 @@ struct PredictionBranch {
     child: PredictionNode,
 }
 
-<<<<<<< HEAD
 fn build_prediction(
     alt_indices: &Array<i32>,
     first_sets: &Array<Array<String>>,
@@ -56,25 +55,7 @@ fn build_prediction(
             elements: alt_elements[i],
             pos: 0,
         });
-||||||| 1aac3ca
-fn build_prediction(
-    alt_indices: &Array<i32>,
-    first_sets: &Array<Array<String>>,
-    alt_elements: &Array<Array<Element>>,
-    depth: i32,
-    max_depth: i32,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> PredictionNode {
-    if alt_indices.len() == 1 {
-        return PredictionNode::Leaf(alt_indices[0]);
-=======
-fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>, alt_elements: &Array<Array<Element>>, depth: i32, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> PredictionNode {
-    if alt_indices.len() == 1 {
-        return PredictionNode::Leaf(alt_indices[0]);
->>>>>>> origin/main
     }
-<<<<<<< HEAD
     let tree = build_sll_node(&configs, 0, max_depth, all_rules, lit_tokens);
     return strip_dead_consume(tree);
 }
@@ -213,19 +194,6 @@ fn sll_advance_inner(
             }
         }
         return results;
-||||||| 1aac3ca
-    if depth >= max_depth {
-        let mut bt_copy: Array<i32> = [];
-        for let ai of alt_indices { bt_copy.append(*ai); }
-        return PredictionNode::Backtrack(bt_copy);
-=======
-    if depth >= max_depth {
-        let mut bt_copy: Array<i32> = [];
-        for let ai of alt_indices {
-            bt_copy.append(*ai);
-        }
-        return PredictionNode::Backtrack(bt_copy);
->>>>>>> origin/main
     }
 
     // Terminal: if token matches, advance past this element.
@@ -316,40 +284,12 @@ fn replace_element_at(elements: &Array<Element>, pos: i32, replacement: &Element
     return result;
 }
 
-<<<<<<< HEAD
 /// Collect unique alt indices from configs.
 fn sll_unique_alts(configs: &Array<SllConfig>) -> Array<i32> {
     let mut alts: Array<i32> = [];
     for let c of configs {
         if !array_contains_i32(&alts, c.alt_index) {
             alts.append(c.alt_index);
-||||||| 1aac3ca
-    // If any alt has empty deeper first set at depth > 0, can't disambiguate further.
-    if depth > 0 {
-        let mut has_empty = false;
-        for let mut i = 0; i < alt_indices.len(); i += 1 {
-            if depth_firsts[i].len() == 0 { has_empty = true; }
-        }
-        if has_empty {
-            let mut bt_copy: Array<i32> = [];
-        for let ai of alt_indices { bt_copy.append(*ai); }
-        return PredictionNode::Backtrack(bt_copy);
-=======
-    // If any alt has empty deeper first set at depth > 0, can't disambiguate further.
-    if depth > 0 {
-        let mut has_empty = false;
-        for let mut i = 0; i < alt_indices.len(); i += 1 {
-            if depth_firsts[i].len() == 0 {
-                has_empty = true;
-            }
-        }
-        if has_empty {
-            let mut bt_copy: Array<i32> = [];
-            for let ai of alt_indices {
-                bt_copy.append(*ai);
-            }
-            return PredictionNode::Backtrack(bt_copy);
->>>>>>> origin/main
         }
     }
     return alts;
@@ -479,7 +419,6 @@ fn build_sll_node(
                 });
             }
         } else {
-<<<<<<< HEAD
             // Still ambiguous: recurse with deeper lookahead.
             // If opaque alts exist, they can't be resolved further — Backtrack.
             let child = if opaque_alts.len() > 0 {
@@ -487,20 +426,6 @@ fn build_sll_node(
             } else {
                 build_sll_node(&deduped, depth + 1, max_depth, all_rules, lit_tokens)
             };
-||||||| 1aac3ca
-            let child = build_prediction(&matching_indices, &matching_firsts, &matching_elements,
-                depth + 1, max_depth, all_rules, lit_tokens);
-=======
-            let child = build_prediction(
-                &matching_indices,
-                &matching_firsts,
-                &matching_elements,
-                depth + 1,
-                max_depth,
-                all_rules,
-                lit_tokens,
-            );
->>>>>>> origin/main
             let mut merged = false;
             for let mut b = 0; b < branches.len(); b += 1 {
                 if prediction_node_eq(&branches[b].child, &child) {
@@ -518,19 +443,7 @@ fn build_sll_node(
     }
 
     if branches.len() == 0 {
-<<<<<<< HEAD
         return PredictionNode::Backtrack(alts);
-||||||| 1aac3ca
-        let mut bt_copy: Array<i32> = [];
-        for let ai of alt_indices { bt_copy.append(*ai); }
-        return PredictionNode::Backtrack(bt_copy);
-=======
-        let mut bt_copy: Array<i32> = [];
-        for let ai of alt_indices {
-            bt_copy.append(*ai);
-        }
-        return PredictionNode::Backtrack(bt_copy);
->>>>>>> origin/main
     }
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
 }
@@ -671,7 +584,6 @@ fn compute_deeper_first(elements: &Array<Element>, depth: i32, all_rules: &Array
     let mut remaining = depth;
     while pos < elements.len() && remaining > 0 {
         let elem = &elements[pos];
-<<<<<<< HEAD
         if let TokenRef(_) | Literal(_) = *elem { remaining -= 1; pos += 1; continue; }
         if is_nullable(elem) { pos += 1; continue; }
         // SLL advancement: single-token RuleRef consumes exactly 1 token,
@@ -684,23 +596,6 @@ fn compute_deeper_first(elements: &Array<Element>, depth: i32, all_rules: &Array
                 continue;
             }
         }
-||||||| 1aac3ca
-        if let TokenRef(_) | Literal(_) = *elem { remaining -= 1; pos += 1; continue; }
-        if is_nullable(elem) { pos += 1; continue; }
-=======
-        if let TokenRef(_) | Literal(_) = *elem {
-            remaining -= 1;
-            pos += 1;
-            continue;
-        }
-        if is_nullable(elem) {
-            pos += 1;
-            continue;
-        }
-        return [];
-    }
-    if pos >= elements.len() {
->>>>>>> origin/main
         return [];
     }
     return first_of_elements_from(elements, pos, all_rules, lit_tokens);
@@ -1057,7 +952,6 @@ fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<Str
     }
 }
 
-<<<<<<< HEAD
 fn gen_alt_body_skip(
     w: &mut CodeWriter,
     type_name: &String,
@@ -1121,17 +1015,6 @@ fn gen_multi_alt_body(
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
 ) {
-||||||| 1aac3ca
-fn gen_multi_alt_body(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    type_name: &String,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) {
-=======
-fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
->>>>>>> origin/main
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
 
     let max_k = 5;
@@ -1889,7 +1772,6 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
     }
 }
 
-<<<<<<< HEAD
 /// Replay name counting for an element without emitting code.
 /// This advances the dedup counter so subsequent elements get correct suffixes.
 fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) {
@@ -1933,21 +1815,6 @@ fn gen_consume_group(
     name_counts: &mut Array<[String, i32]>,
 ) {
     if alts.len() == 0 { return; }
-||||||| 1aac3ca
-fn gen_consume_group(
-    w: &mut CodeWriter,
-    alts: &Array<Alternative>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    name_counts: &mut Array<[String, i32]>,
-) {
-    if alts.len() == 0 { return; }
-=======
-fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
-    if alts.len() == 0 {
-        return;
-    }
->>>>>>> origin/main
     if alts.len() == 1 {
         gen_elements_with_non_greedy(w, &alts[0].elements, all_rules, lit_tokens, name_counts);
         return;
@@ -2010,7 +1877,6 @@ fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Al
     gen_group_prediction_code(w, &tree, alts, all_rules, lit_tokens, name_counts);
 }
 
-<<<<<<< HEAD
 fn gen_group_prediction_code(
     w: &mut CodeWriter,
     node: &PredictionNode,
@@ -2031,18 +1897,6 @@ fn gen_group_prediction_code_skip(
     name_counts: &mut Array<[String, i32]>,
     skip: i32,
 ) {
-||||||| 1aac3ca
-fn gen_group_prediction_code(
-    w: &mut CodeWriter,
-    node: &PredictionNode,
-    alts: &Array<Alternative>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    name_counts: &mut Array<[String, i32]>,
-) {
-=======
-fn gen_group_prediction_code(w: &mut CodeWriter, node: &PredictionNode, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
->>>>>>> origin/main
     if let Leaf(idx) = *node {
         let elems = &alts[idx].elements;
         for let mut i = skip; i < elems.len(); i += 1 {
@@ -2493,7 +2347,6 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
     w.end();  // loop
 }
 
-<<<<<<< HEAD
 fn gen_prediction_code(
     w: &mut CodeWriter,
     node: &PredictionNode,
@@ -2518,16 +2371,6 @@ fn gen_prediction_code_inner(
     skip: i32,
     name_counts: &mut Array<[String, i32]>,
 ) {
-||||||| 1aac3ca
-fn gen_prediction_code(
-    w: &mut CodeWriter,
-    node: &PredictionNode,
-    fn_name: &String,
-    alts: &Array<Alternative>,
-) {
-=======
-fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>) {
->>>>>>> origin/main
     if let Leaf(idx) = *node {
         if skip == 0 {
             w.line(`return {*fn_name}_bt_{idx}(p);`);
