@@ -1989,9 +1989,8 @@ impl Monomorphizer {
                 .functions
                 .trait_method_locations
                 .contains_key(&new_func_name)
+                || receiver_has_type_args
             {
-                None
-            } else if receiver_has_type_args {
                 None
             } else {
                 // Blanket impl: choose the right generic_name for lookup.

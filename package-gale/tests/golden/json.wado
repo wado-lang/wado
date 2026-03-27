@@ -582,12 +582,27 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACE {
-        if p.peek_kind() == TK_LIT_LBRACE {
-            if p.peek_at(1) == TK_STRING {
-                return parse_obj_bt_0(p);
-            } else if p.peek_at(1) == TK_LIT_RBRACE {
-                return parse_obj_bt_1(p);
+        let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+        if p.peek_kind() == TK_STRING {
+            let pair = parse_pair(p)?;
+            while p.peek_kind() == TK_LIT_COMMA {
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_pair(p)?;
             }
+            let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+            return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt0(ObjAlt0 {
+                span: Span::new(start, p.last_end()),
+                lbrace,
+                pair,
+                rbrace,
+            }));
+        } else if p.peek_kind() == TK_LIT_RBRACE {
+            let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+            return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt1(ObjAlt1 {
+                span: Span::new(start, p.last_end()),
+                lbrace,
+                rbrace,
+            }));
         }
     }
     return Result::<ObjNode, ParseError>::Err(ParseError::new(
@@ -642,12 +657,27 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACKET {
-        if p.peek_kind() == TK_LIT_LBRACKET {
-            if p.peek_at(1) == TK_STRING || p.peek_at(1) == TK_NUMBER || p.peek_at(1) == TK_LIT_LBRACE || p.peek_at(1) == TK_LIT_LBRACKET || p.peek_at(1) == TK_LIT_TRUE || p.peek_at(1) == TK_LIT_FALSE || p.peek_at(1) == TK_LIT_NULL {
-                return parse_arr_bt_0(p);
-            } else if p.peek_at(1) == TK_LIT_RBRACKET {
-                return parse_arr_bt_1(p);
+        let lbracket = p.expect(TK_LIT_LBRACKET, "'['")?;
+        if p.peek_kind() == TK_STRING || p.peek_kind() == TK_NUMBER || p.peek_kind() == TK_LIT_LBRACE || p.peek_kind() == TK_LIT_LBRACKET || p.peek_kind() == TK_LIT_TRUE || p.peek_kind() == TK_LIT_FALSE || p.peek_kind() == TK_LIT_NULL {
+            let value = parse_value(p)?;
+            while p.peek_kind() == TK_LIT_COMMA {
+                let tok = p.expect(TK_LIT_COMMA, "','")?;
+                let tok_2 = parse_value(p)?;
             }
+            let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
+            return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt0(ArrAlt0 {
+                span: Span::new(start, p.last_end()),
+                lbracket,
+                value,
+                rbracket,
+            }));
+        } else if p.peek_kind() == TK_LIT_RBRACKET {
+            let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
+            return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt1(ArrAlt1 {
+                span: Span::new(start, p.last_end()),
+                lbracket,
+                rbracket,
+            }));
         }
     }
     return Result::<ArrNode, ParseError>::Err(ParseError::new(
