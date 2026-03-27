@@ -1605,26 +1605,10 @@ impl<'a> Unparser<'a> {
             return;
         }
 
-        // Try single-line first
-        let snap = self.snapshot();
-        self.output.push('[');
-        for (i, elem) in tuple_lit.elements.iter().enumerate() {
-            if i > 0 {
-                self.output.push_str(", ");
-            }
-            self.unparse_expr(elem);
-        }
-        self.output.push(']');
-
-        if !self.output[snap..].contains('\n') && !self.exceeds_width_since(snap) {
-            return;
-        }
-
-        // Rollback for multi-line formatting
-        self.rollback(snap);
-
         // Key-value list heuristic: if all elements are 2-element tuple literals,
-        // format as one entry per line (Wasm CM associative array pattern).
+        // always format as one entry per line (Wasm CM associative array pattern).
+        // This check runs before the single-line attempt so kv-lists are never
+        // collapsed onto one line.
         let is_kv_list = tuple_lit.elements.len() >= 2
             && tuple_lit
                 .elements
@@ -1662,6 +1646,24 @@ impl<'a> Unparser<'a> {
             self.output.push(']');
             return;
         }
+
+        // Try single-line first
+        let snap = self.snapshot();
+        self.output.push('[');
+        for (i, elem) in tuple_lit.elements.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_expr(elem);
+        }
+        self.output.push(']');
+
+        if !self.output[snap..].contains('\n') && !self.exceeds_width_since(snap) {
+            return;
+        }
+
+        // Rollback for multi-line formatting
+        self.rollback(snap);
 
         // Fill-style: pack elements onto lines up to MAX_LINE_WIDTH
         self.output.push('[');
