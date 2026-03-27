@@ -2648,6 +2648,7 @@ fn get_item_first_line(item: &Item) -> usize {
             .as_deref()
             .and_then(|a| a.first().map(|a| a.span.line)),
         Item::Trait(t) => first_attr_line(&t.attrs),
+        Item::TupleTypeDecl(d) => first_attr_line(&d.attrs),
         _ => None,
     };
     attr_line.unwrap_or(item_line).min(item_line)

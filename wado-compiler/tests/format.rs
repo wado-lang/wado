@@ -885,6 +885,20 @@ fn test_format_deref_method_preserves_parens() {
 }
 
 #[test]
+fn test_format_doc_comment_before_attribute_no_extra_blank() {
+    // Doc comment immediately before an attribute must not grow a blank line
+    let source = "/// Doc\n#[comp_feature(\"tuple\")]\npub type [..T];\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        !formatted.contains("/// Doc\n\n#["),
+        "doc comment + attribute must not have a blank line between them: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
 fn test_format_idempotent_all_fixtures() {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
 
