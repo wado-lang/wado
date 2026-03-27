@@ -55,25 +55,8 @@ fn normalize_ast_debug(debug: &str) -> String {
             continue;
         }
 
-        // Normalize "type_params: [...]" — the formatter normalizes impl<T> to compact form
-        if bytes[i..].starts_with(b"type_params: [") {
-            result.extend_from_slice(b"type_params: NORM");
-            i += b"type_params: ".len();
-            let mut depth = 0i32;
-            while i < bytes.len() {
-                if bytes[i] == b'[' {
-                    depth += 1;
-                } else if bytes[i] == b']' {
-                    depth -= 1;
-                    if depth == 0 {
-                        i += 1;
-                        break;
-                    }
-                }
-                i += 1;
-            }
-            continue;
-        }
+        // Note: type_params are NOT normalized — the formatter now always emits
+        // explicit `impl<T>` (matching Rust), so type_params must round-trip exactly.
 
         result.push(bytes[i]);
         i += 1;
@@ -1025,6 +1008,64 @@ fn test_format_doc_comment_before_attribute_no_extra_blank() {
     assert!(
         !formatted.contains("/// Doc\n\n#["),
         "doc comment + attribute must not have a blank line between them: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_impl_explicit_type_params() {
+    // Formatter must always emit explicit `impl<T>`, never compact `impl Foo<T>`
+    let source = r#"
+impl<T> WrapBox<T> {
+    pub fn new(value: T) -> WrapBox<T> {
+        return WrapBox { value };
+    }
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("impl<T> WrapBox<T>"),
+        "impl type params must be preserved: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_impl_bounded_type_params() {
+    // Bounded compact form `impl Foo<T: Ord>` should be normalized to `impl<T: Ord> Foo<T>`
+    let source = r#"
+impl MyArray<T: Ord> {
+    fn sort(&mut self) {
+    }
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("impl<T: Ord> MyArray<T>"),
+        "bounded compact form should be expanded: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_impl_trait_for_type_preserves_params() {
+    let source = r#"
+impl<T: Eq> Eq for Pair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return true;
+    }
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("impl<T: Eq> Eq for Pair<T>"),
+        "trait impl type params must be preserved: {}",
         formatted
     );
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
