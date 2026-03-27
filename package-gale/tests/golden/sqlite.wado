@@ -7822,26 +7822,13 @@ fn parse_type_name(p: &mut Parser) -> Result<TypeNameNode, ParseError> {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_LIT_LPAREN {
                 let tok = p.expect(TK_LIT_LPAREN, "'('")?;
-                if p.peek_kind() == TK_LIT_PLUS || p.peek_kind() == TK_LIT_MINUS || p.peek_kind() == TK_NUMERIC_LITERAL {
-                    let saved_pos = p.pos;
-                    let mut bt_done = false;
-                    if !bt_done {
-                        bt_try: {
-                            let opt_r = parse_signed_number(p);
-                            if let Err(_) = opt_r { p.pos = saved_pos; break bt_try; }
-                            let opt_r_2 = p.expect(TK_LIT_COMMA, "','");
-                            if let Err(_) = opt_r_2 { p.pos = saved_pos; break bt_try; }
-                            let opt_r_3 = parse_signed_number(p);
-                            if let Err(_) = opt_r_3 { p.pos = saved_pos; break bt_try; }
-                            let opt_r_4 = p.expect(TK_LIT_RPAREN, "')'");
-                            if let Err(_) = opt_r_4 { p.pos = saved_pos; break bt_try; }
-                            bt_done = true;
-                        }
-                    }
-                    if !bt_done {
-                        let tok = parse_signed_number(p)?;
-                        let tok_2 = p.expect(TK_LIT_RPAREN, "')'")?;
-                    }
+                let tok_2 = parse_signed_number(p)?;
+                if p.peek_kind() == TK_LIT_COMMA {
+                    let tok_3 = p.expect(TK_LIT_COMMA, "','")?;
+                    let tok_4 = parse_signed_number(p)?;
+                    let tok_5 = p.expect(TK_LIT_RPAREN, "')'")?;
+                } else if p.peek_kind() == TK_LIT_RPAREN {
+                    let tok_6 = p.expect(TK_LIT_RPAREN, "')'")?;
                 }
             }
         }

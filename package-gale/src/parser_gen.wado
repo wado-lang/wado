@@ -167,7 +167,7 @@ fn build_prediction(
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
 }
 
-/// Check if all alternatives start with the same fixed token (TokenRef or Literal).
+/// Check if all alternatives start with the same element (TokenRef, Literal, or RuleRef).
 fn find_common_prefix_element(alt_elements: &Array<Array<Element>>) -> Option<Element> {
     if alt_elements.len() < 2 { return null; }
     // All alternatives must be non-empty.
@@ -175,7 +175,6 @@ fn find_common_prefix_element(alt_elements: &Array<Array<Element>>) -> Option<El
         if elems.len() == 0 { return null; }
     }
     let first_elem = &alt_elements[0][0];
-    // Only factor out TokenRef and Literal (fixed tokens).
     if let TokenRef(name) = *first_elem {
         for let mut i = 1; i < alt_elements.len(); i += 1 {
             if let TokenRef(other) = alt_elements[i][0] {
@@ -188,6 +187,14 @@ fn find_common_prefix_element(alt_elements: &Array<Array<Element>>) -> Option<El
         for let mut i = 1; i < alt_elements.len(); i += 1 {
             if let Literal(other) = alt_elements[i][0] {
                 if other != text { return null; }
+            } else { return null; }
+        }
+        return Option::<Element>::Some(*first_elem);
+    }
+    if let RuleRef(name) = *first_elem {
+        for let mut i = 1; i < alt_elements.len(); i += 1 {
+            if let RuleRef(other) = alt_elements[i][0] {
+                if other != name { return null; }
             } else { return null; }
         }
         return Option::<Element>::Some(*first_elem);
