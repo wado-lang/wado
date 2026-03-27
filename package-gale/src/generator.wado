@@ -1,11 +1,5 @@
-use {
-    Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement,
-    RepeatKind, LexerRule,
-} from "./ir.wado";
-use {
-    to_pascal_case, to_snake_case, to_lower,
-    rule_type_name, literal_field_name, strip_suffix,
-} from "./gen_util.wado";
+use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind, LexerRule } from "./ir.wado";
+use { to_pascal_case, to_snake_case, to_lower, rule_type_name, literal_field_name, strip_suffix } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
@@ -64,11 +58,7 @@ fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule) {
         v.set_pub();
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
             let alt = &rule.alternatives[i];
-            let case_name = if all_labeled {
-                alt.label.unwrap()
-            } else {
-                `Alt{i}`
-            };
+            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{i}` };
             let struct_name = `{base}{case_name}`;
             v.add_case_with_payload(&case_name, &struct_name);
         }
@@ -77,11 +67,7 @@ fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule) {
 
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
             let alt = &rule.alternatives[i];
-            let case_name = if all_labeled {
-                alt.label.unwrap()
-            } else {
-                `Alt{i}`
-            };
+            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{i}` };
             let struct_name = `{base}{case_name}`;
             gen_struct_for_alt(w, &struct_name, alt);
         }
@@ -112,11 +98,7 @@ fn collect_fields(elements: &Array<Element>) -> Array<Field> {
         if let Some(field) = element_to_field(&elements[i]) {
             let count = get_name_count(&name_counts, &field.name);
             increment_name_count(&mut name_counts, &field.name);
-            let final_name = if count > 0 {
-                `{field.name}_{count + 1}`
-            } else {
-                field.name
-            };
+            let final_name = if count > 0 { `{field.name}_{count + 1}` } else { field.name };
             fields.append(Field { name: final_name, type_str: field.type_str });
         }
     }

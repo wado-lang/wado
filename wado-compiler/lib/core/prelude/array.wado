@@ -389,7 +389,7 @@ impl Array<T> {
 }
 
 // sort/sorted require T: Ord (elements must be comparable via Ord::cmp)
-impl Array<T: Ord> {
+impl<T: Ord> Array<T> {
     pub fn sort(&mut self) {
         self.sort_by(|a: &T, b: &T| {
             return a.cmp(b);
@@ -454,13 +454,13 @@ impl ArrayIter<T> {
 
 use { Add } from "core:prelude/traits.wado";
 
-impl ArrayIter<T: Add> {
+impl<T: Add> ArrayIter<T> {
     pub fn sum(&mut self) -> Option<T> {
         return self.reduce(|a: T, b: T| a + b);
     }
 }
 
-impl ArrayIter<T: Ord> {
+impl<T: Ord> ArrayIter<T> {
     pub fn min(&mut self) -> Option<T> {
         if let Some(first) = self.next() {
             let mut result = first;

@@ -51,8 +51,8 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let end = MonotonicClock::now();
     let elapsed_ns = (end - start) as u64;
     let elapsed_us = elapsed_ns / 1000;
-    let per_iter_us = elapsed_us / (iterations as u64);
+    let per_iter_us = elapsed_us / iterations as u64;
 
     println(`Elapsed: {elapsed_us / 1000}.{elapsed_us % 1000} ms ({iterations} iterations)`);
-    println(`Per iteration: {per_iter_us}.{(elapsed_us * 1000 / (iterations as u64)) % 1000} us`);
+    println(`Per iteration: {per_iter_us}.{elapsed_us * 1000 / iterations as u64 % 1000} us`);
 }

@@ -1,11 +1,15 @@
-use {
-    Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement,
-    RepeatKind, LexerRule,
-} from "./ir.wado";
+use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind, LexerRule } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use {
-    to_lower, to_snake_case, to_pascal_case, rule_type_name, literal_field_name,
-    strip_suffix, escape_string, literal_const_name, array_contains_str,
+    to_lower,
+    to_snake_case,
+    to_pascal_case,
+    rule_type_name,
+    literal_field_name,
+    strip_suffix,
+    escape_string,
+    literal_const_name,
+    array_contains_str,
 } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
@@ -34,6 +38,7 @@ struct PredictionBranch {
     child: PredictionNode,
 }
 
+<<<<<<< HEAD
 fn build_prediction(
     alt_indices: &Array<i32>,
     first_sets: &Array<Array<String>>,
@@ -51,7 +56,25 @@ fn build_prediction(
             elements: alt_elements[i],
             pos: 0,
         });
+||||||| 1aac3ca
+fn build_prediction(
+    alt_indices: &Array<i32>,
+    first_sets: &Array<Array<String>>,
+    alt_elements: &Array<Array<Element>>,
+    depth: i32,
+    max_depth: i32,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) -> PredictionNode {
+    if alt_indices.len() == 1 {
+        return PredictionNode::Leaf(alt_indices[0]);
+=======
+fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>, alt_elements: &Array<Array<Element>>, depth: i32, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> PredictionNode {
+    if alt_indices.len() == 1 {
+        return PredictionNode::Leaf(alt_indices[0]);
+>>>>>>> origin/main
     }
+<<<<<<< HEAD
     let tree = build_sll_node(&configs, 0, max_depth, all_rules, lit_tokens);
     return strip_dead_consume(tree);
 }
@@ -190,6 +213,19 @@ fn sll_advance_inner(
             }
         }
         return results;
+||||||| 1aac3ca
+    if depth >= max_depth {
+        let mut bt_copy: Array<i32> = [];
+        for let ai of alt_indices { bt_copy.append(*ai); }
+        return PredictionNode::Backtrack(bt_copy);
+=======
+    if depth >= max_depth {
+        let mut bt_copy: Array<i32> = [];
+        for let ai of alt_indices {
+            bt_copy.append(*ai);
+        }
+        return PredictionNode::Backtrack(bt_copy);
+>>>>>>> origin/main
     }
 
     // Terminal: if token matches, advance past this element.
@@ -280,12 +316,40 @@ fn replace_element_at(elements: &Array<Element>, pos: i32, replacement: &Element
     return result;
 }
 
+<<<<<<< HEAD
 /// Collect unique alt indices from configs.
 fn sll_unique_alts(configs: &Array<SllConfig>) -> Array<i32> {
     let mut alts: Array<i32> = [];
     for let c of configs {
         if !array_contains_i32(&alts, c.alt_index) {
             alts.append(c.alt_index);
+||||||| 1aac3ca
+    // If any alt has empty deeper first set at depth > 0, can't disambiguate further.
+    if depth > 0 {
+        let mut has_empty = false;
+        for let mut i = 0; i < alt_indices.len(); i += 1 {
+            if depth_firsts[i].len() == 0 { has_empty = true; }
+        }
+        if has_empty {
+            let mut bt_copy: Array<i32> = [];
+        for let ai of alt_indices { bt_copy.append(*ai); }
+        return PredictionNode::Backtrack(bt_copy);
+=======
+    // If any alt has empty deeper first set at depth > 0, can't disambiguate further.
+    if depth > 0 {
+        let mut has_empty = false;
+        for let mut i = 0; i < alt_indices.len(); i += 1 {
+            if depth_firsts[i].len() == 0 {
+                has_empty = true;
+            }
+        }
+        if has_empty {
+            let mut bt_copy: Array<i32> = [];
+            for let ai of alt_indices {
+                bt_copy.append(*ai);
+            }
+            return PredictionNode::Backtrack(bt_copy);
+>>>>>>> origin/main
         }
     }
     return alts;
@@ -415,6 +479,7 @@ fn build_sll_node(
                 });
             }
         } else {
+<<<<<<< HEAD
             // Still ambiguous: recurse with deeper lookahead.
             // If opaque alts exist, they can't be resolved further — Backtrack.
             let child = if opaque_alts.len() > 0 {
@@ -422,6 +487,20 @@ fn build_sll_node(
             } else {
                 build_sll_node(&deduped, depth + 1, max_depth, all_rules, lit_tokens)
             };
+||||||| 1aac3ca
+            let child = build_prediction(&matching_indices, &matching_firsts, &matching_elements,
+                depth + 1, max_depth, all_rules, lit_tokens);
+=======
+            let child = build_prediction(
+                &matching_indices,
+                &matching_firsts,
+                &matching_elements,
+                depth + 1,
+                max_depth,
+                all_rules,
+                lit_tokens,
+            );
+>>>>>>> origin/main
             let mut merged = false;
             for let mut b = 0; b < branches.len(); b += 1 {
                 if prediction_node_eq(&branches[b].child, &child) {
@@ -439,7 +518,19 @@ fn build_sll_node(
     }
 
     if branches.len() == 0 {
+<<<<<<< HEAD
         return PredictionNode::Backtrack(alts);
+||||||| 1aac3ca
+        let mut bt_copy: Array<i32> = [];
+        for let ai of alt_indices { bt_copy.append(*ai); }
+        return PredictionNode::Backtrack(bt_copy);
+=======
+        let mut bt_copy: Array<i32> = [];
+        for let ai of alt_indices {
+            bt_copy.append(*ai);
+        }
+        return PredictionNode::Backtrack(bt_copy);
+>>>>>>> origin/main
     }
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
 }
@@ -538,13 +629,19 @@ fn first_of_elements(
 
 fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
     if let Leaf(ai) = *a {
-        if let Leaf(bi) = *b { return ai == bi; }
+        if let Leaf(bi) = *b {
+            return ai == bi;
+        }
     }
     if let Backtrack(aa) = *a {
         if let Backtrack(ba) = *b {
-            if aa.len() != ba.len() { return false; }
+            if aa.len() != ba.len() {
+                return false;
+            }
             for let mut i = 0; i < aa.len(); i += 1 {
-                if aa[i] != ba[i] { return false; }
+                if aa[i] != ba[i] {
+                    return false;
+                }
             }
             return true;
         }
@@ -569,16 +666,12 @@ fn element_eq(a: &Element, b: &Element) -> bool {
     return false;
 }
 
-fn compute_deeper_first(
-    elements: &Array<Element>,
-    depth: i32,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> Array<String> {
+fn compute_deeper_first(elements: &Array<Element>, depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<String> {
     let mut pos = 0;
     let mut remaining = depth;
     while pos < elements.len() && remaining > 0 {
         let elem = &elements[pos];
+<<<<<<< HEAD
         if let TokenRef(_) | Literal(_) = *elem { remaining -= 1; pos += 1; continue; }
         if is_nullable(elem) { pos += 1; continue; }
         // SLL advancement: single-token RuleRef consumes exactly 1 token,
@@ -591,9 +684,25 @@ fn compute_deeper_first(
                 continue;
             }
         }
+||||||| 1aac3ca
+        if let TokenRef(_) | Literal(_) = *elem { remaining -= 1; pos += 1; continue; }
+        if is_nullable(elem) { pos += 1; continue; }
+=======
+        if let TokenRef(_) | Literal(_) = *elem {
+            remaining -= 1;
+            pos += 1;
+            continue;
+        }
+        if is_nullable(elem) {
+            pos += 1;
+            continue;
+        }
         return [];
     }
-    if pos >= elements.len() { return []; }
+    if pos >= elements.len() {
+>>>>>>> origin/main
+        return [];
+    }
     return first_of_elements_from(elements, pos, all_rules, lit_tokens);
 }
 
@@ -647,13 +756,17 @@ fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
 
 fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
     for let mut i = 0; i < arr.len(); i += 1 {
-        if arr[i] == val { return true; }
+        if arr[i] == val {
+            return true;
+        }
     }
     return false;
 }
 
 fn count_backtrack_nodes(node: &PredictionNode) -> i32 {
-    if let Backtrack(_) = *node { return 1; }
+    if let Backtrack(_) = *node {
+        return 1;
+    }
     if let Dispatch(d) = *node {
         let mut count = 0;
         for let mut i = 0; i < d.branches.len(); i += 1 {
@@ -666,7 +779,9 @@ fn count_backtrack_nodes(node: &PredictionNode) -> i32 {
 }
 
 fn count_leaf_nodes(node: &PredictionNode) -> i32 {
-    if let Leaf(_) = *node { return 1; }
+    if let Leaf(_) = *node {
+        return 1;
+    }
     if let Dispatch(d) = *node {
         let mut count = 0;
         for let mut i = 0; i < d.branches.len(); i += 1 {
@@ -768,16 +883,11 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.line("));");
     w.end();
 
-    w.end(); // impl
+    w.end();  // impl
     w.blank();
 }
 
-fn gen_parse_fn(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) {
+fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
     let type_name = rule_type_name(&rule.name);
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
 
@@ -847,7 +957,15 @@ fn gen_parse_fn(
                     f.set_return_type(`Result<{type_name}, ParseError>`);
                     f.emit_begin(w);
                     w.line("let start = p.peek().span.start;");
-                    gen_alt_body(w, &type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens);
+                    gen_alt_body(
+                        w,
+                        &type_name,
+                        Option::<String>::Some(case_name),
+                        Option::<String>::Some(sname),
+                        alt,
+                        all_rules,
+                        lit_tokens,
+                    );
                     w.end();
                     w.blank();
                 }
@@ -918,15 +1036,7 @@ fn gen_parse_fn(
     }
 }
 
-fn gen_alt_body(
-    w: &mut CodeWriter,
-    type_name: &String,
-    variant_case: Option<String>,
-    struct_name: Option<String>,
-    alt: &Alternative,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) {
+fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
     gen_alt_elements(w, &alt.elements, all_rules, lit_tokens);
 
     if let Some(case) = variant_case {
@@ -947,6 +1057,7 @@ fn gen_alt_body(
     }
 }
 
+<<<<<<< HEAD
 fn gen_alt_body_skip(
     w: &mut CodeWriter,
     type_name: &String,
@@ -1010,6 +1121,17 @@ fn gen_multi_alt_body(
     all_rules: &Array<ParserRule>,
     lit_tokens: &Array<LitToken>,
 ) {
+||||||| 1aac3ca
+fn gen_multi_alt_body(
+    w: &mut CodeWriter,
+    rule: &ParserRule,
+    type_name: &String,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) {
+=======
+fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
+>>>>>>> origin/main
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
 
     let max_k = 5;
@@ -1036,19 +1158,22 @@ fn gen_multi_alt_body(
             w.begin("scope:");
         }
 
-        gen_alt_body(w, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens);
+        gen_alt_body(
+            w,
+            type_name,
+            Option::<String>::Some(case_name),
+            Option::<String>::Some(sname),
+            alt,
+            all_rules,
+            lit_tokens,
+        );
         w.end();
     }
 
     gen_error_fallback(w, rule, type_name, all_rules, lit_tokens);
 }
 
-fn gen_alt_elements(
-    w: &mut CodeWriter,
-    elements: &Array<Element>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) {
+fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
     let mut name_counts: Array<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
@@ -1073,13 +1198,7 @@ fn gen_alt_elements(
     }
 }
 
-fn gen_elements_with_non_greedy(
-    w: &mut CodeWriter,
-    elements: &Array<Element>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         if let Repeat(rep) = *elem {
@@ -1097,19 +1216,16 @@ fn gen_elements_with_non_greedy(
 }
 
 fn is_ruleref_optional(elem: &Element) -> bool {
-    if let RuleRef(_) = *elem { return true; }
-    if let Label(lab) = *elem { return is_ruleref_optional(&lab.element); }
+    if let RuleRef(_) = *elem {
+        return true;
+    }
+    if let Label(lab) = *elem {
+        return is_ruleref_optional(&lab.element);
+    }
     return false;
 }
 
-fn gen_element(
-    w: &mut CodeWriter,
-    elem: &Element,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    store: bool,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_element(w: &mut CodeWriter, elem: &Element, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, store: bool, name_counts: &mut Array<[String, i32]>) {
     if let TokenRef(name) = *elem {
         let const_name = `TK_{name}`;
         if store {
@@ -1158,13 +1274,7 @@ fn gen_element(
     }
 }
 
-fn gen_repeat(
-    w: &mut CodeWriter,
-    rep: &RepeatElement,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
     let inner = &rep.element;
     let mut visiting: Array<String> = [];
     let first = first_of_element(inner, all_rules, lit_tokens, &mut visiting);
@@ -1222,16 +1332,13 @@ fn gen_repeat(
     }
 }
 
-fn compute_follow_second(
-    elements: &Array<Element>,
-    follow_start: i32,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> Array<String> {
+fn compute_follow_second(elements: &Array<Element>, follow_start: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<String> {
     // Compute first set of the 2nd token of the follow element.
     // For patterns like (',' table_constraint)*, the follow's inner group is [',' table_constraint].
     // We want first(table_constraint), not first(',').
-    if follow_start >= elements.len() { return []; }
+    if follow_start >= elements.len() {
+        return [];
+    }
     let follow_elem = &elements[follow_start];
     if let Repeat(rep) = *follow_elem {
         if let Group(alts) = rep.element {
@@ -1243,13 +1350,7 @@ fn compute_follow_second(
     return [];
 }
 
-fn compute_non_greedy_condition(
-    inner: &Element,
-    follow_first: &Array<String>,
-    follow_second: &Array<String>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> String {
+fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, follow_second: &Array<String>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> String {
     let mut visiting: Array<String> = [];
     let raw_first = first_of_element(inner, all_rules, lit_tokens, &mut visiting);
     let continue_first = subtract_sets(&raw_first, follow_first);
@@ -1287,17 +1388,13 @@ fn compute_non_greedy_condition(
     return "false";
 }
 
-fn gen_repeat_non_greedy(
-    w: &mut CodeWriter,
-    rep: &RepeatElement,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    follow_first: &Array<String>,
-    follow_second: &Array<String>,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, follow_first: &Array<String>, follow_second: &Array<String>, name_counts: &mut Array<[String, i32]>) {
     let inner = &rep.element;
-    let is_plus = if let Plus = rep.kind { true } else { false };
+    let is_plus = if let Plus = rep.kind {
+        true;
+    } else {
+        false;
+    };
     let while_cond = compute_non_greedy_condition(inner, follow_first, follow_second, all_rules, lit_tokens);
 
     if has_field(inner) {
@@ -1361,14 +1458,7 @@ fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
     return result;
 }
 
-fn gen_repeat_with_follow(
-    w: &mut CodeWriter,
-    rep: &RepeatElement,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    follow_first: &Array<String>,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, follow_first: &Array<String>, name_counts: &mut Array<[String, i32]>) {
     let inner = &rep.element;
     let mut visiting: Array<String> = [];
     let raw_first = first_of_element(inner, all_rules, lit_tokens, &mut visiting);
@@ -1403,7 +1493,9 @@ fn gen_repeat_with_follow(
 
 fn is_optional_repeat(elem: &Element) -> bool {
     if let Repeat(rep) = *elem {
-        if let Optional = rep.kind { return true; }
+        if let Optional = rep.kind {
+            return true;
+        }
     }
     if let Label(lab) = *elem {
         return is_optional_repeat(&lab.element);
@@ -1413,10 +1505,14 @@ fn is_optional_repeat(elem: &Element) -> bool {
 
 fn has_nested_optionals(inner: &Element) -> bool {
     if let Group(alts) = *inner {
-        if alts.len() != 1 { return false; }
+        if alts.len() != 1 {
+            return false;
+        }
         for let mut i = 0; i < alts[0].elements.len(); i += 1 {
             let elem = &alts[0].elements[i];
-            if is_optional_repeat(elem) { return true; }
+            if is_optional_repeat(elem) {
+                return true;
+            }
         }
     }
     return false;
@@ -1446,7 +1542,7 @@ fn compute_shapes(elements: &Array<Element>) -> Array<Array<i32>> {
                 }
             }
             if is_opt {
-                if (mask >> opt_bit) & 1 == 1 {
+                if mask >> opt_bit & 1 == 1 {
                     shape.append(i);
                 }
             } else {
@@ -1458,12 +1554,7 @@ fn compute_shapes(elements: &Array<Element>) -> Array<Array<i32>> {
     return shapes;
 }
 
-fn shape_lookahead_signature(
-    shape: &Array<i32>,
-    elements: &Array<Element>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> Array<Array<String>> {
+fn shape_lookahead_signature(shape: &Array<i32>, elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<Array<String>> {
     let mut sig: Array<Array<String>> = [];
     for let mut si = 0; si < shape.len(); si += 1 {
         let idx = shape[si];
@@ -1497,7 +1588,9 @@ fn gen_lookahead_condition(sig: &Array<Array<String>>) -> String {
             let mut inner = String::with_capacity(64);
             inner.append("(");
             for let mut j = 0; j < tokens.len(); j += 1 {
-                if j > 0 { inner.append(" || "); }
+                if j > 0 {
+                    inner.append(" || ");
+                }
                 inner.append(`{check_expr} == {tokens[j]}`);
             }
             inner.append(")");
@@ -1506,26 +1599,24 @@ fn gen_lookahead_condition(sig: &Array<Array<String>>) -> String {
     }
     let mut result = String::with_capacity(128);
     for let mut i = 0; i < parts.len(); i += 1 {
-        if i > 0 { result.append(" && "); }
+        if i > 0 {
+            result.append(" && ");
+        }
         result.append(parts[i]);
     }
     return result;
 }
 
-fn gen_optional_with_lookahead(
-    w: &mut CodeWriter,
-    group_elements: &Array<Element>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
     let shapes = compute_shapes(group_elements);
 
     let mut is_first = true;
     for let mut si = 0; si < shapes.len(); si += 1 {
         let shape = &shapes[si];
         let sig = shape_lookahead_signature(shape, group_elements, all_rules, lit_tokens);
-        if sig.len() == 0 { continue; }
+        if sig.len() == 0 {
+            continue;
+        }
         let cond = gen_lookahead_condition(&sig);
 
         if is_first {
@@ -1574,16 +1665,23 @@ fn optional_lookahead_depth(inner: &Element) -> i32 {
     // Returns the number of leading fixed tokens that can be checked via lookahead.
     // 0 if the first element is not a fixed token.
     if let Group(alts) = *inner {
-        if alts.len() != 1 { return 0; }
+        if alts.len() != 1 {
+            return 0;
+        }
         let mut depth = 0;
         for let mut i = 0; i < alts[0].elements.len(); i += 1 {
             let elem = &alts[0].elements[i];
-            if let TokenRef(_) | Literal(_) = *elem { depth += 1; }
-            else { break; }
+            if let TokenRef(_) | Literal(_) = *elem {
+                depth += 1;
+            } else {
+                break;
+            }
         }
         return depth;
     }
-    if let TokenRef(_) | Literal(_) = *inner { return 1; }
+    if let TokenRef(_) | Literal(_) = *inner {
+        return 1;
+    }
     return 0;
 }
 
@@ -1591,29 +1689,31 @@ fn optional_lookahead_tokens(inner: &Element, max_depth: i32) -> Array<String> {
     // Returns up to max_depth leading fixed token constants.
     let mut tokens: Array<String> = [];
     if let Group(alts) = *inner {
-        if alts.len() != 1 { return []; }
-        for let mut i = 0; i < alts[0].elements.len(); i += 1 {
-            if tokens.len() >= max_depth { break; }
-            let elem = &alts[0].elements[i];
-            if let TokenRef(name) = *elem { tokens.append(`TK_{name}`); }
-            else if let Literal(text) = *elem { tokens.append(literal_const_name(&text)); }
-            else { break; }
+        if alts.len() != 1 {
+            return [];
         }
-    } else {
-        if let TokenRef(name) = *inner { tokens.append(`TK_{name}`); }
-        else if let Literal(text) = *inner { tokens.append(literal_const_name(&text)); }
+        for let mut i = 0; i < alts[0].elements.len(); i += 1 {
+            if tokens.len() >= max_depth {
+                break;
+            }
+            let elem = &alts[0].elements[i];
+            if let TokenRef(name) = *elem {
+                tokens.append(`TK_{name}`);
+            } else if let Literal(text) = *elem {
+                tokens.append(literal_const_name(&text));
+            } else {
+                break;
+            }
+        }
+    } else if let TokenRef(name) = *inner {
+        tokens.append(`TK_{name}`);
+    } else if let Literal(text) = *inner {
+        tokens.append(literal_const_name(&text));
     }
     return tokens;
 }
 
-fn gen_optional_with_backtrack(
-    w: &mut CodeWriter,
-    inner: &Element,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    first: &Array<String>,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, first: &Array<String>, name_counts: &mut Array<[String, i32]>) {
     if has_nested_optionals(inner) {
         if let Group(alts) = *inner {
             gen_optional_with_lookahead(w, &alts[0].elements, all_rules, lit_tokens, name_counts);
@@ -1632,7 +1732,9 @@ fn gen_optional_with_backtrack(
         }
         let mut cond = String::with_capacity(128);
         for let mut i = 0; i < cond_parts.len(); i += 1 {
-            if i > 0 { cond.append(" && "); }
+            if i > 0 {
+                cond.append(" && ");
+            }
             cond.append(cond_parts[i]);
         }
         w.begin(`if {cond}`);
@@ -1667,19 +1769,11 @@ fn gen_optional_with_backtrack(
         gen_element_failable(w, inner, all_rules, lit_tokens, &saved, &label, name_counts);
     }
 
-    w.end(); // label
-    w.end(); // if
+    w.end();  // label
+    w.end();  // if
 }
 
-fn gen_element_failable(
-    w: &mut CodeWriter,
-    elem: &Element,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    saved_var: &String,
-    label: &String,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_element_failable(w: &mut CodeWriter, elem: &Element, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, saved_var: &String, label: &String, name_counts: &mut Array<[String, i32]>) {
     if let TokenRef(name) = *elem {
         let const_name = `TK_{name}`;
         let r_var = dedup_name(&"opt_r", name_counts);
@@ -1723,8 +1817,12 @@ fn gen_element_failable(
 }
 
 fn has_field(elem: &Element) -> bool {
-    if let TokenRef(_) | Literal(_) | RuleRef(_) = *elem { return true; }
-    if let Label(lab) = *elem { return has_field(&lab.element); }
+    if let TokenRef(_) | Literal(_) | RuleRef(_) = *elem {
+        return true;
+    }
+    if let Label(lab) = *elem {
+        return has_field(&lab.element);
+    }
     return false;
 }
 
@@ -1751,11 +1849,7 @@ fn gen_field_assignments(w: &mut CodeWriter, elements: &Array<Element>) {
     }
 }
 
-fn gen_field_assignment(
-    w: &mut CodeWriter,
-    elem: &Element,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>) {
     if let TokenRef(name) = *elem {
         let field_name = dedup_name(&to_lower(&name), name_counts);
         w.line(`{field_name},`);
@@ -1795,6 +1889,7 @@ fn gen_field_assignment(
     }
 }
 
+<<<<<<< HEAD
 /// Replay name counting for an element without emitting code.
 /// This advances the dedup counter so subsequent elements get correct suffixes.
 fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) {
@@ -1838,6 +1933,21 @@ fn gen_consume_group(
     name_counts: &mut Array<[String, i32]>,
 ) {
     if alts.len() == 0 { return; }
+||||||| 1aac3ca
+fn gen_consume_group(
+    w: &mut CodeWriter,
+    alts: &Array<Alternative>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    name_counts: &mut Array<[String, i32]>,
+) {
+    if alts.len() == 0 { return; }
+=======
+fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+    if alts.len() == 0 {
+        return;
+    }
+>>>>>>> origin/main
     if alts.len() == 1 {
         gen_elements_with_non_greedy(w, &alts[0].elements, all_rules, lit_tokens, name_counts);
         return;
@@ -1884,14 +1994,7 @@ fn gen_consume_group(
     w.end();
 }
 
-fn gen_backtracking_body(
-    w: &mut CodeWriter,
-    group: &Array<i32>,
-    alts: &Array<Alternative>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    name_counts: &mut Array<[String, i32]>,
-) {
+fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
     // Build prediction tree for the group alternatives.
     let mut pred_indices: Array<i32> = [];
     let mut pred_firsts: Array<Array<String>> = [];
@@ -1903,11 +2006,11 @@ fn gen_backtracking_body(
         pred_firsts.append(first_of_alt(&alts[alt_idx], all_rules, lit_tokens, &mut visiting));
         pred_elements.append(alts[alt_idx].elements);
     }
-    let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements,
-        0, 5, all_rules, lit_tokens);
+    let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, all_rules, lit_tokens);
     gen_group_prediction_code(w, &tree, alts, all_rules, lit_tokens, name_counts);
 }
 
+<<<<<<< HEAD
 fn gen_group_prediction_code(
     w: &mut CodeWriter,
     node: &PredictionNode,
@@ -1928,6 +2031,18 @@ fn gen_group_prediction_code_skip(
     name_counts: &mut Array<[String, i32]>,
     skip: i32,
 ) {
+||||||| 1aac3ca
+fn gen_group_prediction_code(
+    w: &mut CodeWriter,
+    node: &PredictionNode,
+    alts: &Array<Alternative>,
+    all_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+    name_counts: &mut Array<[String, i32]>,
+) {
+=======
+fn gen_group_prediction_code(w: &mut CodeWriter, node: &PredictionNode, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+>>>>>>> origin/main
     if let Leaf(idx) = *node {
         let elems = &alts[idx].elements;
         for let mut i = skip; i < elems.len(); i += 1 {
@@ -1976,7 +2091,7 @@ fn gen_group_prediction_code_skip(
                     gen_element_failable(w, &alt.elements[i], all_rules, lit_tokens, &saved_var, &bt_label, &mut nc);
                 }
                 w.line(`{done_var} = true;`);
-                w.end(); // label
+                w.end();  // label
                 w.end();
             }
         }
@@ -1998,15 +2113,7 @@ fn gen_group_prediction_code_skip(
     }
 }
 
-fn compute_lr_conflict_min_prec(
-    alt: &Alternative,
-    own_prec: i32,
-    lr_indices: &Array<i32>,
-    rule: &ParserRule,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    total_lr: i32,
-) -> i32 {
+fn compute_lr_conflict_min_prec(alt: &Alternative, own_prec: i32, lr_indices: &Array<i32>, rule: &ParserRule, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, total_lr: i32) -> i32 {
     // Scan suffix for fixed tokens that are also LR suffix first tokens.
     // If found, compute min_prec = max(own_prec + 1, conflicting_alt_prec + 1).
     let mut min_prec = own_prec + 1;
@@ -2014,23 +2121,34 @@ fn compute_lr_conflict_min_prec(
     let mut fixed_tokens: Array<String> = [];
     for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
         let elem = &alt.elements[ei];
-        if let TokenRef(name) = *elem { fixed_tokens.append(`TK_{name}`); }
-        if let Literal(text) = *elem { fixed_tokens.append(literal_const_name(&text)); }
+        if let TokenRef(name) = *elem {
+            fixed_tokens.append(`TK_{name}`);
+        }
+        if let Literal(text) = *elem {
+            fixed_tokens.append(literal_const_name(&text));
+        }
     }
-    if fixed_tokens.len() == 0 { return min_prec; }
+    if fixed_tokens.len() == 0 {
+        return min_prec;
+    }
 
     // Check each LR alt's suffix first set for conflicts
     let mut lr_pos = 0;
     for let lr_idx_ref of lr_indices {
         let lr_idx = *lr_idx_ref;
         let other = &rule.alternatives[lr_idx];
-        if other.elements.len() <= 1 { lr_pos += 1; continue; }
+        if other.elements.len() <= 1 {
+            lr_pos += 1;
+            continue;
+        }
         let other_prec = total_lr - lr_pos;
         let suffix_first = first_of_elements_from(&other.elements, 1, all_rules, lit_tokens);
         for let ft of fixed_tokens {
             if array_contains_str(&suffix_first, &ft) {
                 let candidate = other_prec + 1;
-                if candidate > min_prec { min_prec = candidate; }
+                if candidate > min_prec {
+                    min_prec = candidate;
+                }
             }
         }
         lr_pos += 1;
@@ -2038,14 +2156,7 @@ fn compute_lr_conflict_min_prec(
     return min_prec;
 }
 
-fn gen_lr_suffix_helpers(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    type_name: &String,
-    lr_indices: &Array<i32>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) {
+fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
     let prec_fn = `{fn_name}_prec`;
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
@@ -2055,7 +2166,10 @@ fn gen_lr_suffix_helpers(
     for let lr_idx_ref of lr_indices {
         let lr_idx = *lr_idx_ref;
         let alt = &rule.alternatives[lr_idx];
-        if alt.elements.len() <= 1 { lr_pos += 1; continue; }
+        if alt.elements.len() <= 1 {
+            lr_pos += 1;
+            continue;
+        }
         let own_prec = total_lr - lr_pos;
 
         let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{lr_idx}` };
@@ -2063,7 +2177,15 @@ fn gen_lr_suffix_helpers(
         let suffix_fn = `{fn_name}_lr_{lr_idx}`;
 
         // Compute min_prec for self-recursive calls in this helper
-        let inner_min_prec = compute_lr_conflict_min_prec(alt, own_prec, lr_indices, rule, all_rules, lit_tokens, total_lr);
+        let inner_min_prec = compute_lr_conflict_min_prec(
+            alt,
+            own_prec,
+            lr_indices,
+            rule,
+            all_rules,
+            lit_tokens,
+            total_lr,
+        );
 
         let mut f = FnSpec::new(&suffix_fn);
         f.add_param("p", "&mut Parser");
@@ -2113,18 +2235,13 @@ fn gen_lr_suffix_helpers(
         w.dedent();
         w.line("}));");
 
-        w.end(); // fn
+        w.end();  // fn
         w.blank();
         lr_pos += 1;
     }
 }
 
-fn compute_lr_second_token(
-    shared_token: &String,
-    elements: &Array<Element>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> Array<String> {
+fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<String> {
     // Find what token follows the shared_token in this alternative's suffix.
     // Walk suffix elements (starting at index 1) to find the shared token,
     // then return the first set of the next element.
@@ -2133,7 +2250,9 @@ fn compute_lr_second_token(
         // Check if this element contains the shared token
         let mut visiting: Array<String> = [];
         let elem_first = first_of_element(elem, all_rules, lit_tokens, &mut visiting);
-        if !array_contains_str(&elem_first, shared_token) { continue; }
+        if !array_contains_str(&elem_first, shared_token) {
+            continue;
+        }
 
         // This element matches the shared token. Check if it's an Optional that wraps it.
         if is_nullable(elem) {
@@ -2150,7 +2269,9 @@ fn compute_lr_second_token(
         if let Group(alts) = *elem {
             for let mut a = 0; a < alts.len(); a += 1 {
                 let alt = &alts[a];
-                if alt.elements.len() < 1 { continue; }
+                if alt.elements.len() < 1 {
+                    continue;
+                }
                 let mut v2: Array<String> = [];
                 let alt_first = first_of_element(&alt.elements[0], all_rules, lit_tokens, &mut v2);
                 if array_contains_str(&alt_first, shared_token) && alt.elements.len() >= 2 {
@@ -2167,12 +2288,7 @@ fn compute_lr_second_token(
     return [];
 }
 
-fn gen_lr_call_with_prec(
-    w: &mut CodeWriter,
-    suffix_fn: &String,
-    prec: i32,
-    use_prec: bool,
-) {
+fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32, use_prec: bool) {
     if use_prec {
         w.begin(`if {prec} >= min_prec`);
         w.line(`result = {*suffix_fn}(p, result, start)?;`);
@@ -2184,18 +2300,7 @@ fn gen_lr_call_with_prec(
     }
 }
 
-fn gen_lr_overlap_dispatch(
-    w: &mut CodeWriter,
-    fn_name: &String,
-    rule: &ParserRule,
-    group: &Array<i32>,
-    valid_lr_indices: &Array<i32>,
-    lr_precs: &Array<i32>,
-    suffix_first_sets: &Array<Array<String>>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    use_prec: bool,
-) {
+fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, use_prec: bool) {
     // For each token in the group, find which alternatives match it.
     // Unique token → dispatch directly. Shared token → sub-dispatch via peek_at(1).
     let mut emitted: Array<String> = [];
@@ -2206,11 +2311,17 @@ fn gen_lr_overlap_dispatch(
         let this_first = &suffix_first_sets[group[k]];
         for let mut t = 0; t < this_first.len(); t += 1 {
             let tk = &this_first[t];
-            if array_contains_str(&emitted, tk) { continue; }
+            if array_contains_str(&emitted, tk) {
+                continue;
+            }
             let mut shared = false;
             for let mut j = 0; j < group.len(); j += 1 {
-                if j == k { continue; }
-                if array_contains_str(&suffix_first_sets[group[j]], tk) { shared = true; }
+                if j == k {
+                    continue;
+                }
+                if array_contains_str(&suffix_first_sets[group[j]], tk) {
+                    shared = true;
+                }
             }
             if !shared {
                 let lr_idx = valid_lr_indices[group[k]];
@@ -2232,7 +2343,9 @@ fn gen_lr_overlap_dispatch(
     let mut shared_tokens: Array<String> = [];
     for let mut k = 0; k < group.len(); k += 1 {
         for let tk of suffix_first_sets[group[k]] {
-            if array_contains_str(&emitted, &tk) { continue; }
+            if array_contains_str(&emitted, &tk) {
+                continue;
+            }
             if !array_contains_str(&shared_tokens, &tk) {
                 shared_tokens.append(tk);
             }
@@ -2254,7 +2367,9 @@ fn gen_lr_overlap_dispatch(
             }
         }
         for let mut k = 0; k < group.len(); k += 1 {
-            if !array_contains_str(&suffix_first_sets[group[k]], shared_tk) { continue; }
+            if !array_contains_str(&suffix_first_sets[group[k]], shared_tk) {
+                continue;
+            }
             let lr_idx = valid_lr_indices[group[k]];
             let prec = lr_precs[group[k]];
             let alt = &rule.alternatives[lr_idx];
@@ -2286,15 +2401,7 @@ fn gen_lr_overlap_dispatch(
     }
 }
 
-fn gen_lr_suffix_dispatch(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    type_name: &String,
-    lr_indices: &Array<i32>,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    use_prec: bool,
-) {
+fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, use_prec: bool) {
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
     let total_lr = lr_indices.len();
 
@@ -2305,9 +2412,15 @@ fn gen_lr_suffix_dispatch(
     for let lr_idx_ref of lr_indices {
         let lr_idx = *lr_idx_ref;
         let alt = &rule.alternatives[lr_idx];
-        if alt.elements.len() <= 1 { lr_position += 1; continue; }
+        if alt.elements.len() <= 1 {
+            lr_position += 1;
+            continue;
+        }
         let suffix_first = first_of_elements_from(&alt.elements, 1, all_rules, lit_tokens);
-        if suffix_first.len() == 0 { lr_position += 1; continue; }
+        if suffix_first.len() == 0 {
+            lr_position += 1;
+            continue;
+        }
         valid_lr_indices.append(lr_idx);
         suffix_first_sets.append(suffix_first);
         // Precedence: first LR alt = highest (N), last = 1
@@ -2355,8 +2468,18 @@ fn gen_lr_suffix_dispatch(
                 w.line(`result = {suffix_fn}(p, result, start)?;`);
             }
         } else {
-            gen_lr_overlap_dispatch(w, &fn_name, rule, group, &valid_lr_indices, &lr_precs,
-                &suffix_first_sets, all_rules, lit_tokens, use_prec);
+            gen_lr_overlap_dispatch(
+                w,
+                &fn_name,
+                rule,
+                group,
+                &valid_lr_indices,
+                &lr_precs,
+                &suffix_first_sets,
+                all_rules,
+                lit_tokens,
+                use_prec,
+            );
         }
     }
 
@@ -2367,9 +2490,10 @@ fn gen_lr_suffix_dispatch(
     } else {
         w.line("break;");
     }
-    w.end(); // loop
+    w.end();  // loop
 }
 
+<<<<<<< HEAD
 fn gen_prediction_code(
     w: &mut CodeWriter,
     node: &PredictionNode,
@@ -2394,6 +2518,16 @@ fn gen_prediction_code_inner(
     skip: i32,
     name_counts: &mut Array<[String, i32]>,
 ) {
+||||||| 1aac3ca
+fn gen_prediction_code(
+    w: &mut CodeWriter,
+    node: &PredictionNode,
+    fn_name: &String,
+    alts: &Array<Alternative>,
+) {
+=======
+fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>) {
+>>>>>>> origin/main
     if let Leaf(idx) = *node {
         if skip == 0 {
             w.line(`return {*fn_name}_bt_{idx}(p);`);
@@ -2455,16 +2589,7 @@ fn gen_prediction_code_inner(
     }
 }
 
-fn gen_multi_alt_body_bt(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    type_name: &String,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    groups: &Array<Array<i32>>,
-    first_sets: &Array<Array<String>>,
-    non_lr_indices: &Array<i32>,
-) {
+fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
     w.line("let kind = p.peek_kind();");
@@ -2488,7 +2613,15 @@ fn gen_multi_alt_body_bt(
             let alt = &rule.alternatives[alt_idx];
             let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{alt_idx}` };
             let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
-            gen_alt_body(w, type_name, Option::<String>::Some(case_name), Option::<String>::Some(sname), alt, all_rules, lit_tokens);
+            gen_alt_body(
+                w,
+                type_name,
+                Option::<String>::Some(case_name),
+                Option::<String>::Some(sname),
+                alt,
+                all_rules,
+                lit_tokens,
+            );
         } else {
             // Sort group by specificity before building prediction tree.
             let mut sorted_group = group.sorted();
@@ -2503,8 +2636,7 @@ fn gen_multi_alt_body_bt(
                 pred_firsts.append(first_sets[idx]);
                 pred_elements.append(rule.alternatives[real_idx].elements);
             }
-            let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements,
-                0, 5, all_rules, lit_tokens);
+            let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, all_rules, lit_tokens);
             let bt_count = count_backtrack_nodes(&tree);
 
             gen_prediction_code(w, &tree, &fn_name, &rule.alternatives, type_name, all_rules, lit_tokens);
@@ -2517,7 +2649,9 @@ fn gen_multi_alt_body_bt(
 }
 
 fn gen_parse_entry(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
-    if parser_rules.len() == 0 { return; }
+    if parser_rules.len() == 0 {
+        return;
+    }
     let root = &parser_rules[0];
     let type_name = rule_type_name(&root.name);
     let fn_name = `parse_{to_snake_case(&root.name)}`;
@@ -2543,7 +2677,9 @@ fn kind_check_str(tokens: &Array<String>, expr: &String) -> String {
     }
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < tokens.len(); i += 1 {
-        if i > 0 { result.append(" || "); }
+        if i > 0 {
+            result.append(" || ");
+        }
         result.append(`{expr} == {tokens[i]}`);
     }
     return result;
@@ -2552,7 +2688,9 @@ fn kind_check_str(tokens: &Array<String>, expr: &String) -> String {
 fn build_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> String {
     let mut cond = String::with_capacity(128);
     for let mut d = 0; d < depth; d += 1 {
-        if d > 0 { cond.append(" && "); }
+        if d > 0 {
+            cond.append(" && ");
+        }
         let tokens = &pos_sets[d];
         let check_expr = if d == 0 { "kind" } else { `p.peek_at({d})` };
         if tokens.len() == 1 {
@@ -2560,7 +2698,9 @@ fn build_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> Str
         } else {
             cond.append("(");
             for let mut j = 0; j < tokens.len(); j += 1 {
-                if j > 0 { cond.append(" || "); }
+                if j > 0 {
+                    cond.append(" || ");
+                }
                 cond.append(`{check_expr} == {tokens[j]}`);
             }
             cond.append(")");
@@ -2569,13 +2709,7 @@ fn build_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> Str
     return cond;
 }
 
-fn gen_error_fallback(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    type_name: &String,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) {
+fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
     let mut expected: Array<String> = [];
     for let alt of rule.alternatives {
         let mut visiting: Array<String> = [];
@@ -2593,7 +2727,9 @@ fn gen_error_fallback(
     w.line("p.peek().span,");
     w.write("[");
     for let mut i = 0; i < expected.len(); i += 1 {
-        if i > 0 { w.write(", "); }
+        if i > 0 {
+            w.write(", ");
+        }
         let s = escape_string(&expected[i]);
         w.write(s);
     }
@@ -2602,12 +2738,7 @@ fn gen_error_fallback(
     w.line("));");
 }
 
-fn first_of_alt(
-    alt: &Alternative,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    visiting: &mut Array<String>,
-) -> Array<String> {
+fn first_of_alt(alt: &Alternative, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, visiting: &mut Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
     for let elem of alt.elements {
         let elem_first = first_of_element(&elem, all_rules, lit_tokens, visiting);
@@ -2623,12 +2754,7 @@ fn first_of_alt(
     return result;
 }
 
-fn first_of_element(
-    elem: &Element,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    visiting: &mut Array<String>,
-) -> Array<String> {
+fn first_of_element(elem: &Element, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, visiting: &mut Array<String>) -> Array<String> {
     if let TokenRef(name) = *elem {
         return [`TK_{name}`];
     }
@@ -2659,12 +2785,7 @@ fn first_of_element(
     return [];
 }
 
-fn first_of_rule(
-    name: &String,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-    visiting: &mut Array<String>,
-) -> Array<String> {
+fn first_of_rule(name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, visiting: &mut Array<String>) -> Array<String> {
     if array_contains_str(visiting, name) {
         return [];
     }
@@ -2698,9 +2819,13 @@ fn first_of_rule(
 
 fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
     for let alt of alts {
-        if alt.elements.len() != 1 { return false; }
+        if alt.elements.len() != 1 {
+            return false;
+        }
         let elem = &alt.elements[0];
-        if let TokenRef(_) | Literal(_) = *elem { continue; }
+        if let TokenRef(_) | Literal(_) = *elem {
+            continue;
+        }
         return false;
     }
     return true;
@@ -2708,43 +2833,45 @@ fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
 
 fn is_nullable(elem: &Element) -> bool {
     if let Repeat(rep) = *elem {
-        if let Star | Optional = rep.kind { return true; }
+        if let Star | Optional = rep.kind {
+            return true;
+        }
     }
     return false;
 }
 
-fn alt_position_first_sets(
-    alt: &Alternative,
-    max_depth: i32,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> Array<Array<String>> {
+fn alt_position_first_sets(alt: &Alternative, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<Array<String>> {
     let mut result: Array<Array<String>> = [];
     let mut start = 0;
     while result.len() < max_depth && start < alt.elements.len() {
-        if result.len() > 0 && is_nullable(&alt.elements[start]) { break; }
+        if result.len() > 0 && is_nullable(&alt.elements[start]) {
+            break;
+        }
 
         let first = first_of_elements_from(&alt.elements, start, all_rules, lit_tokens);
-        if first.len() == 0 { break; }
+        if first.len() == 0 {
+            break;
+        }
         result.append(first);
         let mut skipped_nullable = false;
         while start < alt.elements.len() {
             let was_nullable = is_nullable(&alt.elements[start]);
-            if was_nullable { skipped_nullable = true; }
+            if was_nullable {
+                skipped_nullable = true;
+            }
             start += 1;
-            if !was_nullable { break; }
+            if !was_nullable {
+                break;
+            }
         }
-        if skipped_nullable { break; }
+        if skipped_nullable {
+            break;
+        }
     }
     return result;
 }
 
-fn first_of_elements_from(
-    elements: &Array<Element>,
-    start: i32,
-    all_rules: &Array<ParserRule>,
-    lit_tokens: &Array<LitToken>,
-) -> Array<String> {
+fn first_of_elements_from(elements: &Array<Element>, start: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<String> {
     let mut result: Array<String> = [];
     for let mut i = start; i < elements.len(); i += 1 {
         let mut visiting: Array<String> = [];
@@ -2754,14 +2881,18 @@ fn first_of_elements_from(
                 result.append(tk);
             }
         }
-        if !is_nullable(&elements[i]) { break; }
+        if !is_nullable(&elements[i]) {
+            break;
+        }
     }
     return result;
 }
 
 fn sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
     for let x of a {
-        if array_contains_str(b, x) { return true; }
+        if array_contains_str(b, x) {
+            return true;
+        }
     }
     return false;
 }
@@ -2788,7 +2919,9 @@ fn find_needed_depth(all_position_sets: &Array<Array<Array<String>>>) -> i32 {
                 }
             }
         }
-        if all_ok { return depth; }
+        if all_ok {
+            return depth;
+        }
     }
     return max_k;
 }
@@ -2832,7 +2965,9 @@ fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
 }
 
 fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
-    if alt.elements.len() == 0 { return false; }
+    if alt.elements.len() == 0 {
+        return false;
+    }
     let first = &alt.elements[0];
     if let RuleRef(name) = *first {
         return name == *rule_name;
@@ -2884,21 +3019,22 @@ fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>
 
 fn has_multi_alt_groups(groups: &Array<Array<i32>>) -> bool {
     for let group of groups {
-        if group.len() > 1 { return true; }
+        if group.len() > 1 {
+            return true;
+        }
     }
     return false;
 }
 
-fn sort_group_by_specificity(
-    group: &mut Array<i32>,
-    first_sets: &Array<Array<String>>,
-) {
+fn sort_group_by_specificity(group: &mut Array<i32>, first_sets: &Array<Array<String>>) {
     // Sort by first set size ascending: smaller first set = more specific = try first.
     // Ties broken by original order (stable-ish bubble sort).
     for let mut i = 0; i < group.len(); i += 1 {
         for let mut j = i + 1; j < group.len(); j += 1 {
             if first_sets[group[j]].len() < first_sets[group[i]].len() {
-                let tmp = group[i]; group[i] = group[j]; group[j] = tmp;
+                let tmp = group[i];
+                group[i] = group[j];
+                group[j] = tmp;
             }
         }
     }
@@ -2914,7 +3050,9 @@ fn alt_sort_priority(alt: &Alternative) -> i32 {
     // 1: Single Token/Literal — simple fallbacks (e.g. K_INSERT)
     if alt.elements.len() == 1 {
         let elem = &alt.elements[0];
-        if let RuleRef(_) = *elem { return 3; }
+        if let RuleRef(_) = *elem {
+            return 3;
+        }
         return 1;
     }
     // Multi-element: check first non-nullable element.
@@ -2926,10 +3064,7 @@ fn alt_sort_priority(alt: &Alternative) -> i32 {
     return 2;
 }
 
-fn sort_group_by_element_count(
-    group: &mut Array<i32>,
-    alts: &Array<Alternative>,
-) {
+fn sort_group_by_element_count(group: &mut Array<i32>, alts: &Array<Alternative>) {
     for let mut i = 0; i < group.len(); i += 1 {
         for let mut j = i + 1; j < group.len(); j += 1 {
             let pi = alt_sort_priority(&alts[group[i]]);
@@ -2944,7 +3079,9 @@ fn sort_group_by_element_count(
                 }
             }
             if swap {
-                let tmp = group[i]; group[i] = group[j]; group[j] = tmp;
+                let tmp = group[i];
+                group[i] = group[j];
+                group[j] = tmp;
             }
         }
     }

@@ -89,7 +89,10 @@ test "Value::Object serialize" {
 }
 
 test "Value::Object multiple keys serialize" {
-    let v = Value::Object(obj([["a", Value::Number(1.0)], ["b", Value::Bool(false)]]));
+    let v = Value::Object(obj([
+        ["a", Value::Number(1.0)],
+        ["b", Value::Bool(false)],
+    ]));
     let r = to_string::<Value>(&v);
     assert r matches { Ok(s) && s == "{\"a\":1,\"b\":false}" };
 }
@@ -233,7 +236,10 @@ test "inspect empty object" {
 }
 
 test "pretty-print object" {
-    let v = Value::Object(obj([["name", Value::String("Alice")], ["age", Value::Number(30.0)]]));
+    let v = Value::Object(obj([
+        ["name", Value::String("Alice")],
+        ["age", Value::Number(30.0)],
+    ]));
     assert `{v:#?}` == "{
   \"name\": \"Alice\",
   \"age\": 30.0,
