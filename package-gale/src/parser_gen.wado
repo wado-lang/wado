@@ -276,10 +276,68 @@ fn compute_deeper_first(
         let elem = &elements[pos];
         if let TokenRef(_) | Literal(_) = *elem { remaining -= 1; pos += 1; continue; }
         if is_nullable(elem) { pos += 1; continue; }
+        // SLL advancement: single-token RuleRef consumes exactly 1 token,
+        // so we can safely advance past it and look at the next element.
+        if let RuleRef(name) = *elem {
+            let mut visiting: Array<String> = [];
+            if rule_is_single_token(&name, all_rules, &mut visiting) {
+                remaining -= 1;
+                pos += 1;
+                continue;
+            }
+        }
         return [];
     }
     if pos >= elements.len() { return []; }
     return first_of_elements_from(elements, pos, all_rules, lit_tokens);
+}
+
+/// Check if a rule always consumes exactly one token.
+/// True when every alternative has exactly one non-nullable element
+/// that is either a terminal (TokenRef/Literal) or a single-token RuleRef.
+fn rule_is_single_token(
+    name: &String,
+    all_rules: &Array<ParserRule>,
+    visiting: &mut Array<String>,
+) -> bool {
+    if array_contains_str(visiting, name) { return false; }
+    visiting.append(*name);
+
+    let mut found = false;
+    for let rule of all_rules {
+        if rule.name != *name { continue; }
+        found = true;
+        for let alt of rule.alternatives {
+            let mut non_nullable_count = 0;
+            let mut single_ok = false;
+            for let elem of alt.elements {
+                if is_nullable(&elem) { continue; }
+                non_nullable_count += 1;
+                if non_nullable_count > 1 { break; }
+                if let TokenRef(_) | Literal(_) = elem {
+                    single_ok = true;
+                } else if let RuleRef(r) = elem {
+                    single_ok = rule_is_single_token(&r, all_rules, visiting);
+                }
+            }
+            if non_nullable_count != 1 || !single_ok {
+                remove_from_visiting(visiting, name);
+                return false;
+            }
+        }
+        break;
+    }
+
+    remove_from_visiting(visiting, name);
+    return found;
+}
+
+fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
+    let mut new_arr: Array<String> = [];
+    for let v of visiting {
+        if *v != *name { new_arr.append(*v); }
+    }
+    *visiting = new_arr;
 }
 
 fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
