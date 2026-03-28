@@ -236,6 +236,10 @@ type "functype/wasi/waitable-join" = fn(i32, i32);
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
+type "functype/wasi/waitable-set-drop" = fn(i32);
+
+type "functype/wasi/subtask-drop" = fn(i32);
+
 type "functype/wasi/future-drop-readable:s32" = fn(i32);
 
 type "functype/wasi/future-new" = fn() -> i64;
@@ -255,6 +259,8 @@ import fn future-read:s32 from "wasi/future-read:s32";
 import fn waitable-set-new from "wasi/waitable-set-new";
 import fn waitable-join from "wasi/waitable-join";
 import fn waitable-set-wait from "wasi/waitable-set-wait";
+import fn waitable-set-drop from "wasi/waitable-set-drop";
+import fn subtask-drop from "wasi/subtask-drop";
 import fn future-drop-readable:s32 from "wasi/future-drop-readable:s32";
 import fn future-new from "wasi/future-new";
 import fn future-write from "wasi/future-write";
@@ -415,13 +421,29 @@ fn handle(request) {
     __fr_ptr_3 = "mem/realloc"(0, 0, 8, 40);
     __fr_result_3 = "wasi/future-read:s32"(__fr_handle_3, __fr_ptr_3);
     if __fr_result_3 == -1 {
+        let __fr_ws_3: i32;
         let __fr_evtptr_3: i32;
-        __fr_result_3 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fr_handle_3, __fr_result_3);
+        __fr_ws_3 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(__fr_handle_3, __fr_ws_3);
         __fr_evtptr_3 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(__fr_result_3, __fr_evtptr_3));
-        __fr_result_3 = builtin::load_i32[4](__fr_evtptr_3);
+        drop("wasi/waitable-set-wait"(__fr_ws_3, __fr_evtptr_3));
         drop("mem/realloc"(__fr_evtptr_3, 8, 4, 0));
+        "wasi/waitable-set-drop"(__fr_ws_3);
+        __fr_result_3 = "wasi/future-read:s32"(__fr_handle_3, __fr_ptr_3);
+    };
+    if (__fr_result_3 & 15) != 2 {
+        let __fr_subtask_3: i32;
+        let __fr_ws2_3: i32;
+        let __fr_evtptr2_3: i32;
+        __fr_subtask_3 = __fr_result_3 >>u 4;
+        __fr_ws2_3 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(__fr_subtask_3, __fr_ws2_3);
+        __fr_evtptr2_3 = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"(__fr_ws2_3, __fr_evtptr2_3));
+        drop("mem/realloc"(__fr_evtptr2_3, 8, 4, 0));
+        "wasi/waitable-set-drop"(__fr_ws2_3);
+        "wasi/subtask-drop"(__fr_subtask_3);
+        __fr_result_3 = 2;
     };
     drop("mem/realloc"(__fr_ptr_3, 40, 8, 0));
     "wasi/future-drop-readable:s32"(future_rx);
@@ -783,13 +805,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l41: loop {
+            l42: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l41;
+                continue l42;
             };
         };
     };

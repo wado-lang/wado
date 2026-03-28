@@ -45,8 +45,7 @@ export fn run() with Stdout, Stderr, Preopens {
         let [read_stream, read_future] = file.read_via_stream(0 as Filesize);
         let sub3 = Stdout::write_via_stream(read_stream);
         sub3.drop();
-        read_future.read();
-        read_future.drop();
+        wait_for_subtask(read_future);
 
         // Clean up
         dir.unlink_file_at("append_test.txt");
@@ -55,6 +54,6 @@ export fn run() with Stdout, Stderr, Preopens {
 
 __DATA__
 {
-    "TODO": true, "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
     "stdout": "Hello, World!\n"
 }

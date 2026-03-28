@@ -14,8 +14,7 @@ fn write_bytes(file: &Descriptor, data: Array<u8>) {
     let subtask = file.write_via_stream(write_rx, 0 as Filesize);
     write_tx.write(data);
     write_tx.drop();
-        subtask.read();
-        subtask.drop();
+        wait_for_subtask(subtask);
 }
 
 fn read_all(file: &Descriptor) -> Array<u8> {
@@ -31,8 +30,7 @@ fn read_all(file: &Descriptor) -> Array<u8> {
         }
     }
     read_stream.drop();
-    read_future.read();
-    read_future.drop();
+        wait_for_subtask(read_future);
     return result;
 }
 
@@ -133,7 +131,7 @@ export fn run() with Stdout, Stderr, Preopens {
 
 __DATA__
 {
-    "TODO": true, "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
     "stdout_contains": [
         "set_size: initial size is 10 (correct)",
         "set_size: truncate to 5 succeeded",

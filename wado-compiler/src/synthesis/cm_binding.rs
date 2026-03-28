@@ -2640,8 +2640,10 @@ fn synthesize_adapter(
     // The binding's return type to the Wado caller:
     let adapter_return_type;
 
-    if func_info.is_async && func_info.has_streaming_param() {
-        // Streaming async function (has Stream<T> or Future<T> parameter):
+    let is_streaming_func = func_info.has_streaming_param() || func_info.return_type_has_future();
+    if is_streaming_func {
+        // Streaming function (has Stream<T>/Future<T> param or returns Future<T>):
+        // canon lower is called with async option (CM spec requirement for stream/future).
         // The caller must write to the stream before the subtask completes,
         // so we cannot wait inside the binding. Return the packed subtask handle
         // (i32) directly. The caller is responsible for waiting via wait_for_subtask().
@@ -6441,7 +6443,7 @@ fn rewrite_calls_in_expr(
             // Check if this is a streaming async function
             let is_streaming = wasi_registry
                 .get_function(&qualified)
-                .is_some_and(|f| f.is_async && f.has_streaming_param());
+                .is_some_and(|f| f.has_streaming_param() || f.return_type_has_future());
 
             // Fix up binding function types from the call site
             {
@@ -6549,7 +6551,7 @@ fn rewrite_calls_in_expr(
             // Check if this is a streaming async function
             let is_streaming = wasi_registry
                 .get_function(&qualified)
-                .is_some_and(|f| f.is_async && f.has_streaming_param());
+                .is_some_and(|f| f.has_streaming_param() || f.return_type_has_future());
 
             // Extract receiver and args before replacing
             let (taken_receiver, mut taken_args) =

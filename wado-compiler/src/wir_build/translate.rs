@@ -4152,14 +4152,12 @@ impl FunctionTranslator<'_, '_> {
                 if let Some(func_id) = self.ctx.func_map.get(&key).cloned() {
                     let mut call_args: Vec<WirInstr> =
                         args.iter().map(|a| self.translate_expr(&a.expr)).collect();
-                    // Check if the WASI function expects a buffer_size argument
-                    // (async canon lower adds buffer_size; sync does not)
-                    let func_info = self
-                        .ctx
-                        .project
-                        .wasi_registry
-                        .get_function(wasi_func_name);
-                    if func_info.is_some_and(|f| f.is_async) {
+                    // Async canon lower (used for streaming functions) adds buffer_size argument
+                    let func_info = self.ctx.project.wasi_registry.get_function(wasi_func_name);
+                    let needs_async = func_info.is_some_and(|f| {
+                        f.is_async || f.has_streaming_param() || f.return_type_has_future()
+                    });
+                    if needs_async {
                         call_args.push(WirInstr::I32Const(2048));
                     }
                     Some(WirInstr::Call {
@@ -4272,19 +4270,15 @@ impl FunctionTranslator<'_, '_> {
         CmFuturePayload::Trailers
     }
 
-    /// Determine the WASI package source for an ErrorCode type.
+    /// Determine the WASI package source for an `ErrorCode` type.
     ///
     /// Uses the WASI registry to find which package (cli, filesystem, http, sockets)
-    /// defines this ErrorCode. Falls back to "cli" if not found.
+    /// defines this `ErrorCode`. Falls back to "cli" if not found.
     fn error_code_source(&self, error_type_id: TypeId) -> String {
         // Try to get the type's module source
         match self.type_table.get(error_type_id) {
-            ResolvedType::Enum {
-                module_source, ..
-            }
-            | ResolvedType::Variant {
-                module_source, ..
-            } => {
+            ResolvedType::Enum { module_source, .. }
+            | ResolvedType::Variant { module_source, .. } => {
                 // Extract package from module source (e.g., "wasi:cli/types.wado" → "cli")
                 let source = module_source.to_string();
                 if source.contains("filesystem") {
@@ -4568,11 +4562,9 @@ impl FunctionTranslator<'_, '_> {
             vec![WirType::I32],
             vec![],
         );
-        let subtask_drop_id = self.ctx.ensure_canonical(
-            CanonicalIntrinsic::SubtaskDrop,
-            vec![WirType::I32],
-            vec![],
-        );
+        let subtask_drop_id =
+            self.ctx
+                .ensure_canonical(CanonicalIntrinsic::SubtaskDrop, vec![WirType::I32], vec![]);
         // Case 1: BLOCKED (-1) → wait on future handle, then retry future-read
         instrs.push(WirInstr::If {
             condition: Box::new(WirInstr::I32Eq(
@@ -4584,7 +4576,7 @@ impl FunctionTranslator<'_, '_> {
             )),
             result: None,
             then_body: {
-                let evt = evt_ptr_name.clone();
+                let evt = evt_ptr_name;
                 let ws_name = format!("__fr_ws_{suffix}");
                 vec![
                     WirInstr::DeclareLocal {
@@ -4669,10 +4661,10 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::LocalSet {
                         name: result_name.clone(),
                         value: Box::new(WirInstr::Call {
-                            func_id: future_read_id.clone(),
+                            func_id: future_read_id,
                             args: vec![
                                 WirInstr::LocalGet {
-                                    name: handle_name.clone(),
+                                    name: handle_name,
                                     result_ty: WirType::I32,
                                 },
                                 WirInstr::LocalGet {
@@ -4760,7 +4752,7 @@ impl FunctionTranslator<'_, '_> {
                         }),
                     },
                     WirInstr::Drop(Box::new(WirInstr::Call {
-                        func_id: ws_wait_id.clone(),
+                        func_id: ws_wait_id,
                         args: vec![
                             WirInstr::LocalGet {
                                 name: ws_name2.clone(),

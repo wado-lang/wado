@@ -17,8 +17,8 @@ use tokio::sync::Mutex;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
-use wasmtime_wasi_http::p3::bindings::Service;
 use wasmtime_wasi_http::WasiHttpCtx;
+use wasmtime_wasi_http::p3::bindings::Service;
 use wasmtime_wasi_http::p3::{Request as WasiRequest, WasiHttpCtxView, WasiHttpView};
 
 use crate::args::{self, CliExit};
@@ -253,7 +253,8 @@ async fn handle_http_request(
         async {
             let res = rx.await?;
             let (parts, body) = res.into_parts();
-            let body = BodyExt::collect(body).await
+            let body = BodyExt::collect(body)
+                .await
                 .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?;
             anyhow::Ok(http::Response::from_parts(parts, body.to_bytes()))
         }

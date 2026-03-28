@@ -55,13 +55,13 @@ array array<i32> (mut i32);
 
 array array<String> (mut ref String);
 
-struct ArrayIter<String> {  // from core:serde  // ArrayIter<T> with T=String
+struct ArrayIter<String> {  // from wasi:cli/types.wado  // ArrayIter<T> with T=String
     mut repr: ref array<String>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<i32> {  // from core:serde  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // from wasi:cli/types.wado  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -126,8 +126,6 @@ type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
 type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:internal/wait_for_subtask" = fn(i32);
-
 type "functype/core:internal/log_stderr" = fn(ref String);
 
 type "functype/core:internal/panic" = fn(ref String);
@@ -172,7 +170,7 @@ type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
 type "functype/JsonSeqSerializer^SerializeSeq::element<String>" = fn(ref "core:json/JsonSeqSerializer", ref String) -> ref null "core:serde/SerializeError";
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:serde/ArrayIter<String>") -> ref null String;
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref "wasi:cli/types.wado/ArrayIter<String>") -> ref null String;
 
 type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
@@ -188,9 +186,9 @@ type "functype/String^Inspect::inspect" = fn(ref String, ref Formatter);
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
-type "functype/wasi/subtask-drop" = fn(i32);
-
 type "functype/wasi/stream-new" = fn() -> i64;
+
+type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/core/json/from_string<i32>" = fn(ref String) -> [i32, i32, ref null "core:serde/DeserializeError"];
 
@@ -204,7 +202,7 @@ type "functype/mul_pow10" = fn(i32) -> [u64, u64];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:serde/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "wasi:cli/types.wado/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/core:json/JsonDeserializer::parse_i32_direct" = fn(ref "core:json/JsonDeserializer") -> [i32, i32, ref null "core:serde/DeserializeError"];
 
@@ -220,8 +218,6 @@ type "functype/Array<String>^Serialize::serialize<JsonSerializer>" = fn(ref Arra
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref null "core:serde/SerializeError";
 
-type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
-
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
 import fn task-return from "wasi/task-return";
@@ -232,8 +228,8 @@ import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import memory (1) from "mem/memory";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
-import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
+import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn __test_0_serialize_array_string_() {
     let __local_0: ref Array<String>;
@@ -523,37 +519,19 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
-    let handle: i32;
-    let subtask: i32;
-    let ws: i32;
-    let __local_4: i32;
-    handle = packed >> 4;
-    if handle != 0 {
-        subtask = handle;
-        ws = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_4 = subtask;
-            "wasi/waitable-join"(__local_4, ws);
-            break __inline_cm_waitable_join_0: __local_4;
-        });
-        "core:internal/cm_waitable_set_wait"(ws);
-        "wasi/subtask-drop"(subtask);
-        "wasi/waitable-set-drop"(ws);
-    };
-}
-
 fn "core:internal/log_stderr"(message) {  // from core:internal
     let rx: i32;
     let tx: i32;
-    let subtask: i32;
+    let future_handle: i32;
+    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
-    "core:internal/wait_for_subtask"(subtask);
+    future = future_handle;
+    "wasi/future-drop-readable:transmission-cli"(future);
 }
 
 fn "core:internal/panic"(message) {  // from core:internal
@@ -601,48 +579,40 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
-    let out_ptr: i32;
-    out_ptr = "mem/realloc"(0, 0, 4, 8);
-    drop("wasi/waitable-set-wait"(ws, out_ptr));
-    drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return;
-}
-
 fn pow10_coarse(i) {
-    b19: block {
-        b20: block {
-            b21: block {
-                b22: block {
-                    b23: block {
-                        b24: block {
-                            b25: block {
-                                b26: block {
-                                    b27: block {
-                                        b28: block {
-                                            b29: block {
-                                                b30: block {
-                                                    b31: block {
-                                                        b32: block {
-                                                            b33: block {
-                                                                b34: block {
-                                                                    b35: block {
-                                                                        b36: block {
-                                                                            b37: block {
-                                                                                b38: block {
-                                                                                    b39: block {
-                                                                                        b40: block {
-                                                                                            b41: block {
-                                                                                                b42: block {
-                                                                                                    b43: block {
-                                                                                                        b44: block {
-                                                                                                            b45: block {
-                                                                                                                b46: block {
+    b18: block {
+        b19: block {
+            b20: block {
+                b21: block {
+                    b22: block {
+                        b23: block {
+                            b24: block {
+                                b25: block {
+                                    b26: block {
+                                        b27: block {
+                                            b28: block {
+                                                b29: block {
+                                                    b30: block {
+                                                        b31: block {
+                                                            b32: block {
+                                                                b33: block {
+                                                                    b34: block {
+                                                                        b35: block {
+                                                                            b36: block {
+                                                                                b37: block {
+                                                                                    b38: block {
+                                                                                        b39: block {
+                                                                                            b40: block {
+                                                                                                b41: block {
+                                                                                                    b42: block {
+                                                                                                        b43: block {
+                                                                                                            b44: block {
+                                                                                                                b45: block {
                                                                                                                     br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26] default=0;
                                                                                                                 };
                                                                                                                 "core:internal/unreachable"();
                                                                                                                 unreachable;
-                                                                                                                break b19;
+                                                                                                                break b18;
                                                                                                             };
                                                                                                             return -9202643304706469457_i64; -2331608335343510137_i64;
                                                                                                         };
@@ -699,118 +669,118 @@ fn pow10_coarse(i) {
 }
 
 fn pow10_fine(i) {
-    return b47: block -> u64 {
-        b48: block {
-            b49: block {
-                b50: block {
-                    b51: block {
-                        b52: block {
-                            b53: block {
-                                b54: block {
-                                    b55: block {
-                                        b56: block {
-                                            b57: block {
-                                                b58: block {
-                                                    b59: block {
-                                                        b60: block {
-                                                            b61: block {
-                                                                b62: block {
-                                                                    b63: block {
-                                                                        b64: block {
-                                                                            b65: block {
-                                                                                b66: block {
-                                                                                    b67: block {
-                                                                                        b68: block {
-                                                                                            b69: block {
-                                                                                                b70: block {
-                                                                                                    b71: block {
-                                                                                                        b72: block {
-                                                                                                            b73: block {
-                                                                                                                b74: block {
-                                                                                                                    b75: block {
+    return b46: block -> u64 {
+        b47: block {
+            b48: block {
+                b49: block {
+                    b50: block {
+                        b51: block {
+                            b52: block {
+                                b53: block {
+                                    b54: block {
+                                        b55: block {
+                                            b56: block {
+                                                b57: block {
+                                                    b58: block {
+                                                        b59: block {
+                                                            b60: block {
+                                                                b61: block {
+                                                                    b62: block {
+                                                                        b63: block {
+                                                                            b64: block {
+                                                                                b65: block {
+                                                                                    b66: block {
+                                                                                        b67: block {
+                                                                                            b68: block {
+                                                                                                b69: block {
+                                                                                                    b70: block {
+                                                                                                        b71: block {
+                                                                                                            b72: block {
+                                                                                                                b73: block {
+                                                                                                                    b74: block {
                                                                                                                         br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27] default=0;
                                                                                                                     };
                                                                                                                     "core:internal/unreachable"();
                                                                                                                     unreachable;
-                                                                                                                    break b47;
+                                                                                                                    break b46;
                                                                                                                 };
                                                                                                                 -9223372036854775808_i64;
-                                                                                                                break b47;
+                                                                                                                break b46;
                                                                                                             };
                                                                                                             -6917529027641081856_i64;
-                                                                                                            break b47;
+                                                                                                            break b46;
                                                                                                         };
                                                                                                         -4035225266123964416_i64;
-                                                                                                        break b47;
+                                                                                                        break b46;
                                                                                                     };
                                                                                                     -432345564227567616_i64;
-                                                                                                    break b47;
+                                                                                                    break b46;
                                                                                                 };
                                                                                                 -7187745005283311616_i64;
-                                                                                                break b47;
+                                                                                                break b46;
                                                                                             };
                                                                                             -4372995238176751616_i64;
-                                                                                            break b47;
+                                                                                            break b46;
                                                                                         };
                                                                                         -854558029293551616_i64;
-                                                                                        break b47;
+                                                                                        break b46;
                                                                                     };
                                                                                     -7451627795949551616_i64;
-                                                                                    break b47;
+                                                                                    break b46;
                                                                                 };
                                                                                 -4702848726509551616_i64;
-                                                                                break b47;
+                                                                                break b46;
                                                                             };
                                                                             -1266874889709551616_i64;
-                                                                            break b47;
+                                                                            break b46;
                                                                         };
                                                                         -7709325833709551616_i64;
-                                                                        break b47;
+                                                                        break b46;
                                                                     };
                                                                     -5024971273709551616_i64;
-                                                                    break b47;
+                                                                    break b46;
                                                                 };
                                                                 -1669528073709551616_i64;
-                                                                break b47;
+                                                                break b46;
                                                             };
                                                             -7960984073709551616_i64;
-                                                            break b47;
+                                                            break b46;
                                                         };
                                                         -5339544073709551616_i64;
-                                                        break b47;
+                                                        break b46;
                                                     };
                                                     -2062744073709551616_i64;
-                                                    break b47;
+                                                    break b46;
                                                 };
                                                 -8206744073709551616_i64;
-                                                break b47;
+                                                break b46;
                                             };
                                             -5646744073709551616_i64;
-                                            break b47;
+                                            break b46;
                                         };
                                         -2446744073709551616_i64;
-                                        break b47;
+                                        break b46;
                                     };
                                     -8446744073709551616_i64;
-                                    break b47;
+                                    break b46;
                                 };
                                 -5946744073709551616_i64;
-                                break b47;
+                                break b46;
                             };
                             -2821744073709551616_i64;
-                            break b47;
+                            break b46;
                         };
                         -8681119073709551616_i64;
-                        break b47;
+                        break b46;
                     };
                     -6239712823709551616_i64;
-                    break b47;
+                    break b46;
                 };
                 -3187955011209551616_i64;
-                break b47;
+                break b46;
             };
             -8910000909647051616_i64;
-            break b47;
+            break b46;
         };
         -6525815118631426616_i64;
     };
@@ -959,13 +929,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l85: loop {
+            l84: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l85;
+                continue l84;
             };
         };
     };
@@ -982,14 +952,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l89: loop {
+                l88: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l89;
+                    continue l88;
                 };
             };
         };
@@ -1011,8 +981,8 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
     let lo: i32;
     String::append_char(buf, 34);
     __iter_2 = StrCharIter { repr: s.repr, used: s.used, byte_index: 0 };
-    b92: block {
-        l93: loop {
+    b91: block {
+        l92: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -1047,9 +1017,9 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
                     String::append_char(buf, c);
                 };
             } else {
-                break b92;
+                break b91;
             };
-            continue l93;
+            continue l92;
         };
     };
     String::append_char(buf, 34);
@@ -1140,7 +1110,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l108: loop {
+            l107: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1148,7 +1118,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l108;
+                continue l107;
             };
         };
     };
@@ -1229,7 +1199,7 @@ fn String::append_char(self, c) {
 fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
     let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
     let seq_3: ref "core:json/JsonSeqSerializer";
-    let __iter_4: ref "core:serde/ArrayIter<i32>";
+    let __iter_4: ref "wasi:cli/types.wado/ArrayIter<i32>";
     let r: ref null "core:serde/SerializeError";
     let e_7: ref "core:serde/SerializeError";
     let e_8: ref "core:serde/SerializeError";
@@ -1242,12 +1212,12 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
     };
     if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(seq_2) {
         seq_3 = value_copy "core:json/JsonSeqSerializer"(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(seq_2).payload_0);
-        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "core:serde/ArrayIter<i32>" {
+        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "wasi:cli/types.wado/ArrayIter<i32>" {
             __local_16 = self;
-            break __inline_Array_i32__IntoIterator__into_iter_2: "core:serde/ArrayIter<i32>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
+            break __inline_Array_i32__IntoIterator__into_iter_2: "wasi:cli/types.wado/ArrayIter<i32>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
         };
-        b120: block {
-            l121: loop {
+        b119: block {
+            l120: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: i32;
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -1258,9 +1228,9 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
                         return e_7;
                     };
                 } else {
-                    break b120;
+                    break b119;
                 };
-                continue l121;
+                continue l120;
             };
         };
         return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref null "core:serde/SerializeError" {
@@ -1327,13 +1297,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l129: loop {
+            l128: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l129;
+                continue l128;
             };
         };
     };
@@ -1343,7 +1313,7 @@ fn Array<i32>::grow(self) {
 fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
     let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
     let seq_3: ref "core:json/JsonSeqSerializer";
-    let __iter_4: ref "core:serde/ArrayIter<String>";
+    let __iter_4: ref "wasi:cli/types.wado/ArrayIter<String>";
     let item: ref String;
     let r: ref null "core:serde/SerializeError";
     let e_7: ref "core:serde/SerializeError";
@@ -1358,12 +1328,12 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
     };
     if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(seq_2) {
         seq_3 = value_copy "core:json/JsonSeqSerializer"(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(seq_2).payload_0);
-        __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref "core:serde/ArrayIter<String>" {
+        __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref "wasi:cli/types.wado/ArrayIter<String>" {
             __local_16 = self;
-            break __inline_Array_String__IntoIterator__into_iter_2: "core:serde/ArrayIter<String>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
+            break __inline_Array_String__IntoIterator__into_iter_2: "wasi:cli/types.wado/ArrayIter<String>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
         };
-        b132: block {
-            l133: loop {
+        b131: block {
+            l132: loop {
                 __pattern_temp_1 = ArrayIter<String>^Iterator::next(__iter_4);
                 if ref.is_null(__pattern_temp_1) == 0 {
                     item = value_copy String(ref.as_non_null(__pattern_temp_1));
@@ -1373,9 +1343,9 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
                         return e_7;
                     };
                 } else {
-                    break b132;
+                    break b131;
                 };
-                continue l133;
+                continue l132;
             };
         };
         return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref null "core:serde/SerializeError" {
@@ -1445,13 +1415,13 @@ fn Array<String>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l141: loop {
+            l140: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
                 i = i + 1;
-                continue l141;
+                continue l140;
             };
         };
     };
@@ -1481,11 +1451,11 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
     _licm_used_6 = _licm_input_5.used;
     _licm_repr_7 = _licm_input_5.repr;
     _hfs_pos_8 = self.pos;
-    b143: block {
-        l144: loop {
+    b142: block {
+        l143: loop {
             if (_hfs_pos_8 < _licm_used_6) == 0 {
                 self.pos = _hfs_pos_8;
-                break b143;
+                break b142;
             };
             b = __inline_String__get_byte_1: block -> u8 {
                 __local_4 = _hfs_pos_8;
@@ -1510,7 +1480,7 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
                 self.pos = _hfs_pos_8;
                 return;
             };
-            continue l144;
+            continue l143;
         };
     };
     self.pos = _hfs_pos_8;
@@ -1602,11 +1572,11 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     _licm_used_47 = _licm_input_46.used;
     _licm_repr_48 = _licm_input_46.repr;
     _hfs_pos_51 = self.pos;
-    b155: block {
-        l156: loop {
+    b154: block {
+        l155: loop {
             if (_hfs_pos_51 < _licm_used_47) == 0 {
                 self.pos = _hfs_pos_51;
-                break b155;
+                break b154;
             };
             b = __inline_String__get_byte_8: block -> u8 {
                 __local_28 = _hfs_pos_51;
@@ -1634,12 +1604,12 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                 if b == 46 {
                     _hfs_pos_51 = _hfs_pos_51 + 1;
                     _hfs_pos_49 = _hfs_pos_51;
-                    b164: block {
-                        l165: loop {
+                    b163: block {
+                        l164: loop {
                             if (_hfs_pos_49 < _licm_used_47) == 0 {
                                 _hfs_pos_51 = _hfs_pos_49;
                                 self.pos = _hfs_pos_51;
-                                break b164;
+                                break b163;
                             };
                             b2 = __inline_String__get_byte_10: block -> u8 {
                                 __local_31 = _hfs_pos_49;
@@ -1658,9 +1628,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                             } else {
                                 _hfs_pos_51 = _hfs_pos_49;
                                 self.pos = _hfs_pos_51;
-                                break b164;
+                                break b163;
                             };
-                            continue l165;
+                            continue l164;
                         };
                     };
                     _hfs_pos_51 = _hfs_pos_49;
@@ -1693,12 +1663,12 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                             };
                         };
                         _hfs_pos_50 = _hfs_pos_51;
-                        b175: block {
-                            l176: loop {
+                        b174: block {
+                            l175: loop {
                                 if (_hfs_pos_50 < _licm_used_47) == 0 {
                                     _hfs_pos_51 = _hfs_pos_50;
                                     self.pos = _hfs_pos_51;
-                                    break b175;
+                                    break b174;
                                 };
                                 b3 = __inline_String__get_byte_16: block -> u8 {
                                     __local_40 = _hfs_pos_50;
@@ -1716,9 +1686,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                 } else {
                                     _hfs_pos_51 = _hfs_pos_50;
                                     self.pos = _hfs_pos_51;
-                                    break b175;
+                                    break b174;
                                 };
-                                continue l176;
+                                continue l175;
                             };
                         };
                         _hfs_pos_51 = _hfs_pos_50;
@@ -1757,9 +1727,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                 return 0; builtin::i32_trunc_f64_s(v_signed); ref.null none;
             } else {
                 self.pos = _hfs_pos_51;
-                break b155;
+                break b154;
             };
-            continue l156;
+            continue l155;
         };
     };
     self.pos = _hfs_pos_51;
@@ -1776,13 +1746,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l187: loop {
+            l186: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l187;
+                continue l186;
             };
         };
     };
@@ -1885,8 +1855,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b206: block {
-        l207: loop {
+    b205: block {
+        l206: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -1911,9 +1881,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b206;
+                break b205;
             };
-            continue l207;
+            continue l206;
         };
     };
     String::append_char(f.buf, 34);

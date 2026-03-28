@@ -34,8 +34,7 @@ export fn run() with Stdout, Stderr, Preopens {
         let data: Array<u8> = [82, 69, 78, 65, 77, 69];
         write_tx.write(data);
         write_tx.drop();
-        subtask.read();
-        subtask.drop();
+        wait_for_subtask(subtask);
         println("rename: source file created");
     } else {
         eprintln("rename: failed to create source file");
@@ -127,7 +126,7 @@ export fn run() with Stdout, Stderr, Preopens {
 
 __DATA__
 {
-    "TODO": true, "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
     "stdout_contains": [
         "rename: source file created",
         "rename: rename_at succeeded",

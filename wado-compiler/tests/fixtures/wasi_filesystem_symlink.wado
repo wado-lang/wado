@@ -77,10 +77,8 @@ export fn run() with Stdout, Stderr, Preopens {
         }
         read_stream.drop();
         out_tx.drop();
-        sub.read();
-        sub.drop();
-        read_future.read();
-        read_future.drop();
+        wait_for_subtask(sub);
+        wait_for_subtask(read_future);
     } else {
         eprintln("symlink follow: failed to open");
     }
@@ -130,7 +128,7 @@ fn test_link_at(dir: &Descriptor) with Stdout, Stderr {
 
 __DATA__
 {
-    "TODO": true, "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
     "stdout_contains": [
         "all symlink tests passed"
     ]

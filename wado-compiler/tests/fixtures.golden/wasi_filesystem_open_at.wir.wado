@@ -153,6 +153,8 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
+type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
+
 type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
@@ -171,6 +173,7 @@ import fn wasi:filesystem/Descriptor::open_at from "wasi/wasi:filesystem/Descrip
 import memory (1) from "mem/memory";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
+import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout, Stderr, Preopens {
@@ -289,7 +292,7 @@ fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     let __local_16: i32;
     let __local_17: ref array<u8>;
     __path_packed = "core:internal/cm_lower_string"(path);
-    __async_outptr = "mem/realloc"(0, 0, 4, 8);
+    __async_outptr = "mem/realloc"(0, 0, 4, 20);
     __params_buf = "mem/realloc"(0, 0, 4, 20);
     builtin::store_i32(__params_buf, self);
     builtin::store_u8(__params_buf + 4, path_flags);
@@ -332,7 +335,7 @@ fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
         };
         __result_val = Result<Descriptor,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
-    drop("mem/realloc"(__async_outptr, 8, 4, 0));
+    drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
 }
 
@@ -361,27 +364,27 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
 fn "core:cli/println"(message) with Stdout {  // from core:cli
     let rx: i32;
     let tx: i32;
-    let subtask: i32;
+    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_binding__Stdout_write_via_stream(rx);
+    future = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
-    "core:internal/wait_for_subtask"(subtask);
+    "wasi/future-drop-readable:transmission-cli"(future);
 }
 
 fn "core:cli/eprintln"(message) with Stderr {  // from core:cli
     let rx: i32;
     let tx: i32;
-    let subtask: i32;
+    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_binding__Stderr_write_via_stream(rx);
+    future = __cm_binding__Stderr_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
-    "core:internal/wait_for_subtask"(subtask);
+    "wasi/future-drop-readable:transmission-cli"(future);
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
@@ -461,14 +464,16 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 fn "core:internal/log_stderr"(message) {  // from core:internal
     let rx: i32;
     let tx: i32;
-    let subtask: i32;
+    let future_handle: i32;
+    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
-    "core:internal/wait_for_subtask"(subtask);
+    future = future_handle;
+    "wasi/future-drop-readable:transmission-cli"(future);
 }
 
 fn "core:internal/panic"(message) {  // from core:internal

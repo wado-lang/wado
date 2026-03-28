@@ -90,9 +90,9 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
         wir_module.needed_canonicals.iter().cloned().collect();
 
     // HTTP response types for future<T> canonical intrinsics
-    let needs_trailers_future = all_canonical_intrinsics.iter().any(|i| {
-        matches!(i.future_payload(), Some(CmFuturePayload::Trailers))
-    });
+    let needs_trailers_future = all_canonical_intrinsics
+        .iter()
+        .any(|i| matches!(i.future_payload(), Some(CmFuturePayload::Trailers)));
     // Collect unique transmission sources (e.g., "cli", "filesystem")
     let transmission_sources: IndexSet<String> = all_canonical_intrinsics
         .iter()
@@ -113,11 +113,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
         // Build additional transmission types for other error-code sources
         for source in &transmission_sources {
             if source != "http" && !map.contains_key(source.as_str()) {
-                let ft = build_transmission_future_type_for(
-                    &mut builder,
-                    &mut ctx,
-                    source,
-                );
+                let ft = build_transmission_future_type_for(&mut builder, &mut ctx, source);
                 map.insert(source.clone(), ft);
             }
         }
@@ -125,11 +121,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
     } else if !transmission_sources.is_empty() {
         let mut map: IndexMap<String, u32> = IndexMap::default();
         for source in &transmission_sources {
-            let ft = build_transmission_future_type_for(
-                &mut builder,
-                &mut ctx,
-                source,
-            );
+            let ft = build_transmission_future_type_for(&mut builder, &mut ctx, source);
             map.insert(source.clone(), ft);
         }
         (0, map)
@@ -388,7 +380,9 @@ fn emit_cm_val_type(
                 enum_export_indices,
                 ctx,
             );
-            let ok_type = if !g.args.is_empty() {
+            let ok_type = if g.args.is_empty() {
+                None
+            } else {
                 let ok = &g.args[0];
                 if let Type::Named(named) = ok
                     && named.name == "()"
@@ -397,7 +391,9 @@ fn emit_cm_val_type(
                 } else if let Type::Named(named) = ok
                     && own_resource_type_indices.contains_key(&named.name)
                 {
-                    Some(ComponentValType::Type(own_resource_type_indices[&named.name]))
+                    Some(ComponentValType::Type(
+                        own_resource_type_indices[&named.name],
+                    ))
                 } else if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
                     // Complex ok types (records, options, variants, etc.) use shared type gen
                     type_gen.set_next_idx(*local_type_idx);
@@ -419,8 +415,6 @@ fn emit_cm_val_type(
                         own_resource_type_indices,
                     ))
                 }
-            } else {
-                None
             };
             instance_type
                 .ty()
@@ -449,10 +443,8 @@ fn emit_cm_val_type(
             ComponentValType::Type(idx)
         }
         Type::Generic(g) if g.name == "Option" && !g.args.is_empty() => {
-            let element_val_type = type_to_cm_primitive_with_resources(
-                &g.args[0],
-                own_resource_type_indices,
-            );
+            let element_val_type =
+                type_to_cm_primitive_with_resources(&g.args[0], own_resource_type_indices);
             instance_type.ty().defined_type().option(element_val_type);
             let idx = *local_type_idx;
             *local_type_idx += 1;
@@ -492,10 +484,10 @@ fn emit_cm_val_type(
         }
         _ => {
             // Check enum/variant export indices first (e.g. DescriptorType)
-            if let Type::Named(named) = ty {
-                if let Some(&idx) = enum_export_indices.get(&named.name) {
-                    return ComponentValType::Type(idx);
-                }
+            if let Type::Named(named) = ty
+                && let Some(&idx) = enum_export_indices.get(&named.name)
+            {
+                return ComponentValType::Type(idx);
             }
             type_to_cm_primitive_with_resources(ty, own_resource_type_indices)
         }
@@ -641,7 +633,6 @@ fn wado_type_to_cm_val_type(
     }
 }
 
-
 fn build_memory_module(
     strip_names: bool,
     wasm_mod: Option<&crate::wir::WasmModuleInfo>,
@@ -710,9 +701,9 @@ fn embed_bundled_modules(
 
 /// Build `future<result<_, error-code>>` (transmission) type without HTTP-specific types.
 ///
-/// Used when only `CmFuturePayload::Transmission` is needed (e.g., write_via_stream)
+/// Used when only `CmFuturePayload::Transmission` is needed (e.g., `write_via_stream`)
 /// but no HTTP types are imported.
-/// Build `future<result<_, error-code>>` type for a specific ErrorCode source.
+/// Build `future<result<_, error-code>>` type for a specific `ErrorCode` source.
 ///
 /// Different WASI interfaces (cli, filesystem, http, sockets) have different
 /// error-code types, so each needs its own transmission future type.
@@ -915,7 +906,7 @@ fn emit_canonical_intrinsics(
                 let ft = resolve_future_type(
                     payload.clone(),
                     trailers_future_type,
-                    &transmission_future_types,
+                    transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_new(ft);
@@ -924,7 +915,7 @@ fn emit_canonical_intrinsics(
                 let ft = resolve_future_type(
                     payload.clone(),
                     trailers_future_type,
-                    &transmission_future_types,
+                    transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_write(
@@ -940,7 +931,7 @@ fn emit_canonical_intrinsics(
                 let ft = resolve_future_type(
                     payload.clone(),
                     trailers_future_type,
-                    &transmission_future_types,
+                    transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_read(
@@ -956,7 +947,7 @@ fn emit_canonical_intrinsics(
                 let ft = resolve_future_type(
                     payload.clone(),
                     trailers_future_type,
-                    &transmission_future_types,
+                    transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_cancel_read(ft, false);
@@ -965,7 +956,7 @@ fn emit_canonical_intrinsics(
                 let ft = resolve_future_type(
                     payload.clone(),
                     trailers_future_type,
-                    &transmission_future_types,
+                    transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_cancel_write(ft, false);
@@ -974,7 +965,7 @@ fn emit_canonical_intrinsics(
                 let ft = resolve_future_type(
                     payload.clone(),
                     trailers_future_type,
-                    &transmission_future_types,
+                    transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_drop_writable(ft);
@@ -983,7 +974,7 @@ fn emit_canonical_intrinsics(
                 let ft = resolve_future_type(
                     payload.clone(),
                     trailers_future_type,
-                    &transmission_future_types,
+                    transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_drop_readable(ft);
@@ -1050,9 +1041,11 @@ fn resolve_future_type(
 ) -> u32 {
     match payload {
         CmFuturePayload::Trailers => trailers_future_type,
-        CmFuturePayload::Transmission(ref source) => *transmission_future_types
-            .get(source)
-            .unwrap_or_else(|| panic!("transmission future type not registered for source: {source}")),
+        CmFuturePayload::Transmission(ref source) => {
+            *transmission_future_types.get(source).unwrap_or_else(|| {
+                panic!("transmission future type not registered for source: {source}")
+            })
+        }
         CmFuturePayload::Scalar(scalar) => scalar_future_types
             .iter()
             .find(|(s, _)| *s == scalar)
@@ -1490,8 +1483,7 @@ fn generate_wasi_imports(
             for (name, &idx) in &variant_export_indices {
                 // shared_type_gen uses CM kebab-case names for cache keys
                 if let Some((variant_cm_name, _)) = interface_variants.get(name) {
-                    shared_type_gen
-                        .register_existing(&format!("variant:{variant_cm_name}"), idx);
+                    shared_type_gen.register_existing(&format!("variant:{variant_cm_name}"), idx);
                 }
             }
 
@@ -2528,7 +2520,9 @@ fn lower_wasi_functions(
 
             let mut options: Vec<CanonicalOption> = Vec::new();
 
-            if func.is_async {
+            // CM spec requires async for canon lower when function signature
+            // contains stream<T> or future<T> (Explainer.md line 1328).
+            if func.is_async || func.has_streaming_param() || func.return_type_has_future() {
                 options.push(CanonicalOption::Async);
             }
 

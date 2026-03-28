@@ -71,8 +71,6 @@ type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
 type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:internal/wait_for_subtask" = fn(i32);
-
 type "functype/core:internal/log_stderr" = fn(ref String);
 
 type "functype/core:internal/panic" = fn(ref String);
@@ -117,11 +115,9 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
-type "functype/wasi/subtask-drop" = fn(i32);
+type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/i128::sub" = fn(ref i128, ref i128) -> [u64, i64];
-
-type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -135,7 +131,7 @@ import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_vi
 import memory (1) from "mem/memory";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
-import fn subtask-drop from "wasi/subtask-drop";
+import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn run() with Stdout {
     let x: ref u128;
@@ -217,14 +213,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
 fn "core:cli/println"(message) with Stdout {  // from core:cli
     let rx: i32;
     let tx: i32;
-    let subtask: i32;
+    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_binding__Stdout_write_via_stream(rx);
+    future = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
-    "core:internal/wait_for_subtask"(subtask);
+    "wasi/future-drop-readable:transmission-cli"(future);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
@@ -261,37 +257,19 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
-    let handle: i32;
-    let subtask: i32;
-    let ws: i32;
-    let __local_4: i32;
-    handle = packed >> 4;
-    if handle != 0 {
-        subtask = handle;
-        ws = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_4 = subtask;
-            "wasi/waitable-join"(__local_4, ws);
-            break __inline_cm_waitable_join_0: __local_4;
-        });
-        "core:internal/cm_waitable_set_wait"(ws);
-        "wasi/subtask-drop"(subtask);
-        "wasi/waitable-set-drop"(ws);
-    };
-}
-
 fn "core:internal/log_stderr"(message) {  // from core:internal
     let rx: i32;
     let tx: i32;
-    let subtask: i32;
+    let future_handle: i32;
+    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
-    "core:internal/wait_for_subtask"(subtask);
+    future = future_handle;
+    "wasi/future-drop-readable:transmission-cli"(future);
 }
 
 fn "core:internal/panic"(message) {  // from core:internal
@@ -335,14 +313,6 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
-    let out_ptr: i32;
-    out_ptr = "mem/realloc"(0, 0, 4, 8);
-    drop("wasi/waitable-set-wait"(ws, out_ptr));
-    drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return;
-}
-
 fn u128::div_rem(self, divisor) {
     let quotient: ref u128;
     let remainder: ref u128;
@@ -376,10 +346,10 @@ fn u128::div_rem(self, divisor) {
     quotient = u128 { low: 0_i64, high: 0_i64 };
     remainder = u128 { low: 0_i64, high: 0_i64 };
     i = 127;
-    b12: block {
-        l13: loop {
+    b11: block {
+        l12: loop {
             if (i >= 0) == 0 {
-                break b12;
+                break b11;
             };
             remainder = u128^Shl::shl(remainder, 1);
             bit = u128::get_bit(self, i);
@@ -391,7 +361,7 @@ fn u128::div_rem(self, divisor) {
                 quotient = u128::set_bit(quotient, i);
             };
             i = i - 1;
-            continue l13;
+            continue l12;
         };
     };
     return "tuple/[u128, u128]" { 0: quotient, 1: remainder };
@@ -466,7 +436,7 @@ fn u128::fmt_decimal(self, f) {
     __for_0: block {
         temp_7 = value_copy u128(self);
         block {
-            l22: loop {
+            l21: loop {
                 if (u128^Ord::cmp(temp_7, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_0;
                 };
@@ -476,7 +446,7 @@ fn u128::fmt_decimal(self, f) {
                     __local_21 = u128::div_rem(__local_19, ten);
                     break __inline_u128_Div__div_5: __local_21.0;
                 };
-                continue l22;
+                continue l21;
             };
         };
     };
@@ -489,7 +459,7 @@ fn u128::fmt_decimal(self, f) {
     __for_1: block {
         temp_11 = value_copy u128(self);
         block {
-            l25: loop {
+            l24: loop {
                 if (u128^Ord::cmp(temp_11, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_1;
                 };
@@ -508,7 +478,7 @@ fn u128::fmt_decimal(self, f) {
                     __local_30 = u128::div_rem(__local_28, ten);
                     break __inline_u128_Div__div_10: __local_30.0;
                 };
-                continue l25;
+                continue l24;
             };
         };
     };
@@ -617,7 +587,7 @@ fn i128::fmt_decimal(self, f) {
     __for_2: block {
         temp_9 = value_copy u128(abs_val);
         block {
-            l38: loop {
+            l37: loop {
                 if (u128^Ord::cmp(temp_9, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_2;
                 };
@@ -627,7 +597,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_21 = u128::div_rem(__local_19, ten);
                     break __inline_u128_Div__div_4: __local_21.0;
                 };
-                continue l38;
+                continue l37;
             };
         };
     };
@@ -640,7 +610,7 @@ fn i128::fmt_decimal(self, f) {
     __for_3: block {
         temp_13 = value_copy u128(abs_val);
         block {
-            l41: loop {
+            l40: loop {
                 if (u128^Ord::cmp(temp_13, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_3;
                 };
@@ -659,7 +629,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_30 = u128::div_rem(__local_28, ten);
                     break __inline_u128_Div__div_9: __local_30.0;
                 };
-                continue l41;
+                continue l40;
             };
         };
     };
@@ -748,13 +718,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l52: loop {
+            l51: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l52;
+                continue l51;
             };
         };
     };

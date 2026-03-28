@@ -272,7 +272,7 @@ type "functype/Array<Array<u8>>::append" = fn(ref Array<Array<u8>>, ref Array<u8
 
 type "functype/Array<Array<u8>>::grow" = fn(ref Array<Array<u8>>);
 
-type "functype/wasi/future-new:transmission" = fn() -> i64;
+type "functype/wasi/future-new:transmission-http" = fn() -> i64;
 
 type "functype/wasi/stream-drop-readable" = fn(i32);
 
@@ -300,7 +300,7 @@ import fn wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi:http/Request::consume_body from "wasi/wasi:http/Request::consume_body";
 import fn wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
-import fn future-new:transmission from "wasi/future-new:transmission";
+import fn future-new:transmission-http from "wasi/future-new:transmission-http";
 import fn stream-drop-readable from "wasi/stream-drop-readable";
 import fn future-new from "wasi/future-new";
 import fn stream-new from "wasi/stream-new";
@@ -457,7 +457,7 @@ fn handle(request) {
     let __len_167: i32;
     let __pattern_temp_5: ref null Array<u8>;
     let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/future-new:transmission"();
+    __pair_temp_1 = "wasi/future-new:transmission-http"();
     res_future = builtin::i32_wrap_i64(__pair_temp_1);
     let __sroa___pattern_temp_1_0: i32;
     let __sroa___pattern_temp_1_1: i32;

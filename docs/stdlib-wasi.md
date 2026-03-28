@@ -88,7 +88,7 @@ reads is implementation-specific.
 
 #### `pub effect Stdout`
 
-##### `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
+##### `fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
 
 Write the given stream to stdout.
 
@@ -101,7 +101,7 @@ dropped and this function will return an error-code.
 
 #### `pub effect Stderr`
 
-##### `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
+##### `fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
 
 Write the given stream to stderr.
 
@@ -248,16 +248,395 @@ Truncate file to size 0, similar to `O_TRUNC` in POSIX.
 
 ### Enums
 
-#### `pub enum DescriptorType`
+#### `pub enum Advice`
+
+File or memory access pattern advisory information.
+
+##### `Normal`
+
+The application has no advice to give on its behavior with respect
+to the specified data.
+
+##### `Sequential`
+
+The application expects to access the specified data sequentially
+from lower offsets to higher offsets.
+
+##### `Random`
+
+The application expects to access the specified data in a random
+order.
+
+##### `WillNeed`
+
+The application expects to access the specified data in the near
+future.
+
+##### `DontNeed`
+
+The application expects that it will not access the specified data
+in the near future.
+
+##### `NoReuse`
+
+The application expects to access the specified data once and then
+not reuse it thereafter.
+
+### Effects
+
+#### `pub effect Preopens`
+
+##### `fn get_directories() -> Array<[Descriptor, String]>`
+
+Return the set of preopened directories, and their paths.
+
+### Resources
+
+#### `pub resource Descriptor`
+
+A descriptor is a reference to a filesystem object, which may be a file,
+directory, named pipe, special file, or other object on which filesystem
+calls may be made.
+
+##### `fn read_via_stream(self: &Descriptor, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
+
+Return a stream for reading from a file.
+
+Multiple read, write, and append streams may be active on the same open
+file and they do not interfere with each other.
+
+This function returns a `stream` which provides the data received from the
+file, and a `future` providing additional error information in case an
+error is encountered.
+
+If no error is encountered, `stream.read` on the `stream` will return
+`read-status::closed` with no `error-context` and the future resolves to
+the value `ok`. If an error is encountered, `stream.read` on the
+`stream` returns `read-status::closed` with an `error-context` and the future
+resolves to `err` with an `error-code`.
+
+Note: This is similar to `pread` in POSIX.
+
+##### `fn write_via_stream(self: &Descriptor, data: Stream<u8>, offset: Filesize) -> Future<Result<(), ErrorCode>>`
+
+Return a stream for writing to a file, if available.
+
+May fail with an error-code describing why the file cannot be written.
+
+It is valid to write past the end of a file; the file is extended to the
+extent of the write, with bytes between the previous end and the start of
+the write set to zero.
+
+This function returns once either full contents of the stream are
+written or an error is encountered.
+
+Note: This is similar to `pwrite` in POSIX.
+
+##### `fn append_via_stream(self: &Descriptor, data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
+
+Return a stream for appending to a file, if available.
+
+May fail with an error-code describing why the file cannot be appended.
+
+This function returns once either full contents of the stream are
+written or an error is encountered.
+
+Note: This is similar to `write` with `O_APPEND` in POSIX.
+
+##### `async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Result<(), ErrorCode>`
+
+Provide file advisory information on a descriptor.
+
+This is similar to `posix_fadvise` in POSIX.
+
+##### `async fn sync_data(self: &Descriptor) -> Result<(), ErrorCode>`
+
+Synchronize the data of a file to disk.
+
+This function succeeds with no effect if the file descriptor is not
+opened for writing.
+
+Note: This is similar to `fdatasync` in POSIX.
+
+##### `async fn get_flags(self: &Descriptor) -> Result<DescriptorFlags, ErrorCode>`
+
+Get flags associated with a descriptor.
+
+Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
+
+Note: This returns the value that was the `fs_flags` value returned
+from `fdstat_get` in earlier versions of WASI.
+
+##### `async fn get_type(self: &Descriptor) -> Result<DescriptorType, ErrorCode>`
+
+Get the dynamic type of a descriptor.
+
+Note: This returns the same value as the `type` field of the `fd-stat`
+returned by `stat`, `stat-at` and similar.
+
+Note: This returns similar flags to the `st_mode & S_IFMT` value provided
+by `fstat` in POSIX.
+
+Note: This returns the value that was the `fs_filetype` value returned
+from `fdstat_get` in earlier versions of WASI.
+
+##### `async fn set_size(self: &Descriptor, size: Filesize) -> Result<(), ErrorCode>`
+
+Adjust the size of an open file. If this increases the file's size, the
+extra bytes are filled with zeros.
+
+Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
+
+##### `async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>`
+
+Adjust the timestamps of an open file or directory.
+
+Note: This is similar to `futimens` in POSIX.
+
+Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
+
+##### `fn read_directory(self: &Descriptor) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>]`
+
+Read directory entries from a directory.
+
+On filesystems where directories contain entries referring to themselves
+and their parents, often named `.` and `..` respectively, these entries
+are omitted.
+
+This always returns a new stream which starts at the beginning of the
+directory. Multiple streams may be active on the same directory, and they
+do not interfere with each other.
+
+This function returns a future, which will resolve to an error code if
+reading full contents of the directory fails.
+
+##### `async fn sync(self: &Descriptor) -> Result<(), ErrorCode>`
+
+Synchronize the data and metadata of a file to disk.
+
+This function succeeds with no effect if the file descriptor is not
+opened for writing.
+
+Note: This is similar to `fsync` in POSIX.
+
+##### `async fn create_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
+
+Create a directory.
+
+Note: This is similar to `mkdirat` in POSIX.
+
+##### `async fn stat(self: &Descriptor) -> Result<DescriptorStat, ErrorCode>`
+
+Return the attributes of an open file or directory.
+
+Note: This is similar to `fstat` in POSIX, except that it does not return
+device and inode information. For testing whether two descriptors refer to
+the same underlying filesystem object, use `is-same-object`. To obtain
+additional data that can be used do determine whether a file has been
+modified, use `metadata-hash`.
+
+Note: This was called `fd_filestat_get` in earlier versions of WASI.
+
+##### `async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<DescriptorStat, ErrorCode>`
+
+Return the attributes of a file or directory.
+
+Note: This is similar to `fstatat` in POSIX, except that it does not
+return device and inode information. See the `stat` description for a
+discussion of alternatives.
+
+Note: This was called `path_filestat_get` in earlier versions of WASI.
+
+##### `async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>`
+
+Adjust the timestamps of a file or directory.
+
+Note: This is similar to `utimensat` in POSIX.
+
+Note: This was called `path_filestat_set_times` in earlier versions of
+WASI.
+
+##### `async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>`
+
+Create a hard link.
+
+Fails with `error-code::no-entry` if the old path does not exist,
+with `error-code::exist` if the new path already exists, and
+`error-code::not-permitted` if the old path is not a file.
+
+Note: This is similar to `linkat` in POSIX.
+
+##### `async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Result<Descriptor, ErrorCode>`
+
+Open a file or directory.
+
+If `flags` contains `descriptor-flags::mutate-directory`, and the base
+descriptor doesn't have `descriptor-flags::mutate-directory` set,
+`open-at` fails with `error-code::read-only`.
+
+If `flags` contains `write` or `mutate-directory`, or `open-flags`
+contains `truncate` or `create`, and the base descriptor doesn't have
+`descriptor-flags::mutate-directory` set, `open-at` fails with
+`error-code::read-only`.
+
+Note: This is similar to `openat` in POSIX.
+
+##### `async fn readlink_at(self: &Descriptor, path: String) -> Result<String, ErrorCode>`
+
+Read the contents of a symbolic link.
+
+If the contents contain an absolute or rooted path in the underlying
+filesystem, this function fails with `error-code::not-permitted`.
+
+Note: This is similar to `readlinkat` in POSIX.
+
+##### `async fn remove_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
+
+Remove a directory.
+
+Return `error-code::not-empty` if the directory is not empty.
+
+Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
+
+##### `async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>`
+
+Rename a filesystem object.
+
+Note: This is similar to `renameat` in POSIX.
+
+##### `async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> Result<(), ErrorCode>`
+
+Create a symbolic link (also known as a "symlink").
+
+If `old-path` starts with `/`, the function fails with
+`error-code::not-permitted`.
+
+Note: This is similar to `symlinkat` in POSIX.
+
+##### `async fn unlink_file_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
+
+Unlink a filesystem object that is not a directory.
+
+This is similar to `unlinkat(fd, path, 0)` in POSIX.
+
+Error returns are as specified by POSIX.
+
+If the filesystem object is a directory, `error-code::access` or
+`error-code::is-directory` may be returned instead of the
+POSIX-specified `error-code::not-permitted`.
+
+##### `async fn is_same_object(self: &Descriptor, other: &Descriptor) -> bool`
+
+Test whether two descriptors refer to the same filesystem object.
+
+In POSIX, this corresponds to testing whether the two descriptors have the
+same device (`st_dev`) and inode (`st_ino` or `d_ino`) numbers.
+wasi-filesystem does not expose device and inode numbers, so this function
+may be used instead.
+
+##### `async fn metadata_hash(self: &Descriptor) -> Result<MetadataHashValue, ErrorCode>`
+
+Return a hash of the metadata associated with a filesystem object referred
+to by a descriptor.
+
+This returns a hash of the last-modification timestamp and file size, and
+may also include the inode number, device number, birth timestamp, and
+other metadata fields that may change when the file is modified or
+replaced. It may also include a secret value chosen by the
+implementation and not otherwise exposed.
+
+Implementations are encouraged to provide the following properties:
+
+- If the file is not modified or replaced, the computed hash value should
+  usually not change.
+- If the object is modified or replaced, the computed hash value should
+  usually change.
+- The inputs to the hash should not be easily computable from the
+  computed hash.
+
+However, none of these is required.
+
+##### `async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<MetadataHashValue, ErrorCode>`
+
+Return a hash of the metadata associated with a filesystem object referred
+to by a directory descriptor and a relative path.
+
+This performs the same hash computation as `metadata-hash`.
+
+### Structs
+
+#### `pub struct DescriptorStat`
+
+File attributes.
+
+Note: This was called `filestat` in earlier versions of WASI.
+
+##### `type: DescriptorType`
+
+File type.
+
+##### `link_count: LinkCount`
+
+Number of hard links to the file.
+
+##### `size: Filesize`
+
+For regular files, the file size in bytes. For symbolic links, the
+length in bytes of the pathname contained in the symbolic link.
+
+##### `data_access_timestamp: Option<Instant>`
+
+Last data access timestamp.
+
+If the `option` is none, the platform doesn't maintain an access
+timestamp for this file.
+
+##### `data_modification_timestamp: Option<Instant>`
+
+Last data modification timestamp.
+
+If the `option` is none, the platform doesn't maintain a
+modification timestamp for this file.
+
+##### `status_change_timestamp: Option<Instant>`
+
+Last file status-change timestamp.
+
+If the `option` is none, the platform doesn't maintain a
+status-change timestamp for this file.
+
+#### `pub struct DirectoryEntry`
+
+A directory entry.
+
+##### `type: DescriptorType`
+
+The type of the file referred to by this directory entry.
+
+##### `name: String`
+
+The name of the object.
+
+#### `pub struct MetadataHashValue`
+
+A 128-bit hash value, split into parts because wasm doesn't have a
+128-bit integer type.
+
+##### `lower: u64`
+
+64 bits of a 128-bit hash value.
+
+##### `upper: u64`
+
+Another 64 bits of a 128-bit hash value.
+
+### Variants
+
+#### `pub variant DescriptorType`
 
 The type of a filesystem object referenced by a descriptor.
 
 Note: This was called `filetype` in earlier versions of WASI.
-
-##### `Unknown`
-
-The type of the descriptor or file is unknown or is different from
-any of the other types specified.
 
 ##### `BlockDevice`
 
@@ -287,7 +666,29 @@ The descriptor refers to a regular file inode.
 
 The descriptor refers to a socket.
 
-#### `pub enum ErrorCode`
+##### `Other(Option<String>)`
+
+The type of the descriptor or file is different from any of the
+other types specified.
+
+#### `pub variant NewTimestamp`
+
+When setting a timestamp, this gives the value to set it to.
+
+##### `NoChange`
+
+Leave the timestamp set to its previous value.
+
+##### `Now`
+
+Set the timestamp to the current time of the system clock associated
+with the filesystem.
+
+##### `Timestamp(Instant)`
+
+Set the timestamp to the given value.
+
+#### `pub variant ErrorCode`
 
 Error codes returned by functions, similar to `errno` in POSIX.
 Not all of these error codes are returned by the functions provided by this
@@ -438,401 +839,11 @@ Text file busy, similar to `ETXTBSY` in POSIX.
 
 Cross-device link, similar to `EXDEV` in POSIX.
 
-#### `pub enum Advice`
-
-File or memory access pattern advisory information.
-
-##### `Normal`
-
-The application has no advice to give on its behavior with respect
-to the specified data.
-
-##### `Sequential`
-
-The application expects to access the specified data sequentially
-from lower offsets to higher offsets.
-
-##### `Random`
-
-The application expects to access the specified data in a random
-order.
-
-##### `WillNeed`
-
-The application expects to access the specified data in the near
-future.
-
-##### `DontNeed`
-
-The application expects that it will not access the specified data
-in the near future.
-
-##### `NoReuse`
-
-The application expects to access the specified data once and then
-not reuse it thereafter.
-
-### Effects
-
-#### `pub effect Preopens`
-
-##### `fn get_directories() -> Array<[Descriptor, String]>`
-
-Return the set of preopened directories, and their paths.
-
-### Resources
-
-#### `pub resource Descriptor`
-
-A descriptor is a reference to a filesystem object, which may be a file,
-directory, named pipe, special file, or other object on which filesystem
-calls may be made.
-
-##### `fn read_via_stream(self: &Descriptor, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
-
-Return a stream for reading from a file.
-
-Multiple read, write, and append streams may be active on the same open
-file and they do not interfere with each other.
-
-This function returns a `stream` which provides the data received from the
-file, and a `future` providing additional error information in case an
-error is encountered.
-
-If no error is encountered, `stream.read` on the `stream` will return
-`read-status::closed` with no `error-context` and the future resolves to
-the value `ok`. If an error is encountered, `stream.read` on the
-`stream` returns `read-status::closed` with an `error-context` and the future
-resolves to `err` with an `error-code`.
-
-Note: This is similar to `pread` in POSIX.
-
-##### `async fn write_via_stream(self: &Descriptor, data: Stream<u8>, offset: Filesize) -> Result<(), ErrorCode>`
-
-Return a stream for writing to a file, if available.
-
-May fail with an error-code describing why the file cannot be written.
-
-It is valid to write past the end of a file; the file is extended to the
-extent of the write, with bytes between the previous end and the start of
-the write set to zero.
-
-This function returns once either full contents of the stream are
-written or an error is encountered.
-
-Note: This is similar to `pwrite` in POSIX.
-
-##### `async fn append_via_stream(self: &Descriptor, data: Stream<u8>) -> Result<(), ErrorCode>`
-
-Return a stream for appending to a file, if available.
-
-May fail with an error-code describing why the file cannot be appended.
-
-This function returns once either full contents of the stream are
-written or an error is encountered.
-
-Note: This is similar to `write` with `O_APPEND` in POSIX.
-
-##### `async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Result<(), ErrorCode>`
-
-Provide file advisory information on a descriptor.
-
-This is similar to `posix_fadvise` in POSIX.
-
-##### `async fn sync_data(self: &Descriptor) -> Result<(), ErrorCode>`
-
-Synchronize the data of a file to disk.
-
-This function succeeds with no effect if the file descriptor is not
-opened for writing.
-
-Note: This is similar to `fdatasync` in POSIX.
-
-##### `async fn get_flags(self: &Descriptor) -> Result<DescriptorFlags, ErrorCode>`
-
-Get flags associated with a descriptor.
-
-Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
-
-Note: This returns the value that was the `fs_flags` value returned
-from `fdstat_get` in earlier versions of WASI.
-
-##### `async fn get_type(self: &Descriptor) -> Result<DescriptorType, ErrorCode>`
-
-Get the dynamic type of a descriptor.
-
-Note: This returns the same value as the `type` field of the `fd-stat`
-returned by `stat`, `stat-at` and similar.
-
-Note: This returns similar flags to the `st_mode & S_IFMT` value provided
-by `fstat` in POSIX.
-
-Note: This returns the value that was the `fs_filetype` value returned
-from `fdstat_get` in earlier versions of WASI.
-
-##### `async fn set_size(self: &Descriptor, size: Filesize) -> Result<(), ErrorCode>`
-
-Adjust the size of an open file. If this increases the file's size, the
-extra bytes are filled with zeros.
-
-Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
-
-##### `async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>`
-
-Adjust the timestamps of an open file or directory.
-
-Note: This is similar to `futimens` in POSIX.
-
-Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
-
-##### `async fn read_directory(self: &Descriptor) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>]`
-
-Read directory entries from a directory.
-
-On filesystems where directories contain entries referring to themselves
-and their parents, often named `.` and `..` respectively, these entries
-are omitted.
-
-This always returns a new stream which starts at the beginning of the
-directory. Multiple streams may be active on the same directory, and they
-do not interfere with each other.
-
-This function returns a future, which will resolve to an error code if
-reading full contents of the directory fails.
-
-##### `async fn sync(self: &Descriptor) -> Result<(), ErrorCode>`
-
-Synchronize the data and metadata of a file to disk.
-
-This function succeeds with no effect if the file descriptor is not
-opened for writing.
-
-Note: This is similar to `fsync` in POSIX.
-
-##### `async fn create_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
-
-Create a directory.
-
-Note: This is similar to `mkdirat` in POSIX.
-
-##### `async fn stat(self: &Descriptor) -> Result<DescriptorStat, ErrorCode>`
-
-Return the attributes of an open file or directory.
-
-Note: This is similar to `fstat` in POSIX, except that it does not return
-device and inode information. For testing whether two descriptors refer to
-the same underlying filesystem object, use `is-same-object`. To obtain
-additional data that can be used do determine whether a file has been
-modified, use `metadata-hash`.
-
-Note: This was called `fd_filestat_get` in earlier versions of WASI.
-
-##### `async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<DescriptorStat, ErrorCode>`
-
-Return the attributes of a file or directory.
-
-Note: This is similar to `fstatat` in POSIX, except that it does not
-return device and inode information. See the `stat` description for a
-discussion of alternatives.
-
-Note: This was called `path_filestat_get` in earlier versions of WASI.
-
-##### `async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>`
-
-Adjust the timestamps of a file or directory.
-
-Note: This is similar to `utimensat` in POSIX.
-
-Note: This was called `path_filestat_set_times` in earlier versions of
-WASI.
-
-##### `async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>`
-
-Create a hard link.
-
-Fails with `error-code::no-entry` if the old path does not exist,
-with `error-code::exist` if the new path already exists, and
-`error-code::not-permitted` if the old path is not a file.
-
-Note: This is similar to `linkat` in POSIX.
-
-##### `async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Result<Descriptor, ErrorCode>`
-
-Open a file or directory.
-
-If `flags` contains `descriptor-flags::mutate-directory`, and the base
-descriptor doesn't have `descriptor-flags::mutate-directory` set,
-`open-at` fails with `error-code::read-only`.
-
-If `flags` contains `write` or `mutate-directory`, or `open-flags`
-contains `truncate` or `create`, and the base descriptor doesn't have
-`descriptor-flags::mutate-directory` set, `open-at` fails with
-`error-code::read-only`.
-
-Note: This is similar to `openat` in POSIX.
-
-##### `async fn readlink_at(self: &Descriptor, path: String) -> Result<String, ErrorCode>`
-
-Read the contents of a symbolic link.
-
-If the contents contain an absolute or rooted path in the underlying
-filesystem, this function fails with `error-code::not-permitted`.
-
-Note: This is similar to `readlinkat` in POSIX.
-
-##### `async fn remove_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
-
-Remove a directory.
-
-Return `error-code::not-empty` if the directory is not empty.
-
-Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
-
-##### `async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>`
-
-Rename a filesystem object.
-
-Note: This is similar to `renameat` in POSIX.
-
-##### `async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> Result<(), ErrorCode>`
-
-Create a symbolic link (also known as a "symlink").
-
-If `old-path` starts with `/`, the function fails with
-`error-code::not-permitted`.
-
-Note: This is similar to `symlinkat` in POSIX.
-
-##### `async fn unlink_file_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
-
-Unlink a filesystem object that is not a directory.
-
-Return `error-code::is-directory` if the path refers to a directory.
-Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
-
-##### `async fn is_same_object(self: &Descriptor, other: &Descriptor) -> bool`
-
-Test whether two descriptors refer to the same filesystem object.
-
-In POSIX, this corresponds to testing whether the two descriptors have the
-same device (`st_dev`) and inode (`st_ino` or `d_ino`) numbers.
-wasi-filesystem does not expose device and inode numbers, so this function
-may be used instead.
-
-##### `async fn metadata_hash(self: &Descriptor) -> Result<MetadataHashValue, ErrorCode>`
-
-Return a hash of the metadata associated with a filesystem object referred
-to by a descriptor.
-
-This returns a hash of the last-modification timestamp and file size, and
-may also include the inode number, device number, birth timestamp, and
-other metadata fields that may change when the file is modified or
-replaced. It may also include a secret value chosen by the
-implementation and not otherwise exposed.
-
-Implementations are encouraged to provide the following properties:
-
-- If the file is not modified or replaced, the computed hash value should
-  usually not change.
-- If the object is modified or replaced, the computed hash value should
-  usually change.
-- The inputs to the hash should not be easily computable from the
-  computed hash.
-
-However, none of these is required.
-
-##### `async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<MetadataHashValue, ErrorCode>`
-
-Return a hash of the metadata associated with a filesystem object referred
-to by a directory descriptor and a relative path.
-
-This performs the same hash computation as `metadata-hash`.
-
-### Structs
-
-#### `pub struct DescriptorStat`
-
-File attributes.
-
-Note: This was called `filestat` in earlier versions of WASI.
-
-##### `type: DescriptorType`
-
-File type.
-
-##### `link_count: LinkCount`
-
-Number of hard links to the file.
-
-##### `size: Filesize`
-
-For regular files, the file size in bytes. For symbolic links, the
-length in bytes of the pathname contained in the symbolic link.
-
-##### `data_access_timestamp: Option<Instant>`
-
-Last data access timestamp.
-
-If the `option` is none, the platform doesn't maintain an access
-timestamp for this file.
-
-##### `data_modification_timestamp: Option<Instant>`
-
-Last data modification timestamp.
-
-If the `option` is none, the platform doesn't maintain a
-modification timestamp for this file.
-
-##### `status_change_timestamp: Option<Instant>`
-
-Last file status-change timestamp.
-
-If the `option` is none, the platform doesn't maintain a
-status-change timestamp for this file.
-
-#### `pub struct DirectoryEntry`
-
-A directory entry.
-
-##### `type: DescriptorType`
-
-The type of the file referred to by this directory entry.
-
-##### `name: String`
-
-The name of the object.
-
-#### `pub struct MetadataHashValue`
-
-A 128-bit hash value, split into parts because wasm doesn't have a
-128-bit integer type.
-
-##### `lower: u64`
-
-64 bits of a 128-bit hash value.
-
-##### `upper: u64`
-
-Another 64 bits of a 128-bit hash value.
-
-### Variants
-
-#### `pub variant NewTimestamp`
-
-When setting a timestamp, this gives the value to set it to.
-
-##### `NoChange`
-
-Leave the timestamp set to its previous value.
-
-##### `Now`
-
-Set the timestamp to the current time of the system clock associated
-with the filesystem.
-
-##### `Timestamp(Instant)`
-
-Set the timestamp to the given value.
+##### `Other(Option<String>)`
+
+A catch-all for errors not captured by the existing variants.
+Implementations can use this to extend the error type without
+breaking existing code.
 
 ## wasi:http
 
@@ -903,6 +914,10 @@ original casing used to construct or mutate the `fields` resource. The `fields`
 resource should use that original casing when serializing the fields for
 transport or when returning them from a method.
 
+Implementations may impose limits on individual field values and on total
+aggregate field section size. Operations that would exceed these limits
+fail with `header-error.size-exceeded`
+
 ##### `fn new() -> Fields`
 
 Construct an empty HTTP Fields.
@@ -925,7 +940,8 @@ and values are valid UTF-8 strings. However, values are not always
 well-formed, so they are represented as a raw list of bytes.
 
 An error result will be returned if any header or value was
-syntactically invalid, or if a header was forbidden.
+syntactically invalid, if a header was forbidden, or if the
+entries would exceed an implementation size limit.
 
 ##### `fn get(self: &Fields, name: FieldName) -> Array<FieldValue>`
 
@@ -945,6 +961,9 @@ Set all of the values for a name. Clears any existing values for that
 name, if they have been set.
 
 Fails with `header-error.immutable` if the `fields` are immutable.
+
+Fails with `header-error.size-exceeded` if the name or values would
+exceed an implementation-defined size limit.
 
 ##### `fn delete(self: &Fields, name: FieldName) -> Result<(), HeaderError>`
 
@@ -968,6 +987,9 @@ Append a value for a name. Does not change or delete any existing
 values for that name.
 
 Fails with `header-error.immutable` if the `fields` are immutable.
+
+Fails with `header-error.size-exceeded` if the value would exceed
+an implementation-defined size limit.
 
 ##### `fn copy_all(self: &Fields) -> Array<[FieldName, FieldValue]>`
 
@@ -1364,6 +1386,22 @@ to set a header in a `fields`.
 This error indicates that the operation on the `fields` was not
 permitted because the fields are immutable.
 
+##### `SizeExceeded`
+
+This error indicates that the operation would exceed an
+implementation-defined limit on field sizes. This may apply to
+an individual `field-value`, a single `field-name` plus all its
+values, or the total aggregate size of all fields.
+
+##### `Other(Option<String>)`
+
+This is a catch-all error for anything that doesn't fit cleanly into a
+more specific case. Implementations can use this to extend the error
+type without breaking existing code. It also includes an optional
+string for an unstructured description of the error. Users should not
+depend on the string for diagnosing errors, as it's not required to be
+consistent between implementations.
+
 #### `pub variant RequestOptionsError`
 
 This type enumerates the different kinds of errors that may occur when
@@ -1377,6 +1415,15 @@ Indicates the specified field is not supported by this implementation.
 
 Indicates that the operation on the `request-options` was not permitted
 because it is immutable.
+
+##### `Other(Option<String>)`
+
+This is a catch-all error for anything that doesn't fit cleanly into a
+more specific case. Implementations can use this to extend the error
+type without breaking existing code. It also includes an optional
+string for an unstructured description of the error. Users should not
+depend on the string for diagnosing errors, as it's not required to be
+consistent between implementations.
 
 ## wasi:clocks
 
@@ -1555,9 +1602,9 @@ The insecure interface for insecure pseudo-random numbers.
 It is intended to be portable at least between Unix-family platforms and
 Windows.
 
-##### `fn get_insecure_random_bytes(len: u64) -> Array<u8>`
+##### `fn get_insecure_random_bytes(max_len: u64) -> Array<u8>`
 
-Return `len` insecure pseudo-random bytes.
+Return up to `max-len` insecure pseudo-random bytes.
 
 This function is not cryptographically secure. Do not use it for
 anything related to security.
@@ -1565,6 +1612,13 @@ anything related to security.
 There are no requirements on the values of the returned bytes, however
 implementations are encouraged to return evenly distributed values with
 a long period.
+
+Implementations MAY return fewer bytes than requested (a short read).
+Callers that require exactly `max-len` bytes MUST call this function in
+a loop until the desired number of bytes has been accumulated.
+Implementations MUST return at least 1 byte when `max-len` is greater
+than zero. When `max-len` is zero, implementations MUST return an empty
+list without trapping.
 
 ##### `fn get_insecure_random_u64() -> u64`
 
@@ -1580,9 +1634,10 @@ WASI Random is a random data API.
 It is intended to be portable at least between Unix-family platforms and
 Windows.
 
-##### `fn get_random_bytes(len: u64) -> Array<u8>`
+##### `fn get_random_bytes(max_len: u64) -> Array<u8>`
 
-Return `len` cryptographically-secure random or pseudo-random bytes.
+Return up to `max-len` cryptographically-secure random or pseudo-random
+bytes.
 
 This function must produce data at least as cryptographically secure and
 fast as an adequately seeded cryptographically-secure pseudo-random
@@ -1590,6 +1645,13 @@ number generator (CSPRNG). It must not block, from the perspective of
 the calling program, under any circumstances, including on the first
 request and on requests for numbers of bytes. The returned data must
 always be unpredictable.
+
+Implementations MAY return fewer bytes than requested (a short read).
+Callers that require exactly `max-len` bytes MUST call this function in
+a loop until the desired number of bytes has been accumulated.
+Implementations MUST return at least 1 byte when `max-len` is greater
+than zero. When `max-len` is zero, implementations MUST return an empty
+list without trapping.
 
 This function must always return fresh data. Deterministic environments
 must omit this function, rather than implementing it with deterministic
@@ -1612,86 +1674,6 @@ represented as a `u64`.
 
 ### Enums
 
-#### `pub enum ErrorCode`
-
-Error codes.
-
-In theory, every API can return any error code.
-In practice, API's typically only return the errors documented per API
-combined with a couple of errors that are always possible:
-
-- `unknown`
-- `access-denied`
-- `not-supported`
-- `out-of-memory`
-
-See each individual API for what the POSIX equivalents are. They sometimes differ per API.
-
-##### `Unknown`
-
-Unknown error
-
-##### `AccessDenied`
-
-Access denied.
-
-POSIX equivalent: EACCES, EPERM
-
-##### `NotSupported`
-
-The operation is not supported.
-
-POSIX equivalent: EOPNOTSUPP
-
-##### `InvalidArgument`
-
-One of the arguments is invalid.
-
-POSIX equivalent: EINVAL
-
-##### `OutOfMemory`
-
-Not enough memory to complete the operation.
-
-POSIX equivalent: ENOMEM, ENOBUFS, EAI_MEMORY
-
-##### `Timeout`
-
-The operation timed out before it could finish completely.
-
-##### `InvalidState`
-
-The operation is not valid in the socket's current state.
-
-##### `AddressNotBindable`
-
-A bind operation failed because the provided address is not an address that the `network` can bind to.
-
-##### `AddressInUse`
-
-A bind operation failed because the provided address is already in use or because there are no ephemeral ports available.
-
-##### `RemoteUnreachable`
-
-The remote address is not reachable
-
-##### `ConnectionRefused`
-
-The TCP connection was forcefully rejected
-
-##### `ConnectionReset`
-
-The TCP connection was reset.
-
-##### `ConnectionAborted`
-
-A TCP connection was aborted.
-
-##### `DatagramTooLarge`
-
-The size of a datagram sent to a UDP socket exceeded the maximum
-supported size.
-
 #### `pub enum IpAddressFamily`
 
 ##### `Ipv4`
@@ -1702,44 +1684,6 @@ Similar to `AF_INET` in POSIX.
 
 Similar to `AF_INET6` in POSIX.
 
-#### `pub enum ErrorCode`
-
-Lookup error codes.
-
-##### `Unknown`
-
-Unknown error
-
-##### `AccessDenied`
-
-Access denied.
-
-POSIX equivalent: EACCES, EPERM
-
-##### `InvalidArgument`
-
-`name` is a syntactically invalid domain name or IP address.
-
-POSIX equivalent: EINVAL
-
-##### `NameUnresolvable`
-
-Name does not exist or has no suitable associated IP addresses.
-
-POSIX equivalent: EAI_NONAME, EAI_NODATA, EAI_ADDRFAMILY
-
-##### `TemporaryResolverFailure`
-
-A temporary failure in name resolution occurred.
-
-POSIX equivalent: EAI_AGAIN
-
-##### `PermanentResolverFailure`
-
-A permanent failure in name resolution occurred.
-
-POSIX equivalent: EAI_FAIL
-
 ### Effects
 
 #### `pub effect IpNameLookup`
@@ -1748,9 +1692,9 @@ POSIX equivalent: EAI_FAIL
 
 Resolve an internet host name to a list of IP addresses.
 
-Unicode domain names are automatically converted to ASCII using IDNA encoding.
-If the input is an IP address string, the address is parsed and returned
-as-is without making any external requests.
+Unicode domain names are automatically converted to ASCII using IDNA
+encoding. If the input is an IP address string, the address is parsed
+and returned as-is without making any external requests.
 
 See the wasi-socket proposal README.md for a comparison with getaddrinfo.
 
@@ -1759,9 +1703,6 @@ The results are returned in connection order preference.
 This function never succeeds with 0 results. It either fails or succeeds
 with at least one address. Additionally, this function never returns
 IPv4-mapped IPv6 addresses.
-
-The returned future will resolve to an error code in case of failure.
-It will resolve to success once the returned stream is exhausted.
 
 # References:
 
@@ -1784,12 +1725,26 @@ The socket can be in one of the following states:
 - `connecting`
 - `connected`
 - `closed`
-  See <https://github.com/WebAssembly/wasi-sockets/blob/main/TcpSocketOperationalSemantics-0.3.0-draft.md>
+  See <https://github.com/WebAssembly/WASI/blob/main/proposals/sockets/TcpSocketOperationalSemantics-0.3.0-draft.md>
   for more information.
 
 Note: Except where explicitly mentioned, whenever this documentation uses
 the term "bound" without backticks it actually means: in the `bound` state _or higher_.
 (i.e. `bound`, `listening`, `connecting` or `connected`)
+
+WASI uses shared ownership semantics: the `tcp-socket` handle and all
+derived `stream` and `future` values reference a single underlying OS
+socket:
+
+- Send/receive streams remain functional after the original `tcp-socket`
+  handle is dropped.
+- The stream returned by `listen` behaves similarly.
+- Client sockets returned by `tcp-socket::listen` are independent and do
+  not keep the listening socket alive.
+
+The OS socket is closed only after the last handle is dropped. This
+model has observable effects; for example, it affects when the local
+port binding is released.
 
 In addition to the general error codes documented on the
 `types::error-code` type, TCP socket methods may always return
@@ -1799,12 +1754,17 @@ In addition to the general error codes documented on the
 
 Create a new TCP socket.
 
-Similar to `socket(AF_INET or AF_INET6, SOCK_STREAM, IPPROTO_TCP)` in POSIX.
-On IPv6 sockets, IPV6_V6ONLY is enabled by default and can't be configured otherwise.
+Similar to `socket(AF_INET or AF_INET6, SOCK_STREAM, IPPROTO_TCP)`
+in POSIX. On IPv6 sockets, IPV6_V6ONLY is enabled by default and
+can't be configured otherwise.
 
 Unlike POSIX, WASI sockets have no notion of a socket-level
 `O_NONBLOCK` flag. Instead they fully rely on the Component Model's
 async support.
+
+# Typical errors
+
+- `not-supported`: The `address-family` is not supported. (EAFNOSUPPORT)
 
 # References
 
@@ -1817,9 +1777,10 @@ async support.
 
 Bind the socket to the provided IP address and port.
 
-If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
-network interface(s) to bind to.
-If the TCP/UDP port is zero, the socket will be bound to a random free port.
+If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is
+left to the implementation to decide which network interface(s) to
+bind to. If the TCP/UDP port is zero, the socket will be bound to a
+random free port.
 
 Bind can be attempted multiple times on the same socket, even with
 different arguments on each iteration. But never concurrently and
@@ -1838,10 +1799,11 @@ binding can't be changed anymore.
 
 # Implementors note
 
-When binding to a non-zero port, this bind operation shouldn't be affected by the TIME_WAIT
-state of a recently closed socket on the same local address. In practice this means that the SO_REUSEADDR
-socket option should be set implicitly on all platforms, except on Windows where this is the default behavior
-and SO_REUSEADDR performs something different entirely.
+The bind operation shouldn't be affected by the TIME_WAIT state of a
+recently closed socket on the same local address. In practice this
+means that the SO_REUSEADDR socket option should be set implicitly
+on all platforms, except on Windows where this is the default
+behavior and SO_REUSEADDR performs something different.
 
 # References
 
@@ -1854,7 +1816,12 @@ and SO_REUSEADDR performs something different entirely.
 
 Connect to a remote endpoint.
 
-On success, the socket is transitioned into the `connected` state and this function returns a connection resource.
+On success, the socket is transitioned into the `connected` state
+and the `remote-address` of the socket is updated.
+The `local-address` may be updated as well, based on the best network
+path to `remote-address`. If the socket was not already explicitly
+bound, this function will implicitly bind the socket to a random
+free port.
 
 After a failed connection attempt, the socket will be in the `closed`
 state and the only valid action left is to `drop` the socket. A single
@@ -1945,6 +1912,12 @@ WASI implementations have two options to handle this:
 In either case, the stream returned by this `listen` method remains
 operational.
 
+WASI requires `listen` to perform an implicit bind if the socket
+has not already been bound. Not all platforms (notably Windows)
+exhibit this behavior out of the box. On platforms that require it,
+the WASI implementation can emulate this behavior by performing
+the bind itself if the guest hasn't already done so.
+
 # References
 
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/listen.html>
@@ -1956,7 +1929,7 @@ operational.
 - <https://man.freebsd.org/cgi/man.cgi?query=listen&sektion=2>
 - <https://man.freebsd.org/cgi/man.cgi?query=accept&sektion=2>
 
-##### `async fn send(self: &TcpSocket, data: Stream<u8>) -> Result<(), ErrorCode>`
+##### `fn send(self: &TcpSocket, data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
 
 Transmit data to peer.
 
@@ -1971,6 +1944,8 @@ contents of the stream are transmitted or an error is encountered.
 # Typical errors
 
 - `invalid-state`: The socket is not in the `connected` state. (ENOTCONN)
+- `invalid-state`: `send` has already been called on this socket.
+- `connection-broken`: The connection is not writable anymore. (EPIPE, ECONNABORTED on Windows)
 - `connection-reset`: The connection was reset. (ECONNRESET)
 - `remote-unreachable`: The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
 
@@ -1985,28 +1960,25 @@ contents of the stream are transmitted or an error is encountered.
 
 Read data from peer.
 
-This function returns a `stream` which provides the data received from the
-socket, and a `future` providing additional error information in case the
-socket is closed abnormally.
+Returns a `stream` of data sent by the peer. The implementation
+drops the stream once no more data is available. At that point, the
+returned `future` resolves to:
 
-If the socket is closed normally, `stream.read` on the `stream` will return
-`read-status::closed` with no `error-context` and the future resolves to
-the value `ok`. If the socket is closed abnormally, `stream.read` on the
-`stream` returns `read-status::closed` with an `error-context` and the future
-resolves to `err` with an `error-code`.
+- `ok` after a graceful shutdown from the peer (i.e. a FIN packet), or
+- `err` if the socket was closed abnormally.
 
-`receive` is meant to be called only once per socket. If it is called more
-than once, the subsequent calls return a new `stream` that fails as if it
-were closed abnormally.
+`receive` may be called only once per socket. Subsequent calls return
+a closed stream and a future resolved to `err(invalid-state)`.
 
-If the caller is not expecting to receive any data from the peer,
-they may drop the stream. Any data still in the receive queue
+If the caller is not expecting to receive any more data from the peer,
+they should drop the stream. Any data still in the receive queue
 will be discarded. This is equivalent to calling `shutdown(SHUT_RD)`
 in POSIX.
 
 # Typical errors
 
 - `invalid-state`: The socket is not in the `connected` state. (ENOTCONN)
+- `invalid-state`: `receive` has already been called on this socket.
 - `connection-reset`: The connection was reset. (ECONNRESET)
 - `remote-unreachable`: The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
 
@@ -2026,7 +1998,8 @@ POSIX mentions:
 > If the socket has not been bound to a local name, the value
 > stored in the object pointed to by `address` is unspecified.
 
-WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
+WASI is stricter and requires `get-local-address` to return
+`invalid-state` when the socket hasn't been bound yet.
 
 # Typical errors
 
@@ -2070,10 +2043,12 @@ Equivalent to the SO_DOMAIN socket option.
 
 ##### `fn set_listen_backlog_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>`
 
-Hints the desired listen queue size. Implementations are free to ignore this.
+Hints the desired listen queue size. Implementations are free to
+ignore this.
 
 If the provided value is 0, an `invalid-argument` error is returned.
-Any other value will never cause an error, but it might be silently clamped and/or rounded.
+Any other value will never cause an error, but it might be silently
+clamped and/or rounded.
 
 # Typical errors
 
@@ -2090,7 +2065,8 @@ The keepalive behavior can be adjusted using:
 - `keep-alive-idle-time`
 - `keep-alive-interval`
 - `keep-alive-count`
-  These properties can be configured while `keep-alive-enabled` is false, but only come into effect when `keep-alive-enabled` is true.
+  These properties can be configured while `keep-alive-enabled` is
+  false, but only come into effect when `keep-alive-enabled` is true.
 
 Equivalent to the SO_KEEPALIVE socket option.
 
@@ -2098,11 +2074,13 @@ Equivalent to the SO_KEEPALIVE socket option.
 
 ##### `fn get_keep_alive_idle_time(self: &TcpSocket) -> Result<Duration, ErrorCode>`
 
-Amount of time the connection has to be idle before TCP starts sending keepalive packets.
+Amount of time the connection has to be idle before TCP starts
+sending keepalive packets.
 
 If the provided value is 0, an `invalid-argument` error is returned.
-Any other value will never cause an error, but it might be silently clamped and/or rounded.
-I.e. after setting a value, reading the same setting back may return a different value.
+All other values are accepted without error, but may be
+clamped or rounded. As a result, the value read back from
+this setting may differ from the value that was set.
 
 Equivalent to the TCP_KEEPIDLE socket option. (TCP_KEEPALIVE on MacOS)
 
@@ -2117,8 +2095,9 @@ Equivalent to the TCP_KEEPIDLE socket option. (TCP_KEEPALIVE on MacOS)
 The time between keepalive packets.
 
 If the provided value is 0, an `invalid-argument` error is returned.
-Any other value will never cause an error, but it might be silently clamped and/or rounded.
-I.e. after setting a value, reading the same setting back may return a different value.
+All other values are accepted without error, but may be
+clamped or rounded. As a result, the value read back from
+this setting may differ from the value that was set.
 
 Equivalent to the TCP_KEEPINTVL socket option.
 
@@ -2130,11 +2109,13 @@ Equivalent to the TCP_KEEPINTVL socket option.
 
 ##### `fn get_keep_alive_count(self: &TcpSocket) -> Result<u32, ErrorCode>`
 
-The maximum amount of keepalive packets TCP should send before aborting the connection.
+The maximum amount of keepalive packets TCP should send before
+aborting the connection.
 
 If the provided value is 0, an `invalid-argument` error is returned.
-Any other value will never cause an error, but it might be silently clamped and/or rounded.
-I.e. after setting a value, reading the same setting back may return a different value.
+All other values are accepted without error, but may be
+clamped or rounded. As a result, the value read back from
+this setting may differ from the value that was set.
 
 Equivalent to the TCP_KEEPCNT socket option.
 
@@ -2158,11 +2139,22 @@ If the provided value is 0, an `invalid-argument` error is returned.
 
 ##### `fn get_receive_buffer_size(self: &TcpSocket) -> Result<u64, ErrorCode>`
 
-The kernel buffer space reserved for sends/receives on this socket.
+Kernel buffer space reserved for sending/receiving on this socket.
+Implementations usually treat this as a cap the buffer can grow to,
+rather than allocating the full amount immediately.
 
 If the provided value is 0, an `invalid-argument` error is returned.
-Any other value will never cause an error, but it might be silently clamped and/or rounded.
-I.e. after setting a value, reading the same setting back may return a different value.
+All other values are accepted without error, but may be
+clamped or rounded. As a result, the value read back from
+this setting may differ from the value that was set.
+
+This is only a performance hint. The implementation may ignore it or
+tweak it based on real traffic patterns.
+Linux and macOS appear to behave differently depending on whether a
+buffer size was explicitly set. When set, they tend to honor it; when
+not set, they dynamically adjust the buffer size as the connection
+progresses. This is especially noticeable when comparing the values
+from before and after connection establishment.
 
 Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
 
@@ -2184,8 +2176,9 @@ A UDP socket handle.
 
 Create a new UDP socket.
 
-Similar to `socket(AF_INET or AF_INET6, SOCK_DGRAM, IPPROTO_UDP)` in POSIX.
-On IPv6 sockets, IPV6_V6ONLY is enabled by default and can't be configured otherwise.
+Similar to `socket(AF_INET or AF_INET6, SOCK_DGRAM, IPPROTO_UDP)`
+in POSIX. On IPv6 sockets, IPV6_V6ONLY is enabled by default and
+can't be configured otherwise.
 
 Unlike POSIX, WASI sockets have no notion of a socket-level
 `O_NONBLOCK` flag. Instead they fully rely on the Component Model's
@@ -2202,9 +2195,10 @@ async support.
 
 Bind the socket to the provided IP address and port.
 
-If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
-network interface(s) to bind to.
-If the port is zero, the socket will be bound to a random free port.
+If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is
+left to the implementation to decide which network interface(s) to
+bind to. If the port is zero, the socket will be bound to a random
+free port.
 
 # Typical errors
 
@@ -2269,7 +2263,7 @@ require a disconnect before connecting to a different peer address.
 Dissociate this socket from its peer address.
 
 After calling this method, `send` & `receive` are free to communicate
-with any address again.
+with any remote address again.
 
 The POSIX equivalent of this is calling `connect` with an `AF_UNSPEC` address.
 
@@ -2296,6 +2290,9 @@ Additionally, if the socket is connected, a `remote-address` argument
 _may_ be provided but then it must be identical to the address
 passed to `connect`.
 
+If the socket has not been explicitly bound, it will be
+implicitly bound to a random free port.
+
 Implementations may trap if the `data` length exceeds 64 KiB.
 
 # Typical errors
@@ -2308,6 +2305,15 @@ Implementations may trap if the `data` length exceeds 64 KiB.
 - `remote-unreachable`: The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
 - `connection-refused`: The connection was refused. (ECONNREFUSED)
 - `datagram-too-large`: The datagram is too large. (EMSGSIZE)
+- `address-in-use`: Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE)
+
+# Implementors note
+
+WASI requires `send` to perform an implicit bind if the socket
+has not been bound. Not all platforms (notably Windows) exhibit
+this behavior natively. On such platforms, the WASI implementation
+should emulate it by performing the bind if the guest has not
+already done so.
 
 # References
 
@@ -2357,7 +2363,8 @@ POSIX mentions:
 > If the socket has not been bound to a local name, the value
 > stored in the object pointed to by `address` is unspecified.
 
-WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
+WASI is stricter and requires `get-local-address` to return
+`invalid-state` when the socket hasn't been bound yet.
 
 # Typical errors
 
@@ -2407,11 +2414,14 @@ If the provided value is 0, an `invalid-argument` error is returned.
 
 ##### `fn get_receive_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>`
 
-The kernel buffer space reserved for sends/receives on this socket.
+Kernel buffer space reserved for sending/receiving on this socket.
+Implementations usually treat this as a cap the buffer can grow to,
+rather than allocating the full amount immediately.
 
 If the provided value is 0, an `invalid-argument` error is returned.
-Any other value will never cause an error, but it might be silently clamped and/or rounded.
-I.e. after setting a value, reading the same setting back may return a different value.
+All other values are accepted without error, but may be
+clamped or rounded. As a result, the value read back from
+this setting may differ from the value that was set.
 
 Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
 
@@ -2457,6 +2467,111 @@ sin6_scope_id
 
 ### Variants
 
+#### `pub variant ErrorCode`
+
+Error codes.
+
+In theory, every API can return any error code.
+In practice, API's typically only return the errors documented per API
+combined with a couple of errors that are always possible:
+
+- `other`
+- `access-denied`
+- `not-supported`
+- `out-of-memory`
+
+See each individual API for what the POSIX equivalents are. They sometimes differ per API.
+
+##### `AccessDenied`
+
+Access denied.
+
+POSIX equivalent: EACCES, EPERM
+
+##### `NotSupported`
+
+The operation is not supported.
+
+POSIX equivalent: EOPNOTSUPP, ENOPROTOOPT, EPFNOSUPPORT, EPROTONOSUPPORT, ESOCKTNOSUPPORT
+
+##### `InvalidArgument`
+
+One of the arguments is invalid.
+
+POSIX equivalent: EINVAL, EDESTADDRREQ, EAFNOSUPPORT
+
+##### `OutOfMemory`
+
+Not enough memory to complete the operation.
+
+POSIX equivalent: ENOMEM, ENOBUFS
+
+##### `Timeout`
+
+The operation timed out before it could finish completely.
+
+POSIX equivalent: ETIMEDOUT
+
+##### `InvalidState`
+
+The operation is not valid in the socket's current state.
+
+##### `AddressNotBindable`
+
+The local address is not available.
+
+POSIX equivalent: EADDRNOTAVAIL
+
+##### `AddressInUse`
+
+A bind operation failed because the provided address is already in
+use or because there are no ephemeral ports available.
+
+POSIX equivalent: EADDRINUSE
+
+##### `RemoteUnreachable`
+
+The remote address is not reachable.
+
+POSIX equivalent: EHOSTUNREACH, EHOSTDOWN, ENETDOWN, ENETUNREACH, ENONET
+
+##### `ConnectionRefused`
+
+The connection was forcefully rejected.
+
+POSIX equivalent: ECONNREFUSED
+
+##### `ConnectionBroken`
+
+A write failed because the connection was broken.
+
+POSIX equivalent: EPIPE
+
+##### `ConnectionReset`
+
+The connection was reset.
+
+POSIX equivalent: ECONNRESET
+
+##### `ConnectionAborted`
+
+The connection was aborted.
+
+POSIX equivalent: ECONNABORTED
+
+##### `DatagramTooLarge`
+
+The size of a datagram sent to a UDP socket exceeded the maximum
+supported size.
+
+POSIX equivalent: EMSGSIZE
+
+##### `Other(Option<String>)`
+
+A catch-all for errors not captured by the existing variants.
+Implementations can use this to extend the error type without
+breaking existing code.
+
 #### `pub variant IpAddress`
 
 ##### `Ipv4(Ipv4Address)`
@@ -2468,3 +2583,43 @@ sin6_scope_id
 ##### `Ipv4(Ipv4SocketAddress)`
 
 ##### `Ipv6(Ipv6SocketAddress)`
+
+#### `pub variant ErrorCode`
+
+Lookup error codes.
+
+##### `AccessDenied`
+
+Access denied.
+
+POSIX equivalent: EACCES, EPERM
+
+##### `InvalidArgument`
+
+`name` is a syntactically invalid domain name or IP address.
+
+POSIX equivalent: EINVAL
+
+##### `NameUnresolvable`
+
+Name does not exist or has no suitable associated IP addresses.
+
+POSIX equivalent: EAI_NONAME, EAI_NODATA, EAI_ADDRFAMILY
+
+##### `TemporaryResolverFailure`
+
+A temporary failure in name resolution occurred.
+
+POSIX equivalent: EAI_AGAIN
+
+##### `PermanentResolverFailure`
+
+A permanent failure in name resolution occurred.
+
+POSIX equivalent: EAI_FAIL
+
+##### `Other(Option<String>)`
+
+A catch-all for errors not captured by the existing variants.
+Implementations can use this to extend the error type without
+breaking existing code.

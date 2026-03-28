@@ -103,6 +103,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -157,6 +161,10 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -215,6 +223,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -269,6 +281,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1125,6 +1141,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -1179,6 +1199,10 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1237,6 +1261,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -1291,6 +1319,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1506,18 +1538,20 @@ pub fn log_stdout(message: String) {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
-    let subtask: i32 = core::builtin::call_indirect_stdout_write_via_stream(rx as i32);
+    let future_handle: i32 = core::builtin::call_indirect_stdout_write_via_stream(rx as i32);
     core::internal::write_string_to_stream(tx, message, true);
-    core::internal::wait_for_subtask(subtask);
+    let future: Future<Result<(), CliErrorCode>> = future_handle as Future<Result<(), CliErrorCode>>;
+    future."Future<Result<unit,CliErrorCode>>::drop"();
 }
 
 pub fn log_stderr(message: String) {
     let __pattern_temp_0: [Stream<u8>, StreamWritable<u8>] = "core::prelude/types.wado::Stream<u8>::new"();
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
-    let subtask: i32 = core::builtin::call_indirect_stderr_write_via_stream(rx as i32);
+    let future_handle: i32 = core::builtin::call_indirect_stderr_write_via_stream(rx as i32);
     core::internal::write_string_to_stream(tx, message, true);
-    core::internal::wait_for_subtask(subtask);
+    let future: Future<Result<(), CliErrorCode>> = future_handle as Future<Result<(), CliErrorCode>>;
+    future."Future<Result<unit,CliErrorCode>>::drop"();
 }
 
 pub fn panic(message: String) -> ! {
@@ -1676,6 +1710,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -1730,6 +1768,10 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1788,6 +1830,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -1842,6 +1888,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1966,6 +2016,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -2020,6 +2074,10 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -2078,6 +2136,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -2132,6 +2194,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -2244,6 +2310,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -2298,6 +2368,10 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -2356,6 +2430,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -2410,6 +2488,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -3654,6 +3736,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -3753,6 +3839,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -3825,6 +3915,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -3895,6 +3989,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -4969,6 +5067,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -5025,6 +5127,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -5079,6 +5185,10 @@ pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Form
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -5143,6 +5253,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -7774,6 +7888,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -7828,6 +7946,10 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -7886,6 +8008,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -7940,6 +8066,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -8970,6 +9100,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -9060,6 +9194,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -9124,6 +9262,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -9186,6 +9328,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -9424,6 +9570,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -9478,6 +9628,10 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -9536,6 +9690,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -9590,6 +9748,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -9737,6 +9899,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -9810,6 +9976,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -9870,6 +10040,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -9928,6 +10102,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -10772,6 +10950,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -10826,6 +11008,10 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -10884,6 +11070,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -10940,6 +11130,10 @@ pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
 }
@@ -10994,6 +11188,340 @@ fn __initialize_modules() {
     }
     "core::prelude/fpfmt.wado::__initialize_module"();
     __modules_initialized = true;
+}
+
+// --- Module: wasi:cli/types.wado ---
+pub struct "IterMap<StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn(char) -> char,
+}
+
+pub struct "IterSkip<StrCharIter>" {
+    pub inner: StrCharIter,
+    pub remaining: i32,
+}
+
+pub struct "IterTake<StrCharIter>" {
+    pub inner: StrCharIter,
+    pub remaining: i32,
+}
+
+pub struct "IterEnumerate<StrCharIter>" {
+    pub inner: StrCharIter,
+    pub count: i32,
+}
+
+pub struct "IterFilter<StrCharIter>" {
+    pub inner: StrCharIter,
+    pub pred: fn(char) -> bool,
+}
+
+pub struct "IterSkip<StrUtf8ByteIter>" {
+    pub inner: StrUtf8ByteIter,
+    pub remaining: i32,
+}
+
+pub struct "IterTake<StrUtf8ByteIter>" {
+    pub inner: StrUtf8ByteIter,
+    pub remaining: i32,
+}
+
+pub struct "IterEnumerate<StrUtf8ByteIter>" {
+    pub inner: StrUtf8ByteIter,
+    pub count: i32,
+}
+
+pub struct "IterFilter<StrUtf8ByteIter>" {
+    pub inner: StrUtf8ByteIter,
+    pub pred: fn(u8) -> bool,
+}
+
+pub enum ErrorCode {
+    Io,
+    IllegalByteSequence,
+    Pipe,
+}
+
+pub fn "ErrorCode^Eq::eq"(self: &ErrorCode, other: &ErrorCode) -> bool {
+    return (*self == *other);
+}
+
+pub fn "ErrorCode^Ord::cmp"(self: &ErrorCode, other: &ErrorCode) -> Ordering {
+    let a: ErrorCode = *self;
+    let b: ErrorCode = *other;
+    if (a < b) {
+        return Ordering::Less;
+    }
+    if (a > b) {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "ErrorCode^Inspect::inspect"(self: &ErrorCode, f: &mut Formatter) {
+    if (*self == 0) {
+        f.Formatter::write_str("ErrorCode::Io");
+    } else {
+        if (*self == 1) {
+            f.Formatter::write_str("ErrorCode::IllegalByteSequence");
+        } else {
+            if (*self == 2) {
+                f.Formatter::write_str("ErrorCode::Pipe");
+            };
+        };
+    };
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|I::Item| -> bool");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|u8| -> bool");
+}
+
+pub fn "Fn<2,u8>^Inspect::inspect"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    f.Formatter::write_str("|u8, u8| -> u8");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(char) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> bool");
+}
+
+pub fn "Fn<2,char>^Inspect::inspect"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char, char| -> char");
+}
+
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
+pub fn "Fn<2,I::Item>^Inspect::inspect"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    f.Formatter::write_str("|I::Item, I::Item| -> I::Item");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|[i32, I::Item]| -> bool");
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    f.Formatter::write_str("|[i32, I::Item], [i32, I::Item]| -> [i32, I::Item]");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|[I::Item, J::Item]| -> bool");
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    f.Formatter::write_str("|[I::Item, J::Item], [I::Item, J::Item]| -> [I::Item, J::Item]");
+}
+
+pub fn "ErrorCode^InspectAlt::inspect_alt"(self: &ErrorCode, f: &mut Formatter) {
+    self."ErrorCode^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    self."Fn<2,u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(char) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    self."Fn<2,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    self."Fn<2,I::Item>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "ErrorCode^Display::fmt"(self: &ErrorCode, f: &mut Formatter) {
+    self."ErrorCode^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,u8>^Display::fmt"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    self."Fn<2,u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(char) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,char>^Display::fmt"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    self."Fn<2,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,I::Item>^Display::fmt"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    self."Fn<2,I::Item>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "ErrorCode^DisplayAlt::fmt_alt"(self: &ErrorCode, f: &mut Formatter) {
+    self."ErrorCode^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    self."Fn<2,u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(char) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,char>^DisplayAlt::fmt_alt"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    self."Fn<2,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
 // --- Module: core:prelude/traits.wado ---
@@ -11117,6 +11645,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -11186,6 +11718,10 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -11250,6 +11786,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -11312,6 +11852,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -11812,6 +12356,10 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Inspect::inspect"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), CliErrorCode>>");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -11870,6 +12418,10 @@ pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -11932,6 +12484,10 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -11990,6 +12546,10 @@ pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &m
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), CliErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {

@@ -76,8 +76,7 @@ export fn run() with Stdout, Stderr, Preopens {
         let data: Array<u8> = [116, 101, 115, 116]; // "test"
         w_tx.write(data);
         w_tx.drop();
-        sub.read();
-        sub.drop();
+        wait_for_subtask(sub);
 
         // Test sync_data
         let sd_result = wfile.sync_data();
@@ -106,7 +105,7 @@ export fn run() with Stdout, Stderr, Preopens {
 
 __DATA__
 {
-    "TODO": true, "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
     "stdout_contains": [
         "advise: Sequential succeeded",
         "advise: Random succeeded",
