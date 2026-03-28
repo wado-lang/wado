@@ -1,0 +1,56 @@
+variant Choice {
+    A(AData),
+    B(BData),
+}
+
+struct AData {
+    name: String,
+    children: Array<Choice>,
+}
+
+struct BData {
+    value: i32,
+}
+
+trait Handler {
+    fn on_value(&mut self, v: i32) {}
+}
+
+struct Counter {
+    total: i32,
+}
+
+impl Handler for Counter {
+    fn on_value(&mut self, v: i32) {
+        self.total += v;
+    }
+}
+
+fn walk<H: Handler>(h: &mut H, c: &Choice) {
+    match c {
+        A(a) => {
+            for let child of &a.children {
+                walk(h, &child);
+            }
+        },
+        B(b) => h.on_value(b.value),
+    }
+}
+
+fn count(c: &Choice) -> i32 {
+    let mut counter = Counter { total: 0 };
+    walk(&mut counter, c);
+    return counter.total;
+}
+
+export fn run() {
+    let leaf1 = Choice::B(BData { value: 10 });
+    let leaf2 = Choice::B(BData { value: 20 });
+    let children: Array<Choice> = [leaf1, leaf2];
+    let tree = Choice::A(AData { name: "root", children });
+    let result = count(&tree);
+    assert result == 30, `expected 30, got {result}`;
+}
+
+__DATA__
+{"stdout": "", "TODO": true}
