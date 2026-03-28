@@ -1014,6 +1014,14 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
 /// # Returns
 /// The resolved `ModuleSource`.
 pub fn resolve_import(from_module: &ModuleSource, import_source: &str) -> ModuleSource {
+    resolve_import_with_entry(from_module, import_source, None)
+}
+
+pub fn resolve_import_with_entry(
+    from_module: &ModuleSource,
+    import_source: &str,
+    entry_module: Option<&ModuleSource>,
+) -> ModuleSource {
     // Handle special prefixes
     if let Some(name) = import_source.strip_prefix("core:") {
         return ModuleSource::Core {
@@ -1037,6 +1045,17 @@ pub fn resolve_import(from_module: &ModuleSource, import_source: &str) -> Module
         && (from_path.starts_with("./") || from_path.starts_with("../"))
     {
         let resolved = resolve_module_path(from_path, import_source);
+        // If this resolves to the entry module's canonical name, return the
+        // entry ModuleSource to maintain a single type identity.
+        if let Some(entry) = entry_module {
+            let entry_canonical = match entry {
+                ModuleSource::EntryPoint { filename } => canonicalize_entry_point(filename),
+                _ => entry.to_string(),
+            };
+            if resolved == entry_canonical {
+                return entry.clone();
+            }
+        }
         return ModuleSource::Local { path: resolved };
     }
 

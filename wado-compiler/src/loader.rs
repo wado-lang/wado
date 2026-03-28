@@ -297,6 +297,10 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     loading: IndexSet<ModuleSource>,
     /// Modules that were implicitly loaded
     implicit_modules: IndexSet<ModuleSource>,
+    /// The entry module source (for dedup when sub-modules import back to entry)
+    entry_module_source: Option<ModuleSource>,
+    /// Canonical name of the entry module (e.g., "./cross_module_type_identity.wado")
+    entry_canonical_name: Option<String>,
 }
 
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
@@ -309,6 +313,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             loaded: IndexMap::default(),
             loading: IndexSet::default(),
             implicit_modules: IndexSet::default(),
+            entry_module_source: None,
+            entry_canonical_name: None,
         }
     }
 
@@ -329,6 +335,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Use "<stdin>" as synthetic filename when no filename is provided (e.g., REPL, embedded code)
         let entry_module_source =
             ModuleSource::entry_point_with_filename(entry_filename.unwrap_or("<stdin>"));
+        self.entry_module_source = Some(entry_module_source.clone());
+        self.entry_canonical_name = Some(crate::name::canonicalize_entry_point(
+            entry_filename.unwrap_or("<stdin>"),
+        ));
 
         let entry_name = entry_module_source.to_string();
         self.logger.span_start(&format!("load {entry_name}"));
@@ -365,6 +375,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             if self.loaded.contains_key(&module_source) {
                 continue;
             }
+
+            // Skip — handled by resolve_import returning EntryPoint directly
 
             // Skip if currently loading (cycle)
             if self.loading.contains(&module_source) {
@@ -519,6 +531,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             // For relative imports, resolve against from_module_source
             if let ModuleSource::Local { path: from_file } = from_module_source {
                 let resolved = resolve_module_path(from_file, import_source);
+                // If the resolved path matches the entry module's canonical name,
+                // return the EntryPoint source to avoid duplicate module identity.
+                if let Some(ref entry_canonical) = self.entry_canonical_name
+                    && resolved == *entry_canonical
+                    && let Some(ref entry_ms) = self.entry_module_source
+                {
+                    return Ok(entry_ms.clone());
+                }
                 return Ok(ModuleSource::Local { path: resolved });
             }
             if let ModuleSource::Remote { url: from_url } = from_module_source {
