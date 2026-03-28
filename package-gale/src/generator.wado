@@ -2,6 +2,7 @@ use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, Re
 use { to_pascal_case, to_snake_case, to_lower, rule_type_name, literal_field_name, strip_suffix } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
+use { gen_visitor } from "./visitor_gen.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 
 pub fn generate(grammar: &Grammar) -> String {
@@ -14,6 +15,7 @@ pub fn generate(grammar: &Grammar) -> String {
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     gen_lexer(&mut w, grammar, &lit_tokens);
     gen_parser(&mut w, grammar, &lit_tokens);
+    gen_visitor(&mut w, grammar);
     return w.to_string();
 }
 

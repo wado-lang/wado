@@ -71,6 +71,27 @@ impl Array<T> {
         self.used = used + 1;
     }
 
+    pub fn pop(&mut self) -> Option<T> {
+        if self.used == 0 {
+            return null;
+        }
+        self.used -= 1;
+        return Option::Some(builtin::array_get::<T>(self.repr, self.used));
+    }
+
+    pub fn truncate(&mut self, len: i32) {
+        if len < self.used {
+            self.used = len;
+        }
+    }
+
+    pub fn last(&self) -> Option<T> {
+        if self.used == 0 {
+            return null;
+        }
+        return Option::Some(builtin::array_get::<T>(self.repr, self.used - 1));
+    }
+
     pub fn get(&self, index: i32) -> Option<T> {
         if index < 0 || index >= self.used {
             return null;

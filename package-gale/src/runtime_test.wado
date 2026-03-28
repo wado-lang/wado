@@ -1,4 +1,4 @@
-use { Span, Token, ParseError } from "./runtime.wado";
+use { Span, Token, ParseError, CstNode, CstChild, TreeRecorder, Visitor } from "./runtime.wado";
 
 test "Span::new creates span" {
     let s = Span::new(0, 5);
@@ -42,6 +42,19 @@ test "Token equality" {
     assert a != c;
 }
 
+test "Token::new has empty leading_trivia" {
+    let t = Token::new(1, "hello", Span::new(0, 5));
+    assert t.leading_trivia.is_empty();
+}
+
+test "Token::with_trivia attaches trivia" {
+    let ws = Token::new(99, " ", Span::new(0, 1));
+    let trivia: Array<Token> = [ws];
+    let t = Token::with_trivia(1, "hello", Span::new(1, 6), trivia);
+    assert t.leading_trivia.len() == 1;
+    assert t.leading_trivia[0].text == " ";
+}
+
 test "ParseError::new creates error" {
     let expected: Array<String> = ["INT", "STRING"];
     let err = ParseError::new("unexpected token", Span::new(5, 6), expected);
@@ -50,4 +63,39 @@ test "ParseError::new creates error" {
     assert err.expected.len() == 2;
     assert err.expected[0] == "INT";
     assert err.expected[1] == "STRING";
+}
+
+test "TreeRecorder builds CstNode" {
+    let mut rec = TreeRecorder::new();
+    rec.enter_rule(&"root", &Span::new(0, 10));
+    rec.visit_token(&Token::new(1, "hello", Span::new(0, 5)));
+    rec.visit_token(&Token::new(2, "world", Span::new(6, 11)));
+    rec.exit_rule(&"root", &Span::new(0, 10));
+    let tree = rec.build();
+    assert tree.name == "root";
+    assert tree.children.len() == 2;
+    if let Token(t) = tree.children[0] {
+        assert t.text == "hello";
+    } else {
+        panic("expected Token");
+    }
+}
+
+test "TreeRecorder builds nested tree" {
+    let mut rec = TreeRecorder::new();
+    rec.enter_rule(&"parent", &Span::new(0, 20));
+    rec.enter_rule(&"child", &Span::new(0, 5));
+    rec.visit_token(&Token::new(1, "a", Span::new(0, 1)));
+    rec.exit_rule(&"child", &Span::new(0, 5));
+    rec.visit_token(&Token::new(2, "b", Span::new(10, 11)));
+    rec.exit_rule(&"parent", &Span::new(0, 20));
+    let tree = rec.build();
+    assert tree.name == "parent";
+    assert tree.children.len() == 2;
+    if let Node(child) = tree.children[0] {
+        assert child.name == "child";
+        assert child.children.len() == 1;
+    } else {
+        panic("expected Node");
+    }
 }

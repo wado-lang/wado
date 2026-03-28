@@ -1,0 +1,44 @@
+trait Handler {
+    fn on_value(&mut self, v: i32);
+}
+
+struct Counter {
+    count: i32,
+}
+
+impl Handler for Counter {
+    fn on_value(&mut self, v: i32) {
+        self.count += v;
+    }
+}
+
+variant Shape {
+    Circle(CircleData),
+    Rect(RectData),
+}
+
+struct CircleData {
+    radius: i32,
+}
+
+struct RectData {
+    width: i32,
+    height: i32,
+}
+
+fn walk_shape<H: Handler>(h: &mut H, shape: &Shape) {
+    match shape {
+        Circle(c) => h.on_value(c.radius),
+        Rect(r) => h.on_value(r.width + r.height),
+    }
+}
+
+export fn run() {
+    let mut counter = Counter { count: 0 };
+    let shape = Shape::Circle(CircleData { radius: 10 });
+    walk_shape(&mut counter, &shape);
+    assert counter.count == 10;
+}
+
+__DATA__
+{"stdout": ""}

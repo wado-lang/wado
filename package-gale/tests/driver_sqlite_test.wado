@@ -1,4 +1,36 @@
 use sqlite from "./golden/sqlite.wado";
+use { CstNode, CstChild } from "./golden/sqlite.wado";
+
+fn unparse_xml(node: &CstNode) -> String {
+    let mut out = String::with_capacity(256);
+    out.append(`<{node.name}>`);
+    for let child of &node.children {
+        if let Token(t) = *child {
+            for let trivia of &t.leading_trivia {
+                out.append(trivia.text);
+            }
+            let kind_name = sqlite::token_kind_name(t.kind);
+            out.append(`<{kind_name}>`);
+            out.append(t.text);
+            out.append(`</{kind_name}>`);
+        } else if let Node(n) = *child {
+            out.append(&unparse_xml(n));
+        }
+    }
+    out.append(`</{node.name}>`);
+    return out;
+}
+
+fn assert_parse_xml(input: &String, expected: &String) {
+    let result = sqlite::parse(input);
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let root = result.unwrap();
+    let tree = sqlite::to_tree(&root);
+    let xml = unparse_xml(&tree);
+    assert xml == *expected, `input: {*input}\nexpected: {*expected}\ngot:      {xml}`;
+}
 
 test "tokenize SELECT" {
     let tokens = sqlite::tokenize(&"SELECT 1");
@@ -910,4 +942,74 @@ ORDER BY u.username;");
     if let Err(e) = &result {
         panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
     }
+}
+
+// --- CST tree / visitor / unparse_xml tests ---
+
+test "to_tree builds CstNode for SELECT" {
+    let root = sqlite::parse(&"SELECT 1;").unwrap();
+    let tree = sqlite::to_tree(&root);
+    assert tree.name == "parse";
+    assert tree.children.len() >= 1, `expected at least 1 child, got {tree.children.len()}`;
+}
+
+test "to_tree EOF has trailing trivia" {
+    let root = sqlite::parse(&"SELECT 1; ").unwrap();
+    let tree = sqlite::to_tree(&root);
+    let last = tree.children.last().unwrap();
+    if let Token(t) = last {
+        assert t.text == "", "EOF text should be empty";
+        assert t.leading_trivia.len() >= 1, `expected trivia on EOF, got {t.leading_trivia.len()}`;
+    } else {
+        panic("expected Token for EOF");
+    }
+}
+
+test "tokenize preserves leading trivia" {
+    let tokens = sqlite::tokenize(&" SELECT 1");
+    assert tokens[0].leading_trivia.len() >= 1, `expected trivia, got {tokens[0].leading_trivia.len()}`;
+    assert tokens[0].leading_trivia[0].text == " ";
+}
+
+test "tokenize preserves comment trivia" {
+    let tokens = sqlite::tokenize(&"-- comment\nSELECT 1");
+    assert tokens[0].leading_trivia.len() >= 1, `expected trivia, got {tokens[0].leading_trivia.len()}`;
+}
+
+test "token_kind_name for keywords" {
+    let tokens = sqlite::tokenize(&"SELECT FROM WHERE");
+    assert sqlite::token_kind_name(tokens[0].kind) == "K_SELECT", `got: {sqlite::token_kind_name(tokens[0].kind)}`;
+    assert sqlite::token_kind_name(tokens[1].kind) == "K_FROM";
+    assert sqlite::token_kind_name(tokens[2].kind) == "K_WHERE";
+}
+
+test "token_kind_name for literals and special tokens" {
+    let tokens = sqlite::tokenize(&"foo 42");
+    assert sqlite::token_kind_name(tokens[0].kind) == "IDENTIFIER";
+    assert sqlite::token_kind_name(tokens[1].kind) == "NUMERIC_LITERAL";
+    let eof = tokens.last().unwrap();
+    assert sqlite::token_kind_name(eof.kind) == "Eof";
+}
+
+test "unparse_xml produces well-formed output" {
+    let root = sqlite::parse(&"SELECT 1;").unwrap();
+    let tree = sqlite::to_tree(&root);
+    let xml = unparse_xml(&tree);
+    assert xml.len() > 0, "expected non-empty XML output";
+}
+
+test "unparse_xml preserves whitespace via trivia" {
+    let input = "SELECT  1 ;";
+    let root = sqlite::parse(&input).unwrap();
+    let tree = sqlite::to_tree(&root);
+    let xml = unparse_xml(&tree);
+    assert xml.chars().next().unwrap() == '<', `expected xml to start with '<', got: {xml}`;
+}
+
+test "unparse_xml with comment preserves comment text" {
+    let input = "-- hello\nSELECT 1;";
+    let root = sqlite::parse(&input).unwrap();
+    let tree = sqlite::to_tree(&root);
+    let xml = unparse_xml(&tree);
+    assert xml.len() > 0, "expected non-empty XML output";
 }

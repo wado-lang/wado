@@ -1,0 +1,46 @@
+test "pop from non-empty array" {
+    let mut arr: Array<i32> = [10, 20, 30];
+    let v = arr.pop();
+    assert v == Option::Some(30);
+    assert arr.len() == 2;
+    let v2 = arr.pop();
+    assert v2 == Option::Some(20);
+    assert arr.len() == 1;
+}
+
+test "pop from empty array" {
+    let mut arr: Array<i32> = [];
+    let v = arr.pop();
+    assert v matches { None };
+    assert arr.len() == 0;
+}
+
+test "last on non-empty array" {
+    let arr: Array<i32> = [10, 20, 30];
+    let v = arr.last();
+    assert v == Option::Some(30);
+    assert arr.len() == 3;
+}
+
+test "last on empty array" {
+    let arr: Array<i32> = [];
+    let v = arr.last();
+    assert v matches { None };
+}
+
+test "truncate" {
+    let mut arr: Array<i32> = [10, 20, 30, 40, 50];
+    arr.truncate(3);
+    assert arr.len() == 3;
+    assert arr[0] == 10;
+    assert arr[2] == 30;
+}
+
+test "truncate larger than len is no-op" {
+    let mut arr: Array<i32> = [1, 2];
+    arr.truncate(10);
+    assert arr.len() == 2;
+}
+
+__DATA__
+{"test": {}}

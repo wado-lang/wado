@@ -29,15 +29,21 @@ impl Eq for Span {
 }
 
 /// Token represents a lexed token with its kind, text, and position.
+/// Leading trivia (whitespace, comments) is attached to each token.
 pub struct Token {
     pub kind: i32,
     pub text: String,
     pub span: Span,
+    pub leading_trivia: Array<Token>,
 }
 
 impl Token {
     pub fn new(kind: i32, text: String, span: Span) -> Token {
-        return Token { kind, text, span };
+        return Token { kind, text, span, leading_trivia: [] };
+    }
+
+    pub fn with_trivia(kind: i32, text: String, span: Span, leading_trivia: Array<Token>) -> Token {
+        return Token { kind, text, span, leading_trivia };
     }
 }
 
@@ -58,6 +64,92 @@ impl ParseError {
     pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
         return ParseError { message, span, expected };
     }
+}
+
+/// CstChild is either a terminal token or a non-terminal sub-tree.
+pub variant CstChild {
+    Token(Token),
+    Node(CstNode),
+}
+
+/// CstNode is a generic (untyped) concrete syntax tree node.
+pub struct CstNode {
+    pub name: String,
+    pub span: Span,
+    pub children: Array<CstChild>,
+}
+
+/// Visitor trait for walking typed CST nodes.
+/// Default methods are no-ops; override to add behavior.
+pub trait Visitor {
+    fn enter_rule(&mut self, name: &String, span: &Span) {}
+    fn exit_rule(&mut self, name: &String, span: &Span) {}
+    fn visit_token(&mut self, token: &Token) {}
+}
+
+/// TreeRecorder is a Visitor that records events for building a CstNode tree.
+pub struct TreeRecorder {
+    events: Array<TreeEvent>,
+}
+
+variant TreeEvent {
+    Enter(TreeEnterInfo),
+    Exit,
+    VisitToken(Token),
+}
+
+struct TreeEnterInfo {
+    name: String,
+    span: Span,
+}
+
+impl TreeRecorder {
+    pub fn new() -> TreeRecorder {
+        return TreeRecorder { events: [] };
+    }
+
+    pub fn build(&self) -> CstNode {
+        let mut pos = 0;
+        return tree_build_node(&self.events, &mut pos);
+    }
+}
+
+impl Visitor for TreeRecorder {
+    fn enter_rule(&mut self, name: &String, span: &Span) {
+        self.events.append(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
+    }
+
+    fn exit_rule(&mut self, name: &String, span: &Span) {
+        self.events.append(TreeEvent::Exit);
+    }
+
+    fn visit_token(&mut self, token: &Token) {
+        self.events.append(TreeEvent::VisitToken(*token));
+    }
+}
+
+fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
+    if let Enter(info) = events[*pos] {
+        *pos += 1;
+        let mut children: Array<CstChild> = [];
+        loop {
+            if *pos >= events.len() { break; }
+            let ev = events[*pos];
+            if let Exit = ev {
+                *pos += 1;
+                break;
+            }
+            if let Enter(_) = ev {
+                children.append(CstChild::Node(tree_build_node(events, pos)));
+            } else if let VisitToken(t) = ev {
+                children.append(CstChild::Token(t));
+                *pos += 1;
+            }
+        }
+        return CstNode { name: info.name, span: info.span, children };
+    }
+    panic("TreeRecorder: expected Enter event");
+    return CstNode { name: "", span: Span::new(0, 0), children: [] };
 }
 
 pub enum TokenKind {
@@ -447,6 +539,7 @@ fn try_lit_null(chars: &Array<char>, start: i32) -> i32 {
 pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: Array<Token> = [];
+    let mut trivia: Array<Token> = [];
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
@@ -477,61 +570,23 @@ pub fn tokenize(input: &String) -> Array<Token> {
         end = try_ws(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_WS; }
         if best_end <= start {
-            tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));
+            let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
+            tokens.append(tok);
+            trivia = [];
             lexer.pos = start + 1;
         } else {
             let is_skip = false || best_kind == TK_WS;
-            if !is_skip {
-                tokens.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+            if is_skip {
+                trivia.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+            } else {
+                let tok = Token::with_trivia(best_kind, lexer.slice(start, best_end), Span::new(start, best_end), trivia);
+                tokens.append(tok);
+                trivia = [];
             }
             lexer.pos = best_end;
         }
     }
-    tokens.append(Token::new(TK_EOF, "", Span::new(lexer.pos, lexer.pos)));
-    return tokens;
-}
-
-pub fn tokenize_all(input: &String) -> Array<Token> {
-    let mut lexer = Lexer::new(input);
-    let mut tokens: Array<Token> = [];
-    while !lexer.at_end() {
-        let start = lexer.pos;
-        let mut best_end: i32 = -1;
-        let mut best_kind: i32 = TK_ERROR;
-        let mut end: i32 = -1;
-        end = try_lit_lbrace(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; }
-        end = try_lit_comma(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
-        end = try_lit_rbrace(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; }
-        end = try_lit_colon(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
-        end = try_lit_lbracket(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
-        end = try_lit_rbracket(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
-        end = try_lit_true(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_TRUE; }
-        end = try_lit_false(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_FALSE; }
-        end = try_lit_null(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_NULL; }
-        end = try_string(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_STRING; }
-        end = try_number(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_NUMBER; }
-        end = try_ws(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_WS; }
-        if best_end <= start {
-            tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));
-            lexer.pos = start + 1;
-        } else {
-            tokens.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
-            lexer.pos = best_end;
-        }
-    }
-    tokens.append(Token::new(TK_EOF, "", Span::new(lexer.pos, lexer.pos)));
+    tokens.append(Token::with_trivia(TK_EOF, "", Span::new(lexer.pos, lexer.pos), trivia));
     return tokens;
 }
 
@@ -812,5 +867,102 @@ pub fn parse(input: &String) -> Result<JsonNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
     return parse_json(&mut parser);
+}
+
+pub fn walk_json<V: Visitor>(v: &mut V, node: &JsonNode) {
+    v.enter_rule(&"json", &node.span);
+    walk_value(v, &node.value);
+    v.visit_token(&node.eof);
+    v.exit_rule(&"json", &node.span);
+}
+
+pub fn walk_obj<V: Visitor>(v: &mut V, node: &ObjNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"obj", &n.span);
+            v.visit_token(&n.lbrace);
+            walk_pair(v, &n.pair);
+            v.visit_token(&n.rbrace);
+            v.exit_rule(&"obj", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"obj", &n.span);
+            v.visit_token(&n.lbrace);
+            v.visit_token(&n.rbrace);
+            v.exit_rule(&"obj", &n.span);
+        }
+    }
+}
+
+pub fn walk_pair<V: Visitor>(v: &mut V, node: &PairNode) {
+    v.enter_rule(&"pair", &node.span);
+    v.visit_token(&node.string);
+    v.visit_token(&node.colon);
+    walk_value(v, &node.value);
+    v.exit_rule(&"pair", &node.span);
+}
+
+pub fn walk_arr<V: Visitor>(v: &mut V, node: &ArrNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"arr", &n.span);
+            v.visit_token(&n.lbracket);
+            walk_value(v, &n.value);
+            v.visit_token(&n.rbracket);
+            v.exit_rule(&"arr", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"arr", &n.span);
+            v.visit_token(&n.lbracket);
+            v.visit_token(&n.rbracket);
+            v.exit_rule(&"arr", &n.span);
+        }
+    }
+}
+
+pub fn walk_value<V: Visitor>(v: &mut V, node: &ValueNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"value", &n.span);
+            v.visit_token(&n.string);
+            v.exit_rule(&"value", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"value", &n.span);
+            v.visit_token(&n.number);
+            v.exit_rule(&"value", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"value", &n.span);
+            walk_obj(v, &n.obj);
+            v.exit_rule(&"value", &n.span);
+        }
+        Alt3(n) => {
+            v.enter_rule(&"value", &n.span);
+            walk_arr(v, &n.arr);
+            v.exit_rule(&"value", &n.span);
+        }
+        Alt4(n) => {
+            v.enter_rule(&"value", &n.span);
+            v.visit_token(&n.lit_true);
+            v.exit_rule(&"value", &n.span);
+        }
+        Alt5(n) => {
+            v.enter_rule(&"value", &n.span);
+            v.visit_token(&n.lit_false);
+            v.exit_rule(&"value", &n.span);
+        }
+        Alt6(n) => {
+            v.enter_rule(&"value", &n.span);
+            v.visit_token(&n.lit_null);
+            v.exit_rule(&"value", &n.span);
+        }
+    }
+}
+
+pub fn to_tree(node: &JsonNode) -> CstNode {
+    let mut recorder = TreeRecorder::new();
+    walk_json(&mut recorder, node);
+    return recorder.build();
 }
 
