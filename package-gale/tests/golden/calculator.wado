@@ -844,6 +844,113 @@ pub fn tokenize(input: &String) -> Array<Token> {
     return tokens;
 }
 
+pub fn tokenize_all(input: &String) -> Array<Token> {
+    let mut lexer = Lexer::new(input);
+    let mut tokens: Array<Token> = [];
+    while !lexer.at_end() {
+        let start = lexer.pos;
+        let mut best_end: i32 = -1;
+        let mut best_kind: i32 = TK_ERROR;
+        let mut end: i32 = -1;
+        end = try_cos(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_COS; }
+        end = try_sin(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_SIN; }
+        end = try_tan(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_TAN; }
+        end = try_acos(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_ACOS; }
+        end = try_asin(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_ASIN; }
+        end = try_atan(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_ATAN; }
+        end = try_ln(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LN; }
+        end = try_log(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LOG; }
+        end = try_sqrt(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_SQRT; }
+        end = try_lparen(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LPAREN; }
+        end = try_rparen(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_RPAREN; }
+        end = try_plus(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_PLUS; }
+        end = try_minus(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_MINUS; }
+        end = try_times(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_TIMES; }
+        end = try_div(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_DIV; }
+        end = try_gt(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_GT; }
+        end = try_lt(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LT; }
+        end = try_eq(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_EQ; }
+        end = try_comma(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_COMMA; }
+        end = try_point(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_POINT; }
+        end = try_pow(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_POW; }
+        end = try_pi(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_PI; }
+        end = try_euler(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_EULER; }
+        end = try_i(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_I; }
+        end = try_variable(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
+        end = try_scientific_number(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_SCIENTIFIC_NUMBER; }
+        end = try_ws(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_WS; }
+        if best_end <= start {
+            tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));
+            lexer.pos = start + 1;
+        } else {
+            tokens.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+            lexer.pos = best_end;
+        }
+    }
+    tokens.append(Token::new(TK_EOF, "", Span::new(lexer.pos, lexer.pos)));
+    return tokens;
+}
+
+pub fn token_kind_name(kind: i32) -> String {
+    if kind == TK_COS { return "COS"; }
+    if kind == TK_SIN { return "SIN"; }
+    if kind == TK_TAN { return "TAN"; }
+    if kind == TK_ACOS { return "ACOS"; }
+    if kind == TK_ASIN { return "ASIN"; }
+    if kind == TK_ATAN { return "ATAN"; }
+    if kind == TK_LN { return "LN"; }
+    if kind == TK_LOG { return "LOG"; }
+    if kind == TK_SQRT { return "SQRT"; }
+    if kind == TK_LPAREN { return "LPAREN"; }
+    if kind == TK_RPAREN { return "RPAREN"; }
+    if kind == TK_PLUS { return "PLUS"; }
+    if kind == TK_MINUS { return "MINUS"; }
+    if kind == TK_TIMES { return "TIMES"; }
+    if kind == TK_DIV { return "DIV"; }
+    if kind == TK_GT { return "GT"; }
+    if kind == TK_LT { return "LT"; }
+    if kind == TK_EQ { return "EQ"; }
+    if kind == TK_COMMA { return "COMMA"; }
+    if kind == TK_POINT { return "POINT"; }
+    if kind == TK_POW { return "POW"; }
+    if kind == TK_PI { return "PI"; }
+    if kind == TK_EULER { return "EULER"; }
+    if kind == TK_I { return "I"; }
+    if kind == TK_VARIABLE { return "VARIABLE"; }
+    if kind == TK_SCIENTIFIC_NUMBER { return "SCIENTIFIC_NUMBER"; }
+    if kind == TK_WS { return "WS"; }
+    if kind == TK_EOF { return "Eof"; }
+    if kind == TK_ERROR { return "Error"; }
+    return "Unknown";
+}
+
 struct Parser {
     tokens: Array<Token>,
     pos: i32,

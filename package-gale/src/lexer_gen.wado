@@ -88,6 +88,8 @@ pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitTo
     gen_lexer_match_fns(w, &grammar.lexer_rules);
     gen_literal_match_fns(w, lit_tokens);
     gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens);
+    gen_tokenize_all_fn(w, &grammar.lexer_rules, lit_tokens);
+    gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
 }
 
 fn gen_lexer_struct(w: &mut CodeWriter) {
@@ -424,6 +426,73 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     w.end();  // while
     w.line("tokens.append(Token::new(TK_EOF, \"\", Span::new(lexer.pos, lexer.pos)));");
     w.line("return tokens;");
+    w.end();  // fn
+    w.blank();
+}
+
+fn gen_tokenize_all_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>) {
+    let mut f = FnSpec::new("tokenize_all");
+    f.set_pub();
+    f.add_param("input", "&String");
+    f.set_return_type("Array<Token>");
+    f.emit_begin(w);
+    w.line("let mut lexer = Lexer::new(input);");
+    w.line("let mut tokens: Array<Token> = [];");
+    w.begin("while !lexer.at_end()");
+    w.line("let start = lexer.pos;");
+    w.line("let mut best_end: i32 = -1;");
+    w.line("let mut best_kind: i32 = TK_ERROR;");
+    w.line("let mut end: i32 = -1;");
+
+    for let lit of lit_tokens {
+        let fn_name = lit_try_fn_name(&lit.const_name);
+        w.line(`end = {fn_name}(&lexer.chars, start);`);
+        w.line(`if end > best_end \{ best_end = end; best_kind = {lit.const_name}; \}`);
+    }
+
+    for let rule of lexer_rules {
+        if !rule.is_fragment {
+            let fn_name = `try_{to_lower(&rule.name)}`;
+            w.line(`end = {fn_name}(&lexer.chars, start);`);
+            w.line(`if end > best_end \{ best_end = end; best_kind = TK_{rule.name}; \}`);
+        }
+    }
+
+    w.begin("if best_end <= start");
+    w.line("tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));");
+    w.line("lexer.pos = start + 1;");
+    w.else_begin("else");
+    w.line("tokens.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));");
+    w.line("lexer.pos = best_end;");
+    w.end();  // else
+    w.end();  // while
+    w.line("tokens.append(Token::new(TK_EOF, \"\", Span::new(lexer.pos, lexer.pos)));");
+    w.line("return tokens;");
+    w.end();  // fn
+    w.blank();
+}
+
+fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>) {
+    let mut f = FnSpec::new("token_kind_name");
+    f.set_pub();
+    f.add_param("kind", "i32");
+    f.set_return_type("String");
+    f.emit_begin(w);
+
+    for let rule of lexer_rules {
+        if !rule.is_fragment {
+            w.line(`if kind == TK_{rule.name} \{ return "{rule.name}"; \}`);
+        }
+    }
+    w.line("if kind == TK_EOF { return \"Eof\"; }");
+    w.line("if kind == TK_ERROR { return \"Error\"; }");
+
+    for let lit of lit_tokens {
+        let name = lit.const_name;
+        w.line(`if kind == {name} \{ return "{name}"; \}`);
+    }
+
+    w.line("return \"Unknown\";");
     w.end();  // fn
     w.blank();
 }

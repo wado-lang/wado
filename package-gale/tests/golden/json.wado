@@ -491,6 +491,68 @@ pub fn tokenize(input: &String) -> Array<Token> {
     return tokens;
 }
 
+pub fn tokenize_all(input: &String) -> Array<Token> {
+    let mut lexer = Lexer::new(input);
+    let mut tokens: Array<Token> = [];
+    while !lexer.at_end() {
+        let start = lexer.pos;
+        let mut best_end: i32 = -1;
+        let mut best_kind: i32 = TK_ERROR;
+        let mut end: i32 = -1;
+        end = try_lit_lbrace(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; }
+        end = try_lit_comma(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
+        end = try_lit_rbrace(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; }
+        end = try_lit_colon(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
+        end = try_lit_lbracket(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
+        end = try_lit_rbracket(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
+        end = try_lit_true(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_TRUE; }
+        end = try_lit_false(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_FALSE; }
+        end = try_lit_null(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_NULL; }
+        end = try_string(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_STRING; }
+        end = try_number(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_NUMBER; }
+        end = try_ws(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_WS; }
+        if best_end <= start {
+            tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));
+            lexer.pos = start + 1;
+        } else {
+            tokens.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+            lexer.pos = best_end;
+        }
+    }
+    tokens.append(Token::new(TK_EOF, "", Span::new(lexer.pos, lexer.pos)));
+    return tokens;
+}
+
+pub fn token_kind_name(kind: i32) -> String {
+    if kind == TK_STRING { return "STRING"; }
+    if kind == TK_NUMBER { return "NUMBER"; }
+    if kind == TK_WS { return "WS"; }
+    if kind == TK_EOF { return "Eof"; }
+    if kind == TK_ERROR { return "Error"; }
+    if kind == TK_LIT_LBRACE { return "TK_LIT_LBRACE"; }
+    if kind == TK_LIT_COMMA { return "TK_LIT_COMMA"; }
+    if kind == TK_LIT_RBRACE { return "TK_LIT_RBRACE"; }
+    if kind == TK_LIT_COLON { return "TK_LIT_COLON"; }
+    if kind == TK_LIT_LBRACKET { return "TK_LIT_LBRACKET"; }
+    if kind == TK_LIT_RBRACKET { return "TK_LIT_RBRACKET"; }
+    if kind == TK_LIT_TRUE { return "TK_LIT_TRUE"; }
+    if kind == TK_LIT_FALSE { return "TK_LIT_FALSE"; }
+    if kind == TK_LIT_NULL { return "TK_LIT_NULL"; }
+    return "Unknown";
+}
+
 struct Parser {
     tokens: Array<Token>,
     pos: i32,

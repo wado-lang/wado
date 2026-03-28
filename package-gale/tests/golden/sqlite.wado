@@ -5999,6 +5999,575 @@ pub fn tokenize(input: &String) -> Array<Token> {
     return tokens;
 }
 
+pub fn tokenize_all(input: &String) -> Array<Token> {
+    let mut lexer = Lexer::new(input);
+    let mut tokens: Array<Token> = [];
+    while !lexer.at_end() {
+        let start = lexer.pos;
+        let mut best_end: i32 = -1;
+        let mut best_kind: i32 = TK_ERROR;
+        let mut end: i32 = -1;
+        end = try_lit_semi(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
+        end = try_lit_dot(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
+        end = try_lit_comma(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
+        end = try_lit_lparen(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
+        end = try_lit_rparen(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
+        end = try_lit_eq(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
+        end = try_lit_pipepipe(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_PIPEPIPE; }
+        end = try_lit_star(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
+        end = try_lit_slash(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
+        end = try_lit__(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT__; }
+        end = try_lit_plus(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
+        end = try_lit_minus(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
+        end = try_lit_ltlt(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_LTLT; }
+        end = try_lit_gtgt(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_GTGT; }
+        end = try_lit_amp(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_AMP; }
+        end = try_lit_pipe(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
+        end = try_lit_lt(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
+        end = try_lit_lteq(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_LTEQ; }
+        end = try_lit_gt(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
+        end = try_lit_gteq(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_GTEQ; }
+        end = try_lit_eqeq(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_EQEQ; }
+        end = try_lit_bangeq(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; }
+        end = try_lit_ltgt(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_LTGT; }
+        end = try_lit_tilde(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_TILDE; }
+        end = try_scol(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_SCOL; }
+        end = try_dot(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_DOT; }
+        end = try_open_par(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_OPEN_PAR; }
+        end = try_close_par(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_CLOSE_PAR; }
+        end = try_comma(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_COMMA; }
+        end = try_assign(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_ASSIGN; }
+        end = try_star(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_STAR; }
+        end = try_plus(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_PLUS; }
+        end = try_minus(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_MINUS; }
+        end = try_tilde(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_TILDE; }
+        end = try_pipe2(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_PIPE2; }
+        end = try_div(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_DIV; }
+        end = try_mod(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_MOD; }
+        end = try_lt2(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LT2; }
+        end = try_gt2(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_GT2; }
+        end = try_amp(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_AMP; }
+        end = try_pipe(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_PIPE; }
+        end = try_lt(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LT; }
+        end = try_lt_eq(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LT_EQ; }
+        end = try_gt(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_GT; }
+        end = try_gt_eq(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_GT_EQ; }
+        end = try_eq(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_EQ; }
+        end = try_not_eq1(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_NOT_EQ1; }
+        end = try_not_eq2(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_NOT_EQ2; }
+        end = try_k_abort(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ABORT; }
+        end = try_k_action(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ACTION; }
+        end = try_k_add(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ADD; }
+        end = try_k_after(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_AFTER; }
+        end = try_k_all(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ALL; }
+        end = try_k_alter(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ALTER; }
+        end = try_k_analyze(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ANALYZE; }
+        end = try_k_and(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_AND; }
+        end = try_k_as(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_AS; }
+        end = try_k_asc(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ASC; }
+        end = try_k_attach(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ATTACH; }
+        end = try_k_autoincrement(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_AUTOINCREMENT; }
+        end = try_k_before(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_BEFORE; }
+        end = try_k_begin(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_BEGIN; }
+        end = try_k_between(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_BETWEEN; }
+        end = try_k_by(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_BY; }
+        end = try_k_cascade(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_CASCADE; }
+        end = try_k_case(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_CASE; }
+        end = try_k_cast(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_CAST; }
+        end = try_k_check(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_CHECK; }
+        end = try_k_collate(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_COLLATE; }
+        end = try_k_column(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_COLUMN; }
+        end = try_k_commit(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_COMMIT; }
+        end = try_k_conflict(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_CONFLICT; }
+        end = try_k_constraint(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_CONSTRAINT; }
+        end = try_k_create(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_CREATE; }
+        end = try_k_cross(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_CROSS; }
+        end = try_k_current_date(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_CURRENT_DATE; }
+        end = try_k_current_time(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_CURRENT_TIME; }
+        end = try_k_current_timestamp(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_CURRENT_TIMESTAMP; }
+        end = try_k_database(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_DATABASE; }
+        end = try_k_default(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_DEFAULT; }
+        end = try_k_deferrable(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_DEFERRABLE; }
+        end = try_k_deferred(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_DEFERRED; }
+        end = try_k_delete(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_DELETE; }
+        end = try_k_desc(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_DESC; }
+        end = try_k_detach(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_DETACH; }
+        end = try_k_distinct(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_DISTINCT; }
+        end = try_k_drop(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_DROP; }
+        end = try_k_each(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_EACH; }
+        end = try_k_else(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ELSE; }
+        end = try_k_end(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_END; }
+        end = try_k_escape(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ESCAPE; }
+        end = try_k_except(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_EXCEPT; }
+        end = try_k_exclusive(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_EXCLUSIVE; }
+        end = try_k_exists(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_EXISTS; }
+        end = try_k_explain(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_EXPLAIN; }
+        end = try_k_fail(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_FAIL; }
+        end = try_k_for(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_FOR; }
+        end = try_k_foreign(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_FOREIGN; }
+        end = try_k_from(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_FROM; }
+        end = try_k_full(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_FULL; }
+        end = try_k_glob(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_GLOB; }
+        end = try_k_group(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_GROUP; }
+        end = try_k_having(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_HAVING; }
+        end = try_k_if(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_IF; }
+        end = try_k_ignore(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_IGNORE; }
+        end = try_k_immediate(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_IMMEDIATE; }
+        end = try_k_in(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_IN; }
+        end = try_k_index(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_INDEX; }
+        end = try_k_indexed(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_INDEXED; }
+        end = try_k_initially(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_INITIALLY; }
+        end = try_k_inner(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_INNER; }
+        end = try_k_insert(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_INSERT; }
+        end = try_k_instead(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_INSTEAD; }
+        end = try_k_intersect(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_INTERSECT; }
+        end = try_k_into(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_INTO; }
+        end = try_k_is(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_IS; }
+        end = try_k_isnull(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ISNULL; }
+        end = try_k_join(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_JOIN; }
+        end = try_k_key(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_KEY; }
+        end = try_k_left(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_LEFT; }
+        end = try_k_like(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_LIKE; }
+        end = try_k_limit(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_LIMIT; }
+        end = try_k_match(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_MATCH; }
+        end = try_k_natural(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_NATURAL; }
+        end = try_k_no(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_NO; }
+        end = try_k_not(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_NOT; }
+        end = try_k_notnull(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_NOTNULL; }
+        end = try_k_null(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_NULL; }
+        end = try_k_of(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_OF; }
+        end = try_k_offset(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_OFFSET; }
+        end = try_k_on(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ON; }
+        end = try_k_or(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_OR; }
+        end = try_k_order(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ORDER; }
+        end = try_k_outer(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_OUTER; }
+        end = try_k_plan(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_PLAN; }
+        end = try_k_pragma(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_PRAGMA; }
+        end = try_k_primary(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_PRIMARY; }
+        end = try_k_query(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_QUERY; }
+        end = try_k_raise(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_RAISE; }
+        end = try_k_recursive(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_RECURSIVE; }
+        end = try_k_references(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_REFERENCES; }
+        end = try_k_regexp(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_REGEXP; }
+        end = try_k_reindex(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_REINDEX; }
+        end = try_k_release(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_RELEASE; }
+        end = try_k_rename(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_RENAME; }
+        end = try_k_replace(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_REPLACE; }
+        end = try_k_restrict(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_RESTRICT; }
+        end = try_k_right(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_RIGHT; }
+        end = try_k_rollback(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ROLLBACK; }
+        end = try_k_row(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_ROW; }
+        end = try_k_savepoint(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_SAVEPOINT; }
+        end = try_k_select(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_SELECT; }
+        end = try_k_set(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_SET; }
+        end = try_k_table(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_TABLE; }
+        end = try_k_temp(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_TEMP; }
+        end = try_k_temporary(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_TEMPORARY; }
+        end = try_k_then(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_THEN; }
+        end = try_k_to(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_TO; }
+        end = try_k_transaction(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_TRANSACTION; }
+        end = try_k_trigger(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_TRIGGER; }
+        end = try_k_union(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_UNION; }
+        end = try_k_unique(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_UNIQUE; }
+        end = try_k_update(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_UPDATE; }
+        end = try_k_using(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_USING; }
+        end = try_k_vacuum(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_VACUUM; }
+        end = try_k_values(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_VALUES; }
+        end = try_k_view(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_VIEW; }
+        end = try_k_virtual(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_VIRTUAL; }
+        end = try_k_when(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_WHEN; }
+        end = try_k_where(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_WHERE; }
+        end = try_k_with(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_WITH; }
+        end = try_k_without(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_K_WITHOUT; }
+        end = try_identifier(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; }
+        end = try_numeric_literal(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; }
+        end = try_bind_parameter(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_BIND_PARAMETER; }
+        end = try_string_literal(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; }
+        end = try_blob_literal(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_BLOB_LITERAL; }
+        end = try_single_line_comment(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_SINGLE_LINE_COMMENT; }
+        end = try_multiline_comment(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_MULTILINE_COMMENT; }
+        end = try_spaces(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_SPACES; }
+        end = try_unexpected_char(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; }
+        if best_end <= start {
+            tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));
+            lexer.pos = start + 1;
+        } else {
+            tokens.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+            lexer.pos = best_end;
+        }
+    }
+    tokens.append(Token::new(TK_EOF, "", Span::new(lexer.pos, lexer.pos)));
+    return tokens;
+}
+
+pub fn token_kind_name(kind: i32) -> String {
+    if kind == TK_SCOL { return "SCOL"; }
+    if kind == TK_DOT { return "DOT"; }
+    if kind == TK_OPEN_PAR { return "OPEN_PAR"; }
+    if kind == TK_CLOSE_PAR { return "CLOSE_PAR"; }
+    if kind == TK_COMMA { return "COMMA"; }
+    if kind == TK_ASSIGN { return "ASSIGN"; }
+    if kind == TK_STAR { return "STAR"; }
+    if kind == TK_PLUS { return "PLUS"; }
+    if kind == TK_MINUS { return "MINUS"; }
+    if kind == TK_TILDE { return "TILDE"; }
+    if kind == TK_PIPE2 { return "PIPE2"; }
+    if kind == TK_DIV { return "DIV"; }
+    if kind == TK_MOD { return "MOD"; }
+    if kind == TK_LT2 { return "LT2"; }
+    if kind == TK_GT2 { return "GT2"; }
+    if kind == TK_AMP { return "AMP"; }
+    if kind == TK_PIPE { return "PIPE"; }
+    if kind == TK_LT { return "LT"; }
+    if kind == TK_LT_EQ { return "LT_EQ"; }
+    if kind == TK_GT { return "GT"; }
+    if kind == TK_GT_EQ { return "GT_EQ"; }
+    if kind == TK_EQ { return "EQ"; }
+    if kind == TK_NOT_EQ1 { return "NOT_EQ1"; }
+    if kind == TK_NOT_EQ2 { return "NOT_EQ2"; }
+    if kind == TK_K_ABORT { return "K_ABORT"; }
+    if kind == TK_K_ACTION { return "K_ACTION"; }
+    if kind == TK_K_ADD { return "K_ADD"; }
+    if kind == TK_K_AFTER { return "K_AFTER"; }
+    if kind == TK_K_ALL { return "K_ALL"; }
+    if kind == TK_K_ALTER { return "K_ALTER"; }
+    if kind == TK_K_ANALYZE { return "K_ANALYZE"; }
+    if kind == TK_K_AND { return "K_AND"; }
+    if kind == TK_K_AS { return "K_AS"; }
+    if kind == TK_K_ASC { return "K_ASC"; }
+    if kind == TK_K_ATTACH { return "K_ATTACH"; }
+    if kind == TK_K_AUTOINCREMENT { return "K_AUTOINCREMENT"; }
+    if kind == TK_K_BEFORE { return "K_BEFORE"; }
+    if kind == TK_K_BEGIN { return "K_BEGIN"; }
+    if kind == TK_K_BETWEEN { return "K_BETWEEN"; }
+    if kind == TK_K_BY { return "K_BY"; }
+    if kind == TK_K_CASCADE { return "K_CASCADE"; }
+    if kind == TK_K_CASE { return "K_CASE"; }
+    if kind == TK_K_CAST { return "K_CAST"; }
+    if kind == TK_K_CHECK { return "K_CHECK"; }
+    if kind == TK_K_COLLATE { return "K_COLLATE"; }
+    if kind == TK_K_COLUMN { return "K_COLUMN"; }
+    if kind == TK_K_COMMIT { return "K_COMMIT"; }
+    if kind == TK_K_CONFLICT { return "K_CONFLICT"; }
+    if kind == TK_K_CONSTRAINT { return "K_CONSTRAINT"; }
+    if kind == TK_K_CREATE { return "K_CREATE"; }
+    if kind == TK_K_CROSS { return "K_CROSS"; }
+    if kind == TK_K_CURRENT_DATE { return "K_CURRENT_DATE"; }
+    if kind == TK_K_CURRENT_TIME { return "K_CURRENT_TIME"; }
+    if kind == TK_K_CURRENT_TIMESTAMP { return "K_CURRENT_TIMESTAMP"; }
+    if kind == TK_K_DATABASE { return "K_DATABASE"; }
+    if kind == TK_K_DEFAULT { return "K_DEFAULT"; }
+    if kind == TK_K_DEFERRABLE { return "K_DEFERRABLE"; }
+    if kind == TK_K_DEFERRED { return "K_DEFERRED"; }
+    if kind == TK_K_DELETE { return "K_DELETE"; }
+    if kind == TK_K_DESC { return "K_DESC"; }
+    if kind == TK_K_DETACH { return "K_DETACH"; }
+    if kind == TK_K_DISTINCT { return "K_DISTINCT"; }
+    if kind == TK_K_DROP { return "K_DROP"; }
+    if kind == TK_K_EACH { return "K_EACH"; }
+    if kind == TK_K_ELSE { return "K_ELSE"; }
+    if kind == TK_K_END { return "K_END"; }
+    if kind == TK_K_ESCAPE { return "K_ESCAPE"; }
+    if kind == TK_K_EXCEPT { return "K_EXCEPT"; }
+    if kind == TK_K_EXCLUSIVE { return "K_EXCLUSIVE"; }
+    if kind == TK_K_EXISTS { return "K_EXISTS"; }
+    if kind == TK_K_EXPLAIN { return "K_EXPLAIN"; }
+    if kind == TK_K_FAIL { return "K_FAIL"; }
+    if kind == TK_K_FOR { return "K_FOR"; }
+    if kind == TK_K_FOREIGN { return "K_FOREIGN"; }
+    if kind == TK_K_FROM { return "K_FROM"; }
+    if kind == TK_K_FULL { return "K_FULL"; }
+    if kind == TK_K_GLOB { return "K_GLOB"; }
+    if kind == TK_K_GROUP { return "K_GROUP"; }
+    if kind == TK_K_HAVING { return "K_HAVING"; }
+    if kind == TK_K_IF { return "K_IF"; }
+    if kind == TK_K_IGNORE { return "K_IGNORE"; }
+    if kind == TK_K_IMMEDIATE { return "K_IMMEDIATE"; }
+    if kind == TK_K_IN { return "K_IN"; }
+    if kind == TK_K_INDEX { return "K_INDEX"; }
+    if kind == TK_K_INDEXED { return "K_INDEXED"; }
+    if kind == TK_K_INITIALLY { return "K_INITIALLY"; }
+    if kind == TK_K_INNER { return "K_INNER"; }
+    if kind == TK_K_INSERT { return "K_INSERT"; }
+    if kind == TK_K_INSTEAD { return "K_INSTEAD"; }
+    if kind == TK_K_INTERSECT { return "K_INTERSECT"; }
+    if kind == TK_K_INTO { return "K_INTO"; }
+    if kind == TK_K_IS { return "K_IS"; }
+    if kind == TK_K_ISNULL { return "K_ISNULL"; }
+    if kind == TK_K_JOIN { return "K_JOIN"; }
+    if kind == TK_K_KEY { return "K_KEY"; }
+    if kind == TK_K_LEFT { return "K_LEFT"; }
+    if kind == TK_K_LIKE { return "K_LIKE"; }
+    if kind == TK_K_LIMIT { return "K_LIMIT"; }
+    if kind == TK_K_MATCH { return "K_MATCH"; }
+    if kind == TK_K_NATURAL { return "K_NATURAL"; }
+    if kind == TK_K_NO { return "K_NO"; }
+    if kind == TK_K_NOT { return "K_NOT"; }
+    if kind == TK_K_NOTNULL { return "K_NOTNULL"; }
+    if kind == TK_K_NULL { return "K_NULL"; }
+    if kind == TK_K_OF { return "K_OF"; }
+    if kind == TK_K_OFFSET { return "K_OFFSET"; }
+    if kind == TK_K_ON { return "K_ON"; }
+    if kind == TK_K_OR { return "K_OR"; }
+    if kind == TK_K_ORDER { return "K_ORDER"; }
+    if kind == TK_K_OUTER { return "K_OUTER"; }
+    if kind == TK_K_PLAN { return "K_PLAN"; }
+    if kind == TK_K_PRAGMA { return "K_PRAGMA"; }
+    if kind == TK_K_PRIMARY { return "K_PRIMARY"; }
+    if kind == TK_K_QUERY { return "K_QUERY"; }
+    if kind == TK_K_RAISE { return "K_RAISE"; }
+    if kind == TK_K_RECURSIVE { return "K_RECURSIVE"; }
+    if kind == TK_K_REFERENCES { return "K_REFERENCES"; }
+    if kind == TK_K_REGEXP { return "K_REGEXP"; }
+    if kind == TK_K_REINDEX { return "K_REINDEX"; }
+    if kind == TK_K_RELEASE { return "K_RELEASE"; }
+    if kind == TK_K_RENAME { return "K_RENAME"; }
+    if kind == TK_K_REPLACE { return "K_REPLACE"; }
+    if kind == TK_K_RESTRICT { return "K_RESTRICT"; }
+    if kind == TK_K_RIGHT { return "K_RIGHT"; }
+    if kind == TK_K_ROLLBACK { return "K_ROLLBACK"; }
+    if kind == TK_K_ROW { return "K_ROW"; }
+    if kind == TK_K_SAVEPOINT { return "K_SAVEPOINT"; }
+    if kind == TK_K_SELECT { return "K_SELECT"; }
+    if kind == TK_K_SET { return "K_SET"; }
+    if kind == TK_K_TABLE { return "K_TABLE"; }
+    if kind == TK_K_TEMP { return "K_TEMP"; }
+    if kind == TK_K_TEMPORARY { return "K_TEMPORARY"; }
+    if kind == TK_K_THEN { return "K_THEN"; }
+    if kind == TK_K_TO { return "K_TO"; }
+    if kind == TK_K_TRANSACTION { return "K_TRANSACTION"; }
+    if kind == TK_K_TRIGGER { return "K_TRIGGER"; }
+    if kind == TK_K_UNION { return "K_UNION"; }
+    if kind == TK_K_UNIQUE { return "K_UNIQUE"; }
+    if kind == TK_K_UPDATE { return "K_UPDATE"; }
+    if kind == TK_K_USING { return "K_USING"; }
+    if kind == TK_K_VACUUM { return "K_VACUUM"; }
+    if kind == TK_K_VALUES { return "K_VALUES"; }
+    if kind == TK_K_VIEW { return "K_VIEW"; }
+    if kind == TK_K_VIRTUAL { return "K_VIRTUAL"; }
+    if kind == TK_K_WHEN { return "K_WHEN"; }
+    if kind == TK_K_WHERE { return "K_WHERE"; }
+    if kind == TK_K_WITH { return "K_WITH"; }
+    if kind == TK_K_WITHOUT { return "K_WITHOUT"; }
+    if kind == TK_IDENTIFIER { return "IDENTIFIER"; }
+    if kind == TK_NUMERIC_LITERAL { return "NUMERIC_LITERAL"; }
+    if kind == TK_BIND_PARAMETER { return "BIND_PARAMETER"; }
+    if kind == TK_STRING_LITERAL { return "STRING_LITERAL"; }
+    if kind == TK_BLOB_LITERAL { return "BLOB_LITERAL"; }
+    if kind == TK_SINGLE_LINE_COMMENT { return "SINGLE_LINE_COMMENT"; }
+    if kind == TK_MULTILINE_COMMENT { return "MULTILINE_COMMENT"; }
+    if kind == TK_SPACES { return "SPACES"; }
+    if kind == TK_UNEXPECTED_CHAR { return "UNEXPECTED_CHAR"; }
+    if kind == TK_EOF { return "Eof"; }
+    if kind == TK_ERROR { return "Error"; }
+    if kind == TK_LIT_SEMI { return "TK_LIT_SEMI"; }
+    if kind == TK_LIT_DOT { return "TK_LIT_DOT"; }
+    if kind == TK_LIT_COMMA { return "TK_LIT_COMMA"; }
+    if kind == TK_LIT_LPAREN { return "TK_LIT_LPAREN"; }
+    if kind == TK_LIT_RPAREN { return "TK_LIT_RPAREN"; }
+    if kind == TK_LIT_EQ { return "TK_LIT_EQ"; }
+    if kind == TK_LIT_PIPEPIPE { return "TK_LIT_PIPEPIPE"; }
+    if kind == TK_LIT_STAR { return "TK_LIT_STAR"; }
+    if kind == TK_LIT_SLASH { return "TK_LIT_SLASH"; }
+    if kind == TK_LIT__ { return "TK_LIT__"; }
+    if kind == TK_LIT_PLUS { return "TK_LIT_PLUS"; }
+    if kind == TK_LIT_MINUS { return "TK_LIT_MINUS"; }
+    if kind == TK_LIT_LTLT { return "TK_LIT_LTLT"; }
+    if kind == TK_LIT_GTGT { return "TK_LIT_GTGT"; }
+    if kind == TK_LIT_AMP { return "TK_LIT_AMP"; }
+    if kind == TK_LIT_PIPE { return "TK_LIT_PIPE"; }
+    if kind == TK_LIT_LT { return "TK_LIT_LT"; }
+    if kind == TK_LIT_LTEQ { return "TK_LIT_LTEQ"; }
+    if kind == TK_LIT_GT { return "TK_LIT_GT"; }
+    if kind == TK_LIT_GTEQ { return "TK_LIT_GTEQ"; }
+    if kind == TK_LIT_EQEQ { return "TK_LIT_EQEQ"; }
+    if kind == TK_LIT_BANGEQ { return "TK_LIT_BANGEQ"; }
+    if kind == TK_LIT_LTGT { return "TK_LIT_LTGT"; }
+    if kind == TK_LIT_TILDE { return "TK_LIT_TILDE"; }
+    return "Unknown";
+}
+
 struct Parser {
     tokens: Array<Token>,
     pos: i32,

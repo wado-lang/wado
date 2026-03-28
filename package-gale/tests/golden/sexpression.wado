@@ -569,6 +569,53 @@ pub fn tokenize(input: &String) -> Array<Token> {
     return tokens;
 }
 
+pub fn tokenize_all(input: &String) -> Array<Token> {
+    let mut lexer = Lexer::new(input);
+    let mut tokens: Array<Token> = [];
+    while !lexer.at_end() {
+        let start = lexer.pos;
+        let mut best_end: i32 = -1;
+        let mut best_kind: i32 = TK_ERROR;
+        let mut end: i32 = -1;
+        end = try_string(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_STRING; }
+        end = try_whitespace(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_WHITESPACE; }
+        end = try_number(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_NUMBER; }
+        end = try_symbol(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_SYMBOL; }
+        end = try_lparen(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LPAREN; }
+        end = try_rparen(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_RPAREN; }
+        end = try_dot(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_DOT; }
+        if best_end <= start {
+            tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));
+            lexer.pos = start + 1;
+        } else {
+            tokens.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+            lexer.pos = best_end;
+        }
+    }
+    tokens.append(Token::new(TK_EOF, "", Span::new(lexer.pos, lexer.pos)));
+    return tokens;
+}
+
+pub fn token_kind_name(kind: i32) -> String {
+    if kind == TK_STRING { return "STRING"; }
+    if kind == TK_WHITESPACE { return "WHITESPACE"; }
+    if kind == TK_NUMBER { return "NUMBER"; }
+    if kind == TK_SYMBOL { return "SYMBOL"; }
+    if kind == TK_LPAREN { return "LPAREN"; }
+    if kind == TK_RPAREN { return "RPAREN"; }
+    if kind == TK_DOT { return "DOT"; }
+    if kind == TK_EOF { return "Eof"; }
+    if kind == TK_ERROR { return "Error"; }
+    return "Unknown";
+}
+
 struct Parser {
     tokens: Array<Token>,
     pos: i32,
