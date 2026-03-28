@@ -11,6 +11,37 @@ index 582ba943..822b0e47 100644
          features.set(WasmFeatures::MULTI_MEMORY, false);
  
          match Validator::new_with_features(features).validate_all(translation.wasm) {
+diff --git a/crates/js-component-bindgen/src/function_bindgen.rs b/crates/js-component-bindgen/src/function_bindgen.rs
+index 9fd811c5..aa99de01 100644
+--- a/crates/js-component-bindgen/src/function_bindgen.rs
++++ b/crates/js-component-bindgen/src/function_bindgen.rs
+@@ -1491,11 +1491,24 @@ impl Bindgen for FunctionBindgen<'_> {
+                               taskID: task.id(),
+                               componentIdx: task.componentIdx(),
+                               fn: () => {callee}({args}),
+-                          }});
+-                          "#,
++                          }});"#,
+                     callee = self.callee,
+                     args = operands.join(", "),
+                 );
++                // For async exports using task.return, the JSPI Promising wrapper
++                // returns undefined (void core wasm function). The task's completion
++                // promise (resolved by task.return) provides the already-lifted result.
++                if self.is_async && sig_results_length > 0 {
++                    uwriteln!(
++                        self.src,
++                        r#"
++                          if (ret === undefined) {{
++                              const taskResult = await task.completionPromise();
++                              if (taskResult !== undefined) {{ return taskResult; }}
++                          }}
++                          "#,
++                    );
++                }
+ 
+                 if self.tracing_enabled {
+                     let prefix = self.tracing_prefix;
 diff --git a/crates/js-component-bindgen/src/intrinsics/lower.rs b/crates/js-component-bindgen/src/intrinsics/lower.rs
 index a8cc61b9..fe8e73f9 100644
 --- a/crates/js-component-bindgen/src/intrinsics/lower.rs
@@ -44,10 +75,20 @@ index a8cc61b9..fe8e73f9 100644
                              const rem = ctx.storagePtr % align32;
                              if (rem !== 0) {{
 diff --git a/crates/js-component-bindgen/src/intrinsics/mod.rs b/crates/js-component-bindgen/src/intrinsics/mod.rs
-index 0b50d4cf..2e33152f 100644
+index 0b50d4cf..2a501643 100644
 --- a/crates/js-component-bindgen/src/intrinsics/mod.rs
 +++ b/crates/js-component-bindgen/src/intrinsics/mod.rs
-@@ -1279,6 +1279,22 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
+@@ -1213,6 +1213,9 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
+     if args
+         .intrinsics
+         .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll))
++        || args
++            .intrinsics
++            .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait))
+     {
+         args.intrinsics
+             .extend([&Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory)]);
+@@ -1279,6 +1282,22 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
          ]);
      }
  
@@ -70,7 +111,7 @@ index 0b50d4cf..2e33152f 100644
      if args
          .intrinsics
          .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
-@@ -1364,10 +1380,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
+@@ -1364,10 +1383,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
      if args
          .intrinsics
          .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite))
@@ -86,7 +127,7 @@ index 0b50d4cf..2e33152f 100644
      }
  
 diff --git a/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs b/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs
-index 5e027d19..967777a2 100644
+index 5e027d19..24d9951e 100644
 --- a/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs
 +++ b/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs
 @@ -1140,7 +1140,7 @@ impl AsyncStreamIntrinsic {
@@ -170,6 +211,47 @@ index 5e027d19..967777a2 100644
                              streamTableIdx,
                              payloadLiftFn: payloadLiftFn,
                              payloadLowerFn: payloadLowerFn,
+@@ -1457,9 +1475,23 @@ impl AsyncStreamIntrinsic {
+                             throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] != operation table idx [${{streamTableIdx}}]`);
+                         }}
+ 
++                        const memory = getMemoryFn();
++
++                        // Host stream write hook: if a global hook is registered, deliver
++                        // stream data directly from linear memory, bypassing the rendezvous.
++                        // This enables WASI shims to receive bulk data from stream.write.
++                        if (typeof globalThis._jcoStreamWriteHook === 'function' && streamEnd.isWritable()) {{
++                            const actualCount = count >>> 0;
++                            const data = new Uint8Array(memory.buffer, ptr, actualCount);
++                            const handled = globalThis._jcoStreamWriteHook(streamEndWaitableIdx, new Uint8Array(data));
++                            if (handled) {{
++                                return (actualCount << 4) | 0;
++                            }}
++                        }}
++
+                         const result = await streamEnd.copy({{
+                             isAsync,
+-                            memory: getMemoryFn(),
++                            memory,
+                             ptr,
+                             count,
+                             eventCode: {event_code},
+diff --git a/crates/js-component-bindgen/src/intrinsics/p3/waitable.rs b/crates/js-component-bindgen/src/intrinsics/p3/waitable.rs
+index f7beb8a6..ba0ed043 100644
+--- a/crates/js-component-bindgen/src/intrinsics/p3/waitable.rs
++++ b/crates/js-component-bindgen/src/intrinsics/p3/waitable.rs
+@@ -392,8 +392,9 @@ impl WaitableIntrinsic {
+                             throw Error(`task component [${{task.componentIdx}}] !== executing component [${{componentIdx}}]`);
+                         }}
+ 
+-                        const event = await task.waitForEvent({{ waitableSetRep, isAsync }});
+-                        return {store_event_in_component_memory_fn}(memory, task, event, resultPtr);
++                        const memory = getMemoryFn();
++                        const event = await task.waitUntil({{ waitableSetRep, readyFn: () => true, cancellable: false }});
++                        return {store_event_in_component_memory_fn}({{ memory, ptr: resultPtr, event }});
+                     }}
+                 "#));
+             }
 diff --git a/crates/js-component-bindgen/src/lib.rs b/crates/js-component-bindgen/src/lib.rs
 index b3e08a2a..a33c54df 100644
 --- a/crates/js-component-bindgen/src/lib.rs
@@ -194,6 +276,25 @@ index b3e08a2a..a33c54df 100644
      );
  
      let mut types = ComponentTypesBuilder::new(&validator);
+diff --git a/crates/js-component-bindgen/src/transpile_bindgen.rs b/crates/js-component-bindgen/src/transpile_bindgen.rs
+index 8822efd0..8f0885b5 100644
+--- a/crates/js-component-bindgen/src/transpile_bindgen.rs
++++ b/crates/js-component-bindgen/src/transpile_bindgen.rs
+@@ -1202,12 +1202,12 @@ impl<'a> Instantiator<'a, '_> {
+                 uwriteln!(
+                     self.src.js,
+                     r#"
+-                    const trampoline{i} = {waitable_set_wait_fn}.bind(null, {{
++                    const trampoline{i} = new WebAssembly.Suspending({waitable_set_wait_fn}.bind(null, {{
+                         componentIdx: {instance_idx},
+                         isAsync: {async_},
+                         memoryIdx: {memory_idx},
+                         getMemoryFn: () => memory{memory_idx},
+-                    }});
++                    }}));
+                     "#,
+                 );
+             }
 diff --git a/package-lock.json b/package-lock.json
 index f34275d9..fd3ff020 100644
 --- a/package-lock.json
