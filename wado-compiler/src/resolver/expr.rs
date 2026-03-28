@@ -2070,17 +2070,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
             (name.clone(), None)
         };
 
-        // Get expected field types for coercion (for generic structs)
-        let struct_field_types: Vec<(String, TypeId)> = self
-            .struct_fields
-            .get(&struct_name)
-            .map(|info| {
-                info.fields
-                    .iter()
-                    .map(|(name, type_id, _)| (name.clone(), *type_id))
-                    .collect()
-            })
-            .unwrap_or_default();
+        // Get expected field types for coercion (for generic structs).
+        // When symbol_module_source is known (imported struct), look up fields
+        // from all_struct_fields by (module_source, name) to avoid collisions
+        // with local structs that happen to share the same name.
+        let struct_field_types: Vec<(String, TypeId)> = if let Some(ms) = &symbol_module_source {
+            self.all_struct_fields
+                .get(ms)
+                .and_then(|m| m.get(&struct_name))
+                .map(|info| {
+                    info.fields
+                        .iter()
+                        .map(|(name, type_id, _)| (name.clone(), *type_id))
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            self.struct_fields
+                .get(&struct_name)
+                .map(|info| {
+                    info.fields
+                        .iter()
+                        .map(|(name, type_id, _)| (name.clone(), *type_id))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
 
         // Resolve field expressions, converting tuple literals to arrays when needed.
         // For generic structs, tuple-to-sequence coercion may be deferred to a second
@@ -2159,6 +2174,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if needs_deferred_coercion && matches!(value.kind, TirExprKind::TupleLiteral { .. })
                 {
                     deferred_coercions.push((index, index));
+                }
+
+                // Check field name exists in struct definition
+                if !struct_field_types.iter().any(|(n, _)| n == &field.name) && !struct_field_types.is_empty() {
+                    let _ = self.logger.error(TypeError::FieldNotFound {
+                        struct_name: struct_name.clone(),
+                        field_name: field.name.clone(),
+                        span: field.span,
+                    });
+
                 }
 
                 // Check field value type against declared struct field type

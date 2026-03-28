@@ -214,6 +214,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .iter()
                             .enumerate()
                             .map(|(index, field)| {
+                                // Check field name exists in struct definition
+                                if !struct_field_types.iter().any(|(n, _)| n == &field.name) && !struct_field_types.is_empty() {
+                                    let _ = self.logger.error(TypeError::FieldNotFound {
+                                        struct_name: name.clone(),
+                                        field_name: field.name.clone(),
+                                        span: field.span,
+                                    });
+                                }
                                 let expected_field_type = struct_field_types
                                     .iter()
                                     .find(|(n, _)| n == &field.name)
