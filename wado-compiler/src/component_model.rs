@@ -174,6 +174,19 @@ impl WasiFunctionInfo {
         })
     }
 
+    /// Whether this function returns a Future<T> or a tuple containing Future<T>.
+    pub fn return_type_has_future(&self) -> bool {
+        fn has_future(ty: &Type) -> bool {
+            match ty {
+                Type::Generic(g) if g.name == "Future" => true,
+                Type::Generic(g) => g.args.iter().any(has_future),
+                Type::Tuple(elems) => elems.iter().any(has_future),
+                _ => false,
+            }
+        }
+        self.return_type.as_ref().is_some_and(has_future)
+    }
+
     /// Check if a return type requires Memory + Realloc in canon lower.
     fn return_type_requires_memory(ty: &Type) -> bool {
         match ty {
