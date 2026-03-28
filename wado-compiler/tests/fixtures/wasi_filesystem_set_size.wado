@@ -8,6 +8,7 @@
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, DescriptorFlags, PathFlags, OpenFlags } from "wasi:filesystem";
+use { wait_for_subtask } from "core:internal";
 
 fn write_bytes(file: &Descriptor, data: Array<u8>) {
     let [write_rx, write_tx] = Stream::<u8>::new();
@@ -30,7 +31,7 @@ fn read_all(file: &Descriptor) -> Array<u8> {
         }
     }
     read_stream.drop();
-        wait_for_subtask(read_future);
+        read_future.drop();
     return result;
 }
 

@@ -4153,7 +4153,13 @@ impl FunctionTranslator<'_, '_> {
                     let mut call_args: Vec<WirInstr> =
                         args.iter().map(|a| self.translate_expr(&a.expr)).collect();
                     // Async canon lower (used for streaming functions) adds buffer_size argument
-                    let func_info = self.ctx.project.wasi_registry.get_function(wasi_func_name);
+                    // get_function uses "Effect::method" key format
+                    let effect_method = if is_stderr {
+                        "Stderr::write_via_stream"
+                    } else {
+                        "Stdout::write_via_stream"
+                    };
+                    let func_info = self.ctx.project.wasi_registry.get_function(effect_method);
                     let needs_async = func_info.is_some_and(|f| {
                         f.is_async || f.has_streaming_param() || f.return_type_has_future()
                     });

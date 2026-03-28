@@ -16,6 +16,7 @@
 
 use { Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { wait_for_subtask } from "core:internal";
 
 fn to_upper(data: Array<u8>) -> Array<u8> {
     let mut result: Array<u8> = [];
@@ -63,7 +64,7 @@ export fn run() with Stdout, Stderr, Preopens {
         file_rx.drop();
         out_tx.drop();
         wait_for_subtask(subtask);
-        wait_for_subtask(read_future);
+        read_future.drop();
     }
 }
 

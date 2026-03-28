@@ -2646,8 +2646,15 @@ fn synthesize_adapter(
     // The binding's return type to the Wado caller:
     let adapter_return_type;
 
+    // Streaming path: function has stream/future params AND returns a direct
+    // Future (not a tuple containing Future). For tuple returns like
+    // read_via_stream -> [Stream, Future], the async path should lift the tuple.
+    let returns_direct_future = func_info
+        .return_type
+        .as_ref()
+        .is_some_and(|ty| matches!(ty, Type::Generic(g) if g.name == "Future"));
     let is_streaming_func = !func_info.is_async
-        && (func_info.has_streaming_param() || func_info.return_type_has_future());
+        && (func_info.has_streaming_param() || returns_direct_future);
     if is_streaming_func {
         // Streaming function (has Stream<T>/Future<T> param or returns Future<T>):
         // canon lower is called with async option (CM spec requirement for stream/future).

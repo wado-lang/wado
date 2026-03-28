@@ -22,6 +22,7 @@
 
 use { Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { wait_for_subtask } from "core:internal";
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
@@ -51,7 +52,7 @@ export fn run() with Stdout, Stderr, Preopens {
         let [read_stream, read_done] = file.read_via_stream(0 as Filesize);
         let subtask2 = Stdout::write_via_stream(read_stream);
         wait_for_subtask(subtask2);
-        wait_for_subtask(read_done);
+        read_done.drop();
     }
 }
 

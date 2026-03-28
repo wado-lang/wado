@@ -7,6 +7,7 @@
 
 use { Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, DescriptorFlags, PathFlags, OpenFlags } from "wasi:filesystem";
+use { wait_for_subtask } from "core:internal";
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
@@ -45,7 +46,7 @@ export fn run() with Stdout, Stderr, Preopens {
         let [read_stream, read_future] = file.read_via_stream(0 as Filesize);
         let sub3 = Stdout::write_via_stream(read_stream);
         sub3.drop();
-        wait_for_subtask(read_future);
+        read_future.drop();
 
         // Clean up
         dir.unlink_file_at("append_test.txt");
