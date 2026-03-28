@@ -2241,6 +2241,29 @@ fn import_interfaces_with_resources(
         import_interface_with_resource(builder, ctx, interface_info, project);
     }
 
+    // Register per-package error-code aliases for resource-defining interfaces.
+    // These are needed by Transmission future types (future<result<_, error-code>>).
+    for interface_info in &interfaces_with_resources {
+        let has_error_code = project
+            .wasi_registry
+            .has_enum_in_interface(&interface_info.path, "ErrorCode")
+            || project
+                .wasi_registry
+                .variants_for_interface(&interface_info.path)
+                .any(|(name, _, _)| name == "ErrorCode");
+        if has_error_code {
+            let error_code_key = format!("{}-error-code", interface_info.package);
+            if !ctx.has_type(&error_code_key) {
+                ctx.register_type(&error_code_key);
+                builder.alias_export(
+                    ctx.instance_idx(&interface_info.interface),
+                    "error-code",
+                    ComponentExportKind::Type,
+                );
+            }
+        }
+    }
+
     // Phase 3: Import interfaces that reference resources from other interfaces
     // (e.g. wasi:filesystem/preopens whose get-directories returns a list of descriptors
     // from wasi:filesystem/types). These must be imported AFTER Phase 1 so that the

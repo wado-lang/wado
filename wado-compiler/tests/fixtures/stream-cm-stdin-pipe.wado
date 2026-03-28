@@ -11,7 +11,8 @@ use { Stdin } from "wasi:cli";
 export fn run() with Stdout, Stdin {
     let [stdin_stream, _done] = Stdin::read_via_stream();
     let subtask = Stdout::write_via_stream(stdin_stream);
-    subtask.drop();
+    subtask.read();
+        subtask.drop();
 }
 
 __DATA__

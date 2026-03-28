@@ -80,7 +80,14 @@ fn register_imports(ctx: &mut WirContext<'_>) {
         if import.namespace == "wasi"
             && let Some(intrinsic) = CanonicalIntrinsic::from_import_name(&import.canonical_name)
         {
-            ctx.needed_canonicals.insert(intrinsic, func_id.clone());
+            // Future-related canonicals with default Trailers payload are not tracked here.
+            // They are registered with the correct CmFuturePayload during WIR translation
+            // via CM method dispatch (cm_future_payload), which has access to the actual
+            // Future<T> type parameter. Tracking them with the wrong payload would force
+            // unnecessary HTTP type definitions.
+            if intrinsic.future_payload().is_none() {
+                ctx.needed_canonicals.insert(intrinsic, func_id.clone());
+            }
         }
 
         // Also register under the TIR builtin function name so call sites can resolve.

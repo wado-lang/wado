@@ -1796,7 +1796,23 @@ impl FunctionTranslator<'_, '_> {
                         };
                     let intrinsic = CanonicalIntrinsic::from_import_name(local_name)
                         .unwrap_or_else(|| panic!("unknown canonical intrinsic: {local_name}"));
-                    self.ctx.ensure_canonical(intrinsic, params, results)
+                    // Future-related canonicals with default payload from from_import_name
+                    // are NOT registered here. They must be registered via CM method dispatch
+                    // with the correct CmFuturePayload. If a builtin calls future-drop-readable
+                    // etc., the func_map entry from import registration is used directly.
+                    if intrinsic.future_payload().is_some() {
+                        // Look up the pre-registered import function
+                        self.ctx
+                            .func_map
+                            .get(&format!("wasi/{local_name}"))
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                // No pre-registered import; fall back to ensure_canonical
+                                self.ctx.ensure_canonical(intrinsic, params, results)
+                            })
+                    } else {
+                        self.ctx.ensure_canonical(intrinsic, params, results)
+                    }
                 };
                 WirInstr::Call {
                     func_id,
@@ -4463,6 +4479,7 @@ impl FunctionTranslator<'_, '_> {
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
+        let future_read_id_retry = future_read_id.clone();
         let ws_new_id = self.ctx.ensure_canonical(
             CanonicalIntrinsic::WaitableSetNew,
             vec![],
@@ -4542,7 +4559,12 @@ impl FunctionTranslator<'_, '_> {
             }),
         });
 
-        // If BLOCKED (0xFFFF_FFFF), wait via waitable-set
+        // If BLOCKED (0xFFFF_FFFF), wait via waitable-set, then retry future-read
+        let ws_drop_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetDrop,
+            vec![WirType::I32],
+            vec![],
+        );
         instrs.push(WirInstr::If {
             condition: Box::new(WirInstr::I32Eq(
                 Box::new(WirInstr::LocalGet {
@@ -4554,14 +4576,19 @@ impl FunctionTranslator<'_, '_> {
             result: None,
             then_body: {
                 let evt = evt_ptr_name;
+                let ws_name = format!("__fr_ws_{suffix}");
                 vec![
+                    WirInstr::DeclareLocal {
+                        name: ws_name.clone(),
+                        ty: WirType::I32,
+                    },
                     WirInstr::DeclareLocal {
                         name: evt.clone(),
                         ty: WirType::I32,
                     },
                     // ws = waitable_set_new()
                     WirInstr::LocalSet {
-                        name: result_name.clone(),
+                        name: ws_name.clone(),
                         value: Box::new(WirInstr::Call {
                             func_id: ws_new_id,
                             args: vec![],
@@ -4572,11 +4599,11 @@ impl FunctionTranslator<'_, '_> {
                         func_id: w_join_id,
                         args: vec![
                             WirInstr::LocalGet {
-                                name: handle_name,
+                                name: handle_name.clone(),
                                 result_ty: WirType::I32,
                             },
                             WirInstr::LocalGet {
-                                name: result_name.clone(),
+                                name: ws_name.clone(),
                                 result_ty: WirType::I32,
                             },
                         ],
@@ -4599,7 +4626,7 @@ impl FunctionTranslator<'_, '_> {
                         func_id: ws_wait_id,
                         args: vec![
                             WirInstr::LocalGet {
-                                name: result_name.clone(),
+                                name: ws_name.clone(),
                                 result_ty: WirType::I32,
                             },
                             WirInstr::LocalGet {
@@ -4608,18 +4635,6 @@ impl FunctionTranslator<'_, '_> {
                             },
                         ],
                     })),
-                    // result = i32.load(evt_ptr + 4) — the payload contains the ReturnCode
-                    WirInstr::LocalSet {
-                        name: result_name.clone(),
-                        value: Box::new(WirInstr::I32Load {
-                            offset: 4,
-                            align: 2,
-                            addr: Box::new(WirInstr::LocalGet {
-                                name: evt.clone(),
-                                result_ty: WirType::I32,
-                            }),
-                        }),
-                    },
                     // Free event buffer
                     WirInstr::Drop(Box::new(WirInstr::Call {
                         func_id: realloc_id.clone(),
@@ -4633,6 +4648,32 @@ impl FunctionTranslator<'_, '_> {
                             WirInstr::I32Const(0),
                         ],
                     })),
+                    // Drop waitable set
+                    WirInstr::Call {
+                        func_id: ws_drop_id,
+                        args: vec![WirInstr::LocalGet {
+                            name: ws_name,
+                            result_ty: WirType::I32,
+                        }],
+                    },
+                    // Retry: result = future-read(handle, ptr)
+                    // Now the future is complete, so this will return immediately.
+                    WirInstr::LocalSet {
+                        name: result_name.clone(),
+                        value: Box::new(WirInstr::Call {
+                            func_id: future_read_id_retry,
+                            args: vec![
+                                WirInstr::LocalGet {
+                                    name: handle_name.clone(),
+                                    result_ty: WirType::I32,
+                                },
+                                WirInstr::LocalGet {
+                                    name: ptr_name.clone(),
+                                    result_ty: WirType::I32,
+                                },
+                            ],
+                        }),
+                    },
                 ]
             },
             else_body: None,

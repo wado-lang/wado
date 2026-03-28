@@ -39,6 +39,7 @@ export fn run() with Stdout, Stderr, Preopens {
         // Pipe the file's read stream directly to stdout
         // This prints the file contents: "Hello, World!\n"
         let subtask = Stdout::write_via_stream(read_stream);
+        subtask.read();
         subtask.drop();
     } else {
         eprintln("read_stream: failed to open hello.txt");

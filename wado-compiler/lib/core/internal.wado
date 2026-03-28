@@ -69,30 +69,23 @@ pub fn wait_for_subtask(packed: i32) {
     }
 }
 
-/// Drops a write_via_stream Future handle.
-///
-/// write_via_stream returns a Future<Result<(), ErrorCode>> handle (i32).
-/// We cast it to the typed Future resource and drop it.
-use { ErrorCode } from "wasi:cli/types.wado";
-fn drop_write_future(handle: i32) {
-    let future = handle as Future<Result<(), ErrorCode>>;
-    future.drop();
-}
-
 /// Logs a message with newline to stdout (ambient, no effect required).
-/// Waits for completion.
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
 /// intentional for logging/debugging which must work without effects.
+///
+/// The Future handle returned by write_via_stream is cast to a typed
+/// Future and dropped via CM method dispatch.
+use { ErrorCode as CliErrorCode } from "wasi:cli/types.wado";
 pub fn log_stdout(message: String) {
     let [rx, tx] = Stream::<u8>::new();
 
     let future_handle = builtin::call_indirect_stdout_write_via_stream(rx as i32);
     write_string_to_stream(tx, message, true);
-    drop_write_future(future_handle);
+    let future = future_handle as Future<Result<(), CliErrorCode>>;
+    future.drop();
 }
 
 /// Logs a message with newline to stderr (ambient, no effect required).
-/// Waits for completion.
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
 /// intentional for logging/debugging which must work without effects.
 pub fn log_stderr(message: String) {
@@ -100,7 +93,8 @@ pub fn log_stderr(message: String) {
 
     let future_handle = builtin::call_indirect_stderr_write_via_stream(rx as i32);
     write_string_to_stream(tx, message, true);
-    drop_write_future(future_handle);
+    let future = future_handle as Future<Result<(), CliErrorCode>>;
+    future.drop();
 }
 
 /// Logs a message to stderr and traps.
