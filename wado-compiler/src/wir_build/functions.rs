@@ -80,12 +80,7 @@ fn register_imports(ctx: &mut WirContext<'_>) {
         if import.namespace == "wasi"
             && let Some(intrinsic) = CanonicalIntrinsic::from_import_name(&import.canonical_name)
         {
-            // Skip registering future-related canonicals with default payload here.
-            // They will be registered with the correct CmFuturePayload during WIR
-            // translation when the actual Future<T> type is known.
-            if intrinsic.future_payload().is_none() {
-                ctx.needed_canonicals.insert(intrinsic, func_id.clone());
-            }
+            ctx.needed_canonicals.insert(intrinsic, func_id.clone());
         }
 
         // Also register under the TIR builtin function name so call sites can resolve.
