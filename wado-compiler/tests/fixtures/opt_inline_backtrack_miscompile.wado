@@ -1,11 +1,22 @@
-// O3 miscompilation: backtracking parser dispatch breaks when
-// Parser::advance is inlined (threshold 20, 2+ optimization iterations).
-// Reproduces with the sqlite parser benchmark at -O3.
-// Remove TODO when the optimizer bug is fixed.
+// O3 miscompilation: the generated sqlite parser fails to parse
+// multi-statement SQL when compiled at -O3 (inline threshold 20,
+// 2+ optimization iterations). Cascading inlining in large
+// backtracking parser dispatch code triggers incorrect codegen.
+use sqlite from "../../../package-gale/tests/golden/sqlite.wado";
 
 export fn run() {
-    panic("O3 inline miscompilation not yet fixed");
+    let sql = "CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+CREATE INDEX idx_t_name ON t(name);
+INSERT INTO t (id, name) VALUES (1, 'alice');
+SELECT * FROM t WHERE id IN (SELECT id FROM t WHERE name = 'alice');
+CREATE VIEW v AS SELECT id, name FROM t WHERE id > 0;
+DELETE FROM t WHERE id NOT IN (SELECT id FROM t);
+UPDATE t SET name = 'bob' WHERE id = 1;";
+    let r = sqlite::parse(&sql);
+    if let Err(e) = r {
+        panic(e.message);
+    }
 }
 
 __DATA__
-{"TODO": true}
+{"TODO": true, "stdout": "", "only_opt": ["O3"]}
