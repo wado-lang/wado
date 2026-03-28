@@ -465,11 +465,13 @@ impl Monomorphizer {
             if let Some(ref info) = method_func.method_info.clone()
                 && let Some(ref trait_name) = info.trait_name
             {
-                // For ref-type impls, try the ref struct name first (e.g., "&^IntoIterator::into_iter")
-                if info.base_struct_name != base_struct {
+                // For ref-type impls (impl Trait for &Container<T>),
+                // try "&Container^Trait::method" first
+                if info.is_ref_impl {
+                    let ref_name = format!("&{}", base_struct);
                     possible_keys.push(InstantiationKey {
                         name: MethodName::format_local(
-                            &info.base_struct_name,
+                            &ref_name,
                             Some(trait_name),
                             &method_name,
                         ),

@@ -764,7 +764,7 @@ impl LocalMethodName {
             method_name: self.method_name.clone(),
             method_type_args: self.method_type_args.clone(),
             is_type_param_receiver: false,
-                is_ref_impl: false, // After substitution, it's a concrete type
+            is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
         }
     }
@@ -789,10 +789,11 @@ impl LocalMethodName {
     #[must_use]
     pub fn to_mangled_name(&self) -> String {
         let method_part = self.full_method_name();
+        let prefix = if self.is_ref_impl { "&" } else { "" };
         if let Some(trait_name) = &self.trait_name {
-            format!("{}^{}::{}", self.struct_name, trait_name, method_part)
+            format!("{prefix}{}^{}::{}", self.struct_name, trait_name, method_part)
         } else {
-            format!("{}::{}", self.struct_name, method_part)
+            format!("{prefix}{}::{}", self.struct_name, method_part)
         }
     }
 

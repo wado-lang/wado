@@ -473,8 +473,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             base_struct_name = impl_name;
         }
 
+        let mangled_receiver = if is_ref_impl {
+            format!("&{receiver_struct_name}")
+        } else {
+            receiver_struct_name.clone()
+        };
         let mangled_method_name = MethodName::format_local(
-            &receiver_struct_name,
+            &mangled_receiver,
             trait_name.as_deref(),
             &method_call.method,
         );
@@ -493,8 +498,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_blanket: true,
             })
         } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
+            let generic_base = if is_ref_impl {
+                format!("&{base_struct_name}")
+            } else {
+                base_struct_name.clone()
+            };
             let generic_name =
-                MethodName::format_local(&base_struct_name, None, &method_call.method);
+                MethodName::format_local(&generic_base, trait_name.as_deref(), &method_call.method);
             Some(MonomorphInfo {
                 generic_name,
                 impl_type_args: receiver_type_args.unwrap_or_default(),
