@@ -6244,83 +6244,64 @@ fn parse_sql_stmt(p: &mut Parser) -> Result<SqlStmtNode, ParseError> {
         }
     } else if grp_kind == TK_K_CREATE {
         if p.peek_kind() == TK_K_CREATE {
-            let saved_pos_5 = p.pos;
-            let mut bt_done_5 = false;
-            if !bt_done_5 {
-                bt_try_14: {
-                    let opt_r = parse_create_index_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_5; break bt_try_14; }
-                    bt_done_5 = true;
+            if p.peek_at(1) == TK_K_UNIQUE || p.peek_at(1) == TK_K_INDEX {
+                let tok_11 = parse_create_index_stmt(p)?;
+            } else if p.peek_at(1) == TK_K_TEMP || p.peek_at(1) == TK_K_TEMPORARY {
+                let saved_pos_5 = p.pos;
+                let mut bt_done_5 = false;
+                if !bt_done_5 {
+                    bt_try_14: {
+                        let opt_r = parse_create_table_stmt(p);
+                        if let Err(_) = opt_r { p.pos = saved_pos_5; break bt_try_14; }
+                        bt_done_5 = true;
+                    }
                 }
-            }
-            if !bt_done_5 {
-                bt_try_15: {
-                    let opt_r = parse_create_table_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_5; break bt_try_15; }
-                    bt_done_5 = true;
+                if !bt_done_5 {
+                    bt_try_15: {
+                        let opt_r = parse_create_trigger_stmt(p);
+                        if let Err(_) = opt_r { p.pos = saved_pos_5; break bt_try_15; }
+                        bt_done_5 = true;
+                    }
                 }
-            }
-            if !bt_done_5 {
-                bt_try_16: {
-                    let opt_r = parse_create_trigger_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_5; break bt_try_16; }
-                    bt_done_5 = true;
+                if !bt_done_5 {
+                    let tok = parse_create_view_stmt(p)?;
                 }
-            }
-            if !bt_done_5 {
-                bt_try_17: {
-                    let opt_r = parse_create_view_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_5; break bt_try_17; }
-                    bt_done_5 = true;
-                }
-            }
-            if !bt_done_5 {
-                let tok = parse_create_virtual_table_stmt(p)?;
+            } else if p.peek_at(1) == TK_K_TABLE {
+                let tok_12 = parse_create_table_stmt(p)?;
+            } else if p.peek_at(1) == TK_K_TRIGGER {
+                let tok_13 = parse_create_trigger_stmt(p)?;
+            } else if p.peek_at(1) == TK_K_VIEW {
+                let tok_14 = parse_create_view_stmt(p)?;
+            } else if p.peek_at(1) == TK_K_VIRTUAL {
+                let tok_15 = parse_create_virtual_table_stmt(p)?;
             }
         }
     } else if grp_kind == TK_K_DETACH {
-        let tok_11 = parse_detach_stmt(p)?;
+        let tok_16 = parse_detach_stmt(p)?;
     } else if grp_kind == TK_K_DROP {
         if p.peek_kind() == TK_K_DROP {
-            let saved_pos_6 = p.pos;
-            let mut bt_done_6 = false;
-            if !bt_done_6 {
-                bt_try_18: {
-                    let opt_r = parse_drop_index_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_6; break bt_try_18; }
-                    bt_done_6 = true;
-                }
-            }
-            if !bt_done_6 {
-                bt_try_19: {
-                    let opt_r = parse_drop_table_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_6; break bt_try_19; }
-                    bt_done_6 = true;
-                }
-            }
-            if !bt_done_6 {
-                bt_try_20: {
-                    let opt_r = parse_drop_trigger_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_6; break bt_try_20; }
-                    bt_done_6 = true;
-                }
-            }
-            if !bt_done_6 {
-                let tok = parse_drop_view_stmt(p)?;
+            if p.peek_at(1) == TK_K_INDEX {
+                let tok_17 = parse_drop_index_stmt(p)?;
+            } else if p.peek_at(1) == TK_K_TABLE {
+                let tok_18 = parse_drop_table_stmt(p)?;
+            } else if p.peek_at(1) == TK_K_TRIGGER {
+                let tok_19 = parse_drop_trigger_stmt(p)?;
+            } else if p.peek_at(1) == TK_K_VIEW {
+                let tok_20 = parse_drop_view_stmt(p)?;
             }
         }
     } else if grp_kind == TK_K_PRAGMA {
-        let tok_12 = parse_pragma_stmt(p)?;
+        let tok_21 = parse_pragma_stmt(p)?;
     } else if grp_kind == TK_K_REINDEX {
-        let tok_13 = parse_reindex_stmt(p)?;
+        let tok_22 = parse_reindex_stmt(p)?;
     } else if grp_kind == TK_K_RELEASE {
-        let tok_14 = parse_release_stmt(p)?;
+        let tok_23 = parse_release_stmt(p)?;
     } else if grp_kind == TK_K_ROLLBACK {
-        let tok_15 = parse_rollback_stmt(p)?;
+        let tok_24 = parse_rollback_stmt(p)?;
     } else if grp_kind == TK_K_SAVEPOINT {
-        let tok_16 = parse_savepoint_stmt(p)?;
+        let tok_25 = parse_savepoint_stmt(p)?;
     } else if grp_kind == TK_K_VACUUM {
-        let tok_17 = parse_vacuum_stmt(p)?;
+        let tok_26 = parse_vacuum_stmt(p)?;
     }
     return Result::<SqlStmtNode, ParseError>::Ok(SqlStmtNode {
         span: Span::new(start, p.last_end()),

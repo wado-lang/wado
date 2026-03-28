@@ -453,7 +453,12 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_ru
             // Still ambiguous: recurse with deeper lookahead.
             // If opaque alts exist, try expanding them before giving up.
             let child = if opaque_alts.len() > 0 {
-                PredictionNode::Backtrack(next_alts);
+                let expanded = try_expand_opaque(&closed, tk, &next_configs, opaque_alts, depth + 1, max_depth, all_rules, lit_tokens);
+                if let Some(node) = expanded {
+                    node;
+                } else {
+                    PredictionNode::Backtrack(next_alts);
+                }
             } else {
                 build_sll_node(&deduped, depth + 1, max_depth, all_rules, lit_tokens);
             };
@@ -477,6 +482,171 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_ru
         return PredictionNode::Backtrack(alts);
     }
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
+}
+
+/// Try to resolve opaque configs by expanding their multi-token RuleRefs.
+/// Uses ATN-style expansion: enter referenced rules, advance by one token,
+/// then compute FIRST sets at the decision point's lookahead level.
+/// Builds a flat Dispatch — never calls build_sll_node on expanded configs.
+fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_opaque_configs: &Array<SllConfig>, opaque_alts: Array<i32>, depth: i32, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Option<PredictionNode> {
+    if depth >= max_depth {
+        return null;
+    }
+    // Rule diversity check: only expand when opaque configs reference different rules.
+    let mut rule_refs: Array<String> = [];
+    for let c of original_configs {
+        if !array_contains_i32(&opaque_alts, c.alt_index) {
+            continue;
+        }
+        if c.pos < 0 || c.pos >= c.elements.len() {
+            continue;
+        }
+        if let RuleRef(name) = c.elements[c.pos] {
+            if !array_contains_str(&rule_refs, &name) {
+                rule_refs.append(name);
+            }
+        }
+    }
+    if rule_refs.len() <= 1 {
+        return null;
+    }
+    // Expand opaque configs by entering their RuleRefs and advancing by token.
+    let mut expanded_configs: Array<SllConfig> = [];
+    for let c of original_configs {
+        if !array_contains_i32(&opaque_alts, c.alt_index) {
+            continue;
+        }
+        if c.pos < 0 || c.pos >= c.elements.len() {
+            continue;
+        }
+        if let RuleRef(name) = c.elements[c.pos] {
+            let mut alt_count = 0;
+            let mut has_nullable_start = false;
+            for let rule of all_rules {
+                if rule.name == name {
+                    alt_count = rule.alternatives.len();
+                    // Check if any alternative starts with a nullable element.
+                    // Nullable-start rules cause depth mismatch: sll_advance skips
+                    // the nullable, producing FIRST at a different input depth.
+                    for let alt of rule.alternatives {
+                        if !alt.elements.is_empty() && is_nullable(&alt.elements[0]) {
+                            has_nullable_start = true;
+                        }
+                    }
+                    break;
+                }
+            }
+            if alt_count > 8 || has_nullable_start {
+                continue;
+            }
+            let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
+            for let rule of all_rules {
+                if rule.name != name {
+                    continue;
+                }
+                for let alt of rule.alternatives {
+                    // Pre-filter: skip alternatives whose FIRST doesn't contain the token.
+                    let mut v: Array<String> = [];
+                    if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v), token) {
+                        continue;
+                    }
+                    let exp = SllConfig {
+                        alt_index: c.alt_index,
+                        elements: alt.elements,
+                        pos: 0,
+                        return_stack: new_stack,
+                    };
+                    let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, 0);
+                    for let a of advanced {
+                        if a.pos != -1 {
+                            expanded_configs.append(a);
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+    if expanded_configs.is_empty() {
+        return null;
+    }
+    // Combine non-opaque (already advanced) with expanded configs.
+    // All configs have consumed the same number of input tokens (depth),
+    // so their FIRST sets are all at the same lookahead level (depth).
+    let mut all_configs: Array<SllConfig> = [];
+    for let c of non_opaque_configs {
+        all_configs.append(sll_config_clone(c));
+    }
+    for let ec of expanded_configs {
+        all_configs.append(ec);
+    }
+    // Compute FIRST for each config at the decision point level.
+    let mut all_tokens: Array<String> = [];
+    let mut config_firsts: Array<Array<String>> = [];
+    for let c of all_configs {
+        let first = sll_config_first(&c, all_rules, lit_tokens);
+        config_firsts.append(first);
+        for let tk of first {
+            if !array_contains_str(&all_tokens, &tk) {
+                all_tokens.append(tk);
+            }
+        }
+    }
+    // Build flat Dispatch: for each token, find which alt_indices match.
+    let mut branches: Array<PredictionBranch> = [];
+    let mut has_improvement = false;
+    for let mut t = 0; t < all_tokens.len(); t += 1 {
+        let tk = &all_tokens[t];
+        let mut token_alts: Array<i32> = [];
+        for let mut i = 0; i < all_configs.len(); i += 1 {
+            if array_contains_str(&config_firsts[i], tk) {
+                if !array_contains_i32(&token_alts, all_configs[i].alt_index) {
+                    token_alts.append(all_configs[i].alt_index);
+                }
+            }
+        }
+        let child = if token_alts.len() == 1 {
+            has_improvement = true;
+            PredictionNode::Leaf(token_alts[0]);
+        } else {
+            PredictionNode::Backtrack(token_alts.sorted());
+        };
+        let mut merged = false;
+        for let mut b = 0; b < branches.len(); b += 1 {
+            if prediction_node_eq(&branches[b].child, &child) {
+                branches[b].tokens.append(*tk);
+                merged = true;
+            }
+        }
+        if !merged {
+            branches.append(PredictionBranch { tokens: [*tk], child });
+        }
+    }
+    if !has_improvement || branches.is_empty() {
+        return null;
+    }
+    // Safety: verify all original opaque alts appear in at least one branch.
+    let mut covered_alts: Array<i32> = [];
+    for let b of branches {
+        if let Leaf(idx) = b.child {
+            if !array_contains_i32(&covered_alts, idx) {
+                covered_alts.append(idx);
+            }
+        }
+        if let Backtrack(idxs) = b.child {
+            for let idx of idxs {
+                if !array_contains_i32(&covered_alts, idx) {
+                    covered_alts.append(idx);
+                }
+            }
+        }
+    }
+    for let oa of opaque_alts {
+        if !array_contains_i32(&covered_alts, oa) {
+            return null;
+        }
+    }
+    return Option::<PredictionNode>::Some(PredictionNode::Dispatch(PredictionDispatch { depth, branches }));
 }
 
 
