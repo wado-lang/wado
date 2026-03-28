@@ -52,17 +52,17 @@ node --experimental-wasm-jspi -e "
 
 jco-transpiled code is a single large JS file (~165KB for hello). Key functions to know:
 
-| Wasm canonical built-in | jco JS function | Trampoline |
-|---|---|---|
-| `stream.new` | `streamNew()` | `trampoline8` |
-| `stream.write` | `streamWrite()` | `trampoline0` (JSPI Suspending) |
-| `stream.drop-writable` | `streamDropWritable()` | `trampoline7` |
-| `canon lower (async)` | `_lowerImport()` | `trampoline6` (JSPI Suspending) |
-| `task.return` | `taskReturn()` | `trampoline1` |
-| `waitable-set.new` | `waitableSetNew()` | `trampoline4` |
-| `waitable-set.wait` | `waitableSetWait()` | `trampoline5` (JSPI Suspending) |
-| `waitable.join` | `waitableJoin()` | `trampoline2` |
-| `subtask.drop` | `subtaskDrop()` | `trampoline9` |
+| Wasm canonical built-in | jco JS function        | Trampoline                      |
+| ----------------------- | ---------------------- | ------------------------------- |
+| `stream.new`            | `streamNew()`          | `trampoline8`                   |
+| `stream.write`          | `streamWrite()`        | `trampoline0` (JSPI Suspending) |
+| `stream.drop-writable`  | `streamDropWritable()` | `trampoline7`                   |
+| `canon lower (async)`   | `_lowerImport()`       | `trampoline6` (JSPI Suspending) |
+| `task.return`           | `taskReturn()`         | `trampoline1`                   |
+| `waitable-set.new`      | `waitableSetNew()`     | `trampoline4`                   |
+| `waitable-set.wait`     | `waitableSetWait()`    | `trampoline5` (JSPI Suspending) |
+| `waitable.join`         | `waitableJoin()`       | `trampoline2`                   |
+| `subtask.drop`          | `subtaskDrop()`        | `trampoline9`                   |
 
 Trampoline indices may vary per component. Check the bottom of the transpiled JS for `const trampoline{N} = ...` assignments.
 
@@ -90,15 +90,15 @@ process.on('unhandledRejection', e => { console.error('UNHANDLED:', e); process.
 
 ### Common error patterns
 
-| Error | Likely cause |
-|---|---|
-| `rec group usage requires 'gc' proposal` | `WasmFeatures` in `lib.rs` or `core.rs` missing `GC` / `WASM3` |
-| `wide arithmetic support is not enabled` | Missing `WasmFeatures::WIDE_ARITHMETIC` |
-| `X is not defined` (runtime) | Missing intrinsic dependency in `intrinsics/mod.rs` |
-| `cannot drop subtask before resolve is delivered` | Subtask lifecycle issue — `deliverResolve()` not called |
-| `task.X is not a function` | Method not defined on `AsyncTask` class (jco implementation gap) |
-| `invalid variant discriminant for expected` | Async export returns `undefined` instead of result discriminant |
-| Hang / timeout | JSPI Suspending missing on a trampoline, or rendezvous deadlock |
+| Error                                             | Likely cause                                                     |
+| ------------------------------------------------- | ---------------------------------------------------------------- |
+| `rec group usage requires 'gc' proposal`          | `WasmFeatures` in `lib.rs` or `core.rs` missing `GC` / `WASM3`   |
+| `wide arithmetic support is not enabled`          | Missing `WasmFeatures::WIDE_ARITHMETIC`                          |
+| `X is not defined` (runtime)                      | Missing intrinsic dependency in `intrinsics/mod.rs`              |
+| `cannot drop subtask before resolve is delivered` | Subtask lifecycle issue — `deliverResolve()` not called          |
+| `task.X is not a function`                        | Method not defined on `AsyncTask` class (jco implementation gap) |
+| `invalid variant discriminant for expected`       | Async export returns `undefined` instead of result discriminant  |
+| Hang / timeout                                    | JSPI Suspending missing on a trampoline, or rendezvous deadlock  |
 
 ## Saving Patches
 
@@ -122,17 +122,17 @@ git commit -m "Update jco patches: <description>"
 
 ## Key Source Locations in jco
 
-| File | Purpose |
-|---|---|
-| `crates/js-component-bindgen/src/lib.rs` | Top-level `WasmFeatures` validator config |
-| `crates/js-component-bindgen/src/core.rs` | Core module validation features |
-| `crates/js-component-bindgen/src/transpile_bindgen.rs` | Trampoline generation (JSPI wrapping) |
-| `crates/js-component-bindgen/src/function_bindgen.rs` | Function call/result codegen |
-| `crates/js-component-bindgen/src/intrinsics/mod.rs` | Intrinsic dependency resolution |
-| `crates/js-component-bindgen/src/intrinsics/lower.rs` | Value lowering (Result, Variant, etc.) |
-| `crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs` | Stream classes and operations |
-| `crates/js-component-bindgen/src/intrinsics/p3/waitable.rs` | WaitableSet wait/poll |
-| `crates/js-component-bindgen/src/intrinsics/p3/async_task.rs` | AsyncTask class |
+| File                                                            | Purpose                                   |
+| --------------------------------------------------------------- | ----------------------------------------- |
+| `crates/js-component-bindgen/src/lib.rs`                        | Top-level `WasmFeatures` validator config |
+| `crates/js-component-bindgen/src/core.rs`                       | Core module validation features           |
+| `crates/js-component-bindgen/src/transpile_bindgen.rs`          | Trampoline generation (JSPI wrapping)     |
+| `crates/js-component-bindgen/src/function_bindgen.rs`           | Function call/result codegen              |
+| `crates/js-component-bindgen/src/intrinsics/mod.rs`             | Intrinsic dependency resolution           |
+| `crates/js-component-bindgen/src/intrinsics/lower.rs`           | Value lowering (Result, Variant, etc.)    |
+| `crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs` | Stream classes and operations             |
+| `crates/js-component-bindgen/src/intrinsics/p3/waitable.rs`     | WaitableSet wait/poll                     |
+| `crates/js-component-bindgen/src/intrinsics/p3/async_task.rs`   | AsyncTask class                           |
 
 ## WASI P3 Shims
 
