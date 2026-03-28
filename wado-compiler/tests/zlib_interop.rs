@@ -65,7 +65,8 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
         let state = common::WasiState {
             ctx,
             table: wasmtime::component::ResourceTable::new(),
-            http: common::TestHttpCtx::new(),
+            http_ctx: wasmtime_wasi_http::WasiHttpCtx::new(),
+            http_hooks: common::TestHttpCtx::new(),
         };
         let mut store = Store::new(engine, state);
         // Set epoch deadline for timeout enforcement.

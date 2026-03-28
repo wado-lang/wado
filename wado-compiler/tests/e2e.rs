@@ -339,7 +339,8 @@ async fn run_http_request_async(
     let state = common::WasiState {
         ctx: WasiCtxBuilder::new().build(),
         table: ResourceTable::new(),
-        http: common::TestHttpCtx {
+        http_ctx: wasmtime_wasi_http::WasiHttpCtx::new(),
+        http_hooks: common::TestHttpCtx {
             mocks: outgoing_mocks,
         },
     };
@@ -393,13 +394,12 @@ async fn run_http_request_async(
                     .run_concurrent(async |store| {
                         use std::pin::pin;
                         let handler = pin!(async {
-                            let (res, task) = match service.handle(store, req).await? {
-                                Ok(pair) => pair,
+                            let res = match service.handle(store, req).await? {
+                                Ok(res) => res,
                                 Err(err) => return anyhow::Ok(Err(Some(err))),
                             };
                             let _ = tx
                                 .send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
-                            task.block(store).await;
                             Ok(Ok(()))
                         });
                         let io = pin!(async {
@@ -546,7 +546,7 @@ fn run_test_world(
             let stderr_clone = stderr_pipe.clone();
 
             let mut state = common::WasiState::new_with_pipes(stdout_pipe, stderr_pipe);
-            state.http.mocks = outgoing_mocks.clone();
+            state.http_hooks.mocks = outgoing_mocks.clone();
             let mut store = Store::new(engine, state);
             // Parse per-test timeout from export name (e.g., "test-tm2000-0-slow")
             // and set epoch deadline for timeout enforcement
