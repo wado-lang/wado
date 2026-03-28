@@ -14,8 +14,69 @@ struct Instant {  // from wasi:clocks/system-clock.wado
     mut nanoseconds: u32,
 }
 
+variant ErrorCode {  // from wasi:filesystem/types.wado
+    Access,
+    Already,
+    BadDescriptor,
+    Busy,
+    Deadlock,
+    Quota,
+    Exist,
+    FileTooLarge,
+    IllegalByteSequence,
+    InProgress,
+    Interrupted,
+    Invalid,
+    Io,
+    IsDirectory,
+    Loop,
+    TooManyLinks,
+    MessageSize,
+    NameTooLong,
+    NoDevice,
+    NoEntry,
+    NoLock,
+    InsufficientMemory,
+    InsufficientSpace,
+    NotDirectory,
+    NotEmpty,
+    NotRecoverable,
+    Unsupported,
+    NoTty,
+    NoSuchDevice,
+    Overflow,
+    NotPermitted,
+    Pipe,
+    ReadOnly,
+    InvalidSeek,
+    TextFileBusy,
+    CrossDevice,
+    Other(ref null String),
+}
+
+struct ErrorCode::Other {
+    discriminant: i32,
+    payload_0: ref null String,
+}
+
+variant DescriptorType {  // from wasi:filesystem/types.wado
+    BlockDevice,
+    CharacterDevice,
+    Directory,
+    Fifo,
+    SymbolicLink,
+    RegularFile,
+    Socket,
+    Other(ref null String),
+}
+
+struct DescriptorType::Other {
+    discriminant: i32,
+    payload_0: ref null String,
+}
+
 struct DescriptorStat {  // from wasi:filesystem/types.wado
-    mut type: i32,
+    mut type: ref "wasi:filesystem/types.wado/DescriptorType",
     mut link_count: u64,
     mut size: u64,
     mut data_access_timestamp: ref null "wasi:clocks/system-clock.wado/Instant",
@@ -42,7 +103,7 @@ struct Result<unit,ErrorCode>::Err {
 
 variant Result<Descriptor,ErrorCode> {
     Ok(i32),
-    Err(i32),
+    Err(ref "wasi:filesystem/types.wado/ErrorCode"),
 }
 
 struct Result<Descriptor,ErrorCode>::Ok {
@@ -52,12 +113,12 @@ struct Result<Descriptor,ErrorCode>::Ok {
 
 struct Result<Descriptor,ErrorCode>::Err {
     discriminant: i32,
-    payload_0: i32,
+    payload_0: ref "wasi:filesystem/types.wado/ErrorCode",
 }
 
 variant Result<DescriptorStat,ErrorCode> {
     Ok(ref "wasi:filesystem/types.wado/DescriptorStat"),
-    Err(i32),
+    Err(ref "wasi:filesystem/types.wado/ErrorCode"),
 }
 
 struct Result<DescriptorStat,ErrorCode>::Ok {
@@ -67,7 +128,7 @@ struct Result<DescriptorStat,ErrorCode>::Ok {
 
 struct Result<DescriptorStat,ErrorCode>::Err {
     discriminant: i32,
-    payload_0: i32,
+    payload_0: ref "wasi:filesystem/types.wado/ErrorCode",
 }
 
 struct Array<u8> {  // Array<T> with T=u8
@@ -79,8 +140,6 @@ struct Array<Tuple<Descriptor,String>> {  // Array<T> with T=Tuple<Descriptor,St
     mut repr: ref array<Tuple<Descriptor,String>>,
     mut used: i32,
 }
-
-enum DescriptorType { Unknown = 0, BlockDevice = 1, CharacterDevice = 2, Directory = 3, Fifo = 4, SymbolicLink = 5, RegularFile = 6, Socket = 7 };  // from wasi:filesystem/types.wado
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
@@ -96,13 +155,13 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
+type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
+type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
 type "functype/wasi/wasi:filesystem/Preopens::get_directories" = fn(i32);
 
-type "functype/wasi/wasi:filesystem/Descriptor::write_via_stream" = fn(i32, i32, i64, i32) -> i32;
+type "functype/wasi/wasi:filesystem/Descriptor::write_via_stream" = fn(i32, i32, i64) -> i32;
 
 type "functype/wasi/wasi:filesystem/Descriptor::advise" = fn(i32, i64, i64, i32, i32) -> i32;
 
@@ -304,15 +363,11 @@ fn run() with Stdout, Stderr, Preopens {
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
-    let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 1, 2);
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn __cm_binding__Stderr_write_via_stream(data) {
-    let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 1, 2);
-    return "wasi/wasi:cli/Stderr::write_via_stream"(data, __async_outptr);
+    return "wasi/wasi:cli/Stderr::write_via_stream"(data);
 }
 
 fn __cm_binding__Preopens_get_directories() {
@@ -364,8 +419,15 @@ fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     let __async_outptr: i32;
     let __params_buf: i32;
     let __subtask: i32;
-    let __disc: i32;
+    let __disc_9: i32;
     let __result_val: ref Result<Descriptor,ErrorCode>;
+    let __vdisc: i32;
+    let __vresult: ref "wasi:filesystem/types.wado/ErrorCode";
+    let __disc_13: i32;
+    let __option_result: ref null String;
+    let __local_15: i32;
+    let __local_16: i32;
+    let __local_17: ref array<u8>;
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 4, 8);
     __params_buf = "mem/realloc"(0, 0, 4, 20);
@@ -377,12 +439,38 @@ fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     builtin::store_u8(__params_buf + 17, flags);
     __subtask = "wasi/wasi:filesystem/Descriptor::open_at"(__params_buf, __async_outptr);
     "core:internal/wait_for_subtask"(__subtask);
-    __disc = builtin::load_u8(__async_outptr);
+    __disc_9 = builtin::load_u8(__async_outptr);
     __result_val = ref.null none;
-    if __disc == 0 {
+    if __disc_9 == 0 {
         __result_val = Result<Descriptor,ErrorCode>::Ok { discriminant: 0, payload_0: builtin::load_i32(__async_outptr + 4) };
     } else {
-        __result_val = Result<Descriptor,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_u8(__async_outptr + 4) };
+        __vdisc = builtin::load_u8(__async_outptr + 4);
+        __vresult = ref.null none;
+        if __vdisc == 0 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 0 };
+        } else if __vdisc == 1 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 1 };
+        } else if __vdisc == 2 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 2 };
+        } else if __vdisc == 3 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 3 };
+        } else if __vdisc == 4 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 4 };
+        } else {
+            __disc_13 = builtin::load_u8((__async_outptr + 4) + 4);
+            __option_result = ref.null none;
+            if __disc_13 != 0 {
+                __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref String {
+                    __local_15 = builtin::load_i32(((__async_outptr + 4) + 4) + 4);
+                    __local_16 = builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4);
+                    __local_17 = "core:internal/memory_to_gc_array"(__local_15, __local_16);
+                    break __inline_memory_to_gc_string_0: String { repr: __local_17, used: __local_16 };
+                });
+                drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
+            };
+            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
+        };
+        __result_val = Result<Descriptor,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
     drop("mem/realloc"(__async_outptr, 8, 4, 0));
     return __result_val;
@@ -393,125 +481,238 @@ fn __cm_binding__Descriptor_stat(self) {
     let __subtask: i32;
     let __disc_3: i32;
     let __result_val: ref Result<DescriptorStat,ErrorCode>;
-    let __edisc: i32;
-    let __eresult: "wasi:filesystem/types.wado/enum:DescriptorType";
-    let __lifted_result_7: i64;
-    let __lifted_result_8: i64;
-    let __disc_9: i32;
-    let __option_result_10: ref null "wasi:clocks/system-clock.wado/Instant";
-    let __lifted_result_11: i64;
-    let __lifted_result_12: i32;
-    let __struct_result_13: ref "wasi:clocks/system-clock.wado/Instant";
-    let __disc_14: i32;
-    let __option_result_15: ref null "wasi:clocks/system-clock.wado/Instant";
-    let __lifted_result_16: i64;
-    let __lifted_result_17: i32;
-    let __struct_result_18: ref "wasi:clocks/system-clock.wado/Instant";
-    let __disc_19: i32;
-    let __option_result_20: ref null "wasi:clocks/system-clock.wado/Instant";
-    let __lifted_result_21: i64;
-    let __lifted_result_22: i32;
-    let __struct_result_23: ref "wasi:clocks/system-clock.wado/Instant";
-    let __struct_result_24: ref "wasi:filesystem/types.wado/DescriptorStat";
-    __async_outptr = "mem/realloc"(0, 0, 8, 104);
+    let __vdisc_5: i32;
+    let __vresult_6: ref "wasi:filesystem/types.wado/DescriptorType";
+    let __disc_7: i32;
+    let __option_result_8: ref null String;
+    let __lifted_result_9: i64;
+    let __lifted_result_10: i64;
+    let __disc_11: i32;
+    let __option_result_12: ref null "wasi:clocks/system-clock.wado/Instant";
+    let __lifted_result_13: i64;
+    let __lifted_result_14: i32;
+    let __struct_result_15: ref "wasi:clocks/system-clock.wado/Instant";
+    let __disc_16: i32;
+    let __option_result_17: ref null "wasi:clocks/system-clock.wado/Instant";
+    let __lifted_result_18: i64;
+    let __lifted_result_19: i32;
+    let __struct_result_20: ref "wasi:clocks/system-clock.wado/Instant";
+    let __disc_21: i32;
+    let __option_result_22: ref null "wasi:clocks/system-clock.wado/Instant";
+    let __lifted_result_23: i64;
+    let __lifted_result_24: i32;
+    let __struct_result_25: ref "wasi:clocks/system-clock.wado/Instant";
+    let __struct_result_26: ref "wasi:filesystem/types.wado/DescriptorStat";
+    let __vdisc_27: i32;
+    let __vresult_28: ref "wasi:filesystem/types.wado/ErrorCode";
+    let __disc_29: i32;
+    let __option_result_30: ref null String;
+    let __local_31: i32;
+    let __local_32: i32;
+    let __local_33: ref array<u8>;
+    let __local_34: i32;
+    let __local_35: i32;
+    let __local_36: ref array<u8>;
+    __async_outptr = "mem/realloc"(0, 0, 8, 112);
     __subtask = "wasi/wasi:filesystem/Descriptor::stat"(self, __async_outptr);
     "core:internal/wait_for_subtask"(__subtask);
     __disc_3 = builtin::load_u8(__async_outptr);
     __result_val = ref.null none;
     if __disc_3 == 0 {
-        __edisc = builtin::load_u8(__async_outptr + 8);
-        __eresult = 0;
-        if __edisc == 0 {
-            __eresult = 0;
-        } else if __edisc == 1 {
-            __eresult = 1;
-        } else if __edisc == 2 {
-            __eresult = 2;
-        } else if __edisc == 3 {
-            __eresult = 3;
-        } else if __edisc == 4 {
-            __eresult = 4;
-        } else if __edisc == 5 {
-            __eresult = 5;
-        } else if __edisc == 6 {
-            __eresult = 6;
+        __vdisc_5 = builtin::load_u8(__async_outptr + 8);
+        __vresult_6 = ref.null none;
+        if __vdisc_5 == 0 {
+            __vresult_6 = "wasi:filesystem/types.wado/DescriptorType" { 0 };
+        } else if __vdisc_5 == 1 {
+            __vresult_6 = "wasi:filesystem/types.wado/DescriptorType" { 1 };
+        } else if __vdisc_5 == 2 {
+            __vresult_6 = "wasi:filesystem/types.wado/DescriptorType" { 2 };
+        } else if __vdisc_5 == 3 {
+            __vresult_6 = "wasi:filesystem/types.wado/DescriptorType" { 3 };
+        } else if __vdisc_5 == 4 {
+            __vresult_6 = "wasi:filesystem/types.wado/DescriptorType" { 4 };
+        } else if __vdisc_5 == 5 {
+            __vresult_6 = "wasi:filesystem/types.wado/DescriptorType" { 5 };
+        } else if __vdisc_5 == 6 {
+            __vresult_6 = "wasi:filesystem/types.wado/DescriptorType" { 6 };
         } else {
-            __eresult = 7;
+            __disc_7 = builtin::load_u8((__async_outptr + 8) + 4);
+            __option_result_8 = ref.null none;
+            if __disc_7 != 0 {
+                __option_result_8 = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref String {
+                    __local_31 = builtin::load_i32(((__async_outptr + 8) + 4) + 4);
+                    __local_32 = builtin::load_i32((((__async_outptr + 8) + 4) + 4) + 4);
+                    __local_33 = "core:internal/memory_to_gc_array"(__local_31, __local_32);
+                    break __inline_memory_to_gc_string_0: String { repr: __local_33, used: __local_32 };
+                });
+                drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 4) + 4), builtin::load_i32((((__async_outptr + 8) + 4) + 4) + 4), 1, 0));
+            };
+            __vresult_6 = "wasi:filesystem/types.wado/DescriptorType::Other" { discriminant: 7, payload_0: __option_result_8 };
         };
-        __lifted_result_7 = builtin::load_i64((__async_outptr + 8) + 8);
-        __lifted_result_8 = builtin::load_i64((__async_outptr + 8) + 16);
-        __disc_9 = builtin::load_u8((__async_outptr + 8) + 24);
-        __option_result_10 = ref.null none;
-        if __disc_9 != 0 {
-            __lifted_result_11 = builtin::load_i64(((__async_outptr + 8) + 24) + 8);
-            __lifted_result_12 = builtin::load_i32((((__async_outptr + 8) + 24) + 8) + 8);
-            __struct_result_13 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_11, nanoseconds: __lifted_result_12 };
-            __option_result_10 = __struct_result_13;
+        __lifted_result_9 = builtin::load_i64((__async_outptr + 8) + 16);
+        __lifted_result_10 = builtin::load_i64((__async_outptr + 8) + 24);
+        __disc_11 = builtin::load_u8((__async_outptr + 8) + 32);
+        __option_result_12 = ref.null none;
+        if __disc_11 != 0 {
+            __lifted_result_13 = builtin::load_i64(((__async_outptr + 8) + 32) + 8);
+            __lifted_result_14 = builtin::load_i32((((__async_outptr + 8) + 32) + 8) + 8);
+            __struct_result_15 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_13, nanoseconds: __lifted_result_14 };
+            __option_result_12 = __struct_result_15;
         };
-        __disc_14 = builtin::load_u8((__async_outptr + 8) + 48);
-        __option_result_15 = ref.null none;
-        if __disc_14 != 0 {
-            __lifted_result_16 = builtin::load_i64(((__async_outptr + 8) + 48) + 8);
-            __lifted_result_17 = builtin::load_i32((((__async_outptr + 8) + 48) + 8) + 8);
-            __struct_result_18 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_16, nanoseconds: __lifted_result_17 };
-            __option_result_15 = __struct_result_18;
+        __disc_16 = builtin::load_u8((__async_outptr + 8) + 56);
+        __option_result_17 = ref.null none;
+        if __disc_16 != 0 {
+            __lifted_result_18 = builtin::load_i64(((__async_outptr + 8) + 56) + 8);
+            __lifted_result_19 = builtin::load_i32((((__async_outptr + 8) + 56) + 8) + 8);
+            __struct_result_20 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_18, nanoseconds: __lifted_result_19 };
+            __option_result_17 = __struct_result_20;
         };
-        __disc_19 = builtin::load_u8((__async_outptr + 8) + 72);
-        __option_result_20 = ref.null none;
-        if __disc_19 != 0 {
-            __lifted_result_21 = builtin::load_i64(((__async_outptr + 8) + 72) + 8);
-            __lifted_result_22 = builtin::load_i32((((__async_outptr + 8) + 72) + 8) + 8);
-            __struct_result_23 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_21, nanoseconds: __lifted_result_22 };
-            __option_result_20 = __struct_result_23;
+        __disc_21 = builtin::load_u8((__async_outptr + 8) + 80);
+        __option_result_22 = ref.null none;
+        if __disc_21 != 0 {
+            __lifted_result_23 = builtin::load_i64(((__async_outptr + 8) + 80) + 8);
+            __lifted_result_24 = builtin::load_i32((((__async_outptr + 8) + 80) + 8) + 8);
+            __struct_result_25 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_23, nanoseconds: __lifted_result_24 };
+            __option_result_22 = __struct_result_25;
         };
-        __struct_result_24 = "wasi:filesystem/types.wado/DescriptorStat" { type: __eresult, link_count: __lifted_result_7, size: __lifted_result_8, data_access_timestamp: __option_result_10, data_modification_timestamp: __option_result_15, status_change_timestamp: __option_result_20 };
-        __result_val = Result<DescriptorStat,ErrorCode>::Ok { discriminant: 0, payload_0: __struct_result_24 };
+        __struct_result_26 = "wasi:filesystem/types.wado/DescriptorStat" { type: __vresult_6, link_count: __lifted_result_9, size: __lifted_result_10, data_access_timestamp: __option_result_12, data_modification_timestamp: __option_result_17, status_change_timestamp: __option_result_22 };
+        __result_val = Result<DescriptorStat,ErrorCode>::Ok { discriminant: 0, payload_0: __struct_result_26 };
     } else {
-        __result_val = Result<DescriptorStat,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_u8(__async_outptr + 8) };
+        __vdisc_27 = builtin::load_u8(__async_outptr + 8);
+        __vresult_28 = ref.null none;
+        if __vdisc_27 == 0 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 0 };
+        } else if __vdisc_27 == 1 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 1 };
+        } else if __vdisc_27 == 2 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 2 };
+        } else if __vdisc_27 == 3 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 3 };
+        } else if __vdisc_27 == 4 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 4 };
+        } else {
+            __disc_29 = builtin::load_u8((__async_outptr + 8) + 4);
+            __option_result_30 = ref.null none;
+            if __disc_29 != 0 {
+                __option_result_30 = ref.as_non_null(__inline_memory_to_gc_string_1: block -> ref String {
+                    __local_34 = builtin::load_i32(((__async_outptr + 8) + 4) + 4);
+                    __local_35 = builtin::load_i32((((__async_outptr + 8) + 4) + 4) + 4);
+                    __local_36 = "core:internal/memory_to_gc_array"(__local_34, __local_35);
+                    break __inline_memory_to_gc_string_1: String { repr: __local_36, used: __local_35 };
+                });
+                drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 4) + 4), builtin::load_i32((((__async_outptr + 8) + 4) + 4) + 4), 1, 0));
+            };
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result_30 };
+        };
+        __result_val = Result<DescriptorStat,ErrorCode>::Err { discriminant: 1, payload_0: __vresult_28 };
     };
-    drop("mem/realloc"(__async_outptr, 104, 8, 0));
+    drop("mem/realloc"(__async_outptr, 112, 8, 0));
     return __result_val;
 }
 
 fn __cm_binding__Descriptor_advise(self, offset, length, advice) {
     let __async_outptr: i32;
     let __subtask: i32;
-    let __disc: i32;
+    let __disc_6: i32;
     let __result_val: ref Result<unit,ErrorCode>;
+    let __vdisc: i32;
+    let __vresult: ref "wasi:filesystem/types.wado/ErrorCode";
+    let __disc_10: i32;
+    let __option_result: ref null String;
+    let __local_12: i32;
+    let __local_13: i32;
+    let __local_14: ref array<u8>;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     __subtask = "wasi/wasi:filesystem/Descriptor::advise"(self, offset, length, advice, __async_outptr);
     "core:internal/wait_for_subtask"(__subtask);
-    __disc = builtin::load_u8(__async_outptr);
+    __disc_6 = builtin::load_u8(__async_outptr);
     __result_val = ref.null none;
-    if __disc == 0 {
+    if __disc_6 == 0 {
         __result_val = Result<unit,ErrorCode> { 0 };
     } else {
-        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_u8(__async_outptr + 1) };
+        __vdisc = builtin::load_u8(__async_outptr + 1);
+        __vresult = ref.null none;
+        if __vdisc == 0 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 0 };
+        } else if __vdisc == 1 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 1 };
+        } else if __vdisc == 2 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 2 };
+        } else if __vdisc == 3 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 3 };
+        } else if __vdisc == 4 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 4 };
+        } else {
+            __disc_10 = builtin::load_u8((__async_outptr + 1) + 4);
+            __option_result = ref.null none;
+            if __disc_10 != 0 {
+                __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref String {
+                    __local_12 = builtin::load_i32(((__async_outptr + 1) + 4) + 4);
+                    __local_13 = builtin::load_i32((((__async_outptr + 1) + 4) + 4) + 4);
+                    __local_14 = "core:internal/memory_to_gc_array"(__local_12, __local_13);
+                    break __inline_memory_to_gc_string_0: String { repr: __local_14, used: __local_13 };
+                });
+                drop("mem/realloc"(builtin::load_i32(((__async_outptr + 1) + 4) + 4), builtin::load_i32((((__async_outptr + 1) + 4) + 4) + 4), 1, 0));
+            };
+            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
+        };
+        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
     drop("mem/realloc"(__async_outptr, 2, 1, 0));
     return __result_val;
 }
 
 fn __cm_binding__Descriptor_write_via_stream(self, data, offset) {
-    let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 1, 2);
-    return "wasi/wasi:filesystem/Descriptor::write_via_stream"(self, data, offset, __async_outptr);
+    return "wasi/wasi:filesystem/Descriptor::write_via_stream"(self, data, offset);
 }
 
 fn __cm_binding__Descriptor_sync_data(self) {
     let __async_outptr: i32;
     let __subtask: i32;
-    let __disc: i32;
+    let __disc_3: i32;
     let __result_val: ref Result<unit,ErrorCode>;
+    let __vdisc: i32;
+    let __vresult: ref "wasi:filesystem/types.wado/ErrorCode";
+    let __disc_7: i32;
+    let __option_result: ref null String;
+    let __local_9: i32;
+    let __local_10: i32;
+    let __local_11: ref array<u8>;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     __subtask = "wasi/wasi:filesystem/Descriptor::sync_data"(self, __async_outptr);
     "core:internal/wait_for_subtask"(__subtask);
-    __disc = builtin::load_u8(__async_outptr);
+    __disc_3 = builtin::load_u8(__async_outptr);
     __result_val = ref.null none;
-    if __disc == 0 {
+    if __disc_3 == 0 {
         __result_val = Result<unit,ErrorCode> { 0 };
     } else {
-        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_u8(__async_outptr + 1) };
+        __vdisc = builtin::load_u8(__async_outptr + 1);
+        __vresult = ref.null none;
+        if __vdisc == 0 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 0 };
+        } else if __vdisc == 1 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 1 };
+        } else if __vdisc == 2 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 2 };
+        } else if __vdisc == 3 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 3 };
+        } else if __vdisc == 4 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 4 };
+        } else {
+            __disc_7 = builtin::load_u8((__async_outptr + 1) + 4);
+            __option_result = ref.null none;
+            if __disc_7 != 0 {
+                __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref String {
+                    __local_9 = builtin::load_i32(((__async_outptr + 1) + 4) + 4);
+                    __local_10 = builtin::load_i32((((__async_outptr + 1) + 4) + 4) + 4);
+                    __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
+                    break __inline_memory_to_gc_string_0: String { repr: __local_11, used: __local_10 };
+                });
+                drop("mem/realloc"(builtin::load_i32(((__async_outptr + 1) + 4) + 4), builtin::load_i32((((__async_outptr + 1) + 4) + 4) + 4), 1, 0));
+            };
+            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
+        };
+        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
     drop("mem/realloc"(__async_outptr, 2, 1, 0));
     return __result_val;
@@ -520,17 +721,50 @@ fn __cm_binding__Descriptor_sync_data(self) {
 fn __cm_binding__Descriptor_sync(self) {
     let __async_outptr: i32;
     let __subtask: i32;
-    let __disc: i32;
+    let __disc_3: i32;
     let __result_val: ref Result<unit,ErrorCode>;
+    let __vdisc: i32;
+    let __vresult: ref "wasi:filesystem/types.wado/ErrorCode";
+    let __disc_7: i32;
+    let __option_result: ref null String;
+    let __local_9: i32;
+    let __local_10: i32;
+    let __local_11: ref array<u8>;
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     __subtask = "wasi/wasi:filesystem/Descriptor::sync"(self, __async_outptr);
     "core:internal/wait_for_subtask"(__subtask);
-    __disc = builtin::load_u8(__async_outptr);
+    __disc_3 = builtin::load_u8(__async_outptr);
     __result_val = ref.null none;
-    if __disc == 0 {
+    if __disc_3 == 0 {
         __result_val = Result<unit,ErrorCode> { 0 };
     } else {
-        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_u8(__async_outptr + 1) };
+        __vdisc = builtin::load_u8(__async_outptr + 1);
+        __vresult = ref.null none;
+        if __vdisc == 0 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 0 };
+        } else if __vdisc == 1 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 1 };
+        } else if __vdisc == 2 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 2 };
+        } else if __vdisc == 3 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 3 };
+        } else if __vdisc == 4 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 4 };
+        } else {
+            __disc_7 = builtin::load_u8((__async_outptr + 1) + 4);
+            __option_result = ref.null none;
+            if __disc_7 != 0 {
+                __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref String {
+                    __local_9 = builtin::load_i32(((__async_outptr + 1) + 4) + 4);
+                    __local_10 = builtin::load_i32((((__async_outptr + 1) + 4) + 4) + 4);
+                    __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
+                    break __inline_memory_to_gc_string_0: String { repr: __local_11, used: __local_10 };
+                });
+                drop("mem/realloc"(builtin::load_i32(((__async_outptr + 1) + 4) + 4), builtin::load_i32((((__async_outptr + 1) + 4) + 4) + 4), 1, 0));
+            };
+            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
+        };
+        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
     drop("mem/realloc"(__async_outptr, 2, 1, 0));
     return __result_val;
@@ -540,18 +774,51 @@ fn __cm_binding__Descriptor_unlink_file_at(self, path) {
     let __path_packed: i64;
     let __async_outptr: i32;
     let __subtask: i32;
-    let __disc: i32;
+    let __disc_5: i32;
     let __result_val: ref Result<unit,ErrorCode>;
+    let __vdisc: i32;
+    let __vresult: ref "wasi:filesystem/types.wado/ErrorCode";
+    let __disc_9: i32;
+    let __option_result: ref null String;
+    let __local_11: i32;
+    let __local_12: i32;
+    let __local_13: ref array<u8>;
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 1, 2);
     __subtask = "wasi/wasi:filesystem/Descriptor::unlink_file_at"(self, builtin::i32_wrap_i64(__path_packed), builtin::i32_wrap_i64(__path_packed >> 32_i64), __async_outptr);
     "core:internal/wait_for_subtask"(__subtask);
-    __disc = builtin::load_u8(__async_outptr);
+    __disc_5 = builtin::load_u8(__async_outptr);
     __result_val = ref.null none;
-    if __disc == 0 {
+    if __disc_5 == 0 {
         __result_val = Result<unit,ErrorCode> { 0 };
     } else {
-        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_u8(__async_outptr + 1) };
+        __vdisc = builtin::load_u8(__async_outptr + 1);
+        __vresult = ref.null none;
+        if __vdisc == 0 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 0 };
+        } else if __vdisc == 1 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 1 };
+        } else if __vdisc == 2 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 2 };
+        } else if __vdisc == 3 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 3 };
+        } else if __vdisc == 4 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 4 };
+        } else {
+            __disc_9 = builtin::load_u8((__async_outptr + 1) + 4);
+            __option_result = ref.null none;
+            if __disc_9 != 0 {
+                __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref String {
+                    __local_11 = builtin::load_i32(((__async_outptr + 1) + 4) + 4);
+                    __local_12 = builtin::load_i32((((__async_outptr + 1) + 4) + 4) + 4);
+                    __local_13 = "core:internal/memory_to_gc_array"(__local_11, __local_12);
+                    break __inline_memory_to_gc_string_0: String { repr: __local_13, used: __local_12 };
+                });
+                drop("mem/realloc"(builtin::load_i32(((__async_outptr + 1) + 4) + 4), builtin::load_i32((((__async_outptr + 1) + 4) + 4) + 4), 1, 0));
+            };
+            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
+        };
+        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
     drop("mem/realloc"(__async_outptr, 2, 1, 0));
     return __result_val;
@@ -612,13 +879,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
     __for_0: block {
         i = 0;
         block {
-            l32: loop {
+            l69: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l32;
+                continue l69;
             };
         };
     };
@@ -630,13 +897,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l35: loop {
+            l72: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l35;
+                continue l72;
             };
         };
     };
@@ -802,13 +1069,13 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l43: loop {
+            l80: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref "tuple/[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple/[Descriptor, String]">(old_repr, i));
                 i = i + 1;
-                continue l43;
+                continue l80;
             };
         };
     };
@@ -844,13 +1111,13 @@ fn Array<u8>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l47: loop {
+            l84: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l47;
+                continue l84;
             };
         };
     };

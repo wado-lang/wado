@@ -9,6 +9,51 @@ struct String {
     mut used: i32,
 }
 
+variant ErrorCode {  // from wasi:filesystem/types.wado
+    Access,
+    Already,
+    BadDescriptor,
+    Busy,
+    Deadlock,
+    Quota,
+    Exist,
+    FileTooLarge,
+    IllegalByteSequence,
+    InProgress,
+    Interrupted,
+    Invalid,
+    Io,
+    IsDirectory,
+    Loop,
+    TooManyLinks,
+    MessageSize,
+    NameTooLong,
+    NoDevice,
+    NoEntry,
+    NoLock,
+    InsufficientMemory,
+    InsufficientSpace,
+    NotDirectory,
+    NotEmpty,
+    NotRecoverable,
+    Unsupported,
+    NoTty,
+    NoSuchDevice,
+    Overflow,
+    NotPermitted,
+    Pipe,
+    ReadOnly,
+    InvalidSeek,
+    TextFileBusy,
+    CrossDevice,
+    Other(ref null String),
+}
+
+struct ErrorCode::Other {
+    discriminant: i32,
+    payload_0: ref null String,
+}
+
 struct [Descriptor, String] {
     mut 0: i32,
     mut 1: ref String,
@@ -18,7 +63,7 @@ array array<Tuple<Descriptor,String>> (mut ref "tuple/[Descriptor, String]");
 
 variant Result<Descriptor,ErrorCode> {
     Ok(i32),
-    Err(i32),
+    Err(ref "wasi:filesystem/types.wado/ErrorCode"),
 }
 
 struct Result<Descriptor,ErrorCode>::Ok {
@@ -28,7 +73,7 @@ struct Result<Descriptor,ErrorCode>::Ok {
 
 struct Result<Descriptor,ErrorCode>::Err {
     discriminant: i32,
-    payload_0: i32,
+    payload_0: ref "wasi:filesystem/types.wado/ErrorCode",
 }
 
 struct Array<Tuple<Descriptor,String>> {  // Array<T> with T=Tuple<Descriptor,String>
@@ -50,9 +95,9 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
+type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
+type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
 type "functype/wasi/wasi:filesystem/Preopens::get_directories" = fn(i32);
 
@@ -161,15 +206,11 @@ fn run() with Stdout, Stderr, Preopens {
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
-    let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 1, 2);
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn __cm_binding__Stderr_write_via_stream(data) {
-    let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 1, 2);
-    return "wasi/wasi:cli/Stderr::write_via_stream"(data, __async_outptr);
+    return "wasi/wasi:cli/Stderr::write_via_stream"(data);
 }
 
 fn __cm_binding__Preopens_get_directories() {
@@ -221,8 +262,15 @@ fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     let __async_outptr: i32;
     let __params_buf: i32;
     let __subtask: i32;
-    let __disc: i32;
+    let __disc_9: i32;
     let __result_val: ref Result<Descriptor,ErrorCode>;
+    let __vdisc: i32;
+    let __vresult: ref "wasi:filesystem/types.wado/ErrorCode";
+    let __disc_13: i32;
+    let __option_result: ref null String;
+    let __local_15: i32;
+    let __local_16: i32;
+    let __local_17: ref array<u8>;
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 4, 8);
     __params_buf = "mem/realloc"(0, 0, 4, 20);
@@ -234,12 +282,38 @@ fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     builtin::store_u8(__params_buf + 17, flags);
     __subtask = "wasi/wasi:filesystem/Descriptor::open_at"(__params_buf, __async_outptr);
     "core:internal/wait_for_subtask"(__subtask);
-    __disc = builtin::load_u8(__async_outptr);
+    __disc_9 = builtin::load_u8(__async_outptr);
     __result_val = ref.null none;
-    if __disc == 0 {
+    if __disc_9 == 0 {
         __result_val = Result<Descriptor,ErrorCode>::Ok { discriminant: 0, payload_0: builtin::load_i32(__async_outptr + 4) };
     } else {
-        __result_val = Result<Descriptor,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_u8(__async_outptr + 4) };
+        __vdisc = builtin::load_u8(__async_outptr + 4);
+        __vresult = ref.null none;
+        if __vdisc == 0 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 0 };
+        } else if __vdisc == 1 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 1 };
+        } else if __vdisc == 2 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 2 };
+        } else if __vdisc == 3 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 3 };
+        } else if __vdisc == 4 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 4 };
+        } else {
+            __disc_13 = builtin::load_u8((__async_outptr + 4) + 4);
+            __option_result = ref.null none;
+            if __disc_13 != 0 {
+                __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref String {
+                    __local_15 = builtin::load_i32(((__async_outptr + 4) + 4) + 4);
+                    __local_16 = builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4);
+                    __local_17 = "core:internal/memory_to_gc_array"(__local_15, __local_16);
+                    break __inline_memory_to_gc_string_0: String { repr: __local_17, used: __local_16 };
+                });
+                drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
+            };
+            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
+        };
+        __result_val = Result<Descriptor,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
     drop("mem/realloc"(__async_outptr, 8, 4, 0));
     return __result_val;
@@ -299,13 +373,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
     __for_0: block {
         i = 0;
         block {
-            l10: loop {
+            l16: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l10;
+                continue l16;
             };
         };
     };
@@ -317,13 +391,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l13: loop {
+            l19: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l13;
+                continue l19;
             };
         };
     };
@@ -468,13 +542,13 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l20: loop {
+            l26: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref "tuple/[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple/[Descriptor, String]">(old_repr, i));
                 i = i + 1;
-                continue l20;
+                continue l26;
             };
         };
     };

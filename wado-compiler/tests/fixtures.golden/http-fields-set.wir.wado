@@ -13,6 +13,13 @@ variant HeaderError {  // from wasi:http/types.wado
     InvalidSyntax,
     Forbidden,
     Immutable,
+    SizeExceeded,
+    Other(ref null String),
+}
+
+struct HeaderError::Other {
+    discriminant: i32,
+    payload_0: ref null String,
 }
 
 struct FieldSizePayload {  // from wasi:http/types.wado
@@ -251,7 +258,7 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
+type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
 
 type "functype/wasi/wasi:http/Fields::new" = fn() -> i32;
 
@@ -278,6 +285,8 @@ type "functype/__cm_binding__Fields_set" = fn(i32, ref String, ref Array<Array<u
 type "functype/__cm_binding__Fields_get" = fn(i32, ref String) -> ref Array<Array<u8>>;
 
 type "functype/__cm_export__handle" = fn(i32);
+
+type "functype/core:internal/memory_to_gc_array" = fn(i32, i32) -> ref array<u8>;
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
@@ -947,23 +956,28 @@ fn __cm_binding__Fields_append(self, name, value) {
     let __name_packed: i64;
     let __value_packed: i64;
     let __outptr: i32;
-    let __disc: i32;
+    let __disc_6: i32;
     let __result_val: ref null "wasi:http/types.wado/HeaderError";
     let __vdisc: i32;
     let __vresult: ref "wasi:http/types.wado/HeaderError";
-    let __local_11: ref array<u8>;
-    let __local_12: i32;
+    let __disc_10: i32;
+    let __option_result: ref null String;
+    let __local_13: ref array<u8>;
+    let __local_14: i32;
+    let __local_17: i32;
+    let __local_18: i32;
+    let __local_19: ref array<u8>;
     __name_packed = "core:internal/cm_lower_string"(name);
     __value_packed = __inline_cm_lower_array_u8_0: block -> i64 {
-        __local_11 = value.repr;
-        __local_12 = value.used;
-        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_11, __local_12);
+        __local_13 = value.repr;
+        __local_14 = value.used;
+        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_13, __local_14);
     };
-    __outptr = "mem/realloc"(0, 0, 4, 8);
+    __outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/wasi:http/Fields::append"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64), builtin::i32_wrap_i64(__value_packed), builtin::i32_wrap_i64(__value_packed >> 32_i64), __outptr);
-    __disc = builtin::load_u8(__outptr);
+    __disc_6 = builtin::load_u8(__outptr);
     __result_val = ref.null none;
-    if __disc == 0 {
+    if __disc_6 == 0 {
         __result_val = ref.null none;
     } else {
         __vdisc = builtin::load_u8(__outptr + 4);
@@ -972,12 +986,27 @@ fn __cm_binding__Fields_append(self, name, value) {
             __vresult = "wasi:http/types.wado/HeaderError" { 0 };
         } else if __vdisc == 1 {
             __vresult = "wasi:http/types.wado/HeaderError" { 1 };
-        } else {
+        } else if __vdisc == 2 {
             __vresult = "wasi:http/types.wado/HeaderError" { 2 };
+        } else if __vdisc == 3 {
+            __vresult = "wasi:http/types.wado/HeaderError" { 3 };
+        } else {
+            __disc_10 = builtin::load_u8((__outptr + 4) + 4);
+            __option_result = ref.null none;
+            if __disc_10 != 0 {
+                __option_result = ref.as_non_null(__inline_memory_to_gc_string_3: block -> ref String {
+                    __local_17 = builtin::load_i32(((__outptr + 4) + 4) + 4);
+                    __local_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
+                    __local_19 = "core:internal/memory_to_gc_array"(__local_17, __local_18);
+                    break __inline_memory_to_gc_string_3: String { repr: __local_19, used: __local_18 };
+                });
+                drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
+            };
+            __vresult = "wasi:http/types.wado/HeaderError::Other" { discriminant: 4, payload_0: __option_result };
         };
         __result_val = __vresult;
     };
-    drop("mem/realloc"(__outptr, 8, 4, 0));
+    drop("mem/realloc"(__outptr, 20, 4, 0));
     return __result_val;
 }
 
@@ -996,49 +1025,54 @@ fn __cm_binding__Fields_set(self, name, value) {
     let __value_elem: ref Array<u8>;
     let __elem_packed: i64;
     let __outptr: i32;
-    let __disc: i32;
+    let __disc_11: i32;
     let __result_val: ref null "wasi:http/types.wado/HeaderError";
     let __vdisc: i32;
     let __vresult: ref "wasi:http/types.wado/HeaderError";
-    let __local_16: ref Array<Array<u8>>;
-    let __local_17: i32;
-    let __local_19: ref array<u8>;
-    let __local_20: i32;
+    let __disc_15: i32;
+    let __option_result: ref null String;
+    let __local_18: ref Array<Array<u8>>;
+    let __local_19: i32;
+    let __local_21: ref array<u8>;
+    let __local_22: i32;
+    let __local_25: i32;
+    let __local_26: i32;
+    let __local_27: ref array<u8>;
     __name_packed = "core:internal/cm_lower_string"(name);
     __value_len = value.used;
     __value_base = "mem/realloc"(0, 0, 4, __value_len * 8);
     __value_i = 0;
-    b46: block {
-        l47: loop {
+    b49: block {
+        l50: loop {
             if __value_i >= __value_len {
-                break b46;
+                break b49;
             };
             __value_addr = __value_base + (__value_i * 8);
             __value_elem = __inline_Array_Array_u8___IndexValue__index_value_1: block -> ref Array<u8> {
-                __local_16 = value_copy Array<Array<u8>>(value);
-                __local_17 = __value_i;
-                if __local_17 >= __local_16.used {
+                __local_18 = value_copy Array<Array<u8>>(value);
+                __local_19 = __value_i;
+                if __local_19 >= __local_18.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_Array_u8___IndexValue__index_value_1: builtin::array_get<ref Array<u8>>(__local_16.repr, __local_17);
+                break __inline_Array_Array_u8___IndexValue__index_value_1: builtin::array_get<ref Array<u8>>(__local_18.repr, __local_19);
             };
             __elem_packed = __inline_cm_lower_array_u8_2: block -> i64 {
-                __local_19 = __value_elem.repr;
-                __local_20 = __value_elem.used;
-                break __inline_cm_lower_array_u8_2: "core:internal/cm_lower_list_u8"(__local_19, __local_20);
+                __local_21 = __value_elem.repr;
+                __local_22 = __value_elem.used;
+                break __inline_cm_lower_array_u8_2: "core:internal/cm_lower_list_u8"(__local_21, __local_22);
             };
             builtin::store_i32(__value_addr, builtin::i32_wrap_i64(__elem_packed));
             builtin::store_i32(__value_addr + 4, builtin::i32_wrap_i64(__elem_packed >> 32_i64));
             __value_i = __value_i + 1;
-            continue l47;
+            continue l50;
         };
     };
-    __outptr = "mem/realloc"(0, 0, 4, 8);
+    __outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/wasi:http/Fields::set"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64), __value_base, __value_len, __outptr);
-    __disc = builtin::load_u8(__outptr);
+    __disc_11 = builtin::load_u8(__outptr);
     __result_val = ref.null none;
-    if __disc == 0 {
+    if __disc_11 == 0 {
         __result_val = ref.null none;
     } else {
         __vdisc = builtin::load_u8(__outptr + 4);
@@ -1047,12 +1081,27 @@ fn __cm_binding__Fields_set(self, name, value) {
             __vresult = "wasi:http/types.wado/HeaderError" { 0 };
         } else if __vdisc == 1 {
             __vresult = "wasi:http/types.wado/HeaderError" { 1 };
-        } else {
+        } else if __vdisc == 2 {
             __vresult = "wasi:http/types.wado/HeaderError" { 2 };
+        } else if __vdisc == 3 {
+            __vresult = "wasi:http/types.wado/HeaderError" { 3 };
+        } else {
+            __disc_15 = builtin::load_u8((__outptr + 4) + 4);
+            __option_result = ref.null none;
+            if __disc_15 != 0 {
+                __option_result = ref.as_non_null(__inline_memory_to_gc_string_5: block -> ref String {
+                    __local_25 = builtin::load_i32(((__outptr + 4) + 4) + 4);
+                    __local_26 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
+                    __local_27 = "core:internal/memory_to_gc_array"(__local_25, __local_26);
+                    break __inline_memory_to_gc_string_5: String { repr: __local_27, used: __local_26 };
+                });
+                drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
+            };
+            __vresult = "wasi:http/types.wado/HeaderError::Other" { discriminant: 4, payload_0: __option_result };
         };
         __result_val = __vresult;
     };
-    drop("mem/realloc"(__outptr, 8, 4, 0));
+    drop("mem/realloc"(__outptr, 20, 4, 0));
     return __result_val;
 }
 
@@ -1076,25 +1125,25 @@ fn __cm_binding__Fields_get(self, name) {
     __count_5 = builtin::load_i32(__outptr + 4);
     __result_6 = Array<Array<u8>> { repr: builtin::array_new<ref Array<u8>>(__count_5), used: 0 };
     __i_7 = 0;
-    b53: block {
-        l54: loop {
+    b59: block {
+        l60: loop {
             if __i_7 >= __count_5 {
-                break b53;
+                break b59;
             };
             __elem_addr_8 = __base_4 + (__i_7 * 8);
             __base_9 = builtin::load_i32(__elem_addr_8);
             __count_10 = builtin::load_i32(__elem_addr_8 + 4);
             __result_11 = Array<u8> { repr: builtin::array_new<u8>(__count_10), used: 0 };
             __i_12 = 0;
-            b56: block {
-                l57: loop {
+            b62: block {
+                l63: loop {
                     if __i_12 >= __count_10 {
-                        break b56;
+                        break b62;
                     };
                     __elem_addr_13 = __base_9 + (__i_12 * 1);
                     Array<u8>::append(__result_11, builtin::load_u8(__elem_addr_13));
                     __i_12 = __i_12 + 1;
-                    continue l57;
+                    continue l63;
                 };
             };
             if __count_10 > 0 {
@@ -1102,7 +1151,7 @@ fn __cm_binding__Fields_get(self, name) {
             };
             Array<Array<u8>>::append(__result_6, __result_11);
             __i_7 = __i_7 + 1;
-            continue l54;
+            continue l60;
         };
     };
     if __count_5 > 0 {
@@ -1128,18 +1177,38 @@ fn __cm_export__handle(request) {
     handle(request);
 }
 
+fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
+    let arr: ref array<u8>;
+    let i: i32;
+    arr = builtin::array_new<u8>(len);
+    __for_0: block {
+        i = 0;
+        block {
+            l68: loop {
+                if (i < len) == 0 {
+                    break __for_0;
+                };
+                builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
+                i = i + 1;
+                continue l68;
+            };
+        };
+    };
+    return arr;
+}
+
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     let i: i32;
     __for_1: block {
         i = 0;
         block {
-            l62: loop {
+            l71: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l62;
+                continue l71;
             };
         };
     };
@@ -1265,13 +1334,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l69: loop {
+            l78: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l69;
+                continue l78;
             };
         };
     };
@@ -1288,14 +1357,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l73: loop {
+                l82: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l73;
+                    continue l82;
                 };
             };
         };
@@ -1427,13 +1496,13 @@ fn Array<Array<u8>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l86: loop {
+            l95: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Array<u8>>(new_repr, i, builtin::array_get<ref Array<u8>>(old_repr, i));
                 i = i + 1;
-                continue l86;
+                continue l95;
             };
         };
     };
@@ -1469,13 +1538,13 @@ fn Array<u8>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l90: loop {
+            l99: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l90;
+                continue l99;
             };
         };
     };
@@ -1489,13 +1558,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l93: loop {
+            l102: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l93;
+                continue l102;
             };
         };
     };

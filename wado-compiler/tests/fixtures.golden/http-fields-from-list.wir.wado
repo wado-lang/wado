@@ -13,6 +13,13 @@ variant HeaderError {  // from wasi:http/types.wado
     InvalidSyntax,
     Forbidden,
     Immutable,
+    SizeExceeded,
+    Other(ref null String),
+}
+
+struct HeaderError::Other {
+    discriminant: i32,
+    payload_0: ref null String,
 }
 
 struct FieldSizePayload {  // from wasi:http/types.wado
@@ -271,7 +278,7 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
+type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
 
 type "functype/wasi/wasi:http/Fields::new" = fn() -> i32;
 
@@ -290,6 +297,8 @@ type "functype/__cm_binding__Fields_has" = fn(i32, ref String) -> bool;
 type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_export__handle" = fn(i32);
+
+type "functype/core:internal/memory_to_gc_array" = fn(i32, i32) -> ref array<u8>;
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
@@ -913,15 +922,20 @@ fn __cm_binding__Fields_from_list(entries) {
     let __packed: i64;
     let __elem_packed: i64;
     let __outptr: i32;
-    let __disc: i32;
+    let __disc_10: i32;
     let __result_val: ref Result<Fields,HeaderError>;
     let __vdisc: i32;
     let __vresult: ref "wasi:http/types.wado/HeaderError";
-    let __local_15: ref Array<Tuple<String,Array<u8>>>;
-    let __local_16: i32;
-    let __local_17: ref Array<u8>;
-    let __local_18: ref array<u8>;
-    let __local_19: i32;
+    let __disc_14: i32;
+    let __option_result: ref null String;
+    let __local_17: ref Array<Tuple<String,Array<u8>>>;
+    let __local_18: i32;
+    let __local_19: ref Array<u8>;
+    let __local_20: ref array<u8>;
+    let __local_21: i32;
+    let __local_24: i32;
+    let __local_25: i32;
+    let __local_26: ref array<u8>;
     __entries_len = entries.used;
     __entries_base = "mem/realloc"(0, 0, 4, __entries_len * 16);
     __entries_i = 0;
@@ -932,22 +946,22 @@ fn __cm_binding__Fields_from_list(entries) {
             };
             __entries_addr = __entries_base + (__entries_i * 16);
             __entries_elem = __inline_Array_Tuple_String_Array_u8____IndexValue__index_value_1: block -> ref "tuple/[String, Array<u8>]" {
-                __local_15 = value_copy Array<Tuple<String,Array<u8>>>(entries);
-                __local_16 = __entries_i;
-                if __local_16 >= __local_15.used {
+                __local_17 = value_copy Array<Tuple<String,Array<u8>>>(entries);
+                __local_18 = __entries_i;
+                if __local_18 >= __local_17.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_Tuple_String_Array_u8____IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, Array<u8>]">(__local_15.repr, __local_16);
+                break __inline_Array_Tuple_String_Array_u8____IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, Array<u8>]">(__local_17.repr, __local_18);
             };
             __packed = "core:internal/cm_lower_string"(__entries_elem.0);
             builtin::store_i32(__entries_addr, builtin::i32_wrap_i64(__packed));
             builtin::store_i32(__entries_addr + 4, builtin::i32_wrap_i64(__packed >> 32_i64));
             __elem_packed = __inline_cm_lower_array_u8_2: block -> i64 {
-                __local_17 = __entries_elem.1;
-                __local_18 = __local_17.repr;
-                __local_19 = __local_17.used;
-                break __inline_cm_lower_array_u8_2: "core:internal/cm_lower_list_u8"(__local_18, __local_19);
+                __local_19 = __entries_elem.1;
+                __local_20 = __local_19.repr;
+                __local_21 = __local_19.used;
+                break __inline_cm_lower_array_u8_2: "core:internal/cm_lower_list_u8"(__local_20, __local_21);
             };
             builtin::store_i32(__entries_addr + 8, builtin::i32_wrap_i64(__elem_packed));
             builtin::store_i32((__entries_addr + 8) + 4, builtin::i32_wrap_i64(__elem_packed >> 32_i64));
@@ -955,11 +969,11 @@ fn __cm_binding__Fields_from_list(entries) {
             continue l43;
         };
     };
-    __outptr = "mem/realloc"(0, 0, 4, 8);
+    __outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/wasi:http/Fields::from_list"(__entries_base, __entries_len, __outptr);
-    __disc = builtin::load_u8(__outptr);
+    __disc_10 = builtin::load_u8(__outptr);
     __result_val = ref.null none;
-    if __disc == 0 {
+    if __disc_10 == 0 {
         __result_val = Result<Fields,HeaderError>::Ok { discriminant: 0, payload_0: builtin::load_i32(__outptr + 4) };
     } else {
         __vdisc = builtin::load_u8(__outptr + 4);
@@ -968,12 +982,27 @@ fn __cm_binding__Fields_from_list(entries) {
             __vresult = "wasi:http/types.wado/HeaderError" { 0 };
         } else if __vdisc == 1 {
             __vresult = "wasi:http/types.wado/HeaderError" { 1 };
-        } else {
+        } else if __vdisc == 2 {
             __vresult = "wasi:http/types.wado/HeaderError" { 2 };
+        } else if __vdisc == 3 {
+            __vresult = "wasi:http/types.wado/HeaderError" { 3 };
+        } else {
+            __disc_14 = builtin::load_u8((__outptr + 4) + 4);
+            __option_result = ref.null none;
+            if __disc_14 != 0 {
+                __option_result = ref.as_non_null(__inline_memory_to_gc_string_5: block -> ref String {
+                    __local_24 = builtin::load_i32(((__outptr + 4) + 4) + 4);
+                    __local_25 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
+                    __local_26 = "core:internal/memory_to_gc_array"(__local_24, __local_25);
+                    break __inline_memory_to_gc_string_5: String { repr: __local_26, used: __local_25 };
+                });
+                drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
+            };
+            __vresult = "wasi:http/types.wado/HeaderError::Other" { discriminant: 4, payload_0: __option_result };
         };
         __result_val = Result<Fields,HeaderError>::Err { discriminant: 1, payload_0: __vresult };
     };
-    drop("mem/realloc"(__outptr, 8, 4, 0));
+    drop("mem/realloc"(__outptr, 20, 4, 0));
     return __result_val;
 }
 
@@ -1003,18 +1032,38 @@ fn __cm_export__handle(request) {
     handle(request);
 }
 
+fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
+    let arr: ref array<u8>;
+    let i: i32;
+    arr = builtin::array_new<u8>(len);
+    __for_0: block {
+        i = 0;
+        block {
+            l53: loop {
+                if (i < len) == 0 {
+                    break __for_0;
+                };
+                builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
+                i = i + 1;
+                continue l53;
+            };
+        };
+    };
+    return arr;
+}
+
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     let i: i32;
     __for_1: block {
         i = 0;
         block {
-            l50: loop {
+            l56: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l50;
+                continue l56;
             };
         };
     };
@@ -1140,13 +1189,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l57: loop {
+            l63: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l57;
+                continue l63;
             };
         };
     };
@@ -1163,14 +1212,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l61: loop {
+                l67: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l61;
+                    continue l67;
                 };
             };
         };
@@ -1302,13 +1351,13 @@ fn Array<Tuple<String,Array<u8>>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l74: loop {
+            l80: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref "tuple/[String, Array<u8>]">(new_repr, i, builtin::array_get<ref "tuple/[String, Array<u8>]">(old_repr, i));
                 i = i + 1;
-                continue l74;
+                continue l80;
             };
         };
     };
@@ -1344,13 +1393,13 @@ fn Array<u8>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l78: loop {
+            l84: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l78;
+                continue l84;
             };
         };
     };
@@ -1364,13 +1413,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l81: loop {
+            l87: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l81;
+                continue l87;
             };
         };
     };
