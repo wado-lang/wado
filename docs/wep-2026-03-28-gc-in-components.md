@@ -236,9 +236,12 @@ For HTTP handlers processing request/response bodies, this eliminates the domina
 
 - [Pre-Proposal: Wasm GC Support in the Canonical ABI (component-model#525)](https://github.com/WebAssembly/component-model/issues/525)
 - [Prototype Wasm GC and CM canonical ABI support (wasmtime#10325)](https://github.com/bytecodealliance/wasmtime/issues/10325)
+- [Implement the WebAssembly GC Proposal (wasmtime#5032)](https://github.com/bytecodealliance/wasmtime/issues/5032)
+- [Wasm GC Proposal Overview (archived)](https://github.com/WebAssembly/gc/blob/main/proposals/gc/Overview.md)
 - [Wasm 3.0 (GC shipped)](https://webassembly.org/news/2025-09-17-wasm-3.0/)
 - [Wasmtime 27.0: Complete Wasm GC support](https://bytecodealliance.org/articles/wasmtime-27.0)
 - [Bytecode Alliance RFC: Wasm GC in Wasmtime](https://github.com/bytecodealliance/rfcs/blob/main/accepted/wasm-gc.md)
+- [Component Model Explainer](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Explainer.md)
 - [Component Model Canonical ABI](https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md)
 - [Component Model Linking](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Linking.md)
 - [Shared-Everything Threads Proposal](https://github.com/WebAssembly/shared-everything-threads/blob/main/proposals/shared-everything-threads/Overview.md)
