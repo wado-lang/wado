@@ -1696,10 +1696,11 @@ impl FunctionTranslator<'_, '_> {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
                 let wir_type_id = match &wir_type {
                     WirType::Ref { type_id, .. } => Some(type_id.clone()),
-                    WirType::AbstractRef { .. } => {
-                        // Tuple types created in CM binding synthesis may not have
-                        // exact TypeId match in the WIR type map. Try to find a
-                        // matching tuple struct, or define one on-the-fly.
+                    _ if elements.len() >= 2 => {
+                        // Tuple types created in CM binding synthesis may have
+                        // TypeIds from a different module's type_table, causing
+                        // type_id_to_wir_type to return I32 or AbstractRef instead
+                        // of Ref. Fall back to matching by element WIR types.
                         self.ctx
                             .find_tuple_type_for_elements(self.type_table, elements)
                             .or_else(|| {

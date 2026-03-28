@@ -99,6 +99,26 @@ pub fn wasi_type_to_type_id_scoped(
                 })
                 .or_else(|| type_table.find_resource_type_by_name(named.name.as_str()))
                 .or_else(|| type_table.find_variant_type_by_name(named.name.as_str()))
+                .or_else(|| {
+                    // Create variant from WASI registry when it exists in a
+                    // different module but not yet in this type_table.
+                    // Checked BEFORE find_enum_type_by_name to prevent a
+                    // same-named enum (e.g. cli ErrorCode) from shadowing
+                    // a package-scoped variant (e.g. filesystem ErrorCode).
+                    if let Some(reg) = registry
+                        && let Some(pkg) = wasi_package
+                        && reg.is_variant(&named.name)
+                    {
+                        Some(type_table.make_variant(
+                            named.name.clone(),
+                            ModuleSource::Wasi {
+                                interface: format!("{pkg}/types.wado"),
+                            },
+                        ))
+                    } else {
+                        None
+                    }
+                })
                 .or_else(|| type_table.find_enum_type_by_name(named.name.as_str()))
                 .or_else(|| {
                     // Check WASI struct registry
@@ -109,32 +129,6 @@ pub fn wasi_type_to_type_id_scoped(
                         Some(type_table.make_struct(
                             named.name.clone(),
                             ModuleSource::Wasi { interface: package },
-                        ))
-                    } else {
-                        None
-                    }
-                })
-                .or_else(|| {
-                    // Check WASI variant registry with package scope.
-                    // This handles cases where a variant (e.g., ErrorCode) exists
-                    // in a different module's type_table but needs to be created
-                    // in the current type_table for tuple type resolution.
-                    if let Some(reg) = registry
-                        && reg.is_variant(&named.name)
-                    {
-                        let source = reg
-                            .get_variant_cm_name(&named.name)
-                            .map(|_| {
-                                wasi_package
-                                    .map(|p| p.to_string())
-                                    .unwrap_or_else(|| "cli".to_string())
-                            })
-                            .unwrap_or_else(|| "cli".to_string());
-                        Some(type_table.make_variant(
-                            named.name.clone(),
-                            ModuleSource::Wasi {
-                                interface: format!("{source}/types"),
-                            },
                         ))
                     } else {
                         None
