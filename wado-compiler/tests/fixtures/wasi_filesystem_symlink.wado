@@ -65,7 +65,7 @@ export fn run() with Stdout, Stderr, Preopens {
         }
 
         // Read content via the symlink
-        let [read_stream, _done] = linked_file.read_via_stream(0 as Filesize);
+        let [read_stream, read_future] = linked_file.read_via_stream(0 as Filesize);
         let [out_rx, out_tx] = Stream::<u8>::new();
         let sub = Stdout::write_via_stream(out_rx);
         loop {
@@ -77,7 +77,9 @@ export fn run() with Stdout, Stderr, Preopens {
         }
         read_stream.drop();
         out_tx.drop();
-        wait_for_subtask(sub);
+        sub.read();
+        sub.drop();
+        read_future.drop();
     } else {
         eprintln("symlink follow: failed to open");
     }

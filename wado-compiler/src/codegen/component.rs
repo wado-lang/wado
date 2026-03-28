@@ -1487,6 +1487,13 @@ fn generate_wasi_imports(
             for (name, &idx) in &flags_export_indices {
                 shared_type_gen.register_existing(&format!("flags:{name}"), idx);
             }
+            for (name, &idx) in &variant_export_indices {
+                // shared_type_gen uses CM kebab-case names for cache keys
+                if let Some((variant_cm_name, _)) = interface_variants.get(name) {
+                    shared_type_gen
+                        .register_existing(&format!("variant:{variant_cm_name}"), idx);
+                }
+            }
 
             for func in &supported_functions {
                 // Pre-define param-only types (stream for params, result for params)

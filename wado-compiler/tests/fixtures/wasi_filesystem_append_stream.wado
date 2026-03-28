@@ -31,7 +31,8 @@ export fn run() with Stdout, Stderr, Preopens {
         let hello: Array<u8> = [72, 101, 108, 108, 111];
         w_tx.write(hello);
         w_tx.drop();
-        wait_for_subtask(sub1);
+        sub1.read();
+        sub1.drop();
 
         // Append ", World!\n" (44, 32, 87, 111, 114, 108, 100, 33, 10)
         let [a_rx, a_tx] = Stream::<u8>::new();
@@ -39,12 +40,15 @@ export fn run() with Stdout, Stderr, Preopens {
         let suffix: Array<u8> = [44, 32, 87, 111, 114, 108, 100, 33, 10];
         a_tx.write(suffix);
         a_tx.drop();
-        wait_for_subtask(sub2);
+        sub2.read();
+        sub2.drop();
 
         // Read back and pipe to stdout
-        let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+        let [read_stream, read_future] = file.read_via_stream(0 as Filesize);
         let sub3 = Stdout::write_via_stream(read_stream);
-        wait_for_subtask(sub3);
+        sub3.read();
+        sub3.drop();
+        read_future.drop();
 
         // Clean up
         dir.unlink_file_at("append_test.txt");

@@ -28,7 +28,7 @@ export fn run() with Stdout, Stderr, Preopens {
 
     if let Ok(stat) = stat_result {
         // hello.txt should be a regular file
-        if stat.type == DescriptorType::RegularFile {
+        if stat.type matches { RegularFile } {
             println("stat_at: type is RegularFile (correct)");
         } else {
             eprintln("stat_at: unexpected file type");
@@ -60,7 +60,7 @@ export fn run() with Stdout, Stderr, Preopens {
         let fstat_result = file.stat();
 
         if let Ok(fstat) = fstat_result {
-            if fstat.type == DescriptorType::RegularFile {
+            if fstat.type matches { RegularFile } {
                 println("stat: type is RegularFile (correct)");
             } else {
                 eprintln("stat: unexpected file type");

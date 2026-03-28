@@ -76,7 +76,8 @@ export fn run() with Stdout, Stderr, Preopens {
         let data: Array<u8> = [116, 101, 115, 116]; // "test"
         w_tx.write(data);
         w_tx.drop();
-        wait_for_subtask(sub);
+        sub.read();
+        sub.drop();
 
         // Test sync_data
         let sd_result = wfile.sync_data();

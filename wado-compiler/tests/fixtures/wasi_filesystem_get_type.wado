@@ -20,7 +20,7 @@ export fn run() with Stdout, Stderr, Preopens {
     // Test get_type on directory descriptor
     let dir_type_result = dir.get_type();
     if let Ok(dt) = dir_type_result {
-        if dt == DescriptorType::Directory {
+        if dt matches { Directory } {
             println("get_type: directory descriptor is Directory (correct)");
         } else {
             eprintln("get_type: directory descriptor has wrong type");
@@ -40,7 +40,7 @@ export fn run() with Stdout, Stderr, Preopens {
     if let Ok(file) = open_result {
         let file_type_result = file.get_type();
         if let Ok(ft) = file_type_result {
-            if ft == DescriptorType::RegularFile {
+            if ft matches { RegularFile } {
                 println("get_type: file descriptor is RegularFile (correct)");
             } else {
                 eprintln("get_type: file descriptor has wrong type");
