@@ -1,228 +1,244 @@
-# WEP: GC in Components — Research and Impact Analysis
+# WEP: Migration to GC in Components
 
 ## Context
 
-Wado compiles to Wasm Components using Wasm GC internally for all heap-allocated values (structs, arrays, strings, closures, variants). At the Component Model (CM) boundary, the compiler currently **converts all GC values to/from linear memory** via the Canonical ABI's flat representation. This is the only approach supported by the current CM spec.
+Wado uses Wasm GC internally for all heap-allocated values (structs, arrays, strings, closures, variants). At Component Model (CM) boundaries, these GC values are **serialized to linear memory** and deserialized back, because the current CM Canonical ABI only supports linear-memory-based data exchange. Every WASI call copies data twice: GC→linear memory on export, linear memory→GC on import.
 
-A [pre-proposal (WebAssembly/component-model#525)](https://github.com/WebAssembly/component-model/issues/525) by fitzgen (June 2025) proposes extending the Canonical ABI to allow **GC-native value passing** across component boundaries. This WEP documents the current state of the spec, wasmtime implementation status, and the implications for Wado.
+A [pre-proposal (component-model#525)](https://github.com/WebAssembly/component-model/issues/525) extends the Canonical ABI with a `gc` mode that passes GC references directly across component boundaries — eliminating the linear memory round-trip. When this lands, Wado should migrate its CM bindings to GC mode for significant performance gains.
 
-## Current State: CM Boundary = Copy Through Linear Memory
+This WEP defines the migration strategy.
 
-### How It Works Today
+## Decision
 
-The current Canonical ABI prescribes a **linear-memory-based** flat ABI for all component-level value exchange:
+Migrate CM boundary crossing from linear memory to GC-native in three phases:
 
-1. **Export (lift):** Wado GC values → copy to linear memory → CM flat ABI scalars
-2. **Import (lower):** CM flat ABI scalars → copy from linear memory → Wado GC values
+1. **Align internal representations** — adjust Wado's GC types to be compatible with the CM GC canonical types
+2. **Dual-mode binding synthesis** — add a `gc` path alongside the existing linear memory path in `cm_binding.rs`
+3. **Switch default** — make GC mode the default once wasmtime support stabilizes
 
-For example, passing a `String` across the CM boundary:
-- **Lower (call WASI):** GC string → `cm_lower_string` copies bytes to linear memory → `(ptr, len)` pair
-- **Lift (from WASI):** `(ptr, len)` pair → `memory_to_gc_string` copies bytes from linear memory → GC string
+## Background: The CM GC Pre-Proposal
 
-This means **every CM boundary crossing requires a full copy** through linear memory, even when both sides use Wasm GC internally.
+### New Canonical Options
 
-The CM MVP type grammar references the GC proposal's `core:comptype` (composite type) only to extend it with a module type constructor. It deliberately avoids `rectype` (recursive types from the GC proposal), keeping component-model types intentionally non-recursive and simpler than core Wasm GC types. The only abstract type bound currently supported is `resource`.
+The pre-proposal adds two canonical options:
 
-### Wado's Current Architecture
+- **`gc` (`0x09`)**: Switch from linear memory to GC mode
+- **`core-type` (`0x08 <idx:u32>`)**: Declare the core function type used for GC lowering
 
-The compiler's CM binding synthesis (`synthesis/cm_binding.rs`) generates TIR adapter functions that handle all type conversions. The layout computation (`cm_abi.rs`) follows the Canonical ABI specification for sizes, alignments, and field offsets in linear memory.
+When `gc` is present, `lift_func` and `lower_func` operate on GC references instead of linear memory pointers. `memory` and `realloc` are no longer needed.
 
-Key files:
-- `wado-compiler/src/synthesis/cm_binding.rs` — adapter synthesis
-- `wado-compiler/src/cm_abi.rs` — Canonical ABI layout
-- `wado-compiler/src/codegen/component.rs` — component builder
-- `wado-compiler/src/component_model.rs` — CM types and registry
+### CM Type → Core GC Type Mapping
 
-### Why the CM MVP Chose Linear Memory Over GC
-
-The Explainer.md explicitly considered and **rejected** using immutable GC objects for cross-boundary data passing, citing "an unnecessary dependency on GC and needless copying." The CM MVP was designed to work without any GC dependency, using linear memory as the universal data exchange format. This was a deliberate choice to keep the CM spec independent of the GC proposal's timeline.
-
-## The Pre-Proposal: GC-Native Canonical ABI (component-model#525)
-
-### Overview
-
-The proposal introduces two new canonical options that enable GC-native value passing:
-
-| Option | Encoding | Purpose |
-|--------|----------|---------|
-| `gc` | `0x09` | Switch canonical ABI from linear memory to GC mode |
-| `core-type` | `0x08 <idx:u32>` | Specify which core function type to use for GC lowering |
-
-Both must be present together. When `gc` is set, the canonical ABI bypasses linear memory entirely and passes GC references directly.
-
-### Type Lowering in GC Mode
-
-The proposal defines mappings between component types and core Wasm GC types, distinguishing **value types** (direct args/returns) from **storage types** (nested in structs/arrays):
-
-| Component Type | GC Value Type | GC Storage Type |
-|----------------|---------------|-----------------|
+| CM Type | GC Lowering (value position) | GC Lowering (storage position) |
+|---------|------------------------------|-------------------------------|
 | `bool`, `s8`, `u8` | `i32` | `i8` |
 | `s16`, `u16` | `i32` | `i16` |
-| `s32`, `u32` | `i32` | `i32` |
+| `s32`, `u32`, `char` | `i32` | `i32` |
 | `s64`, `u64` | `i64` | `i64` |
 | `f32`, `f64` | native | native |
-| `char` | `i32` | `i32` |
-| `string` (UTF-8) | `(ref null? (array (mut? i8)))` | — |
-| `string` (UTF-16) | `(ref null? (array (mut? i16)))` | — |
+| `string` | `(ref null? (array (mut? i8)))` | — |
 | `record` / `tuple` | `(ref null? (struct ...))` | — |
 | `list<T>` | `(ref null? (array (mut? T')))` | — |
-| `variant` | `(ref null? (struct))` + subtypes | — |
-| `option<T>` | `(ref null? (struct))` + subtypes | — |
-| `result<T, E>` | `(ref null? (struct))` + subtypes | — |
-| `own` / `borrow` | `externref` | — |
-| `future` / `stream` | `externref` | — |
+| `variant` / `option` / `result` | subtype hierarchy (base struct + subtypes in same rec group) | — |
+| `own` / `borrow` / `future` / `stream` | `externref` | — |
 
-### Key Design Decisions
+Components choose nullability and mutability. The engine can pass values **zero-copy** when both sides use the same rec group and compatible mutability.
 
-#### 1. Components Choose Their Own Core Types
+### Mutability and Copies
 
-The proposal avoids prescribing a single canonical GC type for each component type. Instead, each component specifies its preferred core types via `core-type`. This minimizes copies:
-
-- If two components use the **same rec group** for a record type → **zero-copy** passing
-- If they use **different rec groups** (even structurally identical) → engine must copy
-- If one uses **mutable** fields and the other **immutable** → at least one copy
-
-#### 2. Mutability Trade-offs
-
-| Scenario | Copies |
-|----------|--------|
+| Scenario | Copies at CM boundary |
+|----------|----------------------|
 | Both immutable, same rec group | 0 |
 | Both immutable, different rec groups | 1 |
 | One mutable, one immutable | 1 |
-| Both mutable | 2 (worse than linear memory's 1) |
+| Both mutable | 2 |
+| Current linear memory approach | 2 (always) |
 
-Making fields immutable enables zero-copy passing but forces a copy if the component's "at rest" representation needs mutability (e.g., for array `.append()`).
+### Upstream Status
 
-#### 3. Variant / Option / Result Representation
+| Item | Status |
+|------|--------|
+| Wasm GC (core spec) | Shipped in Wasm 3.0 (Sept 2025) |
+| Core GC in wasmtime | Feature-complete (v27.0+) |
+| CM GC pre-proposal | [component-model#525](https://github.com/WebAssembly/component-model/issues/525) (June 2025, open) |
+| CM GC in wasmtime | [wasmtime#10325](https://github.com/bytecodealliance/wasmtime/issues/10325) (prototyping, 🛸 flag "very incomplete") |
 
-The proposal uses **subtype hierarchies** (not nullable refs) for sum types:
-- Each case becomes a subtype of a shared base struct
-- All case types must be in the same `rec` group
-- This avoids ambiguity with nested optionals (`option<option<T>>`)
+## Phase 1: Align Internal Representations
 
-This differs from Wado's internal representation which uses NullableRef optimization for 2-case variants with one unit case. At the CM boundary, the proposal requires SubtypeHierarchy for all sum types.
+Before the GC canonical ABI exists, prepare Wado's internal GC types to be compatible.
 
-#### 4. Resources Remain as externref
+### 1.1 String: Already Aligned
 
-`own<T>`, `borrow<T>`, `future<T>`, `stream<T>`, and `error-context` all lower to `externref`. No change from the current approach.
+Wado's `String` is `(ref (array (mut i8)))` — UTF-8 bytes in a mutable i8 array. The CM GC proposal maps `string` to `(ref null? (array (mut? i8)))` for UTF-8. Structurally identical modulo nullability.
 
-### What's NOT in the Proposal
+**Action:** None needed. Wado's string type naturally matches.
 
-- **Width/depth subtyping** for records and tuples (planned for future extension)
-- **Per-case `core-type`** for variants (rejected due to verbosity)
-- **Shared-everything linking** integration (separate concern)
+### 1.2 Records: Field Order and Storage Types
 
-## Wasmtime Implementation Status
+Wado structs compile to `(ref (struct (field ...) ...))`. The CM GC proposal maps `record` to the same. The key difference is **storage types**: the proposal uses packed types (`i8`, `i16`) for small integers in struct fields, while Wado currently uses `i32` for all integer fields.
 
-### Wasm GC Proposal: Shipped in Wasm 3.0
+**Action:** When emitting CM-boundary struct types, use packed storage types (`i8` for bool/u8/s8, `i16` for u16/s16). This only affects types that appear in WASI function signatures, not internal Wado types.
 
-The Wasm GC proposal was finalized and shipped as part of **Wasm 3.0** (September 2025). The [WebAssembly/gc repository](https://github.com/WebAssembly/gc) was archived in April 2025. All major browsers support Wasm GC.
+### 1.3 Arrays / Lists: Already Aligned
 
-### Core Wasm GC in Wasmtime: Feature-Complete (v27.0+)
+Wado's `Array<T>` is `(ref (array (mut T')))`. The proposal maps `list<T>` to the same structure.
 
-Since wasmtime v27.0 (November 2024), core Wasm GC is feature-complete for the spec:
-- All GC instructions (struct.new, array.new, ref.cast, ref.test, etc.)
-- Two collector implementations: standard GC collector and null collector (bump-allocate, never collect)
-- Enabled via `Config::wasm_gc` or `-W gc` CLI flag
-- Quality-of-implementation work remains (tracing collector for cycle reclamation)
-- Architecture: pluggable collector design per [Bytecode Alliance RFC](https://github.com/bytecodealliance/rfcs/blob/main/accepted/wasm-gc.md)
+**Action:** None needed.
 
-### GC in Components: Prototype Stage
+### 1.4 Variants: SubtypeHierarchy at CM Boundary
 
-- **Tracking issue:** [bytecodealliance/wasmtime#10325](https://github.com/bytecodealliance/wasmtime/issues/10325) (opened March 2025 by fitzgen)
-- **Status:** Open, no merged PRs visible. Still in prototyping phase.
-- **Feature flag:** `WasmFeatures` has a flag for "Support for Wasm GC in the component model proposal" (corresponds to 🛸 emoji), defaults to `false`, described as "very incomplete"
-- fitzgen is actively implementing in both wasm-tools and wasmtime
+The proposal requires **subtype hierarchies** for all sum types (`variant`, `option`, `result`): an empty base struct with per-case subtypes, all in the same rec group. This differs from Wado's internal NullableRef optimization for 2-case variants.
 
-### Timeline Estimate
+Wado already uses SubtypeHierarchy for multi-case variants and `Result`. The gap is **NullableRef variants** (`Option<T>`, 2-case variants with one unit case) which use `(ref null $T)` internally.
 
-Given that:
-- The pre-proposal was posted June 2025
-- Prototyping is ongoing in wasmtime
-- No spec merge has occurred yet
+**Action:** At CM boundaries, NullableRef variants must be converted to SubtypeHierarchy. Two options:
 
-A reasonable estimate: **experimental support in wasmtime H2 2026, stable in 2027**.
+- **(a) Convert at the boundary:** The CM binding adapter wraps/unwraps NullableRef into SubtypeHierarchy. Keeps internal optimization, adds a small conversion cost.
+- **(b) Use SubtypeHierarchy everywhere:** Simplifies CM boundary but regresses internal code (extra `ref.test`/`ref.cast` vs simple `ref.is_null`).
 
-## Shared-Everything Linking (Separate Concern)
+**Decision:** Option (a) — convert at the boundary. The NullableRef optimization is worth keeping for hot paths within a component. The conversion cost at CM boundaries is dominated by the function call overhead anyway.
 
-[Shared-everything linking](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Linking.md) allows multiple core modules within a component to share `memory` and `table` instances. This is orthogonal to GC-in-components:
+### 1.5 Rec Group Strategy
 
-- **Shared-everything linking**: modules within one component share linear memory (for C/Rust-style linking)
-- **GC in components**: GC types cross component boundaries (for GC-language interop)
+Core Wasm deduplicates types structurally at rec group granularity. Types in different rec groups are distinct even if structurally identical, forcing copies.
 
-### Shared-Everything Threads (Separate Proposal)
+For zero-copy WASI calls, Wado's CM-boundary types must live in a rec group that **the host recognizes**. In practice, the host (wasmtime) will define canonical rec groups for WASI types, and Wado must emit matching ones.
 
-The [shared-everything-threads proposal](https://github.com/WebAssembly/shared-everything-threads/blob/main/proposals/shared-everything-threads/Overview.md) extends GC types with `shared` annotations for thread safety. While orthogonal to GC-in-components, it intersects with GC:
+**Action:** Introduce a "CM type registry" in the compiler that tracks which GC types are used at CM boundaries and groups them into rec groups following the canonical layout. This is a `wir_build` concern — emit a dedicated rec group for CM-boundary types separate from internal types.
 
-- **Shared heap types**: `(shared struct ...)`, `(shared array ...)`, `(shared any)`, etc.
-- **Strict rule**: Shared and unshared types are **never subtypes** of one another
-- **Atomic access**: Reference-typed and i8/i16/i32 fields never tear; larger fields may tear
-- **`waitqueue`**: New shared-only GC type for futex-like synchronization
-- **CM integration**: Thread spawn builtins (`thread.spawn_ref`, `thread.spawn_indirect`, `thread.available_parallelism`)
+### 1.6 Mutability Decision
 
-This is relevant if Wado ever targets multi-threaded components.
+Wado uses mutable fields internally (struct fields are mutable via `&mut self`, arrays support `.append()`). The proposal warns that mutable fields force copies.
 
-## Impact on Wado
+**Decision:** Use **mutable** fields in the CM GC lowering. Rationale:
 
-### What Changes When GC-in-CM Lands
+- Wado's "at rest" representation is mutable. Using immutable CM types would force a copy on every import (immutable→mutable) and every export (mutable→immutable) — no better than linear memory.
+- When both Wado components communicate, both-mutable means 2 copies, but this is a rare case. Most Wado CM calls are to WASI (host), where the host can handle mutable refs efficiently.
+- If the host provides immutable refs, Wado takes one copy on import — same as the host providing a linear memory buffer.
 
-1. **CM binding synthesis** (`cm_binding.rs`) will need a parallel "GC mode" path that emits GC ref passing instead of linear memory copies.
+## Phase 2: Dual-Mode Binding Synthesis
 
-2. **Component builder** (`codegen/component.rs`) will need to emit the `gc` and `core-type` canonical options.
+### 2.1 CM Binding Synthesis (`cm_binding.rs`)
 
-3. **Type mapping**: Wado's internal GC types are already structurally similar to the proposal's lowerings:
-   - Wado `String` → `(ref (array (mut i8)))` ← proposal's UTF-8 string
-   - Wado structs → `(ref (struct ...))` ← proposal's record
-   - Wado `Array<T>` → `(ref (array (mut T')))` ← proposal's `list<T>`
+Add a `CmMode` enum:
 
-4. **Variant representation at CM boundary**: The proposal requires SubtypeHierarchy for all sum types. Wado already uses SubtypeHierarchy internally (except for NullableRef-optimized 2-case variants). The CM adapter would need to convert between representations for NullableRef variants.
+```rust
+enum CmMode {
+    LinearMemory,  // current behavior
+    Gc,            // new: pass GC refs directly
+}
+```
 
-5. **Mutability alignment**: Wado uses mutable struct fields and mutable arrays internally. The proposal suggests this leads to copies. Wado may want to explore immutable "transfer" representations for CM boundary crossing.
+The synthesizer already dispatches on type shape. In GC mode, most composite types become **identity** (pass through directly) instead of lower/lift through linear memory:
 
-### Potential Zero-Copy Path
+| Type | Linear Memory Mode | GC Mode |
+|------|-------------------|---------|
+| Scalars | identity | identity |
+| `String` | `cm_lower_string` / `memory_to_gc_string` | **identity** (same GC array type) |
+| `Array<u8>` | `cm_lower_array_u8` / `memory_to_gc_array` | **identity** |
+| Records | recursive field-by-field copy via LM | **identity or shallow copy** (if rec groups match) |
+| Variants | discriminant + payload via LM | **ref.cast + unwrap** or identity |
+| Resources | handle table (i32) | `externref` (unchanged) |
 
-If Wado aligns its internal GC representations with the CM GC canonical types:
+For most types, GC mode synthesis is **dramatically simpler** than linear memory mode — many types need no adapter at all.
 
-| Type | Current (linear memory) | GC-in-CM (aligned) |
-|------|------------------------|---------------------|
-| `String` import | copy LM→GC | **zero-copy** (same array type) |
-| `String` export | copy GC→LM | **zero-copy** (same array type) |
-| Record import | copy LM→GC | **zero-copy** (if same rec group) |
-| Record export | copy GC→LM | **zero-copy** (if same rec group) |
-| `Array<u8>` import | copy LM→GC | **zero-copy** |
-| `Array<u8>` export | copy GC→LM | **zero-copy** |
+### 2.2 Component Builder (`codegen/component.rs`)
 
-This would eliminate the biggest performance cost of WASI calls for data-heavy operations.
+Currently, `lower_func` and `lift_func` emit:
 
-### Rec Group Strategy
+```rust
+[CanonicalOption::Memory(ctx.memory_idx()),
+ CanonicalOption::Realloc(ctx.core_func_idx("realloc"))]
+```
 
-The proposal's rec group deduplication rule is critical. For zero-copy:
-- All types used at CM boundaries should be in a carefully structured rec group
-- Types that cross component boundaries together should share the same rec group
-- The compiler must ensure its rec group layout matches what the host/other components expect
+In GC mode, replace with:
 
-### Action Items (When Ready)
+```rust
+[CanonicalOption::Gc,
+ CanonicalOption::CoreType(core_type_idx)]
+```
 
-1. **Track the proposal**: Monitor component-model#525 and wasmtime#10325 for spec stabilization
-2. **Dual-mode binding synthesis**: Keep linear memory path, add GC path behind feature flag
-3. **Rec group planning**: Design the compiler's rec group emission to align with CM GC canonical types
-4. **Mutability analysis**: Consider immutable "snapshot" types for CM boundary crossing
-5. **Benchmark**: Compare linear memory vs GC boundary crossing once wasmtime prototype is available
+This requires `wasm_encoder` to support the new canonical options. Track `wasm-tools` for this.
 
-### No Immediate Action Required
+### 2.3 Memory Module
 
-The proposal is pre-stage and wasmtime support is not yet available. Wado's current linear-memory CM binding approach is correct and performant for the current spec. The architecture (type-driven TIR synthesis) is well-positioned to add a GC mode when the time comes.
+In GC mode, the memory module (`mem`) is **still needed** for:
+- `stream.read` / `stream.write` (byte streams use linear memory even in GC mode)
+- `error-context` (uses memory for debug strings)
+- Any fallback to linear memory mode
+
+But `realloc` is no longer needed for regular WASI function calls. The memory module can be simplified.
+
+### 2.4 Feature Flag
+
+Add `--cm-gc` flag to `wado compile` / `wado run`:
+
+```sh
+wado compile --cm-gc -o out.wasm file.wado   # use GC canonical ABI
+wado compile -o out.wasm file.wado            # default: linear memory (current)
+```
+
+Switch the default to GC mode once wasmtime enables the 🛸 flag by default.
+
+## Phase 3: Switch Default and Clean Up
+
+Once the CM GC spec is merged and wasmtime enables it by default:
+
+1. Make `--cm-gc` the default
+2. Keep `--cm-linear-memory` as a fallback for runtimes without GC-in-CM support
+3. Remove internal helper functions that are only needed for linear memory CM binding (`cm_lower_string`, `memory_to_gc_string`, `cm_lower_array_u8`, `memory_to_gc_array` in `internal.wado`)
+4. Simplify the memory module (no `realloc` needed for most components)
+
+## Performance Impact
+
+### Expected Gains
+
+The biggest wins are for data-heavy WASI calls:
+
+| Operation | Current (LM) | After (GC) | Improvement |
+|-----------|--------------|------------|-------------|
+| `String` export | O(n) copy GC→LM | O(1) ref pass | major |
+| `String` import | O(n) copy LM→GC | O(1) ref pass | major |
+| `Array<u8>` round-trip | 2× O(n) copies | 0 copies | major |
+| `i32` / scalar | identity | identity | none |
+| Record with 3 fields | 3× store + 3× load | O(1) ref pass | moderate |
+
+For HTTP handlers processing request/response bodies, this eliminates the dominant cost of crossing the CM boundary.
+
+### Unchanged
+
+- Intra-component performance (no CM boundary involved)
+- Resource handle passing (already efficient via i32/externref)
+- Stream/future operations (still use linear memory for byte buffers)
+
+## Consequences
+
+### Positive
+
+- Eliminates O(n) copies for strings, arrays, and records at CM boundaries
+- Simplifies CM binding synthesis (most types become identity)
+- Reduces linear memory pressure (no temporary buffers for CM calls)
+- Natural fit for Wado's GC-based architecture
+
+### Negative
+
+- Dual-mode synthesis increases compiler complexity until linear memory mode is removed
+- Rec group alignment requires careful coordination with the host
+- Mutability choice (mutable fields) may prevent zero-copy in some multi-component scenarios
+- Depends on upstream spec and wasmtime progress (not under Wado's control)
+
+### Risks
+
+- The pre-proposal may change significantly before merging. Phase 1 (alignment) is safe regardless; Phase 2 (dual-mode) should wait for spec stabilization.
+- `wasm_encoder` may not support `CanonicalOption::Gc` / `CanonicalOption::CoreType` until wasmtime ships the feature.
 
 ## References
 
 - [Pre-Proposal: Wasm GC Support in the Canonical ABI (component-model#525)](https://github.com/WebAssembly/component-model/issues/525)
 - [Prototype Wasm GC and CM canonical ABI support (wasmtime#10325)](https://github.com/bytecodealliance/wasmtime/issues/10325)
-- [Component Model Linking](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Linking.md)
-- [Shared-Everything Dynamic Linking Example](https://github.com/WebAssembly/component-model/blob/main/design/mvp/examples/SharedEverythingDynamicLinking.md)
+- [Wasm 3.0 (GC shipped)](https://webassembly.org/news/2025-09-17-wasm-3.0/)
 - [Wasmtime 27.0: Complete Wasm GC support](https://bytecodealliance.org/articles/wasmtime-27.0)
-- [Implement the WebAssembly GC Proposal (wasmtime#5032)](https://github.com/bytecodealliance/wasmtime/issues/5032)
-- [Wasm GC Proposal (archived)](https://github.com/WebAssembly/gc/blob/main/proposals/gc/Overview.md)
-- [Wasm 3.0 Announcement](https://webassembly.org/news/2025-09-17-wasm-3.0/)
 - [Bytecode Alliance RFC: Wasm GC in Wasmtime](https://github.com/bytecodealliance/rfcs/blob/main/accepted/wasm-gc.md)
-- [Component Model Explainer](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Explainer.md)
 - [Component Model Canonical ABI](https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md)
+- [Component Model Linking](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Linking.md)
+- [Shared-Everything Threads Proposal](https://github.com/WebAssembly/shared-everything-threads/blob/main/proposals/shared-everything-threads/Overview.md)
