@@ -7,7 +7,8 @@ use {
     LabelElement,
     RepeatKind,
 } from "./ir.wado";
-use { to_snake_case, to_lower, rule_type_name, literal_field_name, strip_suffix } from "./gen_util.wado";
+use { to_snake_case, to_pascal_case, to_lower, rule_type_name, literal_field_name, strip_suffix } from "./gen_util.wado";
+use { group_can_store, group_alt_case_info } from "./generator.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
 /// Generate Visitor walk functions and to_tree for a grammar.
@@ -56,28 +57,68 @@ fn gen_walk_field(w: &mut CodeWriter, field: &WalkField, var: &String) {
     let name = &field.name;
     match field.wrapper {
         Direct => {
-            match &field.action {
-                VisitToken => w.line(`v.visit_token(&{var}.{name});`),
-                WalkRule(rule_name) => w.line(`walk_{rule_name}(v, &{var}.{name});`),
+            if let WalkGroup(alts) = &field.action {
+                gen_walk_group_inline(w, &`&{var}.{name}`, alts);
+            } else if let WalkRule(rule_name) = &field.action {
+                w.line(`walk_{rule_name}(v, &{var}.{name});`);
+            } else {
+                w.line(`v.visit_token(&{var}.{name});`);
             }
         },
         ArrayWrap => {
             w.begin(`for let item of &{var}.{name}`);
-            match &field.action {
-                VisitToken => w.line("v.visit_token(item);"),
-                WalkRule(rule_name) => w.line(`walk_{rule_name}(v, item);`),
+            if let WalkGroup(alts) = &field.action {
+                gen_walk_group_inline(w, &"item", alts);
+            } else if let WalkRule(rule_name) = &field.action {
+                w.line(`walk_{rule_name}(v, item);`);
+            } else {
+                w.line("v.visit_token(item);");
             }
             w.end();
         },
         OptionalWrap => {
             w.begin(`if let Some(item) = &{var}.{name}`);
-            match &field.action {
-                VisitToken => w.line("v.visit_token(item);"),
-                WalkRule(rule_name) => w.line(`walk_{rule_name}(v, item);`),
+            if let WalkGroup(alts) = &field.action {
+                gen_walk_group_inline(w, &"item", alts);
+            } else if let WalkRule(rule_name) = &field.action {
+                w.line(`walk_{rule_name}(v, item);`);
+            } else {
+                w.line("v.visit_token(item);");
             }
             w.end();
         },
     }
+}
+
+fn gen_walk_group_inline(w: &mut CodeWriter, expr: &String, alts: &Array<Alternative>) {
+    if alts.len() == 1 {
+        w.line(`let grp_ref = {*expr};`);
+        let fields = collect_walk_fields(&alts[0].elements);
+        for let f of &fields {
+            gen_walk_field(w, f, &"grp_ref");
+        }
+        return;
+    }
+    w.begin(`match {expr}`);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let ci = group_alt_case_info(&alts[i], i);
+        w.begin(`{ci.0}(grp) =>`);
+        // For single-RuleRef alts, grp IS the node — call walk directly
+        if alts[i].elements.len() == 1 {
+            if let RuleRef(rname) = alts[i].elements[0] {
+                w.line(`walk_{rname}(v, grp);`);
+            } else {
+                w.line("v.visit_token(grp);");
+            }
+        } else {
+            let fields = collect_walk_fields(&alts[i].elements);
+            for let f of &fields {
+                gen_walk_field(w, f, &"grp");
+            }
+        }
+        w.end();
+    }
+    w.end();
 }
 
 fn gen_to_tree_fn(w: &mut CodeWriter, grammar: &Grammar) {
@@ -96,6 +137,7 @@ fn gen_to_tree_fn(w: &mut CodeWriter, grammar: &Grammar) {
 variant WalkAction {
     VisitToken,
     WalkRule(String),
+    WalkGroup(Array<Alternative>),
 }
 
 enum WalkWrapper {
@@ -146,6 +188,16 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
             action: WalkAction::VisitToken,
             wrapper: WalkWrapper::Direct,
         });
+    }
+    if let Group(alts) = *elem {
+        if group_can_store(&alts) {
+            return Option::Some(WalkField {
+                name: "group",
+                action: WalkAction::WalkGroup(alts),
+                wrapper: WalkWrapper::Direct,
+            });
+        }
+        return null;
     }
     if let Repeat(rep) = *elem {
         if let Some(inner) = element_to_walk_field(&rep.element) {
