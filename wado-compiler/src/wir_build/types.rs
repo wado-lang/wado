@@ -1297,7 +1297,10 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             for tir_mod in ctx.project.tir_modules.values() {
                 let type_table = &*tir_mod.type_table.borrow();
                 for tir_struct in &tir_mod.structs {
-                    if &tir_struct.name != struct_name_str {
+                    // Match by exact name, or by monomorphized name (base name matches TIR name)
+                    let name_matches = tir_struct.name == *struct_name_str
+                        || struct_name_str.starts_with(&format!("{}<", tir_struct.name));
+                    if !name_matches {
                         continue;
                     }
                     if let Some(ms) = module_source
