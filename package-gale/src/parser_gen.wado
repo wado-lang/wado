@@ -77,6 +77,26 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
     return node;
 }
 
+/// Strip ALL Consume nodes from a prediction tree.
+/// Used for expanded RuleRef predictions where Consume would incorrectly
+/// consume tokens belonging to the sub-rule at the decision point.
+fn strip_all_consume(node: PredictionNode) -> PredictionNode {
+    if let Consume(c) = node {
+        return strip_all_consume(c.child);
+    }
+    if let Dispatch(d) = node {
+        let mut new_branches: Array<PredictionBranch> = [];
+        for let b of d.branches {
+            new_branches.append(PredictionBranch {
+                tokens: b.tokens,
+                child: strip_all_consume(b.child),
+            });
+        }
+        return PredictionNode::Dispatch(PredictionDispatch { depth: d.depth, branches: new_branches });
+    }
+    return node;
+}
+
 struct SllReturn {
     elements: Array<Element>,
     pos: i32,
@@ -528,8 +548,27 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_ru
 /// Returns Some(node) if expansion produces a better prediction tree, None otherwise.
 /// `non_opaque_configs` are the already-advanced transparent configs for this token.
 fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_opaque_configs: &Array<SllConfig>, opaque_alts: Array<i32>, depth: i32, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Option<PredictionNode> {
-    // Only expand at shallow depths to limit cost.
+    // Only expand at shallow depths (up to 2 lookahead levels) to limit cost.
     if depth > 2 || depth >= max_depth {
+        return null;
+    }
+    // Rule diversity check: only expand when opaque configs reference different rules.
+    // If all opaque configs point to the same RuleRef, expansion can't distinguish them.
+    let mut rule_refs: Array<String> = [];
+    for let c of original_configs {
+        if !array_contains_i32(&opaque_alts, c.alt_index) {
+            continue;
+        }
+        if c.pos < 0 || c.pos >= c.elements.len() {
+            continue;
+        }
+        if let RuleRef(name) = c.elements[c.pos] {
+            if !array_contains_str(&rule_refs, &name) {
+                rule_refs.append(name);
+            }
+        }
+    }
+    if rule_refs.len() <= 1 {
         return null;
     }
     // Re-advance opaque configs by expanding their RuleRefs.
@@ -562,20 +601,78 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
     for let ec of expanded_configs {
         all_configs.append(ec);
     }
-    let deduped = sll_dedup_by_alt(&all_configs);
-    let alts = sll_unique_alts(&deduped);
-    if alts.len() <= 1 {
-        if alts.len() == 1 {
-            return Option::<PredictionNode>::Some(PredictionNode::Leaf(alts[0]));
+    // Build a flat one-level Dispatch from expanded configs.
+    // Group configs by FIRST token, then check if each token group resolves to one alt.
+    let mut all_tokens: Array<String> = [];
+    let mut config_firsts: Array<Array<String>> = [];
+    for let c of all_configs {
+        let first = sll_config_first(&c, all_rules, lit_tokens);
+        config_firsts.append(first);
+        for let tk of first {
+            if !array_contains_str(&all_tokens, &tk) {
+                all_tokens.append(tk);
+            }
         }
+    }
+    let mut branches: Array<PredictionBranch> = [];
+    let mut has_improvement = false;
+    for let mut t = 0; t < all_tokens.len(); t += 1 {
+        let tk = &all_tokens[t];
+        let mut token_alts: Array<i32> = [];
+        for let mut i = 0; i < all_configs.len(); i += 1 {
+            if array_contains_str(&config_firsts[i], tk) {
+                if !array_contains_i32(&token_alts, all_configs[i].alt_index) {
+                    token_alts.append(all_configs[i].alt_index);
+                }
+            }
+        }
+        if token_alts.len() == 1 {
+            has_improvement = true;
+            let mut merged = false;
+            for let mut b = 0; b < branches.len(); b += 1 {
+                if let Leaf(idx) = branches[b].child {
+                    if idx == token_alts[0] {
+                        branches[b].tokens.append(*tk);
+                        merged = true;
+                    }
+                }
+            }
+            if !merged {
+                branches.append(PredictionBranch {
+                    tokens: [*tk],
+                    child: PredictionNode::Leaf(token_alts[0]),
+                });
+            }
+        } else {
+            // Still ambiguous for this token — fall back to Backtrack.
+            let sorted = token_alts.sorted();
+            let child = PredictionNode::Backtrack(sorted);
+            let mut merged = false;
+            for let mut b = 0; b < branches.len(); b += 1 {
+                if prediction_node_eq(&branches[b].child, &child) {
+                    branches[b].tokens.append(*tk);
+                    merged = true;
+                }
+            }
+            if !merged {
+                branches.append(PredictionBranch {
+                    tokens: [*tk],
+                    child,
+                });
+            }
+        }
+    }
+    if !has_improvement || branches.is_empty() {
         return null;
     }
-    let result = build_sll_node(&deduped, depth, max_depth, all_rules, lit_tokens);
-    // Only return if expansion actually helped (reduced backtracking).
-    if count_backtrack_nodes(&result) < alts.len() {
-        return Option::<PredictionNode>::Some(result);
+    // Only use if ALL branches are Leaf — any Backtrack branch means the expansion
+    // didn't fully resolve, which can cause incorrect dispatching on sub-rule tokens.
+    for let b of branches {
+        if let Backtrack(_) = b.child {
+            return null;
+        }
     }
-    return null;
+    return Option::<PredictionNode>::Some(PredictionNode::Dispatch(PredictionDispatch { depth, branches }));
 }
 
 /// Check if all configs are at the same terminal element (for Consume).
