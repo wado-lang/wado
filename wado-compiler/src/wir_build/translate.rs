@@ -4122,8 +4122,10 @@ impl FunctionTranslator<'_, '_> {
             // === WASI call indirects ===
             "builtin::call_indirect_stdout_write_via_stream"
             | "builtin::call_indirect_stderr_write_via_stream" => {
-                // These pass the argument and add i32.const 2048 (buffer_size),
-                // then call the appropriate WASI write_via_stream function.
+                // These call the appropriate WASI write_via_stream function.
+                // For async write_via_stream (canon lower with async option),
+                // a buffer_size hint (i32.const 2048) is appended.
+                // For sync write_via_stream returning Future<T>, no extra arg is needed.
                 let is_stderr = builtin_name.contains("stderr");
                 let wasi_func_name = if is_stderr {
                     "wasi:cli/Stderr::write_via_stream"
@@ -4134,7 +4136,16 @@ impl FunctionTranslator<'_, '_> {
                 if let Some(func_id) = self.ctx.func_map.get(&key).cloned() {
                     let mut call_args: Vec<WirInstr> =
                         args.iter().map(|a| self.translate_expr(&a.expr)).collect();
-                    call_args.push(WirInstr::I32Const(2048));
+                    // Check if the WASI function expects a buffer_size argument
+                    // (async canon lower adds buffer_size; sync does not)
+                    let func_info = self
+                        .ctx
+                        .project
+                        .wasi_registry
+                        .get_function(wasi_func_name);
+                    if func_info.is_some_and(|f| f.is_async) {
+                        call_args.push(WirInstr::I32Const(2048));
+                    }
                     Some(WirInstr::Call {
                         func_id,
                         args: call_args,
