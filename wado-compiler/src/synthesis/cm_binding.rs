@@ -135,8 +135,18 @@ pub fn wasi_type_to_type_id_scoped(
                     wasi_type_to_type_id_scoped(&g.args[1], type_table, registry, wasi_package);
                 type_table.make_result(ok_type, err_type)
             }
-            // Stream/Future/Own/Borrow are handle types represented as i32
-            "Stream" | "Future" | "Own" | "Borrow" => TypeTable::I32,
+            "Stream" if g.args.len() == 1 => {
+                let inner =
+                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
+                type_table.make_stream(inner)
+            }
+            "Future" if g.args.len() == 1 => {
+                let inner =
+                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
+                type_table.make_future(inner)
+            }
+            // Own/Borrow are handle types represented as i32
+            "Own" | "Borrow" => TypeTable::I32,
             _ => TypeTable::UNIT,
         },
         Type::Tuple(types) if types.is_empty() => TypeTable::UNIT,
@@ -235,8 +245,9 @@ fn materialize_if_needed(
     // primitive types and handles (i32, i64, f32, f64, u8, u16, bool, char).
     let type_id = expr.type_id;
     let local = alloc_local(next_local, local_types, type_id);
-    stmts.push(let_stmt("__lifted_result", local, type_id, expr));
-    local_ref(local, "__lifted_result", type_id)
+    let name = format!("__lifted_result_{local}");
+    stmts.push(let_stmt(&name, local, type_id, expr));
+    local_ref(local, &name, type_id)
 }
 
 fn synthesize_lift_inner(
@@ -2646,15 +2657,11 @@ fn synthesize_adapter(
     // The binding's return type to the Wado caller:
     let adapter_return_type;
 
-    // Streaming path: function has stream/future params AND returns a direct
-    // Future (not a tuple containing Future). For tuple returns like
-    // read_via_stream -> [Stream, Future], the async path should lift the tuple.
-    let returns_direct_future = func_info
-        .return_type
-        .as_ref()
-        .is_some_and(|ty| matches!(ty, Type::Generic(g) if g.name == "Future"));
-    let is_streaming_func = !func_info.is_async
-        && (func_info.has_streaming_param() || returns_direct_future);
+    // Streaming path: functions with Stream params that callers must write to
+    // before the subtask completes. For functions returning tuples with Future
+    // (like read_via_stream -> [Stream, Future]), the async path lifts the full
+    // tuple from outptr after wait_for_subtask.
+    let is_streaming_func = !func_info.is_async && func_info.has_streaming_param();
     if is_streaming_func {
         // Streaming function (has Stream<T>/Future<T> param or returns Future<T>):
         // canon lower is called with async option (CM spec requirement for stream/future).
@@ -2721,8 +2728,23 @@ fn synthesize_adapter(
                     TypeTable::I32,
                 )));
                 let lifted_type_id = lifted.type_id;
+                // For tuple returns (e.g. [Stream, Future]), ensure the return type
+                // matches the actual tuple structure, not I32.
+                let return_type_id = if let Some(return_type) = &func_info.return_type
+                    && matches!(return_type, Type::Tuple(_))
+                {
+                    let lift_ctx = LiftContext {
+                        wasi_registry,
+                        type_table,
+                        wasi_package: Some(&func_info.package),
+                    };
+                    let mut tt = lift_ctx.type_table.borrow_mut();
+                    wasi_type_to_type_id_with_registry(return_type, &mut tt, Some(wasi_registry))
+                } else {
+                    lifted_type_id
+                };
                 body_stmts.push(return_stmt(Some(lifted)));
-                adapter_return_type = lifted_type_id;
+                adapter_return_type = return_type_id;
             } else {
                 // Has outptr but no return type: free the async results buffer.
                 body_stmts.push(expr_stmt(builtin_call(
