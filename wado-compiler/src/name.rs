@@ -789,11 +789,10 @@ impl LocalMethodName {
     #[must_use]
     pub fn to_mangled_name(&self) -> String {
         let method_part = self.full_method_name();
-        let prefix = if self.is_ref_impl { "&" } else { "" };
         if let Some(trait_name) = &self.trait_name {
-            format!("{prefix}{}^{}::{}", self.struct_name, trait_name, method_part)
+            format!("{}^{}::{}", self.struct_name, trait_name, method_part)
         } else {
-            format!("{prefix}{}::{}", self.struct_name, method_part)
+            format!("{}::{}", self.struct_name, method_part)
         }
     }
 

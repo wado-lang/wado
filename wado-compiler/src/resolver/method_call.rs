@@ -473,13 +473,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             base_struct_name = impl_name;
         }
 
-        let mangled_receiver = if is_ref_impl {
-            format!("&{receiver_struct_name}")
-        } else {
-            receiver_struct_name.clone()
-        };
         let mangled_method_name = MethodName::format_local(
-            &mangled_receiver,
+            &receiver_struct_name,
             trait_name.as_deref(),
             &method_call.method,
         );
