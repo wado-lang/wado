@@ -1306,7 +1306,7 @@ fn mark_local_fully_assigned(local_idx: u32, counts: &mut IndexMap<(u32, u32), F
 // Replacement pass: replace field accesses and insert field-selective sync
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Context needed to insert write-back/re-read inside LabeledBlock expressions.
+/// Context needed to insert write-back/re-read inside `LabeledBlock` expressions.
 struct ReplaceCtx<'a> {
     local_types: &'a [TypeId],
     type_table: &'a TypeTable,
@@ -1320,7 +1320,11 @@ fn replace_in_block(
     type_table: &TypeTable,
     cache: &FieldUsageCache,
 ) {
-    let ctx = ReplaceCtx { local_types, type_table, cache };
+    let ctx = ReplaceCtx {
+        local_types,
+        type_table,
+        cache,
+    };
     let span = crate::token::Span::new(0, 0, 0, 0);
     let mut new_stmts = Vec::new();
 
@@ -1949,7 +1953,7 @@ fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate], ctx: &
             then_block,
             else_block,
         } => {
-            replace_in_expr(condition, candidates, &ctx);
+            replace_in_expr(condition, candidates, ctx);
             replace_in_block_stmts(then_block, candidates, ctx);
             if let Some(eb) = else_block {
                 replace_in_block_stmts(eb, candidates, ctx);
@@ -1967,7 +1971,7 @@ fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate], ctx: &
             else_block,
             ..
         } => {
-            replace_in_expr(scrutinee, candidates, &ctx);
+            replace_in_expr(scrutinee, candidates, ctx);
             replace_in_block_stmts(then_block, candidates, ctx);
             if let Some(eb) = else_block {
                 replace_in_block_stmts(eb, candidates, ctx);
@@ -1989,7 +1993,11 @@ fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate], ctx: &
     }
 }
 
-fn replace_in_block_stmts(block: &mut TirBlock, candidates: &[ScalarizeCandidate], ctx: &ReplaceCtx) {
+fn replace_in_block_stmts(
+    block: &mut TirBlock,
+    candidates: &[ScalarizeCandidate],
+    ctx: &ReplaceCtx,
+) {
     for stmt in &mut block.stmts {
         replace_in_stmt(stmt, candidates, ctx);
     }
@@ -2104,7 +2112,7 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate], ctx: &
             then_branch,
             else_branch,
         } => {
-            replace_in_expr(condition, candidates, &ctx);
+            replace_in_expr(condition, candidates, ctx);
             replace_in_block_stmts(then_branch, candidates, ctx);
             if let Some(eb) = else_branch {
                 replace_in_block_stmts(eb, candidates, ctx);
@@ -2143,7 +2151,13 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate], ctx: &
             // function calls inside labeled block expressions get proper
             // write-back/re-read around them, even when the labeled block
             // is nested inside a let value or other expression context.
-            replace_in_block(block, candidates, ctx.local_types, ctx.type_table, ctx.cache);
+            replace_in_block(
+                block,
+                candidates,
+                ctx.local_types,
+                ctx.type_table,
+                ctx.cache,
+            );
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             replace_in_expr(value, candidates, ctx);
@@ -2160,7 +2174,7 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate], ctx: &
             default,
             ..
         } => {
-            replace_in_expr(scrutinee, candidates, &ctx);
+            replace_in_expr(scrutinee, candidates, ctx);
             for arm in arms {
                 replace_in_block_stmts(arm, candidates, ctx);
             }
