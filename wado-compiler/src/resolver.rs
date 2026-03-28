@@ -215,11 +215,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
-    /// Look up struct field info by (name, module_source).
+    /// Look up struct field info by (name, `module_source`).
     ///
     /// This is the correct way to look up struct fields — it disambiguates
     /// structs with the same name from different modules. Falls back to the
-    /// module-local flat map when the requested module_source has no entry in
+    /// module-local flat map when the requested `module_source` has no entry in
     /// the global map (e.g. during early resolution before all modules are loaded).
     fn lookup_struct_fields(
         &self,
@@ -232,7 +232,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .or_else(|| {
                 // Fallback: if all_struct_fields is not yet populated (early init),
                 // try the flat map but only if module_source matches.
-                self.struct_fields.get(name).filter(|info| info.module_source == *module_source)
+                self.struct_fields
+                    .get(name)
+                    .filter(|info| info.module_source == *module_source)
             })
     }
 

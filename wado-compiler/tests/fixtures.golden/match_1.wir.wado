@@ -150,45 +150,37 @@ import fn stream-new from "wasi/stream-new";
 fn classify(n) {
     let __local_1: i32;
     let __local_2: i32;
-    block {
+    __local_1 = n;
+    if __local_1 > 0 {
         __local_1 = n;
-        if __local_1 > 0 {
-            __local_1 = n;
-            return String { repr: array.new_data<u8>("positive"), used: 8 };
-            unreachable;
-        } else {
-            block {
-                __local_2 = n;
-                if __local_2 < 0 {
-                    __local_2 = n;
-                    return String { repr: array.new_data<u8>("negative"), used: 8 };
-                    unreachable;
-                } else {
-                    return String { repr: array.new_data<u8>("zero"), used: 4 };
-                    unreachable;
-                };
-            };
-        };
+        return String { repr: array.new_data<u8>("positive"), used: 8 };
+        unreachable;
+    __local_2 = n;
+    } else if __local_2 < 0 {
+        __local_2 = n;
+        return String { repr: array.new_data<u8>("negative"), used: 8 };
+        unreachable;
+    } else {
+        return String { repr: array.new_data<u8>("zero"), used: 4 };
+        unreachable;
     };
     unreachable;
 }
 
 fn classify_builder(x) {
     let __local_1: ref String;
-    return let __match_scrut_0: i32; __match_scrut_0 = x; block -> ref String {
-        if x > 0 -> ref String {
-            if x > 10 -> ref String {
-                __local_1 = String { repr: builtin::array_new<u8>(8), used: 0 };
-                String::append_char(__local_1, 98);
-                String::append_char(__local_1, 105);
-                String::append_char(__local_1, 103);
-                __local_1;
-            } else {
-                String { repr: array.new_data<u8>("small"), used: 5 };
-            };
+    return let __match_scrut_0: i32; __match_scrut_0 = x; if x > 0 -> ref String {
+        if x > 10 -> ref String {
+            __local_1 = String { repr: builtin::array_new<u8>(8), used: 0 };
+            String::append_char(__local_1, 98);
+            String::append_char(__local_1, 105);
+            String::append_char(__local_1, 103);
+            __local_1;
         } else {
-            String { repr: array.new_data<u8>("zero"), used: 4 };
+            String { repr: array.new_data<u8>("small"), used: 5 };
         };
+    } else {
+        String { repr: array.new_data<u8>("zero"), used: 4 };
     };
 }
 
@@ -451,22 +443,15 @@ fn __test_3_string_literal() {
     text = String { repr: array.new_data<u8>("hello"), used: 5 };
     let __match_scrut_0: ref String;
     __match_scrut_0 = text;
-    result = block -> i32 {
+    result = if __local_12 = __match_scrut_0; String^Eq::eq(__local_12, String { repr: array.new_data<u8>("hello"), used: 5 }) -> i32 {
         __local_12 = __match_scrut_0;
-        if String^Eq::eq(__local_12, String { repr: array.new_data<u8>("hello"), used: 5 }) -> i32 {
-            __local_12 = __match_scrut_0;
-            1;
-        } else {
-            block -> i32 {
-                __local_13 = __match_scrut_0;
-                if String^Eq::eq(__local_13, String { repr: array.new_data<u8>("world"), used: 5 }) -> i32 {
-                    __local_13 = __match_scrut_0;
-                    2;
-                } else {
-                    0;
-                };
-            };
-        };
+        1;
+    __local_13 = __match_scrut_0;
+    } else if String^Eq::eq(__local_13, String { repr: array.new_data<u8>("world"), used: 5 }) -> i32 {
+        __local_13 = __match_scrut_0;
+        2;
+    } else {
+        0;
     };
     __cond_3 = result == 1;
     if __cond_3 == 0 {
@@ -505,22 +490,15 @@ condition: result == 1
     text2 = String { repr: array.new_data<u8>("other"), used: 5 };
     let __match_scrut_1: ref String;
     __match_scrut_1 = text2;
-    result2 = block -> i32 {
+    result2 = if __local_14 = __match_scrut_1; String^Eq::eq(__local_14, String { repr: array.new_data<u8>("hello"), used: 5 }) -> i32 {
         __local_14 = __match_scrut_1;
-        if String^Eq::eq(__local_14, String { repr: array.new_data<u8>("hello"), used: 5 }) -> i32 {
-            __local_14 = __match_scrut_1;
-            1;
-        } else {
-            block -> i32 {
-                __local_15 = __match_scrut_1;
-                if String^Eq::eq(__local_15, String { repr: array.new_data<u8>("world"), used: 5 }) -> i32 {
-                    __local_15 = __match_scrut_1;
-                    2;
-                } else {
-                    0;
-                };
-            };
-        };
+        1;
+    __local_15 = __match_scrut_1;
+    } else if String^Eq::eq(__local_15, String { repr: array.new_data<u8>("world"), used: 5 }) -> i32 {
+        __local_15 = __match_scrut_1;
+        2;
+    } else {
+        0;
     };
     __cond_7 = result2 == 0;
     if __cond_7 == 0 {
@@ -785,9 +763,7 @@ fn __test_6_arm_nested_if_value() {
     let __local_59: ref Formatter;
     let __local_66: ref Formatter;
     __v0_0 = block -> ref String {
-        block -> ref String {
-            String { repr: array.new_data<u8>("small"), used: 5 };
-        };
+        String { repr: array.new_data<u8>("small"), used: 5 };
     };
     __cond_1 = String^Eq::eq(__v0_0, String { repr: array.new_data<u8>("small"), used: 5 });
     if __cond_1 == 0 {
@@ -816,9 +792,7 @@ condition: classify_nested(5) == \"small\"
         unreachable;
     };
     __v0_2 = block -> ref String {
-        block -> ref String {
-            String { repr: array.new_data<u8>("big"), used: 3 };
-        };
+        String { repr: array.new_data<u8>("big"), used: 3 };
     };
     __cond_3 = String^Eq::eq(__v0_2, String { repr: array.new_data<u8>("big"), used: 3 });
     if __cond_3 == 0 {
@@ -847,9 +821,7 @@ condition: classify_nested(15) == \"big\"
         unreachable;
     };
     __v0_4 = block -> ref String {
-        block -> ref String {
-            String { repr: array.new_data<u8>("zero"), used: 4 };
-        };
+        String { repr: array.new_data<u8>("zero"), used: 4 };
     };
     __cond_5 = String^Eq::eq(__v0_4, String { repr: array.new_data<u8>("zero"), used: 4 });
     if __cond_5 == 0 {
@@ -1000,13 +972,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l52: loop {
+            l42: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l52;
+                continue l42;
             };
         };
     };
@@ -1121,13 +1093,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l59: loop {
+            l49: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l59;
+                continue l49;
             };
         };
     };
@@ -1144,14 +1116,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l63: loop {
+                l53: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l63;
+                    continue l53;
                 };
             };
         };
@@ -1243,7 +1215,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l72: loop {
+            l62: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1251,7 +1223,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l72;
+                continue l62;
             };
         };
     };
@@ -1336,13 +1308,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l84: loop {
+            l74: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l84;
+                continue l74;
             };
         };
     };
@@ -1445,8 +1417,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b103: block {
-        l104: loop {
+    b93: block {
+        l94: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -1471,9 +1443,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b103;
+                break b93;
             };
-            continue l104;
+            continue l94;
         };
     };
     String::append_char(f.buf, 34);

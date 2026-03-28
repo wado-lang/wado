@@ -5725,10 +5725,7 @@ impl FunctionTranslator<'_, '_> {
                 // pattern is irrefutable like Binding/Wildcard), fold the guard into a
                 // single If to avoid cloning `result` (which causes 2^N tree explosion
                 // for many guarded arms, e.g., string match with N branches).
-                let pattern_is_trivially_true = matches!(
-                    &condition,
-                    WirInstr::I32Const(1)
-                );
+                let pattern_is_trivially_true = matches!(&condition, WirInstr::I32Const(1));
                 if pattern_is_trivially_true {
                     // Pattern always matches — just use the guard as the sole condition.
                     // Emit pattern bindings before the guard expression so that bound

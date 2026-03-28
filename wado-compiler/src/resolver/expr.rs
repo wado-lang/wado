@@ -2160,13 +2160,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
 
                 // Check field name exists in struct definition
-                if !struct_field_types.iter().any(|(n, _)| n == &field.name) && !struct_field_types.is_empty() {
+                if !struct_field_types.iter().any(|(n, _)| n == &field.name)
+                    && !struct_field_types.is_empty()
+                {
                     let _ = self.logger.error(TypeError::FieldNotFound {
                         struct_name: struct_name.clone(),
                         field_name: field.name.clone(),
                         span: field.span,
                     });
-
                 }
 
                 // Check field value type against declared struct field type
@@ -2191,12 +2192,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // struct_module_source was already determined above (before field resolution).
 
         // Check field visibility: non-pub fields cannot be set from other modules
-        if struct_module_source != self.current_module_source {
-            if let Some(struct_info) = self.lookup_struct_fields(&struct_name, &struct_module_source)
-            {
-                for (fname, _, is_pub) in &struct_info.fields {
-                    if !is_pub && fields.iter().any(|f| f.name == *fname) {
-                        let _ = self.logger.error(TypeError::TypeMismatch {
+        if struct_module_source != self.current_module_source
+            && let Some(struct_info) =
+                self.lookup_struct_fields(&struct_name, &struct_module_source)
+        {
+            for (fname, _, is_pub) in &struct_info.fields {
+                if !is_pub && fields.iter().any(|f| f.name == *fname) {
+                    let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: format!(
                                 "accessible field (field `{fname}` of struct `{struct_name}` is private)"
                             ),
@@ -2206,7 +2208,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             ),
                             span: struct_lit.span,
                         });
-                    }
                 }
             }
         }
@@ -2276,7 +2277,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
 
             // Check trait bounds on inferred type arguments
-            if let Some(struct_info) = self.lookup_struct_fields(&struct_name, &struct_module_source).cloned() {
+            if let Some(struct_info) = self
+                .lookup_struct_fields(&struct_name, &struct_module_source)
+                .cloned()
+            {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
                     if let Some(&type_arg) = type_args.get(i) {
                         for bound in bounds {
