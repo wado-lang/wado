@@ -386,14 +386,22 @@ impl Monomorphizer {
                             .filter(|(_, args)| !args.is_empty())
                     });
                 if let Some((base_struct, impl_type_args)) = base_info {
+                    // For ref impl methods (impl Trait for &Container<T>), the generic
+                    // function is named with "&" prefix (e.g., "&Array^IntoIterator::into_iter").
+                    let is_ref = method_func.method_info.as_ref().is_some_and(|mi| mi.is_ref_impl);
+                    let ref_base = if is_ref {
+                        format!("&{base_struct}")
+                    } else {
+                        base_struct.clone()
+                    };
                     // Try both inherent and trait method formats
                     let mut dg_names = vec![(
-                        MethodName::format_local(&base_struct, None, &method_name),
+                        MethodName::format_local(&ref_base, None, &method_name),
                         None::<String>,
                     )];
                     if let Some(ref tn) = trait_name_opt {
                         dg_names.push((
-                            MethodName::format_local(&base_struct, Some(tn), &method_name),
+                            MethodName::format_local(&ref_base, Some(tn), &method_name),
                             Some(tn.clone()),
                         ));
                     }

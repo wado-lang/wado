@@ -379,18 +379,29 @@ impl Monomorphizer {
                                         ),
                                         Some(tn.clone()),
                                     ));
-                                    // For ref-type impls, also try "&^Trait::method"
-                                    if let Some(ref info) = method_func.method_info
-                                        && info.base_struct_name != base_struct
-                                    {
-                                        dg_names.push((
-                                            MethodName::format_local(
-                                                &info.base_struct_name,
-                                                Some(tn),
-                                                &method_name,
-                                            ),
-                                            Some(tn.clone()),
-                                        ));
+                                    // For ref-type impls (impl Trait for &Container<T>),
+                                    // also try "&Container^Trait::method"
+                                    if let Some(ref info) = method_func.method_info {
+                                        if info.is_ref_impl {
+                                            let ref_name = format!("&{}", base_struct);
+                                            dg_names.push((
+                                                MethodName::format_local(
+                                                    &ref_name,
+                                                    Some(tn),
+                                                    &method_name,
+                                                ),
+                                                Some(tn.clone()),
+                                            ));
+                                        } else if info.base_struct_name != base_struct {
+                                            dg_names.push((
+                                                MethodName::format_local(
+                                                    &info.base_struct_name,
+                                                    Some(tn),
+                                                    &method_name,
+                                                ),
+                                                Some(tn.clone()),
+                                            ));
+                                        }
                                     }
                                 }
 
@@ -437,17 +448,25 @@ impl Monomorphizer {
                     // Try both regular method and trait method formats
                     // Method names to try: BaseStruct::method, BaseStruct^Trait::method (from method_info)
                     let mut names_to_try = Vec::new();
-                    // For ref-type impls (e.g., impl Trait for &Array<T>),
-                    // try the ref struct name FIRST so it takes priority
+                    // For ref-type impls (impl Trait for &Container<T>),
+                    // try "&Container^Trait::method" FIRST so it takes priority
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
-                        && info.base_struct_name != base_struct
                     {
-                        names_to_try.push(MethodName::format_local(
-                            &info.base_struct_name,
-                            Some(trait_name),
-                            &method_name,
-                        ));
+                        if info.is_ref_impl {
+                            let ref_name = format!("&{}", base_struct);
+                            names_to_try.push(MethodName::format_local(
+                                &ref_name,
+                                Some(trait_name),
+                                &method_name,
+                            ));
+                        } else if info.base_struct_name != base_struct {
+                            names_to_try.push(MethodName::format_local(
+                                &info.base_struct_name,
+                                Some(trait_name),
+                                &method_name,
+                            ));
+                        }
                     }
                     names_to_try.push(MethodName::format_local(&base_struct, None, &method_name));
                     if let Some(ref info) = method_func.method_info.clone()

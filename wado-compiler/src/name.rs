@@ -659,6 +659,10 @@ pub struct LocalMethodName {
     /// Whether the struct name is a type parameter that should be substituted directly
     /// during monomorphization (e.g., `T^Ord::cmp` where T should become i32).
     pub is_type_param_receiver: bool,
+    /// Whether this method is from an `impl Trait for &T` or `impl Trait for &mut T`.
+    /// When true, the function name uses the inner type name (e.g., "Array") but the
+    /// actual impl is on the reference type (e.g., &Array<T>).
+    pub is_ref_impl: bool,
     /// CM canonical name from `#[cm("...")]` attribute on resource methods.
     /// When set, synthesis generates a CM binding function and rewrites
     /// the call site to use it instead of the original resource method.
@@ -683,6 +687,7 @@ impl LocalMethodName {
             method_name,
             method_type_args: vec![],
             is_type_param_receiver: false,
+            is_ref_impl: false,
             cm_name: None,
         }
     }
@@ -709,6 +714,7 @@ impl LocalMethodName {
             method_name,
             method_type_args,
             is_type_param_receiver: false,
+                is_ref_impl: false,
             cm_name: None,
         }
     }
@@ -732,6 +738,7 @@ impl LocalMethodName {
             method_name: self.method_name.clone(),
             method_type_args: method_type_args.to_vec(),
             is_type_param_receiver: self.is_type_param_receiver,
+            is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
         }
     }
@@ -756,7 +763,8 @@ impl LocalMethodName {
             trait_name: self.trait_name.clone(),
             method_name: self.method_name.clone(),
             method_type_args: self.method_type_args.clone(),
-            is_type_param_receiver: false, // After substitution, it's a concrete type
+            is_type_param_receiver: false,
+                is_ref_impl: false, // After substitution, it's a concrete type
             cm_name: self.cm_name.clone(),
         }
     }

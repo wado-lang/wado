@@ -107,6 +107,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut trait_impl_module_source: Option<ModuleSource> = None;
         let mut blanket_type_param: Option<String> = None;
         let mut trait_impl_struct_name: Option<String> = None;
+        let mut is_ref_impl = false;
 
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &Array<T> takes priority over impl IntoIterator for Array<T>.
@@ -139,13 +140,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some(trait_match) = result
                     && !trait_match.is_blanket_ref_impl
                 {
-                    trait_impl_struct_name = Some(trait_match.impl_struct_name);
+                    // Strip "&" / "&mut " prefix from impl_struct_name — we track
+                    // ref-ness via is_ref_impl flag instead of encoding it in the name.
+                    let clean_name = trait_match
+                        .impl_struct_name
+                        .strip_prefix("&mut ")
+                        .or_else(|| trait_match.impl_struct_name.strip_prefix("&"))
+                        .unwrap_or(&trait_match.impl_struct_name)
+                        .to_string();
+                    trait_impl_struct_name = Some(clean_name);
                     trait_name = Some(trait_match.trait_name);
                     let mut info = trait_match.method_info;
                     info.is_ref_impl = true;
                     method_info = Some(info);
                     trait_impl_module_source = Some(trait_match.impl_module_source);
                     blanket_type_param = trait_match.blanket_type_param;
+                    is_ref_impl = true;
                 }
             }
         }
@@ -517,6 +527,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
         .with_type_args(&impl_type_arg_names, &method_type_arg_names);
         method_info.is_type_param_receiver = is_type_param_receiver;
+        method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
 
         // Use trait impl module source if this is a trait method,
