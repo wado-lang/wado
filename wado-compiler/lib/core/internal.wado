@@ -69,15 +69,13 @@ pub fn wait_for_subtask(packed: i32) {
     }
 }
 
-/// Waits for a write_via_stream Future to complete and drops it.
+/// Drops a write_via_stream Future handle.
 ///
 /// write_via_stream returns a Future<Result<(), ErrorCode>> handle (i32).
-/// We cast it to the typed Future resource, read to wait for completion,
-/// then drop the handle.
+/// We cast it to the typed Future resource and drop it.
 use { ErrorCode } from "wasi:cli/types.wado";
-fn wait_for_write_future(handle: i32) {
+fn drop_write_future(handle: i32) {
     let future = handle as Future<Result<(), ErrorCode>>;
-    future.read();
     future.drop();
 }
 
@@ -90,7 +88,7 @@ pub fn log_stdout(message: String) {
 
     let future_handle = builtin::call_indirect_stdout_write_via_stream(rx as i32);
     write_string_to_stream(tx, message, true);
-    wait_for_write_future(future_handle);
+    drop_write_future(future_handle);
 }
 
 /// Logs a message with newline to stderr (ambient, no effect required).
@@ -102,7 +100,7 @@ pub fn log_stderr(message: String) {
 
     let future_handle = builtin::call_indirect_stderr_write_via_stream(rx as i32);
     write_string_to_stream(tx, message, true);
-    wait_for_write_future(future_handle);
+    drop_write_future(future_handle);
 }
 
 /// Logs a message to stderr and traps.

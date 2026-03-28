@@ -5,7 +5,6 @@
 // CM streams are zero-buffered rendezvous channels, so the consumer must be
 // started before stream.write() to avoid BLOCKED.
 use { Stderr } from "core:cli";
-use { wait_for_subtask } from "core:internal";
 
 export fn run() with Stderr {
     let [rx, tx] = Stream::<u8>::new();
@@ -21,7 +20,7 @@ export fn run() with Stderr {
     tx.drop();
 
     // 4. Wait for consumer to finish
-    wait_for_subtask(subtask);
+    subtask.drop();
 }
 
 __DATA__

@@ -7,12 +7,11 @@
 // - The stream can be piped directly to Stdout::write_via_stream()
 use { Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
-use { wait_for_subtask } from "core:internal";
 
 export fn run() with Stdout, Stdin {
     let [stdin_stream, _done] = Stdin::read_via_stream();
     let subtask = Stdout::write_via_stream(stdin_stream);
-    wait_for_subtask(subtask);
+    subtask.drop();
 }
 
 __DATA__

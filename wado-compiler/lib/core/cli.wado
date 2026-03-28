@@ -42,7 +42,6 @@ pub fn println(message: String) with Stdout {
 
     let future = Stdout::write_via_stream(rx);
     write_to_stream(tx, message, true);
-    future.read();
     future.drop();
 }
 
@@ -52,7 +51,6 @@ pub fn eprintln(message: String) with Stderr {
 
     let future = Stderr::write_via_stream(rx);
     write_to_stream(tx, message, true);
-    future.read();
     future.drop();
 }
 
@@ -62,7 +60,6 @@ pub fn print(message: String) with Stdout {
 
     let future = Stdout::write_via_stream(rx);
     write_to_stream(tx, message, false);
-    future.read();
     future.drop();
 }
 
@@ -72,7 +69,6 @@ pub fn eprint(message: String) with Stderr {
 
     let future = Stderr::write_via_stream(rx);
     write_to_stream(tx, message, false);
-    future.read();
     future.drop();
 }
 /// Writes raw bytes to stdout.
@@ -82,7 +78,6 @@ pub fn print_bytes(data: Array<u8>) with Stdout {
     let future = Stdout::write_via_stream(rx);
     tx.write(data);
     tx.drop();
-    future.read();
     future.drop();
 }
 

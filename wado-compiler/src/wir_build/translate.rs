@@ -4709,6 +4709,11 @@ impl FunctionTranslator<'_, '_> {
                     ptr_name,
                 );
             }
+
+            // Check if Ok type is () (the transmission pattern: Result<(), E>)
+            if matches!(self.type_table.get(ok_type_id), ResolvedType::Unit) {
+                return self.lift_result_unit(inner_t, ptr_name);
+            }
         }
 
         // Fallback: unsupported T type — emit unreachable
@@ -4817,6 +4822,40 @@ impl FunctionTranslator<'_, '_> {
         let result_err = WirInstr::Unreachable;
 
         // Result = if result_disc == 0 { Ok(...) } else { Err (trap) }
+        let result_wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, result_type_id);
+        WirInstr::If {
+            condition: Box::new(WirInstr::I32Eqz(Box::new(result_disc))),
+            result: Some(result_wir_type),
+            then_body: vec![result_ok],
+            else_body: Some(vec![result_err]),
+        }
+    }
+
+    /// Lift `Result<(), E>` from CM linear memory.
+    ///
+    /// CM layout at ptr:
+    /// - offset 0: result discriminant (i32) — 0=Ok, 1=Err
+    ///
+    /// Returns `Result::Ok(())` when discriminant is 0, traps on Err.
+    fn lift_result_unit(&mut self, result_type_id: TypeId, ptr_name: &str) -> WirInstr {
+        let ptr = || WirInstr::LocalGet {
+            name: ptr_name.to_string(),
+            result_ty: WirType::I32,
+        };
+
+        let result_disc = WirInstr::I32Load {
+            offset: 0,
+            align: 2,
+            addr: Box::new(ptr()),
+        };
+
+        let result_ok = self.build_variant_case_wir(result_type_id, 0, "Ok", None);
+
+        // Err branch: trap (ErrorCode lifting not yet implemented for this pattern)
+        let result_err = WirInstr::Unreachable;
+
         let result_wir_type = self
             .ctx
             .type_id_to_wir_type(self.type_table, result_type_id);
