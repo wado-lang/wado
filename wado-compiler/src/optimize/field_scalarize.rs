@@ -1306,6 +1306,13 @@ fn mark_local_fully_assigned(local_idx: u32, counts: &mut IndexMap<(u32, u32), F
 // Replacement pass: replace field accesses and insert field-selective sync
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Context needed to insert write-back/re-read inside `LabeledBlock` expressions.
+struct ReplaceCtx<'a> {
+    local_types: &'a [TypeId],
+    type_table: &'a TypeTable,
+    cache: &'a FieldUsageCache,
+}
+
 fn replace_in_block(
     block: &mut TirBlock,
     candidates: &[ScalarizeCandidate],
@@ -1313,6 +1320,11 @@ fn replace_in_block(
     type_table: &TypeTable,
     cache: &FieldUsageCache,
 ) {
+    let ctx = ReplaceCtx {
+        local_types,
+        type_table,
+        cache,
+    };
     let span = crate::token::Span::new(0, 0, 0, 0);
     let mut new_stmts = Vec::new();
 
@@ -1348,7 +1360,7 @@ fn replace_in_block(
                         new_stmts.push(make_write_back_stmt(c, span));
                     }
                 }
-                replace_in_expr(condition, candidates);
+                replace_in_expr(condition, candidates, &ctx);
                 replace_in_block(then_block, candidates, local_types, type_table, cache);
                 if let Some(eb) = else_block {
                     replace_in_block(eb, candidates, local_types, type_table, cache);
@@ -1387,7 +1399,7 @@ fn replace_in_block(
                         new_stmts.push(make_write_back_stmt(c, span));
                     }
                 }
-                replace_in_expr(scrutinee, candidates);
+                replace_in_expr(scrutinee, candidates, &ctx);
                 replace_in_block(then_block, candidates, local_types, type_table, cache);
                 if let Some(eb) = else_block {
                     replace_in_block(eb, candidates, local_types, type_table, cache);
@@ -1422,7 +1434,7 @@ fn replace_in_block(
                     ..
                 } = &mut expr.kind
                 {
-                    replace_in_expr(scrutinee, candidates);
+                    replace_in_expr(scrutinee, candidates, &ctx);
                     for arm in arms {
                         replace_in_block(arm, candidates, local_types, type_table, cache);
                     }
@@ -1443,7 +1455,7 @@ fn replace_in_block(
             stmt.kind,
             TirStmtKind::Return { .. } | TirStmtKind::Break { .. }
         ) {
-            replace_in_stmt(&mut stmt, candidates);
+            replace_in_stmt(&mut stmt, candidates, &ctx);
             new_stmts.extend(make_write_back_stmts(candidates, span));
             new_stmts.push(stmt);
             continue;
@@ -1464,7 +1476,7 @@ fn replace_in_block(
             }
         }
 
-        replace_in_stmt(&mut stmt, candidates);
+        replace_in_stmt(&mut stmt, candidates, &ctx);
         new_stmts.push(stmt);
 
         if !sync_fields.re_read.is_empty() {
@@ -1923,17 +1935,17 @@ fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 // Expression replacement (replace field accesses with scalarized locals)
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate]) {
+fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate], ctx: &ReplaceCtx) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } => {
-            replace_in_expr(value, candidates);
+            replace_in_expr(value, candidates, ctx);
         }
         TirStmtKind::Expr(expr) => {
-            replace_in_expr(expr, candidates);
+            replace_in_expr(expr, candidates, ctx);
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                replace_in_expr(v, candidates);
+                replace_in_expr(v, candidates, ctx);
             }
         }
         TirStmtKind::If {
@@ -1941,17 +1953,17 @@ fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate]) {
             then_block,
             else_block,
         } => {
-            replace_in_expr(condition, candidates);
-            replace_in_block_stmts(then_block, candidates);
+            replace_in_expr(condition, candidates, ctx);
+            replace_in_block_stmts(then_block, candidates, ctx);
             if let Some(eb) = else_block {
-                replace_in_block_stmts(eb, candidates);
+                replace_in_block_stmts(eb, candidates, ctx);
             }
         }
         TirStmtKind::Loop { body } => {
-            replace_in_block_stmts(body, candidates);
+            replace_in_block_stmts(body, candidates, ctx);
         }
         TirStmtKind::LabeledBlock { block, .. } => {
-            replace_in_block_stmts(block, candidates);
+            replace_in_block_stmts(block, candidates, ctx);
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -1959,20 +1971,20 @@ fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate]) {
             else_block,
             ..
         } => {
-            replace_in_expr(scrutinee, candidates);
-            replace_in_block_stmts(then_block, candidates);
+            replace_in_expr(scrutinee, candidates, ctx);
+            replace_in_block_stmts(then_block, candidates, ctx);
             if let Some(eb) = else_block {
-                replace_in_block_stmts(eb, candidates);
+                replace_in_block_stmts(eb, candidates, ctx);
             }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                replace_in_expr(v, candidates);
+                replace_in_expr(v, candidates, ctx);
             }
         }
         TirStmtKind::Continue => {}
         TirStmtKind::LetDestructure { value, .. } => {
-            replace_in_expr(value, candidates);
+            replace_in_expr(value, candidates, ctx);
         }
         TirStmtKind::TaskReturn { .. } => {}
         TirStmtKind::VariadicForOf { .. } => {
@@ -1981,9 +1993,13 @@ fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate]) {
     }
 }
 
-fn replace_in_block_stmts(block: &mut TirBlock, candidates: &[ScalarizeCandidate]) {
+fn replace_in_block_stmts(
+    block: &mut TirBlock,
+    candidates: &[ScalarizeCandidate],
+    ctx: &ReplaceCtx,
+) {
     for stmt in &mut block.stmts {
-        replace_in_stmt(stmt, candidates);
+        replace_in_stmt(stmt, candidates, ctx);
     }
 }
 
@@ -1997,7 +2013,7 @@ fn make_write_back_stmts(
         .collect()
 }
 
-fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
+fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate], ctx: &ReplaceCtx) {
     // Check if this is an assignment to a scalarized field: obj.field = val
     if let TirExprKind::Assign { target, value } = &mut expr.kind {
         if let TirExprKind::FieldAccess {
@@ -2010,7 +2026,7 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
             for c in candidates {
                 if c.local_index == *index && c.field_index == *field_index {
                     // Replace obj.field = val with _hfs_local = val
-                    replace_in_expr(value, candidates);
+                    replace_in_expr(value, candidates, ctx);
                     let new_target = TirExpr::new(
                         TirExprKind::Local {
                             index: c.new_local_index,
@@ -2024,8 +2040,8 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
                 }
             }
         }
-        replace_in_expr(target, candidates);
-        replace_in_expr(value, candidates);
+        replace_in_expr(target, candidates, ctx);
+        replace_in_expr(value, candidates, ctx);
         return;
     }
 
@@ -2056,90 +2072,101 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
-            replace_in_expr(inner, candidates);
+            replace_in_expr(inner, candidates, ctx);
         }
         TirExprKind::Binary { left, right, .. } => {
-            replace_in_expr(left, candidates);
-            replace_in_expr(right, candidates);
+            replace_in_expr(left, candidates, ctx);
+            replace_in_expr(right, candidates, ctx);
         }
         TirExprKind::Unary { expr, .. } => {
-            replace_in_expr(expr, candidates);
+            replace_in_expr(expr, candidates, ctx);
         }
         TirExprKind::Cast { expr, .. } => {
-            replace_in_expr(expr, candidates);
+            replace_in_expr(expr, candidates, ctx);
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                replace_in_expr(&mut arg.expr, candidates);
+                replace_in_expr(&mut arg.expr, candidates, ctx);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            replace_in_expr(receiver, candidates);
+            replace_in_expr(receiver, candidates, ctx);
             for arg in args {
-                replace_in_expr(&mut arg.expr, candidates);
+                replace_in_expr(&mut arg.expr, candidates, ctx);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                replace_in_expr(arg, candidates);
+                replace_in_expr(arg, candidates, ctx);
             }
         }
         TirExprKind::Index { expr, index } => {
-            replace_in_expr(expr, candidates);
-            replace_in_expr(index, candidates);
+            replace_in_expr(expr, candidates, ctx);
+            replace_in_expr(index, candidates, ctx);
         }
         TirExprKind::Block(block) => {
-            replace_in_block_stmts(block, candidates);
+            replace_in_block_stmts(block, candidates, ctx);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            replace_in_expr(condition, candidates);
-            replace_in_block_stmts(then_branch, candidates);
+            replace_in_expr(condition, candidates, ctx);
+            replace_in_block_stmts(then_branch, candidates, ctx);
             if let Some(eb) = else_branch {
-                replace_in_block_stmts(eb, candidates);
+                replace_in_block_stmts(eb, candidates, ctx);
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                replace_in_expr(&mut field.value, candidates);
+                replace_in_expr(&mut field.value, candidates, ctx);
             }
         }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
-                replace_in_expr(elem, candidates);
+                replace_in_expr(elem, candidates, ctx);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            replace_in_expr(callee, candidates);
+            replace_in_expr(callee, candidates, ctx);
             for arg in args {
-                replace_in_expr(arg, candidates);
+                replace_in_expr(arg, candidates, ctx);
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            replace_in_expr(functor, candidates);
+            replace_in_expr(functor, candidates, ctx);
         }
         TirExprKind::Closure { body, .. } => {
-            replace_in_expr(body, candidates);
+            replace_in_expr(body, candidates, ctx);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                replace_in_expr(p, candidates);
+                replace_in_expr(p, candidates, ctx);
             }
         }
         TirExprKind::LabeledBlock { block, .. } => {
-            replace_in_block_stmts(block, candidates);
+            // Use replace_in_block (with write-back/re-read sync) instead of
+            // replace_in_block_stmts (field replacement only). This ensures
+            // function calls inside labeled block expressions get proper
+            // write-back/re-read around them, even when the labeled block
+            // is nested inside a let value or other expression context.
+            replace_in_block(
+                block,
+                candidates,
+                ctx.local_types,
+                ctx.type_table,
+                ctx.cache,
+            );
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            replace_in_expr(value, candidates);
+            replace_in_expr(value, candidates, ctx);
         }
         TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            replace_in_expr(expr, candidates);
+            replace_in_expr(expr, candidates, ctx);
         }
         TirExprKind::VariantPayload { expr, .. } => {
-            replace_in_expr(expr, candidates);
+            replace_in_expr(expr, candidates, ctx);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -2147,29 +2174,29 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
             default,
             ..
         } => {
-            replace_in_expr(scrutinee, candidates);
+            replace_in_expr(scrutinee, candidates, ctx);
             for arm in arms {
-                replace_in_block_stmts(arm, candidates);
+                replace_in_block_stmts(arm, candidates, ctx);
             }
-            replace_in_block_stmts(default, candidates);
+            replace_in_block_stmts(default, candidates, ctx);
         }
         TirExprKind::Assign { target, value } => {
-            replace_in_expr(target, candidates);
-            replace_in_expr(value, candidates);
+            replace_in_expr(target, candidates, ctx);
+            replace_in_expr(value, candidates, ctx);
         }
         TirExprKind::Match { expr, arms } => {
-            replace_in_expr(expr, candidates);
+            replace_in_expr(expr, candidates, ctx);
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
-                    replace_in_expr(guard, candidates);
+                    replace_in_expr(guard, candidates, ctx);
                 }
-                replace_in_expr(&mut arm.body, candidates);
+                replace_in_expr(&mut arm.body, candidates, ctx);
             }
         }
         TirExprKind::TemplateString { parts } => {
             for part in parts {
                 if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
-                    replace_in_expr(expr, candidates);
+                    replace_in_expr(expr, candidates, ctx);
                 }
             }
         }

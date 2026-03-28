@@ -1,0 +1,63 @@
+// HFS miscompilation variant: LabeledBlock inside match/if expression.
+// The inlined function returns Result, and `?` creates a match that wraps
+// the LabeledBlock. HFS write-back is placed before the let statement,
+// but the LabeledBlock contains advance() + function call sequence.
+
+struct Parser {
+    pos: i32,
+    data: Array<i32>,
+}
+
+impl Parser {
+    fn current(&self) -> i32 {
+        return self.data[self.pos];
+    }
+    fn advance(&mut self) -> i32 {
+        let v = self.data[self.pos];
+        self.pos = self.pos + 1;
+        return v;
+    }
+}
+
+fn consume_three(p: &mut Parser) -> Result<i32, String> {
+    let a = p.advance();
+    let b = p.advance();
+    let c = p.advance();
+    let d = p.current();
+    let e = p.current();
+    let f = p.current();
+    let g = p.current();
+    let h = p.current();
+    return Result::<i32, String>::Ok(a + b + c + d + e + f + g + h);
+}
+
+// Returns Result — when inlined + ?, creates match(LabeledBlock { ... })
+fn advance_then_consume(p: &mut Parser) -> Result<i32, String> {
+    let skipped = p.advance();
+    let result = consume_three(p)?;
+    return Result::<i32, String>::Ok(skipped + result);
+}
+
+fn parse_all(p: &mut Parser) -> Result<i32, String> {
+    let mut total = 0;
+    while p.current() >= 0 {
+        let a = p.current();
+        let b = p.current();
+        let c = p.current();
+        let d = p.current();
+        let r = advance_then_consume(p)?;
+        total = total + r;
+    }
+    return Result::<i32, String>::Ok(total);
+}
+
+export fn run() {
+    let data: Array<i32> = [10, 20, 30, 40, 50, 60, 70, 80, -1];
+    let mut p = Parser { pos: 0, data };
+    let result = parse_all(&mut p);
+    if let Err(e) = result { panic(e); }
+    assert p.pos == 8, `expected pos=8, got {p.pos}`;
+}
+
+__DATA__
+{"stdout": ""}

@@ -160,6 +160,11 @@ struct TestSpec {
     #[serde(default)]
     skip_os: bool,
 
+    /// Run this test only at the listed optimization levels (e.g. `["O3"]`).
+    /// When set, all other levels are skipped.
+    #[serde(default)]
+    only_opt: Vec<String>,
+
     /// Stdin data to pipe into the program.
     /// If set, the program's stdin will receive this UTF-8 string.
     #[serde(default)]
@@ -634,6 +639,21 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
     if spec.skip_os && opt_level == OptLevel::Os {
         eprintln!("[{test_id}] skipped (skip_os)");
         return;
+    }
+
+    // Skip if only_opt is set and this level is not in the list
+    if !spec.only_opt.is_empty() {
+        let level_str = match opt_level {
+            OptLevel::O0 => "O0",
+            OptLevel::O1 => "O1",
+            OptLevel::O2 => "O2",
+            OptLevel::O3 => "O3",
+            OptLevel::Os => "Os",
+        };
+        if !spec.only_opt.iter().any(|s| s == level_str) {
+            eprintln!("[{test_id}] skipped (only_opt: {:?})", spec.only_opt);
+            return;
+        }
     }
 
     // Handle TODO tests - they must fail
