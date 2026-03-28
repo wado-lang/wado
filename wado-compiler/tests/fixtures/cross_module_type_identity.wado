@@ -1,0 +1,29 @@
+// Test: passing a struct type defined in module A to a function in module B
+// should work without Wasm GC type mismatch errors.
+// This currently fails due to cross-module type identity issues.
+use utils from "./sub/cross_module_type_identity_util.wado";
+
+variant Shape {
+    Circle(CircleData),
+    Rect(RectData),
+}
+
+pub struct CircleData {
+    pub radius: i32,
+}
+
+pub struct RectData {
+    pub width: i32,
+}
+
+export fn run() {
+    let shapes: Array<Shape> = [
+        Shape::Circle(CircleData { radius: 10 }),
+        Shape::Rect(RectData { width: 5 }),
+    ];
+    let result = utils::sum_shapes(&shapes);
+    assert result == 15;
+}
+
+__DATA__
+{"stdout": "", "TODO": true}
