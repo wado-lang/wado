@@ -413,8 +413,14 @@ fn get_type_name_static(ty: &ast::Type) -> String {
     match ty {
         ast::Type::Named(named) => named.name.clone(),
         ast::Type::Generic(generic) => generic.name.clone(),
-        ast::Type::Reference(inner) => format!("&{}", get_type_name_static(inner)),
-        ast::Type::MutReference(inner) => format!("&mut {}", get_type_name_static(inner)),
+        ast::Type::Reference(inner) => match inner.as_ref() {
+            ast::Type::Generic(_) => format!("&{}", get_type_name_static(inner)),
+            _ => "&".to_string(),
+        },
+        ast::Type::MutReference(inner) => match inner.as_ref() {
+            ast::Type::Generic(_) => format!("&mut {}", get_type_name_static(inner)),
+            _ => "&mut".to_string(),
+        },
         ast::Type::Tuple(_) => "Tuple".to_string(),
         _ => "Unknown".to_string(),
     }

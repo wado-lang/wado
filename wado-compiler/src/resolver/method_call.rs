@@ -117,16 +117,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             );
             if is_ref {
-                let ref_struct_name = if matches!(
+                let ref_prefix = if matches!(
                     self.type_table.borrow().get(receiver.type_id),
                     ResolvedType::Ref(_)
                 ) {
                     "&"
                 } else {
-                    "&mut"
+                    "&mut "
                 };
+                let ref_struct_name = format!("{ref_prefix}{struct_name}");
                 let result = self.find_trait_method_for_type(
-                    ref_struct_name,
+                    &ref_struct_name,
                     &method_call.method,
                     &struct_module,
                     receiver_type_args_for_trait.as_deref(),
