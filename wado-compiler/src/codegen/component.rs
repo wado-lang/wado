@@ -90,14 +90,20 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
         wir_module.needed_canonicals.iter().cloned().collect();
 
     // HTTP response types for future<T> canonical intrinsics
-    let needs_http_future_types = all_canonical_intrinsics.iter().any(|i| {
-        matches!(
-            i.future_payload(),
-            Some(CmFuturePayload::Trailers | CmFuturePayload::Transmission)
-        )
+    let needs_trailers_future = all_canonical_intrinsics.iter().any(|i| {
+        matches!(i.future_payload(), Some(CmFuturePayload::Trailers))
     });
-    let (trailers_future_type, transmission_future_type) = if needs_http_future_types {
+    let needs_transmission_future = all_canonical_intrinsics.iter().any(|i| {
+        matches!(i.future_payload(), Some(CmFuturePayload::Transmission))
+    });
+    let (trailers_future_type, transmission_future_type) = if needs_trailers_future {
+        // Trailers requires full HTTP types; Transmission is also built here
         build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type)
+    } else if needs_transmission_future {
+        // Transmission only: future<result<_, error-code>> without HTTP-specific types
+        let transmission_future_type =
+            build_transmission_future_type(&mut builder, &mut ctx);
+        (0, transmission_future_type)
     } else {
         (0, 0)
     };
@@ -671,6 +677,34 @@ fn embed_bundled_modules(
             ExportKind::Func,
         );
     }
+}
+
+/// Build `future<result<_, error-code>>` (transmission) type without HTTP-specific types.
+///
+/// Used when only `CmFuturePayload::Transmission` is needed (e.g., write_via_stream)
+/// but no HTTP types are imported.
+fn build_transmission_future_type(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+) -> u32 {
+    let error_code_idx = ctx.type_idx("error-code");
+
+    ctx.register_type("http-transmission-result");
+    {
+        let (_, enc) = builder.ty(Some("http-transmission-result"));
+        enc.defined_type()
+            .result(None, Some(ComponentValType::Type(error_code_idx)));
+    }
+
+    ctx.register_type("http-transmission-future");
+    {
+        let transmission_result_idx = ctx.type_idx("http-transmission-result");
+        let (_, enc) = builder.ty(Some("http-transmission-future"));
+        enc.defined_type()
+            .future(Some(ComponentValType::Type(transmission_result_idx)));
+    }
+
+    ctx.type_idx("http-transmission-future")
 }
 
 fn build_future_intrinsic_types(
