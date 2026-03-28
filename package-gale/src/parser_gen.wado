@@ -188,7 +188,52 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
         let mut results: Array<SllConfig> = [];
         let mut visiting: Array<String> = [];
         if array_contains_str(&first_of_element(elem, all_rules, lit_tokens, &mut visiting), token) {
-            results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack });
+            // Check if the inner element is a multi-token RuleRef.
+            // If so, enter it via return stack instead of skipping to pos+1.
+            let mut entered = false;
+            if let Repeat(rep) = *elem {
+                if let RuleRef(inner_name) = rep.element {
+                    let mut stv: Array<String> = [];
+                    if !rule_is_single_token(&inner_name, all_rules, &mut stv) && c.return_stack.len() < 1 {
+                        let mut inner_alt_count = 0;
+                        for let rule of all_rules {
+                            if rule.name == inner_name {
+                                inner_alt_count = rule.alternatives.len();
+                                break;
+                            }
+                        }
+                        if inner_alt_count <= 8 {
+                            entered = true;
+                            let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
+                            for let rule of all_rules {
+                                if rule.name != inner_name {
+                                    continue;
+                                }
+                                for let alt of rule.alternatives {
+                                    let mut v2: Array<String> = [];
+                                    if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v2), token) {
+                                        continue;
+                                    }
+                                    let exp = SllConfig {
+                                        alt_index: c.alt_index,
+                                        elements: alt.elements,
+                                        pos: 0,
+                                        return_stack: new_stack,
+                                    };
+                                    let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, inline_depth + 1);
+                                    for let a of advanced {
+                                        results.append(a);
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if !entered {
+                results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack });
+            }
         }
         // Also try skipping: advance past all consecutive nullables non-recursively.
         let mut skip_pos = c.pos + 1;
@@ -521,22 +566,13 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         }
         if let RuleRef(name) = c.elements[c.pos] {
             let mut alt_count = 0;
-            let mut has_nullable_start = false;
             for let rule of all_rules {
                 if rule.name == name {
                     alt_count = rule.alternatives.len();
-                    // Check if any alternative starts with a nullable element.
-                    // Nullable-start rules cause depth mismatch: sll_advance skips
-                    // the nullable, producing FIRST at a different input depth.
-                    for let alt of rule.alternatives {
-                        if !alt.elements.is_empty() && is_nullable(&alt.elements[0]) {
-                            has_nullable_start = true;
-                        }
-                    }
                     break;
                 }
             }
-            if alt_count > 8 || has_nullable_start {
+            if alt_count > 8 {
                 continue;
             }
             let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
@@ -625,19 +661,20 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
     if !has_improvement || branches.is_empty() {
         return null;
     }
+    // Only use if ALL branches are Leaf — any Backtrack branch means expansion
+    // didn't fully resolve, and the code generator's Dispatch has no fallback
+    // for unmatched tokens, which would silently drop valid inputs.
+    for let b of branches {
+        if let Backtrack(_) = b.child {
+            return null;
+        }
+    }
     // Safety: verify all original opaque alts appear in at least one branch.
     let mut covered_alts: Array<i32> = [];
     for let b of branches {
         if let Leaf(idx) = b.child {
             if !array_contains_i32(&covered_alts, idx) {
                 covered_alts.append(idx);
-            }
-        }
-        if let Backtrack(idxs) = b.child {
-            for let idx of idxs {
-                if !array_contains_i32(&covered_alts, idx) {
-                    covered_alts.append(idx);
-                }
             }
         }
     }
