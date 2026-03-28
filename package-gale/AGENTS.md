@@ -101,6 +101,30 @@ Commit the updated golden files.
 
 - **No backtracking in new code.** Use static k-token lookahead prediction to disambiguate alternatives. If prediction cannot resolve within depth 5, file an issue rather than adding backtracking. Existing backtracking sites are being migrated to prediction; do not add new ones.
 
+## Failed Approaches (Do Not Repeat)
+
+### RuleRef Expansion via Return Stack (2026-03)
+
+**Goal:** Expand multi-token RuleRefs during SLL prediction to reduce backtracking.
+
+**What was tried:** Added `return_stack` to `SllConfig` to track continuation points when entering a referenced rule. `sll_expand_rule_ref` pushed return frames and advanced inside sub-rules. `try_expand_opaque` called expansion when `build_sll_node` would otherwise produce `Backtrack`.
+
+**Why it failed (3 distinct bugs):**
+
+1. **Consume node corruption:** `build_sll_node` emits `Consume(element, child)` when all configs share a common terminal. For expanded configs inside a sub-rule, this emits `p.expect(K_FROM)` at the _decision point_, consuming a token that belongs to the referenced rule (e.g., `delete_stmt`). Fix attempted: `strip_all_consume` — but this loses disambiguation information.
+
+2. **Depth-mixed Dispatch:** Expanded configs produce Dispatch branches for tokens _inside_ sub-rules (e.g., `K_RECURSIVE` from `with_clause`). When multiple alternatives share the same prefix rule (`with_clause`), these dispatches are meaningless — every alternative sees the same tokens. The generated parser enters wrong branches and fails or times out.
+
+3. **Dedup false resolution:** `sll_dedup_by_alt` keeps one config per `alt_index`. When two alternatives expand to configs with identical FIRST sets (e.g., `join_clause` and `table_or_subquery` both start with `table_or_subquery`), dedup merges them into a single alt. The prediction then emits a `Leaf` for the wrong alternative, silently dropping the other.
+
+**What remains:** The `return_stack` field on `SllConfig`, `push_return`, `pop_return`, and return-stack-aware `sll_config_first` / `sll_advance_inner` are committed as zero-overhead infrastructure. They don't affect generated output.
+
+**Lessons:**
+
+- Tokens from inside expanded sub-rules cannot be used for prediction at the decision point level
+- To use expansion correctly, the prediction must map expanded tokens back to the decision point's lookahead depth (essentially an ATN simulator)
+- `sll_dedup_by_alt` is too aggressive for expanded configs — alternatives sharing sub-rules get merged
+
 ## On-Task-Done
 
 When completing a task, run from the project root:
