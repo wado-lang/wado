@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774690140174,
+  "lastUpdate": 1774691820092,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8174,6 +8174,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/64c181c3581941f7ea15b14e7428e434e6e05b78"
         },
         "date": 1774690139965,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24726,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "edadca3e65a624c8d71b1f3dccd627a7a6be25c5",
+          "message": "Merge pull request #718 from wado-lang/claude/refactor-rule-index-Kr0F1\n\nRemove global rule index and use linear search in find_rule",
+          "timestamp": "2026-03-28T18:54:07+09:00",
+          "tree_id": "29181c2aab800464c191f802efcd5f3d1e283df8",
+          "url": "https://github.com/wado-lang/wado/commit/edadca3e65a624c8d71b1f3dccd627a7a6be25c5"
+        },
+        "date": 1774691819879,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
