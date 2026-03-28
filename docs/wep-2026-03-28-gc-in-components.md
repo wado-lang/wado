@@ -21,6 +21,8 @@ For example, passing a `String` across the CM boundary:
 
 This means **every CM boundary crossing requires a full copy** through linear memory, even when both sides use Wasm GC internally.
 
+The CM MVP type grammar references the GC proposal's `core:comptype` (composite type) only to extend it with a module type constructor. It deliberately avoids `rectype` (recursive types from the GC proposal), keeping component-model types intentionally non-recursive and simpler than core Wasm GC types. The only abstract type bound currently supported is `resource`.
+
 ### Wado's Current Architecture
 
 The compiler's CM binding synthesis (`synthesis/cm_binding.rs`) generates TIR adapter functions that handle all type conversions. The layout computation (`cm_abi.rs`) follows the Canonical ABI specification for sizes, alignments, and field offsets in linear memory.
@@ -108,18 +110,24 @@ This differs from Wado's internal representation which uses NullableRef optimiza
 
 ## Wasmtime Implementation Status
 
-### Core Wasm GC: Complete (v27.0+)
+### Wasm GC Proposal: Shipped in Wasm 3.0
 
-Since wasmtime v27.0 (November 2024), core Wasm GC is fully implemented:
+The Wasm GC proposal was finalized and shipped as part of **Wasm 3.0** (September 2025). The [WebAssembly/gc repository](https://github.com/WebAssembly/gc) was archived in April 2025. All major browsers support Wasm GC.
+
+### Core Wasm GC in Wasmtime: Feature-Complete (v27.0+)
+
+Since wasmtime v27.0 (November 2024), core Wasm GC is feature-complete for the spec:
 - All GC instructions (struct.new, array.new, ref.cast, ref.test, etc.)
 - Two collector implementations: standard GC collector and null collector (bump-allocate, never collect)
 - Enabled via `Config::wasm_gc` or `-W gc` CLI flag
+- Quality-of-implementation work remains (tracing collector for cycle reclamation)
+- Architecture: pluggable collector design per [Bytecode Alliance RFC](https://github.com/bytecodealliance/rfcs/blob/main/accepted/wasm-gc.md)
 
 ### GC in Components: Prototype Stage
 
 - **Tracking issue:** [bytecodealliance/wasmtime#10325](https://github.com/bytecodealliance/wasmtime/issues/10325) (opened March 2025 by fitzgen)
 - **Status:** Open, no merged PRs visible. Still in prototyping phase.
-- **Feature flag:** `WasmFeatures` has a flag for "Support for Wasm GC in the component model proposal" (corresponds to 🛸 emoji), defaults to `false`
+- **Feature flag:** `WasmFeatures` has a flag for "Support for Wasm GC in the component model proposal" (corresponds to 🛸 emoji), defaults to `false`, described as "very incomplete"
 - fitzgen is actively implementing in both wasm-tools and wasmtime
 
 ### Timeline Estimate
@@ -199,6 +207,8 @@ The proposal is pre-stage and wasmtime support is not yet available. Wado's curr
 - [Shared-Everything Dynamic Linking Example](https://github.com/WebAssembly/component-model/blob/main/design/mvp/examples/SharedEverythingDynamicLinking.md)
 - [Wasmtime 27.0: Complete Wasm GC support](https://bytecodealliance.org/articles/wasmtime-27.0)
 - [Implement the WebAssembly GC Proposal (wasmtime#5032)](https://github.com/bytecodealliance/wasmtime/issues/5032)
-- [Wasm GC Proposal](https://github.com/WebAssembly/gc/blob/main/proposals/gc/Overview.md)
+- [Wasm GC Proposal (archived)](https://github.com/WebAssembly/gc/blob/main/proposals/gc/Overview.md)
+- [Wasm 3.0 Announcement](https://webassembly.org/news/2025-09-17-wasm-3.0/)
+- [Bytecode Alliance RFC: Wasm GC in Wasmtime](https://github.com/bytecodealliance/rfcs/blob/main/accepted/wasm-gc.md)
 - [Component Model Explainer](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Explainer.md)
 - [Component Model Canonical ABI](https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md)
