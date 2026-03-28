@@ -4559,24 +4559,37 @@ impl FunctionTranslator<'_, '_> {
             }),
         });
 
-        // If BLOCKED (0xFFFF_FFFF), wait via waitable-set, then retry future-read
+        // canon future.read async returns (subtask_handle << 4) | status:
+        //   status 0 = Starting (async guest task), 1 = Started (async host task)
+        //   status 2 = Returned (sync completion, payload in buffer)
+        // If status != 2 (Returned), wait for the subtask to complete, then retry.
         let ws_drop_id = self.ctx.ensure_canonical(
             CanonicalIntrinsic::WaitableSetDrop,
             vec![WirType::I32],
             vec![],
         );
+        let subtask_drop_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::SubtaskDrop,
+            vec![WirType::I32],
+            vec![],
+        );
         instrs.push(WirInstr::If {
-            condition: Box::new(WirInstr::I32Eq(
-                Box::new(WirInstr::LocalGet {
-                    name: result_name.clone(),
-                    result_ty: WirType::I32,
-                }),
-                Box::new(WirInstr::I32Const(-1)),
+            // status != 2 (Returned) → async task in flight, need to wait
+            condition: Box::new(WirInstr::I32Ne(
+                Box::new(WirInstr::I32And(
+                    Box::new(WirInstr::LocalGet {
+                        name: result_name.clone(),
+                        result_ty: WirType::I32,
+                    }),
+                    Box::new(WirInstr::I32Const(0xF)),
+                )),
+                Box::new(WirInstr::I32Const(2)),
             )),
             result: None,
             then_body: {
                 let evt = evt_ptr_name;
                 let ws_name = format!("__fr_ws_{suffix}");
+                let subtask_name = format!("__fr_subtask_{suffix}");
                 vec![
                     WirInstr::DeclareLocal {
                         name: ws_name.clone(),
@@ -4586,6 +4599,21 @@ impl FunctionTranslator<'_, '_> {
                         name: evt.clone(),
                         ty: WirType::I32,
                     },
+                    WirInstr::DeclareLocal {
+                        name: subtask_name.clone(),
+                        ty: WirType::I32,
+                    },
+                    // Extract subtask handle from async result: subtask = result >> 4
+                    WirInstr::LocalSet {
+                        name: subtask_name.clone(),
+                        value: Box::new(WirInstr::I32ShrU(
+                            Box::new(WirInstr::LocalGet {
+                                name: result_name.clone(),
+                                result_ty: WirType::I32,
+                            }),
+                            Box::new(WirInstr::I32Const(4)),
+                        )),
+                    },
                     // ws = waitable_set_new()
                     WirInstr::LocalSet {
                         name: ws_name.clone(),
@@ -4594,12 +4622,12 @@ impl FunctionTranslator<'_, '_> {
                             args: vec![],
                         }),
                     },
-                    // waitable_join(handle, ws)
+                    // waitable_join(subtask, ws) — join the SUBTASK, not the future
                     WirInstr::Call {
                         func_id: w_join_id,
                         args: vec![
                             WirInstr::LocalGet {
-                                name: handle_name.clone(),
+                                name: subtask_name.clone(),
                                 result_ty: WirType::I32,
                             },
                             WirInstr::LocalGet {
@@ -4656,6 +4684,14 @@ impl FunctionTranslator<'_, '_> {
                             result_ty: WirType::I32,
                         }],
                     },
+                    // Drop subtask
+                    WirInstr::Call {
+                        func_id: subtask_drop_id,
+                        args: vec![WirInstr::LocalGet {
+                            name: subtask_name,
+                            result_ty: WirType::I32,
+                        }],
+                    },
                     // Retry: result = future-read(handle, ptr)
                     // Now the future is complete, so this will return immediately.
                     WirInstr::LocalSet {
@@ -4679,12 +4715,10 @@ impl FunctionTranslator<'_, '_> {
             else_body: None,
         });
 
-        // status = result & 0xF
-        // COMPLETED (0) → Some(lifted_value), DROPPED (1) → None
-        //
-        // For COMPLETED, lift T from the CM payload buffer at ptr before freeing.
-        // Currently supports: T = Result<Option<Trailers>, ErrorCode>
-        // (the only type used with Future::read in practice).
+        // canon future.read async returns (subtask_handle << 4) | status:
+        //   status 2 = Returned → payload written to buffer → Some(lifted_value)
+        //   After wait+retry, status should also be 2.
+        //   Any other status → None (writer dropped without fulfilling)
         let option_wir_type = self
             .ctx
             .type_id_to_wir_type(self.type_table, result_type_id);
@@ -4695,7 +4729,6 @@ impl FunctionTranslator<'_, '_> {
             self.build_variant_case_wir(result_type_id, 0, "Some", Some(some_payload));
         let none_variant = self.build_variant_case_wir(result_type_id, 1, "None", None);
 
-        // Save result to a local so we can free the buffer afterward.
         self.local_counter += 1;
         let option_result_name = format!("__fr_opt_{}", self.local_counter);
         instrs.push(WirInstr::DeclareLocal {
@@ -4703,17 +4736,20 @@ impl FunctionTranslator<'_, '_> {
             ty: option_wir_type.clone(),
         });
 
-        // option_result = if (result & 0xF) == 0 { Some(lifted_value) } else { None }
+        // option_result = if (result & 0xF) == 2 { Some(lifted_value) } else { None }
         instrs.push(WirInstr::LocalSet {
             name: option_result_name.clone(),
             value: Box::new(WirInstr::If {
-                condition: Box::new(WirInstr::I32Eqz(Box::new(WirInstr::I32And(
-                    Box::new(WirInstr::LocalGet {
-                        name: result_name,
-                        result_ty: WirType::I32,
-                    }),
-                    Box::new(WirInstr::I32Const(0xF)),
-                )))),
+                condition: Box::new(WirInstr::I32Eq(
+                    Box::new(WirInstr::I32And(
+                        Box::new(WirInstr::LocalGet {
+                            name: result_name,
+                            result_ty: WirType::I32,
+                        }),
+                        Box::new(WirInstr::I32Const(0xF)),
+                    )),
+                    Box::new(WirInstr::I32Const(2)),
+                )),
                 result: Some(option_wir_type.clone()),
                 then_body: vec![some_variant],
                 else_body: Some(vec![none_variant]),

@@ -41,6 +41,7 @@ export fn run() with Stdout, Stderr, Preopens {
         let subtask = Stdout::write_via_stream(read_stream);
         subtask.read();
         subtask.drop();
+        read_future.read();
         read_future.drop();
     } else {
         eprintln("read_stream: failed to open hello.txt");

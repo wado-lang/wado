@@ -14,7 +14,7 @@ fn write_bytes(file: &Descriptor, data: Array<u8>) {
     let subtask = file.write_via_stream(write_rx, 0 as Filesize);
     write_tx.write(data);
     write_tx.drop();
-    subtask.read();
+        subtask.read();
         subtask.drop();
 }
 
@@ -31,6 +31,7 @@ fn read_all(file: &Descriptor) -> Array<u8> {
         }
     }
     read_stream.drop();
+    read_future.read();
     read_future.drop();
     return result;
 }
