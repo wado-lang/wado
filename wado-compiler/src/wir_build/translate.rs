@@ -1694,8 +1694,22 @@ impl FunctionTranslator<'_, '_> {
             // === Tuple Literal ===
             TirExprKind::TupleLiteral { elements } => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    // Unit-typed elements have no Wasm representation; skip them.
+                let wir_type_id = match &wir_type {
+                    WirType::Ref { type_id, .. } => Some(type_id.clone()),
+                    WirType::AbstractRef { .. } => {
+                        // Tuple types created in CM binding synthesis may not have
+                        // exact TypeId match in the WIR type map. Try to find a
+                        // matching tuple struct, or define one on-the-fly.
+                        self.ctx
+                            .find_tuple_type_for_elements(self.type_table, elements)
+                            .or_else(|| {
+                                self.ctx
+                                    .define_tuple_struct_for_elements(self.type_table, elements)
+                            })
+                    }
+                    _ => None,
+                };
+                if let Some(type_id) = wir_type_id {
                     let non_unit_elements: Vec<_> = elements
                         .iter()
                         .filter(|e| {

@@ -105,11 +105,36 @@ pub fn wasi_type_to_type_id_scoped(
                     if let Some(reg) = registry
                         && reg.is_struct(&named.name)
                     {
-                        // Extract package name from the struct's source interface
                         let package = wasi_struct_package(reg, &named.name);
                         Some(type_table.make_struct(
                             named.name.clone(),
                             ModuleSource::Wasi { interface: package },
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .or_else(|| {
+                    // Check WASI variant registry with package scope.
+                    // This handles cases where a variant (e.g., ErrorCode) exists
+                    // in a different module's type_table but needs to be created
+                    // in the current type_table for tuple type resolution.
+                    if let Some(reg) = registry
+                        && reg.is_variant(&named.name)
+                    {
+                        let source = reg
+                            .get_variant_cm_name(&named.name)
+                            .map(|_| {
+                                wasi_package
+                                    .map(|p| p.to_string())
+                                    .unwrap_or_else(|| "cli".to_string())
+                            })
+                            .unwrap_or_else(|| "cli".to_string());
+                        Some(type_table.make_variant(
+                            named.name.clone(),
+                            ModuleSource::Wasi {
+                                interface: format!("{source}/types"),
+                            },
                         ))
                     } else {
                         None
@@ -1121,7 +1146,14 @@ fn synthesize_lift_tuple(
         let mut tt = ctx.type_table.borrow_mut();
         let elem_type_ids: Vec<TypeId> = elems
             .iter()
-            .map(|t| wasi_type_to_type_id(t, &mut tt))
+            .map(|t| {
+                wasi_type_to_type_id_scoped(
+                    t,
+                    &mut tt,
+                    Some(ctx.wasi_registry),
+                    ctx.wasi_package,
+                )
+            })
             .collect();
         tt.make_tuple(elem_type_ids)
     } else {
@@ -2727,24 +2759,8 @@ fn synthesize_adapter(
                     ],
                     TypeTable::I32,
                 )));
-                let lifted_type_id = lifted.type_id;
-                // For tuple returns (e.g. [Stream, Future]), ensure the return type
-                // matches the actual tuple structure, not I32.
-                let return_type_id = if let Some(return_type) = &func_info.return_type
-                    && matches!(return_type, Type::Tuple(_))
-                {
-                    let lift_ctx = LiftContext {
-                        wasi_registry,
-                        type_table,
-                        wasi_package: Some(&func_info.package),
-                    };
-                    let mut tt = lift_ctx.type_table.borrow_mut();
-                    wasi_type_to_type_id_with_registry(return_type, &mut tt, Some(wasi_registry))
-                } else {
-                    lifted_type_id
-                };
-                body_stmts.push(return_stmt(Some(lifted)));
-                adapter_return_type = return_type_id;
+                body_stmts.push(return_stmt(Some(lifted.clone())));
+                adapter_return_type = lifted.type_id;
             } else {
                 // Has outptr but no return type: free the async results buffer.
                 body_stmts.push(expr_stmt(builtin_call(

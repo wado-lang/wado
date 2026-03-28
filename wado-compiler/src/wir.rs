@@ -788,7 +788,7 @@ pub struct WirFuncType {
 ///   - F32 → f32
 ///   - F64 → f64
 ///   - Enum/Flags → i32
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WirType {
     // Signed integers
     I8,

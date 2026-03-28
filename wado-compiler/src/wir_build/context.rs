@@ -731,6 +731,107 @@ impl<'a> WirContext<'a> {
         }
     }
 
+    /// Find a tuple WIR type that matches the given TIR elements by WIR type compatibility.
+    ///
+    /// When CM binding synthesis creates tuple types, the TypeIds may not exactly match
+    /// the ones in tuple_type_map. This fallback searches by matching WIR types of elements.
+    pub fn find_tuple_type_for_elements(
+        &self,
+        type_table: &crate::tir::TypeTable,
+        elements: &[crate::tir::TirExpr],
+    ) -> Option<WirTypeId> {
+        let elem_wir_types: Vec<WirType> = elements
+            .iter()
+            .map(|e| self.type_id_to_wir_type(type_table, e.type_id))
+            .filter(|t| !matches!(t, WirType::Unit))
+            .collect();
+        // Search tuple_type_map for a matching tuple with same WIR field types
+        for (elem_type_ids, wir_type_id) in &self.tuple_type_map {
+            if elem_type_ids.len() == elem_wir_types.len() {
+                let all_match = elem_type_ids
+                    .iter()
+                    .zip(elem_wir_types.iter())
+                    .all(|(tid, wir)| self.type_id_to_wir_type(type_table, *tid) == *wir);
+                if all_match {
+                    return Some(wir_type_id.clone());
+                }
+            }
+        }
+        None
+    }
+
+    /// Define a new tuple struct for the given elements when no existing match is found.
+    ///
+    /// Creates a WIR struct with fields matching the WIR types of each element.
+    /// Used for CM binding synthesis tuple returns that weren't pre-registered.
+    pub fn define_tuple_struct_for_elements(
+        &mut self,
+        type_table: &crate::tir::TypeTable,
+        elements: &[crate::tir::TirExpr],
+    ) -> Option<WirTypeId> {
+        let elem_wir_types: Vec<WirType> = elements
+            .iter()
+            .map(|e| self.type_id_to_wir_type(type_table, e.type_id))
+            .filter(|t| !matches!(t, WirType::Unit))
+            .collect();
+        if elem_wir_types.is_empty() {
+            return None;
+        }
+        let elem_names: Vec<String> = elements
+            .iter()
+            .filter(|e| {
+                !matches!(
+                    self.type_id_to_wir_type(type_table, e.type_id),
+                    WirType::Unit
+                )
+            })
+            .enumerate()
+            .map(|(i, _)| i.to_string())
+            .collect();
+        let display = format!(
+            "tuple/[{}]",
+            elem_names
+                .iter()
+                .zip(elem_wir_types.iter())
+                .map(|(_, t)| format!("{t:?}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let fields: Vec<crate::wir::WirField> = elem_names
+            .iter()
+            .zip(elem_wir_types.iter())
+            .map(|(name, ty)| crate::wir::WirField {
+                name: name.clone(),
+                ty: ty.clone(),
+                mutable: true,
+            })
+            .collect();
+        let struct_def = crate::wir::WirTypeDef::Struct(crate::wir::WirStructType {
+            name: crate::wir::WirName {
+                display: display.clone(),
+                fq: display.clone(),
+            },
+            fields,
+            meta: crate::wir::WirMeta::default(),
+            generic_origin: None,
+            newtype_origin: None,
+        });
+        let type_id = self.register_type(display, struct_def);
+        // Register in tuple_type_map using the TIR element TypeIds
+        let elem_type_ids: Vec<crate::tir::TypeId> = elements
+            .iter()
+            .filter(|e| {
+                !matches!(
+                    self.type_id_to_wir_type(type_table, e.type_id),
+                    WirType::Unit
+                )
+            })
+            .map(|e| e.type_id)
+            .collect();
+        self.tuple_type_map.insert(elem_type_ids, type_id.clone());
+        Some(type_id)
+    }
+
     // === Build Final WirModule ===
 
     /// Consume this context and produce the final `WirModule`.
