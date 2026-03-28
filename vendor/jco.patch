@@ -1,0 +1,209 @@
+diff --git a/crates/js-component-bindgen/src/core.rs b/crates/js-component-bindgen/src/core.rs
+index 582ba943..822b0e47 100644
+--- a/crates/js-component-bindgen/src/core.rs
++++ b/crates/js-component-bindgen/src/core.rs
+@@ -98,7 +98,7 @@ impl<'a> Translation<'a> {
+         }
+ 
+         // Set up wasm features to use
+-        let mut features = WasmFeatures::default();
++        let mut features = WasmFeatures::WASM3 | WasmFeatures::WIDE_ARITHMETIC;
+         features.set(WasmFeatures::MULTI_MEMORY, false);
+ 
+         match Validator::new_with_features(features).validate_all(translation.wasm) {
+diff --git a/crates/js-component-bindgen/src/intrinsics/lower.rs b/crates/js-component-bindgen/src/intrinsics/lower.rs
+index a8cc61b9..fe8e73f9 100644
+--- a/crates/js-component-bindgen/src/intrinsics/lower.rs
++++ b/crates/js-component-bindgen/src/intrinsics/lower.rs
+@@ -542,15 +542,18 @@ impl LowerIntrinsic {
+ 
+                             ctx.resultPtr = originalPtr + payloadOffset32;
+ 
+-                            const payloadBytesWritten = lowerFn({{
+-                                memory,
+-                                realloc,
+-                                vals: [val],
+-                                storagePtr,
+-                                storageLen,
+-                                componentIdx,
+-                            }});
+-                            let bytesWritten = payloadOffset + payloadBytesWritten;
++                            let payloadBytesWritten = 0;
++                            if (lowerFn) {{
++                                payloadBytesWritten = lowerFn({{
++                                    memory,
++                                    realloc,
++                                    vals: [val],
++                                    storagePtr,
++                                    storageLen,
++                                    componentIdx,
++                                }});
++                            }}
++                            let bytesWritten = payloadOffset32 + payloadBytesWritten;
+ 
+                             const rem = ctx.storagePtr % align32;
+                             if (rem !== 0) {{
+diff --git a/crates/js-component-bindgen/src/intrinsics/mod.rs b/crates/js-component-bindgen/src/intrinsics/mod.rs
+index 0b50d4cf..2e33152f 100644
+--- a/crates/js-component-bindgen/src/intrinsics/mod.rs
++++ b/crates/js-component-bindgen/src/intrinsics/mod.rs
+@@ -1279,6 +1279,22 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
+         ]);
+     }
+ 
++    if args
++        .intrinsics
++        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatResult))
++    {
++        args.intrinsics
++            .insert(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
++    }
++
++    if args
++        .intrinsics
++        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatOption))
++    {
++        args.intrinsics
++            .insert(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
++    }
++
+     if args
+         .intrinsics
+         .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
+@@ -1364,10 +1380,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
+     if args
+         .intrinsics
+         .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite))
++        || args
++            .intrinsics
++            .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead))
+     {
+         args.intrinsics.extend([
+             &Intrinsic::GlobalBufferManager,
+             &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant),
++            &Intrinsic::AsyncEventCodeEnum,
+         ]);
+     }
+ 
+diff --git a/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs b/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs
+index 5e027d19..967777a2 100644
+--- a/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs
++++ b/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs
+@@ -1140,7 +1140,7 @@ impl AsyncStreamIntrinsic {
+                     r#"
+                     class {host_stream_class_name} {{
+                         #componentIdx;
+-                        #streamEndIdx;
++                        #streamEndWaitableIdx;
+                         #streamTableIdx;
+ 
+                         #payloadLiftFn;
+@@ -1162,14 +1162,18 @@ impl AsyncStreamIntrinsic {
+                             if (!args.payloadLowerFn) {{ throw new TypeError("missing payload lower fn"); }}
+                             this.#payloadLowerFn = args.payloadLowerFn;
+ 
+-                            if (args.streamEndIdx === undefined) {{ throw new Error("missing stream idx"); }}
++                            if (args.streamEndWaitableIdx === undefined) {{ throw new Error("missing stream idx"); }}
+                             if (args.streamTableIdx === undefined) {{ throw new Error("missing stream table idx"); }}
+-                            this.#streamEndIdx = args.streamEndIdx;
++                            this.#streamEndWaitableIdx = args.streamEndWaitableIdx;
+                             this.#streamTableIdx = args.streamTableIdx;
+ 
+                             this.#isUnitStream = args.isUnitStream;
+                         }}
+ 
++                        setRep(rep) {{
++                            this.#rep = rep;
++                        }}
++
+                         createUserStream(args) {{
+                            if (this.#userStream) {{ return this.#userStream; }}
+                            if (this.#rep === null) {{ throw new Error("unexpectedly missing rep for host stream"); }}
+@@ -1177,9 +1181,9 @@ impl AsyncStreamIntrinsic {
+                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            if (!cstate) {{ throw new Error(`missing async state for component [${{this.#componentIdx}}]`); }}
+ 
+-                           const streamEnd = cstate.getStreamEnd({{ tableIdx: this.#streamTableIdx, streamEndIdx: this.#streamEndIdx }});
++                           const streamEnd = cstate.getStreamEnd({{ tableIdx: this.#streamTableIdx, streamEndWaitableIdx: this.#streamEndWaitableIdx }});
+                            if (!streamEnd) {{
+-                               throw new Error(`missing stream [${{this.#streamEndIdx}}] (table [${{this.#streamTableIdx}}], component [${{this.#componentIdx}}]`);
++                               throw new Error(`missing stream [${{this.#streamEndWaitableIdx}}] (table [${{this.#streamTableIdx}}], component [${{this.#componentIdx}}]`);
+                            }}
+ 
+                             return new {external_stream_class}({{
+@@ -1266,6 +1270,20 @@ impl AsyncStreamIntrinsic {
+                             this.#writeFn(obj);
+                         }}
+ 
++                        intoReadableStream() {{
++                            const stream = this;
++                            return new ReadableStream({{
++                                async pull(controller) {{
++                                    const chunk = await stream.next();
++                                    if (chunk === undefined) {{
++                                        controller.close();
++                                    }} else {{
++                                        controller.enqueue(chunk);
++                                    }}
++                                }},
++                            }});
++                        }}
++
+                         [{symbol_dispose}]() {{
+                             this.#dropFn();
+                         }}
+@@ -1366,7 +1384,7 @@ impl AsyncStreamIntrinsic {
+                         {debug_log_fn}('[{stream_new_from_lift_fn}()] args', {{ ctx }});
+                         const {{
+                             componentIdx,
+-                            streamEndIdx,
++                            streamEndWaitableIdx,
+                             streamTableIdx,
+                             payloadLiftFn,
+                             payloadTypeSize32,
+@@ -1376,7 +1394,7 @@ impl AsyncStreamIntrinsic {
+ 
+                         const stream = new {host_stream_class}({{
+                             componentIdx,
+-                            streamEndIdx,
++                            streamEndWaitableIdx,
+                             streamTableIdx,
+                             payloadLiftFn: payloadLiftFn,
+                             payloadLowerFn: payloadLowerFn,
+diff --git a/crates/js-component-bindgen/src/lib.rs b/crates/js-component-bindgen/src/lib.rs
+index b3e08a2a..a33c54df 100644
+--- a/crates/js-component-bindgen/src/lib.rs
++++ b/crates/js-component-bindgen/src/lib.rs
+@@ -128,17 +128,14 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
+     // This does not require the correct execution of the related features post-transpilation,
+     // but without the right features specified, components won't load at all.
+     let mut validator = wasmtime_environ::wasmparser::Validator::new_with_features(
+-        WasmFeatures::WASM2
++        WasmFeatures::WASM3
+             | WasmFeatures::COMPONENT_MODEL
+             | WasmFeatures::CM_ASYNC
+             | WasmFeatures::CM_ASYNC_BUILTINS
+             | WasmFeatures::CM_ASYNC_STACKFUL
+             | WasmFeatures::CM_ERROR_CONTEXT
+             | WasmFeatures::CM_FIXED_SIZE_LIST
+-            | WasmFeatures::EXCEPTIONS
+-            | WasmFeatures::EXTENDED_CONST
+-            | WasmFeatures::MEMORY64
+-            | WasmFeatures::MULTI_MEMORY,
++            | WasmFeatures::WIDE_ARITHMETIC,
+     );
+ 
+     let mut types = ComponentTypesBuilder::new(&validator);
+diff --git a/package-lock.json b/package-lock.json
+index f34275d9..fd3ff020 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -9038,7 +9038,7 @@
+     },
+     "packages/jco": {
+       "name": "@bytecodealliance/jco",
+-      "version": "1.17.4",
++      "version": "1.17.5",
+       "license": "(Apache-2.0 WITH LLVM-exception)",
+       "dependencies": {
+         "@bytecodealliance/componentize-js": "^0.19.3",
