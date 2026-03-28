@@ -5627,10 +5627,17 @@ impl FunctionTranslator<'_, '_> {
                         | TirPattern::Struct { .. }
                         | TirPattern::Tuple(_)
                 ) && arm.guard.is_none();
+                // When the pattern is trivially true (Binding/Wildcard) and a guard
+                // is present, we fold into a single If instead of nested 2-level If,
+                // so only count 1 depth instead of 2.
+                let pattern_trivially_true = matches!(
+                    arm.pattern,
+                    TirPattern::Wildcard | TirPattern::Binding { .. }
+                );
                 if !is_irrefutable {
                     depth += 1;
-                    if arm.guard.is_some() {
-                        depth += 1; // guarded arms create an extra inner If
+                    if arm.guard.is_some() && !pattern_trivially_true {
+                        depth += 1; // guarded arms with non-trivial pattern create an extra inner If
                     }
                 }
                 if_depths.push(depth);
@@ -5713,29 +5720,65 @@ impl FunctionTranslator<'_, '_> {
                 // Outer if checks the pattern condition; inner if checks the guard.
                 // This prevents pattern bindings (ref.cast etc.) from executing
                 // when the pattern doesn't match.
-                let mut inner_then = Vec::new();
-                self.emit_pattern_bindings(
-                    &arm.pattern,
-                    &scrut_local_name,
-                    scrutinee.type_id,
-                    &mut inner_then,
-                );
-                let guard_expr = self.translate_expr(guard);
-                // Inner if: check guard, run body or fall through to remaining arms
-                let inner_if = WirInstr::If {
-                    condition: Box::new(guard_expr),
-                    result: result_wir_type.clone(),
-                    then_body: body_instrs,
-                    else_body: Some(vec![result.clone()]),
-                };
-                inner_then.push(inner_if);
-                // Outer if: check pattern condition
-                result = WirInstr::If {
-                    condition: Box::new(condition),
-                    result: result_wir_type.clone(),
-                    then_body: inner_then,
-                    else_body: Some(vec![result]),
-                };
+                //
+                // Optimization: when the pattern condition is trivially true (i.e., the
+                // pattern is irrefutable like Binding/Wildcard), fold the guard into a
+                // single If to avoid cloning `result` (which causes 2^N tree explosion
+                // for many guarded arms, e.g., string match with N branches).
+                let pattern_is_trivially_true = matches!(&condition, WirInstr::I32Const(1));
+                if pattern_is_trivially_true {
+                    // Pattern always matches — just use the guard as the sole condition.
+                    // Emit pattern bindings before the guard expression so that bound
+                    // variables (e.g., `__lit_N`) are available when evaluating the guard
+                    // (e.g., `__lit_N.eq("str")`). Since the pattern is irrefutable
+                    // (Binding/Wildcard), these bindings are safe to emit unconditionally.
+                    // We embed bindings into the condition via Seq so that the If is the
+                    // top-level instruction (required for value-producing match expressions).
+                    let mut bind_instrs = Vec::new();
+                    self.emit_pattern_bindings(
+                        &arm.pattern,
+                        &scrut_local_name,
+                        scrutinee.type_id,
+                        &mut bind_instrs,
+                    );
+                    let guard_expr = self.translate_expr(guard);
+                    let condition_with_bindings = if bind_instrs.is_empty() {
+                        guard_expr
+                    } else {
+                        bind_instrs.push(guard_expr);
+                        WirInstr::Seq(bind_instrs)
+                    };
+                    result = WirInstr::If {
+                        condition: Box::new(condition_with_bindings),
+                        result: result_wir_type.clone(),
+                        then_body: body_instrs,
+                        else_body: Some(vec![result]),
+                    };
+                } else {
+                    let mut inner_then = Vec::new();
+                    self.emit_pattern_bindings(
+                        &arm.pattern,
+                        &scrut_local_name,
+                        scrutinee.type_id,
+                        &mut inner_then,
+                    );
+                    let guard_expr = self.translate_expr(guard);
+                    // Inner if: check guard, run body or fall through to remaining arms
+                    let inner_if = WirInstr::If {
+                        condition: Box::new(guard_expr),
+                        result: result_wir_type.clone(),
+                        then_body: body_instrs,
+                        else_body: Some(vec![result.clone()]),
+                    };
+                    inner_then.push(inner_if);
+                    // Outer if: check pattern condition
+                    result = WirInstr::If {
+                        condition: Box::new(condition),
+                        result: result_wir_type.clone(),
+                        then_body: inner_then,
+                        else_body: Some(vec![result]),
+                    };
+                }
             } else {
                 let then_body = body_instrs;
                 let else_body = Some(vec![result]);

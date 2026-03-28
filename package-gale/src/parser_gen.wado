@@ -13,6 +13,10 @@ use {
 } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
+use { TreeMap } from "core:collections";
+
+// Global rule index for O(log n) rule lookups.
+global mut RULE_INDEX: TreeMap<String, i32> = TreeMap::<String, i32>::new();
 
 // --- Prediction Engine ---
 
@@ -195,38 +199,27 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
                 if let RuleRef(inner_name) = rep.element {
                     let mut stv: Array<String> = [];
                     if !rule_is_single_token(&inner_name, all_rules, &mut stv) && c.return_stack.len() < 1 {
-                        let mut inner_alt_count = 0;
-                        for let rule of all_rules {
-                            if rule.name == inner_name {
-                                inner_alt_count = rule.alternatives.len();
-                                break;
-                            }
-                        }
-                        if inner_alt_count <= 8 {
+                        if let Some(found_rule) = find_rule(&inner_name, all_rules) {
+                        if found_rule.alternatives.len() <= 8 {
                             entered = true;
                             let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-                            for let rule of all_rules {
-                                if rule.name != inner_name {
+                            for let alt of found_rule.alternatives {
+                                let mut v2: Array<String> = [];
+                                if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v2), token) {
                                     continue;
                                 }
-                                for let alt of rule.alternatives {
-                                    let mut v2: Array<String> = [];
-                                    if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v2), token) {
-                                        continue;
-                                    }
-                                    let exp = SllConfig {
-                                        alt_index: c.alt_index,
-                                        elements: alt.elements,
-                                        pos: 0,
-                                        return_stack: new_stack,
-                                    };
-                                    let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, inline_depth + 1);
-                                    for let a of advanced {
-                                        results.append(a);
-                                    }
+                                let exp = SllConfig {
+                                    alt_index: c.alt_index,
+                                    elements: alt.elements,
+                                    pos: 0,
+                                    return_stack: new_stack,
+                                };
+                                let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, inline_depth + 1);
+                                for let a of advanced {
+                                    results.append(a);
                                 }
-                                break;
                             }
+                        }
                         }
                     }
                 }
@@ -565,41 +558,28 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
             continue;
         }
         if let RuleRef(name) = c.elements[c.pos] {
-            let mut alt_count = 0;
-            for let rule of all_rules {
-                if rule.name == name {
-                    alt_count = rule.alternatives.len();
-                    break;
-                }
-            }
-            if alt_count > 8 {
-                continue;
-            }
-            let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-            for let rule of all_rules {
-                if rule.name != name {
-                    continue;
-                }
-                for let alt of rule.alternatives {
-                    // Pre-filter: skip alternatives whose FIRST doesn't contain the token.
-                    let mut v: Array<String> = [];
-                    if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v), token) {
-                        continue;
-                    }
-                    let exp = SllConfig {
-                        alt_index: c.alt_index,
-                        elements: alt.elements,
-                        pos: 0,
-                        return_stack: new_stack,
-                    };
-                    let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, 0);
-                    for let a of advanced {
-                        if a.pos != -1 {
-                            expanded_configs.append(a);
+            if let Some(found_rule) = find_rule(&name, all_rules) {
+                if found_rule.alternatives.len() <= 8 {
+                    let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
+                    for let alt of found_rule.alternatives {
+                        let mut v: Array<String> = [];
+                        if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v), token) {
+                            continue;
+                        }
+                        let exp = SllConfig {
+                            alt_index: c.alt_index,
+                            elements: alt.elements,
+                            pos: 0,
+                            return_stack: new_stack,
+                        };
+                        let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, 0);
+                        for let a of advanced {
+                            if a.pos != -1 {
+                                expanded_configs.append(a);
+                            }
                         }
                     }
                 }
-                break;
             }
         }
     }
@@ -884,13 +864,8 @@ fn rule_is_single_token(name: &String, all_rules: &Array<ParserRule>, visiting: 
     }
     visiting.append(*name);
 
-    let mut found = false;
-    for let rule of all_rules {
-        if rule.name != *name {
-            continue;
-        }
-        found = true;
-        for let alt of rule.alternatives {
+    if let Some(found_rule) = find_rule(name, all_rules) {
+        for let alt of found_rule.alternatives {
             let mut non_nullable_count = 0;
             let mut single_ok = false;
             for let elem of alt.elements {
@@ -912,11 +887,12 @@ fn rule_is_single_token(name: &String, all_rules: &Array<ParserRule>, visiting: 
                 return false;
             }
         }
-        break;
+        remove_from_visiting(visiting, name);
+        return true;
     }
 
     remove_from_visiting(visiting, name);
-    return found;
+    return false;
 }
 
 fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
@@ -927,6 +903,13 @@ fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
         }
     }
     *visiting = new_arr;
+}
+
+fn find_rule(name: &String, all_rules: &Array<ParserRule>) -> Option<&ParserRule> {
+    if let Some(i) = RULE_INDEX.get(*name) {
+        return Option::<&ParserRule>::Some(&all_rules[i]);
+    }
+    return null;
 }
 
 fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
@@ -973,6 +956,13 @@ fn count_leaf_nodes(node: &PredictionNode) -> i32 {
 }
 
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
+    // Build rule name → index for O(log n) lookups.
+    let mut idx = TreeMap::<String, i32>::new();
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        idx[grammar.parser_rules[i].name] = i;
+    }
+    RULE_INDEX = idx;
+
     gen_parser_struct(w);
     for let rule of grammar.parser_rules {
         gen_parse_fn(w, &rule, &grammar.parser_rules, lit_tokens);
@@ -2886,28 +2876,18 @@ fn first_of_rule(name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Arra
     visiting.append(*name);
 
     let mut result: Array<String> = [];
-    for let rule of all_rules {
-        if rule.name == *name {
-            for let alt of rule.alternatives {
-                let af = first_of_alt(&alt, all_rules, lit_tokens, visiting);
-                for let tk of af {
-                    if !array_contains_str(&result, &tk) {
-                        result.append(tk);
-                    }
+    if let Some(found_rule) = find_rule(name, all_rules) {
+        for let alt of found_rule.alternatives {
+            let af = first_of_alt(&alt, all_rules, lit_tokens, visiting);
+            for let tk of af {
+                if !array_contains_str(&result, &tk) {
+                    result.append(tk);
                 }
             }
-            break;
         }
     }
 
-    let mut new_visiting: Array<String> = [];
-    for let v of visiting {
-        if *v != *name {
-            new_visiting.append(*v);
-        }
-    }
-    *visiting = new_visiting;
-
+    remove_from_visiting(visiting, name);
     return result;
 }
 
