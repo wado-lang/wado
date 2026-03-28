@@ -1,0 +1,54 @@
+pub variant CstChild {
+    TokenChild(TokenData),
+    NodeChild(NodeData),
+}
+
+pub struct TokenData {
+    pub kind: i32,
+    pub text: String,
+    pub leading: Array<TokenData>,
+}
+
+pub struct NodeData {
+    pub name: String,
+    pub children: Array<CstChild>,
+}
+
+pub trait Visitor {
+    fn enter(&mut self, name: &String) {}
+    fn exit(&mut self, name: &String) {}
+    fn token(&mut self, t: &TokenData) {}
+}
+
+pub struct Recorder {
+    pub count: i32,
+}
+
+impl Visitor for Recorder {
+    fn enter(&mut self, name: &String) { self.count += 1; }
+    fn token(&mut self, t: &TokenData) { self.count += 1; }
+}
+
+pub fn walk_node<V: Visitor>(v: &mut V, node: &NodeData) {
+    v.enter(&node.name);
+    for let child of &node.children {
+        match child {
+            TokenChild(t) => v.token(t),
+            NodeChild(n) => walk_node(v, n),
+        }
+    }
+    v.exit(&node.name);
+}
+
+pub fn to_tree(node: &NodeData) -> NodeData {
+    let mut rec = Recorder { count: 0 };
+    walk_node(&mut rec, node);
+    return NodeData { name: `counted:{rec.count}`, children: [] };
+}
+
+pub fn make_test_tree() -> NodeData {
+    let tok = TokenData { kind: 1, text: "x", leading: [] };
+    let leaf = CstChild::TokenChild(tok);
+    let children: Array<CstChild> = [leaf];
+    return NodeData { name: "root", children };
+}
