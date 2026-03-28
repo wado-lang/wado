@@ -4479,7 +4479,6 @@ impl FunctionTranslator<'_, '_> {
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
-        let future_read_id_retry = future_read_id.clone();
         let ws_new_id = self.ctx.ensure_canonical(
             CanonicalIntrinsic::WaitableSetNew,
             vec![],
@@ -4692,23 +4691,11 @@ impl FunctionTranslator<'_, '_> {
                             result_ty: WirType::I32,
                         }],
                     },
-                    // Retry: result = future-read(handle, ptr)
-                    // Now the future is complete, so this will return immediately.
+                    // After subtask completes, payload is written to buffer.
+                    // Set result = 2 (Returned) so the status check below succeeds.
                     WirInstr::LocalSet {
                         name: result_name.clone(),
-                        value: Box::new(WirInstr::Call {
-                            func_id: future_read_id_retry,
-                            args: vec![
-                                WirInstr::LocalGet {
-                                    name: handle_name.clone(),
-                                    result_ty: WirType::I32,
-                                },
-                                WirInstr::LocalGet {
-                                    name: ptr_name.clone(),
-                                    result_ty: WirType::I32,
-                                },
-                            ],
-                        }),
+                        value: Box::new(WirInstr::I32Const(2)),
                     },
                 ]
             },
