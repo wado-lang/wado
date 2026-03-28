@@ -460,8 +460,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         match ty {
             Type::Named(named) => named.name.clone(),
             Type::Generic(generic) => generic.name.clone(),
-            Type::Reference(_) => "&".to_string(),
-            Type::MutReference(_) => "&mut".to_string(),
+            Type::Reference(inner) => format!("&{}", Self::get_type_name_static(inner)),
+            Type::MutReference(inner) => format!("&mut {}", Self::get_type_name_static(inner)),
             Type::Tuple(_) => "Tuple".to_string(),
             _ => "Unknown".to_string(),
         }
@@ -471,8 +471,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         match ty {
             Type::Named(named) => named.name.clone(),
             Type::Generic(generic) => generic.name.clone(),
-            Type::Reference(_) => "&".to_string(),
-            Type::MutReference(_) => "&mut".to_string(),
+            Type::Reference(inner) => format!("&{}", self.get_type_name(inner)),
+            Type::MutReference(inner) => format!("&mut {}", self.get_type_name(inner)),
             Type::Tuple(_) => "Tuple".to_string(),
             Type::Function(func_type) => {
                 // Build function type string: "fn(T1, T2) -> R"

@@ -307,12 +307,10 @@ pub struct ArrayRefIter<T> {
     index: i32,
 }
 
-// NOTE: ArrayRefIter uses an inherent `next` method instead of `impl Iterator`
-// because the monomorphizer creates spurious `Array<Box<T>>` struct definitions
-// from Iterator's default `collect()` method when `type Item = &T`.
-// TODO: Once that bug is fixed, this should become `impl Iterator for ArrayRefIter<T>`.
-impl ArrayRefIter<T> {
-    pub fn next(&mut self) -> Option<&T> {
+impl<T> Iterator for ArrayRefIter<T> {
+    type Item = &T;
+
+    fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.used {
             return null;
         }
