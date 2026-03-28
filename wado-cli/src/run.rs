@@ -359,7 +359,7 @@ pub async fn run(opts: RunOptions) {
     )
     .await
     {
-        eprintln!("Runtime error: {e}");
+        eprintln!("Runtime error: {e:?}");
         process::exit(1);
     }
 }
