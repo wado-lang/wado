@@ -1,13 +1,65 @@
-// O3 miscompilation: copy_prop + HFS interaction corrupts parser position
-// in backtracking dispatch. Minimal SQL: SELECT with IN subquery + WHERE.
-// Root cause: copy_prop pass (skip = fix). Affects parse_create_trigger_stmt's
-// inner loop where HFS scalarizes p.pos.
-use sqlite from "../../../package-gale/tests/golden/sqlite.wado";
+// HFS miscompilation: field_scalarize inserts write-back before the
+// entire let statement, but an inlined labeled block in the let value
+// updates the scalar and then calls a function that reads the struct
+// field — which still has the stale (pre-update) value.
+
+struct Parser {
+    pos: i32,
+    data: Array<i32>,
+}
+
+impl Parser {
+    fn current(&self) -> i32 {
+        return self.data[self.pos];
+    }
+    fn advance(&mut self) -> i32 {
+        let v = self.data[self.pos];
+        self.pos = self.pos + 1;
+        return v;
+    }
+}
+
+// Large enough to NOT be inlined at O3 (>20 stmts)
+fn consume_three(p: &mut Parser) -> i32 {
+    let a = p.advance();
+    let b = p.advance();
+    let c = p.advance();
+    let d = p.current();
+    let e = p.current();
+    let f = p.current();
+    let g = p.current();
+    let h = p.current();
+    return a + b + c + d + e + f + g + h;
+}
+
+// When inlined into the loop, creates a LabeledBlock with:
+//   1. inlined advance (updates _hfs_pos)
+//   2. call to consume_three (reads p.pos from struct)
+fn advance_then_consume(p: &mut Parser) -> i32 {
+    let skipped = p.advance();
+    let result = consume_three(p);
+    return skipped + result;
+}
+
+// Separate function so p is &mut Parser (HFS candidate)
+fn parse_all(p: &mut Parser) -> i32 {
+    let mut total = 0;
+    while p.current() >= 0 {
+        let a = p.current();
+        let b = p.current();
+        let c = p.current();
+        let d = p.current();
+        let r = advance_then_consume(p);
+        total = total + r;
+    }
+    return total;
+}
 
 export fn run() {
-    let sql = "SELECT 1 WHERE 1 IN (SELECT 1 WHERE 1 = 1);";
-    let r = sqlite::parse(&sql);
-    if let Err(e) = r { panic(e.message); }
+    let data: Array<i32> = [10, 20, 30, 40, 50, 60, 70, 80, -1];
+    let mut p = Parser { pos: 0, data };
+    let result = parse_all(&mut p);
+    assert p.pos == 8, `expected pos=8, got {p.pos}`;
 }
 
 __DATA__
