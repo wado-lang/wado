@@ -15,7 +15,7 @@ CST Group support (storing `(rule_a | rule_b)*` results in the parse tree) is im
 
 The walker generates `for let item of &node.group_list` which iterates `&Array<GroupVariant>`. This requires `IntoIterator for &Array<T>` → `ArrayRefIter<T>` → `Iterator` trait impl.
 
-`ArrayRefIter<T>` cannot implement `Iterator` because the monomorphizer **eagerly instantiates all default methods** (collect, map, filter, fold, etc.) for every `T`, causing OOM on large programs like gale itself.
+`ArrayRefIter<T>` now implements `Iterator` (e2e tests pass), but the monomorphizer **eagerly instantiates all default methods** (collect, map, filter, fold, etc.) for every `T`, causing OOM when compiling large programs like gale itself.
 
 ### Fix path
 
@@ -23,7 +23,7 @@ The walker generates `for let item of &node.group_list` which iterates `&Array<G
 1. Lazy monomorphization of trait default methods
    (only instantiate methods that are actually called)
      ↓
-2. ArrayRefIter<T> implements Iterator trait
+2. Gale compiles without OOM (ArrayRefIter<T> already implements Iterator)
      ↓
 3. CST Group fix can use `for let item of &node.group_list`
      ↓
