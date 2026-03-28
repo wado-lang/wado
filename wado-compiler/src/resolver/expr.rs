@@ -2051,31 +2051,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Look up the struct in the symbol table to resolve imports/aliases
         // We need both the struct name (for struct_fields lookup) and module_source (for disambiguation)
         // Local struct definitions (current module) shadow imported/prelude structs.
-        let (struct_name, symbol_module_source) = if self
+        // Resolve struct name and module_source.
+        // Local definitions shadow imported/prelude structs.
+        let (struct_name, struct_module_source) = if self
             .lookup_struct_fields(name, &self.current_module_source)
             .is_some()
         {
-            // Current module defines this struct locally - skip symbol table
-            (name.clone(), None)
+            (name.clone(), self.current_module_source.clone())
         } else if let Some(symbol) = self.symbols.lookup(name) {
             match &symbol.kind {
                 crate::symbol::SymbolKind::Struct(_) => {
-                    (symbol.name.clone(), Some(symbol.module_source.clone()))
+                    (symbol.name.clone(), symbol.module_source.clone())
                 }
-                _ => (name.clone(), None),
+                _ => (name.clone(), self.current_module_source.clone()),
             }
         } else {
-            // Fall back to local struct name
-            (name.clone(), None)
+            (name.clone(), self.current_module_source.clone())
         };
-
-        // Determine struct_module_source early: this is the definitive module that
-        // owns the struct definition. Used for all subsequent field lookups.
-        let struct_module_source = symbol_module_source.unwrap_or_else(|| {
-            self.lookup_struct_fields(&struct_name, &self.current_module_source)
-                .map(|info| info.module_source.clone())
-                .unwrap_or_else(|| self.current_module_source.clone())
-        });
 
         // Get expected field types using (name, module_source) lookup.
         let struct_field_types: Vec<(String, TypeId)> = self
