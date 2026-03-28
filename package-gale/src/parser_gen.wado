@@ -46,6 +46,7 @@ fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>,
             alt_index: alt_indices[i],
             elements: alt_elements[i],
             pos: 0,
+            return_stack: [],
         });
     }
     let tree = build_sll_node(&configs, 0, max_depth, all_rules, lit_tokens);
@@ -76,10 +77,16 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
     return node;
 }
 
+struct SllReturn {
+    elements: Array<Element>,
+    pos: i32,
+}
+
 struct SllConfig {
     alt_index: i32,
     elements: Array<Element>,
     pos: i32,
+    return_stack: Array<SllReturn>,
 }
 
 fn sll_config_clone(c: &SllConfig) -> SllConfig {
@@ -87,8 +94,34 @@ fn sll_config_clone(c: &SllConfig) -> SllConfig {
         alt_index: c.alt_index,
         elements: c.elements,
         pos: c.pos,
+        return_stack: c.return_stack,
     };
 }
+
+fn push_return(stack: &Array<SllReturn>, elements: Array<Element>, pos: i32) -> Array<SllReturn> {
+    let mut new_stack: Array<SllReturn> = [];
+    for let s of stack {
+        new_stack.append(*s);
+    }
+    new_stack.append(SllReturn { elements, pos });
+    return new_stack;
+}
+
+fn pop_return(c: &SllConfig) -> SllConfig {
+    let last_idx = c.return_stack.len() - 1;
+    let ret = &c.return_stack[last_idx];
+    let mut new_stack: Array<SllReturn> = [];
+    for let mut i = 0; i < last_idx; i += 1 {
+        new_stack.append(c.return_stack[i]);
+    }
+    return SllConfig {
+        alt_index: c.alt_index,
+        elements: ret.elements,
+        pos: ret.pos,
+        return_stack: new_stack,
+    };
+}
+
 
 /// Identity closure — nullable handling is done in sll_config_first
 /// (first_of_elements_from) and sll_advance_inner (explicit skip logic).
@@ -110,9 +143,17 @@ fn _sll_closure_unused(configs: &Array<SllConfig>) -> Array<SllConfig> {
 
 /// Compute FIRST set of the current position in a config.
 /// Includes tokens from nullable elements that were skipped by closure.
+/// When at end of elements with a return stack, pops and continues from caller.
 fn sll_config_first(c: &SllConfig, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<String> {
-    if c.pos < 0 || c.pos >= c.elements.len() {
+    if c.pos < 0 {
         return [];
+    }
+    if c.pos >= c.elements.len() {
+        if c.return_stack.is_empty() {
+            return [];
+        }
+        let popped = pop_return(c);
+        return sll_config_first(&popped, all_rules, lit_tokens);
     }
     return first_of_elements_from(&c.elements, c.pos, all_rules, lit_tokens);
 }
@@ -123,13 +164,67 @@ fn sll_advance(c: &SllConfig, token: &String, all_rules: &Array<ParserRule>, lit
     return sll_advance_inner(c, token, all_rules, lit_tokens, 0);
 }
 
+fn sll_expand_rule_ref(name: &String, c: &SllConfig, continuation_pos: i32, token: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, inline_depth: i32) -> Array<SllConfig> {
+    // Depth guard: only 1 level of RuleRef expansion to prevent blowup.
+    if c.return_stack.len() >= 1 {
+        return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: [] }];
+    }
+    // Only expand rules with few alternatives to avoid combinatorial explosion.
+    let mut rule_alt_count = 0;
+    for let rule of all_rules {
+        if rule.name == *name {
+            rule_alt_count = rule.alternatives.len();
+            break;
+        }
+    }
+    if rule_alt_count > 5 {
+        return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: [] }];
+    }
+    let new_stack = push_return(
+        &c.return_stack,
+        c.elements,
+        continuation_pos,
+    );
+    let mut results: Array<SllConfig> = [];
+    for let rule of all_rules {
+        if rule.name != *name {
+            continue;
+        }
+        for let alt of rule.alternatives {
+            let expanded = SllConfig {
+                alt_index: c.alt_index,
+                elements: alt.elements,
+                pos: 0,
+                return_stack: new_stack,
+            };
+            let advanced = sll_advance_inner(&expanded, token, all_rules, lit_tokens, inline_depth + 1);
+            for let a of advanced {
+                results.append(a);
+            }
+        }
+        break;
+    }
+    if results.is_empty() {
+        return [];
+    }
+    return results;
+}
+
 fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, inline_depth: i32) -> Array<SllConfig> {
     // Limit inline expansion depth to prevent explosion from recursive rules.
     if inline_depth > 2 {
         return [];
     }
-    if c.pos < 0 || c.pos >= c.elements.len() {
+    if c.pos < 0 {
         return [];
+    }
+    // End of current elements: pop return stack if available.
+    if c.pos >= c.elements.len() {
+        if c.return_stack.is_empty() {
+            return [];
+        }
+        let popped = pop_return(c);
+        return sll_advance_inner(&popped, token, all_rules, lit_tokens, inline_depth);
     }
     let elem = &c.elements[c.pos];
 
@@ -138,14 +233,14 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
         let mut results: Array<SllConfig> = [];
         let mut visiting: Array<String> = [];
         if array_contains_str(&first_of_element(elem, all_rules, lit_tokens, &mut visiting), token) {
-            results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1 });
+            results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack });
         }
         // Also try skipping: advance past all consecutive nullables non-recursively.
         let mut skip_pos = c.pos + 1;
         while skip_pos < c.elements.len() && is_nullable(&c.elements[skip_pos]) {
             let mut v: Array<String> = [];
             if array_contains_str(&first_of_element(&c.elements[skip_pos], all_rules, lit_tokens, &mut v), token) {
-                results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1 });
+                results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
             }
             skip_pos += 1;
         }
@@ -153,26 +248,26 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
             let skipped_elem = &c.elements[skip_pos];
             if let TokenRef(name) = *skipped_elem {
                 if `TK_{name}` == *token {
-                    results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1 });
+                    results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                 }
             } else if let Literal(text) = *skipped_elem {
                 if literal_const_name(&text) == *token {
-                    results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1 });
+                    results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                 }
             } else if let RuleRef(name) = *skipped_elem {
                 let mut v: Array<String> = [];
                 if array_contains_str(&first_of_rule(&name, all_rules, lit_tokens, &mut v), token) {
                     let mut stv: Array<String> = [];
                     if rule_is_single_token(&name, all_rules, &mut stv) {
-                        results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1 });
+                        results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                     } else {
-                        results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1 });
+                        results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: c.return_stack });
                     }
                 }
             } else {
                 let mut v: Array<String> = [];
                 if array_contains_str(&first_of_element(skipped_elem, all_rules, lit_tokens, &mut v), token) {
-                    results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1 });
+                    results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                 }
             }
         }
@@ -182,20 +277,20 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
     // Terminal: if token matches, advance past this element.
     if let TokenRef(name) = *elem {
         if `TK_{name}` == *token {
-            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1 }];
+            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
         }
         return [];
     }
     if let Literal(text) = *elem {
         if literal_const_name(&text) == *token {
-            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1 }];
+            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
         }
         return [];
     }
 
     // RuleRef: advance past only if the rule always consumes exactly one token.
-    // Multi-token rules can't be safely skipped because token position wouldn't
-    // correspond to element position.
+    // Multi-token rules return opaque (pos=-1); expansion happens in build_sll_node
+    // only when needed to resolve ambiguity.
     if let RuleRef(name) = *elem {
         let mut visiting: Array<String> = [];
         let rule_first = first_of_rule(&name, all_rules, lit_tokens, &mut visiting);
@@ -205,11 +300,11 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
         let mut st_visiting: Array<String> = [];
         if rule_is_single_token(&name, all_rules, &mut st_visiting) {
             // Single-token rule: safe to advance, element position == token position.
-            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1 }];
+            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
         }
         // Multi-token rule: token matches FIRST but we can't advance past it.
         // Return config with pos = -1 as a sentinel meaning "opaque match".
-        return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1 }];
+        return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: c.return_stack }];
     }
 
     // Group: treat as consuming one token if the token is in FIRST(group).
@@ -225,7 +320,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
             }
         }
         if array_contains_str(&group_first, token) {
-            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1 }];
+            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
         }
         return [];
     }
@@ -237,7 +332,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
         inner_first = first_of_element(&rep.element, all_rules, lit_tokens, &mut visiting);
         if array_contains_str(&inner_first, token) {
             // Advance past the repeat element (simplified: treat as consuming 1 token).
-            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1 }];
+            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
         }
         return [];
     }
@@ -248,6 +343,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
             alt_index: c.alt_index,
             elements: replace_element_at(&c.elements, c.pos, &lab.element),
             pos: c.pos,
+            return_stack: c.return_stack,
         };
         return sll_advance_inner(&unwrapped, token, all_rules, lit_tokens, inline_depth);
     }
@@ -322,6 +418,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_ru
                 alt_index: c.alt_index,
                 elements: c.elements,
                 pos: c.pos + 1,
+                return_stack: c.return_stack,
             });
         }
         let child = build_sll_node(&advanced, depth, max_depth, all_rules, lit_tokens);
@@ -399,7 +496,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_ru
             }
         } else {
             // Still ambiguous: recurse with deeper lookahead.
-            // If opaque alts exist, they can't be resolved further — Backtrack.
+            // If opaque alts exist, try expanding them before giving up.
             let child = if opaque_alts.len() > 0 {
                 PredictionNode::Backtrack(next_alts);
             } else {
@@ -425,6 +522,60 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_ru
         return PredictionNode::Backtrack(alts);
     }
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
+}
+
+/// Try to resolve opaque configs by expanding their multi-token RuleRefs.
+/// Returns Some(node) if expansion produces a better prediction tree, None otherwise.
+/// `non_opaque_configs` are the already-advanced transparent configs for this token.
+fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_opaque_configs: &Array<SllConfig>, opaque_alts: Array<i32>, depth: i32, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Option<PredictionNode> {
+    // Only expand at shallow depths to limit cost.
+    if depth > 2 || depth >= max_depth {
+        return null;
+    }
+    // Re-advance opaque configs by expanding their RuleRefs.
+    let mut expanded_configs: Array<SllConfig> = [];
+    for let c of original_configs {
+        if !array_contains_i32(&opaque_alts, c.alt_index) {
+            continue;
+        }
+        if c.pos < 0 || c.pos >= c.elements.len() {
+            continue;
+        }
+        let elem = &c.elements[c.pos];
+        if let RuleRef(name) = *elem {
+            let result = sll_expand_rule_ref(&name, c, c.pos + 1, token, all_rules, lit_tokens, 0);
+            for let r of result {
+                if r.pos != -1 {
+                    expanded_configs.append(r);
+                }
+            }
+        }
+    }
+    if expanded_configs.is_empty() {
+        return null;
+    }
+    // Combine non-opaque (already advanced) with newly expanded configs.
+    let mut all_configs: Array<SllConfig> = [];
+    for let c of non_opaque_configs {
+        all_configs.append(sll_config_clone(c));
+    }
+    for let ec of expanded_configs {
+        all_configs.append(ec);
+    }
+    let deduped = sll_dedup_by_alt(&all_configs);
+    let alts = sll_unique_alts(&deduped);
+    if alts.len() <= 1 {
+        if alts.len() == 1 {
+            return Option::<PredictionNode>::Some(PredictionNode::Leaf(alts[0]));
+        }
+        return null;
+    }
+    let result = build_sll_node(&deduped, depth, max_depth, all_rules, lit_tokens);
+    // Only return if expansion actually helped (reduced backtracking).
+    if count_backtrack_nodes(&result) < alts.len() {
+        return Option::<PredictionNode>::Some(result);
+    }
+    return null;
 }
 
 /// Check if all configs are at the same terminal element (for Consume).
