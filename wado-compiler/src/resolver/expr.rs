@@ -2052,9 +2052,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // We need both the struct name (for struct_fields lookup) and module_source (for disambiguation)
         // Local struct definitions (current module) shadow imported/prelude structs.
         let (struct_name, symbol_module_source) = if self
-            .struct_fields
-            .get(name)
-            .is_some_and(|info| info.module_source == self.current_module_source)
+            .lookup_struct_fields(name, &self.current_module_source)
+            .is_some()
         {
             // Current module defines this struct locally - skip symbol table
             (name.clone(), None)
@@ -2070,32 +2069,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
             (name.clone(), None)
         };
 
-        // Get expected field types for coercion (for generic structs).
-        // When symbol_module_source is known (imported struct), look up fields
-        // from all_struct_fields by (module_source, name) to avoid collisions
-        // with local structs that happen to share the same name.
-        let struct_field_types: Vec<(String, TypeId)> = if let Some(ms) = &symbol_module_source {
-            self.all_struct_fields
-                .get(ms)
-                .and_then(|m| m.get(&struct_name))
-                .map(|info| {
-                    info.fields
-                        .iter()
-                        .map(|(name, type_id, _)| (name.clone(), *type_id))
-                        .collect()
-                })
-                .unwrap_or_default()
-        } else {
-            self.struct_fields
-                .get(&struct_name)
-                .map(|info| {
-                    info.fields
-                        .iter()
-                        .map(|(name, type_id, _)| (name.clone(), *type_id))
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
+        // Determine struct_module_source early: this is the definitive module that
+        // owns the struct definition. Used for all subsequent field lookups.
+        let struct_module_source = symbol_module_source.unwrap_or_else(|| {
+            self.lookup_struct_fields(&struct_name, &self.current_module_source)
+                .map(|info| info.module_source.clone())
+                .unwrap_or_else(|| self.current_module_source.clone())
+        });
+
+        // Get expected field types using (name, module_source) lookup.
+        let struct_field_types: Vec<(String, TypeId)> = self
+            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .map(|info| {
+                info.fields
+                    .iter()
+                    .map(|(name, type_id, _)| (name.clone(), *type_id))
+                    .collect()
+            })
+            .unwrap_or_default();
 
         // Resolve field expressions, converting tuple literals to arrays when needed.
         // For generic structs, tuple-to-sequence coercion may be deferred to a second
@@ -2205,28 +2196,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
             .collect();
 
-        // Get module_source for this struct
-        // Priority: symbol table module_source > struct_fields > current_module_source
-        // The symbol table module_source is needed for imported structs (especially with aliases)
-        // to handle name collisions between local and imported structs
-        let struct_module_source = if let Some(ms) = symbol_module_source {
-            // Imported struct - use module_source from symbol table
-            ms
-        } else if let Some(info) = self.struct_fields.get(&struct_name) {
-            // Local struct found in struct_fields
-            info.module_source.clone()
-        } else {
-            // Fall back to current module
-            self.current_module_source.clone()
-        };
+        // struct_module_source was already determined above (before field resolution).
 
         // Check field visibility: non-pub fields cannot be set from other modules
-        if struct_module_source != self.current_module_source
-            && let Some(struct_info) = self.struct_fields.get(&struct_name)
-        {
-            for (fname, _, is_pub) in &struct_info.fields {
-                if !is_pub && fields.iter().any(|f| f.name == *fname) {
-                    let _ = self.logger.error(TypeError::TypeMismatch {
+        if struct_module_source != self.current_module_source {
+            if let Some(struct_info) = self.lookup_struct_fields(&struct_name, &struct_module_source)
+            {
+                for (fname, _, is_pub) in &struct_info.fields {
+                    if !is_pub && fields.iter().any(|f| f.name == *fname) {
+                        let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: format!(
                                 "accessible field (field `{fname}` of struct `{struct_name}` is private)"
                             ),
@@ -2236,6 +2214,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             ),
                             span: struct_lit.span,
                         });
+                    }
                 }
             }
         }
@@ -2305,7 +2284,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
 
             // Check trait bounds on inferred type arguments
-            if let Some(struct_info) = self.struct_fields.get(&struct_name).cloned() {
+            if let Some(struct_info) = self.lookup_struct_fields(&struct_name, &struct_module_source).cloned() {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
                     if let Some(&type_arg) = type_args.get(i) {
                         for bound in bounds {

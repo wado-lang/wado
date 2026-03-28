@@ -215,7 +215,26 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
-    // known_type_names_cache is pre-computed in orchestration.rs and passed to each Resolver
+    /// Look up struct field info by (name, module_source).
+    ///
+    /// This is the correct way to look up struct fields — it disambiguates
+    /// structs with the same name from different modules. Falls back to the
+    /// module-local flat map when the requested module_source has no entry in
+    /// the global map (e.g. during early resolution before all modules are loaded).
+    fn lookup_struct_fields(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&StructFieldInfo> {
+        self.all_struct_fields
+            .get(module_source)
+            .and_then(|m| m.get(name))
+            .or_else(|| {
+                // Fallback: if all_struct_fields is not yet populated (early init),
+                // try the flat map but only if module_source matches.
+                self.struct_fields.get(name).filter(|info| info.module_source == *module_source)
+            })
+    }
 
     /// Build effect name → module source map from a module's import declarations.
     ///
