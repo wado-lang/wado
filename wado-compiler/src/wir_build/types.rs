@@ -232,9 +232,13 @@ fn register_struct(
     }
 
     // Skip if already registered under a different module_source (name-only match).
-    // This handles both monomorphized structs appearing in multiple modules and
-    // non-monomorphized structs imported across modules (same type via `use ... from`).
-    if let Some(existing) = ctx.lookup_struct_by_name(&tir_struct.name).cloned() {
+    // Monomorphized structs like TreeMap<String,i32> may appear in both the
+    // definition module and the entry module. Only register the first occurrence.
+    // Only applies to monomorphized structs — non-mono structs with the same name
+    // from different modules (e.g., two modules defining `Pair`) are distinct types.
+    if tir_struct.monomorph_info.is_some()
+        && let Some(existing) = ctx.lookup_struct_by_name(&tir_struct.name).cloned()
+    {
         ctx.struct_type_map.insert(struct_name, existing);
         return;
     }
@@ -531,38 +535,7 @@ fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::w
     ctx.struct_type_map.insert(struct_name, type_id);
 }
 
-/// Collect (module_source_str, type_name) pairs for types that are "native" to each module.
-/// A type is native to a module if it's the first module (in iteration order) that defines
-/// that type name. Subsequent modules with the same type name are assumed to be imports.
-fn collect_native_type_names(ctx: &WirContext<'_>) -> IndexSet<(String, String)> {
-    let mut seen_structs: IndexSet<String> = IndexSet::default();
-    let mut seen_variants: IndexSet<String> = IndexSet::default();
-    let mut native: IndexSet<(String, String)> = IndexSet::default();
-
-    for (module_source, tir_mod) in &ctx.project.tir_modules {
-        let ms_str = module_source.to_string();
-        for s in &tir_mod.structs {
-            if s.monomorph_info.is_none() && s.type_params.is_empty() {
-                if seen_structs.insert(s.name.clone()) {
-                    native.insert((ms_str.clone(), s.name.clone()));
-                }
-            }
-        }
-        for v in &tir_mod.variants {
-            if v.type_params.is_empty() && seen_variants.insert(v.name.clone()) {
-                native.insert((ms_str.clone(), v.name.clone()));
-            }
-        }
-    }
-    native
-}
-
 fn register_library_types(ctx: &mut WirContext<'_>) {
-    // Build a set of (module_source, struct/variant name) pairs to detect cross-module
-    // imports. A struct is considered "native" to a module if no other module defines
-    // the same name, OR if it's the first module encountered with that name.
-    let native_structs = collect_native_type_names(ctx);
-
     let entry_source = &ctx.project.entry_module_source;
     for (module_source, tir_mod) in &ctx.project.tir_modules {
         if module_source == entry_source {
@@ -570,25 +543,16 @@ fn register_library_types(ctx: &mut WirContext<'_>) {
         }
         let type_table = &*tir_mod.type_table.borrow();
 
-        let ms_str = module_source.to_string();
-        // Collect non-mono structs and variants for topological sorting.
-        // Filter out types that were imported from another module.
+        // Collect non-mono structs and variants for topological sorting
         let structs: Vec<_> = tir_mod
             .structs
             .iter()
-            .filter(|s| {
-                s.monomorph_info.is_none()
-                    && s.type_params.is_empty()
-                    && native_structs.contains(&(ms_str.clone(), s.name.clone()))
-            })
+            .filter(|s| s.monomorph_info.is_none() && s.type_params.is_empty())
             .collect();
         let variants: Vec<_> = tir_mod
             .variants
             .iter()
-            .filter(|v| {
-                v.type_params.is_empty()
-                    && native_structs.contains(&(ms_str.clone(), v.name.clone()))
-            })
+            .filter(|v| v.type_params.is_empty())
             .collect();
 
         let structs_slice: Vec<_> = structs.iter().map(|s| (*s).clone()).collect();

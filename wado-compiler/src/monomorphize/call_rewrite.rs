@@ -1,7 +1,7 @@
 //! Post-monomorphization rewrites: function call rewriting to monomorphized names.
 
-use crate::name::LocalMethodName;
 use crate::name::MethodName;
+use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
     TirExprKind, TirModule, TirStmt, TirStmtKind, TirTemplatePart, TypeId, TypeTable,
@@ -225,19 +225,14 @@ impl Monomorphizer {
             let effective_type_args: Option<Vec<TypeId>> = if !type_args.is_empty() {
                 Some(type_args.clone())
             } else if func.method_info.is_none() && func.monomorph_info.is_none() {
-                self.infer_instantiated_type_args(
-                    &qualified_func_name,
-                    &original_method_info,
-                    args,
-                    type_table,
-                )
+                self.infer_instantiated_type_args(&qualified_func_name, &original_method_info, args, type_table)
             } else {
                 None
             };
 
             if let Some(inferred_args) = effective_type_args {
                 let key = InstantiationKey {
-                    name: qualified_func_name,
+                    name: qualified_func_name.clone(),
                     impl_type_args: vec![],
                     method_type_args: inferred_args,
                     method_info: original_method_info.clone(),
@@ -556,7 +551,7 @@ impl Monomorphizer {
         }
     }
 
-    /// For implicit generic calls (where `type_args` is empty but the callee was instantiated),
+    /// For implicit generic calls (where type_args is empty but the callee was instantiated),
     /// try to find the matching instantiation by checking all instantiated variants of the callee.
     fn infer_instantiated_type_args(
         &self,

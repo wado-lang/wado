@@ -1866,12 +1866,6 @@ _Fields are private._
 
 ##### `pub fn append(&mut self, value: T)`
 
-##### `pub fn pop(&mut self) -> Option<T>`
-
-##### `pub fn truncate(&mut self, len: i32)`
-
-##### `pub fn last(&self) -> Option<T>`
-
 ##### `pub fn get(&self, index: i32) -> Option<T>`
 
 ##### `pub fn copy_within_append(&mut self, src_start: i32, count: i32)`
