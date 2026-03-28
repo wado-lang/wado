@@ -1,5 +1,5 @@
 use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind, LexerRule } from "./ir.wado";
-use { to_pascal_case, to_snake_case, to_lower, rule_type_name, literal_field_name, strip_suffix, array_contains_str } from "./gen_util.wado";
+use { to_pascal_case, to_snake_case, to_lower, rule_type_name, literal_field_name, strip_suffix } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
 use { gen_visitor } from "./visitor_gen.wado";
@@ -77,7 +77,6 @@ fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule) {
 }
 
 fn gen_struct_for_alt(w: &mut CodeWriter, type_name: &String, alt: &Alternative) {
-    gen_group_types_in_elements(w, &alt.elements);
     let fields = collect_fields(&alt.elements);
     let mut s = StructSpec::new(type_name);
     s.set_pub();
@@ -147,13 +146,6 @@ fn element_to_field(elem: &Element) -> Option<Field> {
             type_str: "Token",
         });
     }
-    if let Group(alts) = *elem {
-        if group_can_store(&alts) {
-            let gtn = group_type_name_from_alts(&alts);
-            return Option::<Field>::Some(Field { name: "group", type_str: gtn });
-        }
-        return null;
-    }
     if let Repeat(rep) = *elem {
         if let Some(inner) = element_to_field(&rep.element) {
             let field = match rep.kind {
@@ -189,113 +181,4 @@ fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
         }
     }
     return true;
-}
-
-pub fn group_can_store(alts: &Array<Alternative>) -> bool {
-    // Only multi-alt groups with single-element alternatives are storable.
-    // Single-alt groups have variable name scoping issues and are deferred.
-    if alts.len() <= 1 {
-        return false;
-    }
-    // Each alt must be a single RuleRef (not TokenRef/Literal, which can have
-    // overlapping FIRST sets and trigger backtracking that doesn't store results).
-    for let alt of alts {
-        if alt.elements.len() != 1 { return false; }
-        if let RuleRef(_) = alt.elements[0] {} else { return false; }
-    }
-    return true;
-}
-
-pub fn group_type_name_from_alts(alts: &Array<Alternative>) -> String {
-    let mut parts: Array<String> = [];
-    for let alt of alts {
-        if alt.elements.len() == 1 {
-            if let RuleRef(name) = alt.elements[0] { parts.append(to_pascal_case(&name)); }
-            else if let TokenRef(name) = alt.elements[0] { parts.append(to_pascal_case(&name)); }
-            else if let Literal(text) = alt.elements[0] { parts.append(to_pascal_case(&literal_field_name(&text))); }
-            else { parts.append(`Alt{parts.len()}`); }
-        } else { parts.append(`Alt{parts.len()}`); }
-    }
-    let mut name = String::with_capacity(64);
-    for let mut i = 0; i < parts.len(); i += 1 {
-        if i > 0 { name.append("Or"); }
-        name.append(parts[i]);
-    }
-    name.append("Group");
-    return name;
-}
-
-pub fn group_alt_case_info(alt: &Alternative, index: i32) -> [String, String] {
-    if alt.elements.len() == 1 {
-        if let RuleRef(name) = alt.elements[0] {
-            let pc = to_pascal_case(&name);
-            return [pc, `{to_pascal_case(&name)}Node`];
-        }
-        if let TokenRef(name) = alt.elements[0] {
-            let pc = to_pascal_case(&name);
-            return [pc, `{pc}Payload`];
-        }
-    }
-    return [`Alt{index}`, `GroupAlt{index}`];
-}
-
-fn extract_group_alts(elem: &Element) -> Option<Array<Alternative>> {
-    if let Group(alts) = *elem { return Option::Some(alts); }
-    if let Repeat(rep) = *elem { return extract_group_alts(&rep.element); }
-    if let Label(lab) = *elem { return extract_group_alts(&lab.element); }
-    return null;
-}
-
-fn gen_group_types_in_elements(w: &mut CodeWriter, elements: &Array<Element>) {
-    let mut seen: Array<String> = [];
-    for let elem of elements {
-        if let Some(alts) = extract_group_alts(&elem) {
-            if group_can_store(&alts) {
-                let gtn = group_type_name_from_alts(&alts);
-                if !array_contains_str(&seen, &gtn) {
-                    seen.append(gtn);
-                    gen_group_type_def(w, &group_type_name_from_alts(&alts), &alts);
-                }
-            }
-        }
-    }
-}
-
-fn gen_group_type_def(w: &mut CodeWriter, type_name: &String, alts: &Array<Alternative>) {
-    if alts.len() == 1 {
-        gen_group_types_in_elements(w, &alts[0].elements);
-        let fields = collect_fields(&alts[0].elements);
-        let mut s = StructSpec::new(type_name);
-        s.set_pub();
-        s.add_pub_field("span", "Span");
-        for let field of &fields { s.add_pub_field(&field.name, &field.type_str); }
-        s.emit(w);
-        w.blank();
-    } else {
-        let mut v = VariantSpec::new(type_name);
-        v.set_pub();
-        for let mut i = 0; i < alts.len(); i += 1 {
-            let ci = group_alt_case_info(&alts[i], i);
-            v.add_case_with_payload(&ci.0, &ci.1);
-        }
-        v.emit(w);
-        w.blank();
-        // Only generate case structs for non-RuleRef alternatives.
-        // RuleRef alternatives reuse existing Node types (e.g., SqlStmtListNode).
-        for let mut i = 0; i < alts.len(); i += 1 {
-            if let RuleRef(_) = alts[i].elements[0] {
-                // Reuses existing node type — no struct to generate
-            } else {
-                let ci = group_alt_case_info(&alts[i], i);
-                gen_group_types_in_elements(w, &alts[i].elements);
-                let fields = collect_fields(&alts[i].elements);
-                let mut s = StructSpec::new(&ci.1);
-                s.set_pub();
-                s.add_pub_field("span", "Span");
-                for let field of &fields { s.add_pub_field(&field.name, &field.type_str); }
-                s.emit(w);
-                w.blank();
-            }
-        }
-    }
 }

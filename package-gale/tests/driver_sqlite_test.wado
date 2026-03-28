@@ -953,20 +953,6 @@ test "to_tree builds CstNode for SELECT" {
     assert tree.children.len() >= 1, `expected at least 1 child, got {tree.children.len()}`;
 }
 
-test "to_tree includes sql_stmt_list from group" {
-    let root = sqlite::parse(&"SELECT 1;").unwrap();
-    let tree = sqlite::to_tree(&root);
-    let mut found_sql_stmt_list = false;
-    for let child of &tree.children {
-        if let Node(n) = *child {
-            if n.name == "sql_stmt_list" {
-                found_sql_stmt_list = true;
-            }
-        }
-    }
-    assert found_sql_stmt_list, `expected sql_stmt_list child in parse tree, got {tree.children.len()} children`;
-}
-
 test "to_tree EOF has trailing trivia" {
     let root = sqlite::parse(&"SELECT 1; ").unwrap();
     let tree = sqlite::to_tree(&root);

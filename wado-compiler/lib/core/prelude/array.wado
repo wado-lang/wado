@@ -307,10 +307,13 @@ pub struct ArrayRefIter<T> {
     index: i32,
 }
 
-impl<T> Iterator for ArrayRefIter<T> {
-    type Item = &T;
-
-    fn next(&mut self) -> Option<Self::Item> {
+// ArrayRefIter uses an inherent `next` method instead of `impl Iterator`
+// because Iterator's many default methods (collect, map, filter, fold, etc.)
+// all get monomorphized for every T used with &Array<T>, causing OOM on
+// large programs. for-of works via IntoIterator, which delegates to this
+// inherent next() method.
+impl ArrayRefIter<T> {
+    pub fn next(&mut self) -> Option<&T> {
         if self.index >= self.used {
             return null;
         }

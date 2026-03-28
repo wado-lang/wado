@@ -386,22 +386,14 @@ impl Monomorphizer {
                             .filter(|(_, args)| !args.is_empty())
                     });
                 if let Some((base_struct, impl_type_args)) = base_info {
-                    // For ref impl methods (impl Trait for &Container<T>), the generic
-                    // function is named with "&" prefix (e.g., "&Array^IntoIterator::into_iter").
-                    let is_ref = method_func.method_info.as_ref().is_some_and(|mi| mi.is_ref_impl);
-                    let ref_base = if is_ref {
-                        format!("&{base_struct}")
-                    } else {
-                        base_struct.clone()
-                    };
                     // Try both inherent and trait method formats
                     let mut dg_names = vec![(
-                        MethodName::format_local(&ref_base, None, &method_name),
+                        MethodName::format_local(&base_struct, None, &method_name),
                         None::<String>,
                     )];
                     if let Some(ref tn) = trait_name_opt {
                         dg_names.push((
-                            MethodName::format_local(&ref_base, Some(tn), &method_name),
+                            MethodName::format_local(&base_struct, Some(tn), &method_name),
                             Some(tn.clone()),
                         ));
                     }
@@ -465,13 +457,11 @@ impl Monomorphizer {
             if let Some(ref info) = method_func.method_info.clone()
                 && let Some(ref trait_name) = info.trait_name
             {
-                // For ref-type impls (impl Trait for &Container<T>),
-                // try "&Container^Trait::method" first
-                if info.is_ref_impl {
-                    let ref_name = format!("&{}", base_struct);
+                // For ref-type impls, try the ref struct name first (e.g., "&^IntoIterator::into_iter")
+                if info.base_struct_name != base_struct {
                     possible_keys.push(InstantiationKey {
                         name: MethodName::format_local(
-                            &ref_name,
+                            &info.base_struct_name,
                             Some(trait_name),
                             &method_name,
                         ),

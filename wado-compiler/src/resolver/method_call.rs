@@ -107,7 +107,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut trait_impl_module_source: Option<ModuleSource> = None;
         let mut blanket_type_param: Option<String> = None;
         let mut trait_impl_struct_name: Option<String> = None;
-        let mut is_ref_impl = false;
 
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &Array<T> takes priority over impl IntoIterator for Array<T>.
@@ -118,17 +117,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             );
             if is_ref {
-                let ref_prefix = if matches!(
+                let ref_struct_name = if matches!(
                     self.type_table.borrow().get(receiver.type_id),
                     ResolvedType::Ref(_)
                 ) {
                     "&"
                 } else {
-                    "&mut "
+                    "&mut"
                 };
-                let ref_struct_name = format!("{ref_prefix}{struct_name}");
                 let result = self.find_trait_method_for_type(
-                    &ref_struct_name,
+                    ref_struct_name,
                     &method_call.method,
                     &struct_module,
                     receiver_type_args_for_trait.as_deref(),
@@ -140,22 +138,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some(trait_match) = result
                     && !trait_match.is_blanket_ref_impl
                 {
-                    // Strip "&" / "&mut " prefix from impl_struct_name — we track
-                    // ref-ness via is_ref_impl flag instead of encoding it in the name.
-                    let clean_name = trait_match
-                        .impl_struct_name
-                        .strip_prefix("&mut ")
-                        .or_else(|| trait_match.impl_struct_name.strip_prefix("&"))
-                        .unwrap_or(&trait_match.impl_struct_name)
-                        .to_string();
-                    trait_impl_struct_name = Some(clean_name);
+                    trait_impl_struct_name = Some(trait_match.impl_struct_name);
                     trait_name = Some(trait_match.trait_name);
                     let mut info = trait_match.method_info;
                     info.is_ref_impl = true;
                     method_info = Some(info);
                     trait_impl_module_source = Some(trait_match.impl_module_source);
                     blanket_type_param = trait_match.blanket_type_param;
-                    is_ref_impl = true;
                 }
             }
         }
@@ -493,13 +482,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_blanket: true,
             })
         } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
-            let generic_base = if is_ref_impl {
-                format!("&{base_struct_name}")
-            } else {
-                base_struct_name.clone()
-            };
             let generic_name =
-                MethodName::format_local(&generic_base, trait_name.as_deref(), &method_call.method);
+                MethodName::format_local(&base_struct_name, None, &method_call.method);
             Some(MonomorphInfo {
                 generic_name,
                 impl_type_args: receiver_type_args.unwrap_or_default(),
@@ -532,7 +516,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
         .with_type_args(&impl_type_arg_names, &method_type_arg_names);
         method_info.is_type_param_receiver = is_type_param_receiver;
-        method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
 
         // Use trait impl module source if this is a trait method,

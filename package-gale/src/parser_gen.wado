@@ -11,13 +11,8 @@ use {
     literal_const_name,
     array_contains_str,
 } from "./gen_util.wado";
-use { group_can_store, group_type_name_from_alts, group_alt_case_info } from "./generator.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
-use { TreeMap } from "core:collections";
-
-// Global rule index for O(log n) rule lookups.
-global mut RULE_INDEX: TreeMap<String, i32> = TreeMap::<String, i32>::new();
 
 // --- Prediction Engine ---
 
@@ -200,27 +195,38 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
                 if let RuleRef(inner_name) = rep.element {
                     let mut stv: Array<String> = [];
                     if !rule_is_single_token(&inner_name, all_rules, &mut stv) && c.return_stack.len() < 1 {
-                        if let Some(found_rule) = find_rule(&inner_name, all_rules) {
-                        if found_rule.alternatives.len() <= 8 {
-                            entered = true;
-                            let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-                            for let alt of found_rule.alternatives {
-                                let mut v2: Array<String> = [];
-                                if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v2), token) {
-                                    continue;
-                                }
-                                let exp = SllConfig {
-                                    alt_index: c.alt_index,
-                                    elements: alt.elements,
-                                    pos: 0,
-                                    return_stack: new_stack,
-                                };
-                                let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, inline_depth + 1);
-                                for let a of advanced {
-                                    results.append(a);
-                                }
+                        let mut inner_alt_count = 0;
+                        for let rule of all_rules {
+                            if rule.name == inner_name {
+                                inner_alt_count = rule.alternatives.len();
+                                break;
                             }
                         }
+                        if inner_alt_count <= 8 {
+                            entered = true;
+                            let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
+                            for let rule of all_rules {
+                                if rule.name != inner_name {
+                                    continue;
+                                }
+                                for let alt of rule.alternatives {
+                                    let mut v2: Array<String> = [];
+                                    if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v2), token) {
+                                        continue;
+                                    }
+                                    let exp = SllConfig {
+                                        alt_index: c.alt_index,
+                                        elements: alt.elements,
+                                        pos: 0,
+                                        return_stack: new_stack,
+                                    };
+                                    let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, inline_depth + 1);
+                                    for let a of advanced {
+                                        results.append(a);
+                                    }
+                                }
+                                break;
+                            }
                         }
                     }
                 }
@@ -559,28 +565,41 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
             continue;
         }
         if let RuleRef(name) = c.elements[c.pos] {
-            if let Some(found_rule) = find_rule(&name, all_rules) {
-                if found_rule.alternatives.len() <= 8 {
-                    let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-                    for let alt of found_rule.alternatives {
-                        let mut v: Array<String> = [];
-                        if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v), token) {
-                            continue;
-                        }
-                        let exp = SllConfig {
-                            alt_index: c.alt_index,
-                            elements: alt.elements,
-                            pos: 0,
-                            return_stack: new_stack,
-                        };
-                        let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, 0);
-                        for let a of advanced {
-                            if a.pos != -1 {
-                                expanded_configs.append(a);
-                            }
+            let mut alt_count = 0;
+            for let rule of all_rules {
+                if rule.name == name {
+                    alt_count = rule.alternatives.len();
+                    break;
+                }
+            }
+            if alt_count > 8 {
+                continue;
+            }
+            let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
+            for let rule of all_rules {
+                if rule.name != name {
+                    continue;
+                }
+                for let alt of rule.alternatives {
+                    // Pre-filter: skip alternatives whose FIRST doesn't contain the token.
+                    let mut v: Array<String> = [];
+                    if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v), token) {
+                        continue;
+                    }
+                    let exp = SllConfig {
+                        alt_index: c.alt_index,
+                        elements: alt.elements,
+                        pos: 0,
+                        return_stack: new_stack,
+                    };
+                    let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, 0);
+                    for let a of advanced {
+                        if a.pos != -1 {
+                            expanded_configs.append(a);
                         }
                     }
                 }
+                break;
             }
         }
     }
@@ -865,8 +884,13 @@ fn rule_is_single_token(name: &String, all_rules: &Array<ParserRule>, visiting: 
     }
     visiting.append(*name);
 
-    if let Some(found_rule) = find_rule(name, all_rules) {
-        for let alt of found_rule.alternatives {
+    let mut found = false;
+    for let rule of all_rules {
+        if rule.name != *name {
+            continue;
+        }
+        found = true;
+        for let alt of rule.alternatives {
             let mut non_nullable_count = 0;
             let mut single_ok = false;
             for let elem of alt.elements {
@@ -888,12 +912,11 @@ fn rule_is_single_token(name: &String, all_rules: &Array<ParserRule>, visiting: 
                 return false;
             }
         }
-        remove_from_visiting(visiting, name);
-        return true;
+        break;
     }
 
     remove_from_visiting(visiting, name);
-    return false;
+    return found;
 }
 
 fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
@@ -904,13 +927,6 @@ fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
         }
     }
     *visiting = new_arr;
-}
-
-fn find_rule(name: &String, all_rules: &Array<ParserRule>) -> Option<&ParserRule> {
-    if let Some(i) = RULE_INDEX.get(*name) {
-        return Option::<&ParserRule>::Some(&all_rules[i]);
-    }
-    return null;
 }
 
 fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
@@ -957,13 +973,6 @@ fn count_leaf_nodes(node: &PredictionNode) -> i32 {
 }
 
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
-    // Build rule name → index for O(log n) lookups.
-    let mut idx = TreeMap::<String, i32>::new();
-    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
-        idx[grammar.parser_rules[i].name] = i;
-    }
-    RULE_INDEX = idx;
-
     gen_parser_struct(w);
     for let rule of grammar.parser_rules {
         gen_parse_fn(w, &rule, &grammar.parser_rules, lit_tokens);
@@ -1408,7 +1417,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, all_rules: &Array<ParserRule>
         return;
     }
     if let Group(alts) = *elem {
-        gen_consume_group(w, &alts, all_rules, lit_tokens, name_counts, store);
+        gen_consume_group(w, &alts, all_rules, lit_tokens, name_counts);
         return;
     }
     if let Label(lab) = *elem {
@@ -1949,7 +1958,7 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, all_rules: &Array<Pa
                 gen_element_failable(w, &inner_elem, all_rules, lit_tokens, saved_var, label, name_counts);
             }
         } else {
-            gen_consume_group(w, &alts, all_rules, lit_tokens, name_counts, false);
+            gen_consume_group(w, &alts, all_rules, lit_tokens, name_counts);
         }
         return;
     }
@@ -1962,9 +1971,6 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, all_rules: &Array<Pa
 fn has_field(elem: &Element) -> bool {
     if let TokenRef(_) | Literal(_) | RuleRef(_) = *elem {
         return true;
-    }
-    if let Group(alts) = *elem {
-        return group_can_store(&alts);
     }
     if let Label(lab) = *elem {
         return has_field(&lab.element);
@@ -1981,9 +1987,6 @@ fn element_field_info(elem: &Element) -> [String, String] {
     }
     if let RuleRef(name) = *elem {
         return [to_snake_case(&name), rule_type_name(&name)];
-    }
-    if let Group(alts) = *elem {
-        return ["group", group_type_name_from_alts(&alts)];
     }
     if let Label(lab) = *elem {
         return element_field_info(&lab.element);
@@ -2025,13 +2028,6 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
                 let field_name = dedup_name(&info.0, name_counts);
                 w.line(`{field_name},`);
             }
-        }
-        return;
-    }
-    if let Group(alts) = *elem {
-        if group_can_store(&alts) {
-            let field_name = dedup_name(&"group", name_counts);
-            w.line(`{field_name},`);
         }
         return;
     }
@@ -2080,129 +2076,54 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) 
     }
 }
 
-fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>, store: bool) {
-    if alts.len() == 0 { return; }
-
-    let can_store = store && group_can_store(alts);
-
-    if !can_store {
-        // Old behavior: parse and discard
-        if alts.len() == 1 {
-            gen_elements_with_non_greedy(w, &alts[0].elements, all_rules, lit_tokens, name_counts);
-            return;
-        }
-        let mut first_sets: Array<Array<String>> = [];
-        for let alt of alts { let mut v: Array<String> = []; first_sets.append(first_of_alt(&alt, all_rules, lit_tokens, &mut v)); }
-        let groups = compute_overlap_groups(&first_sets);
-        let grp_var = dedup_name(&"grp_kind", name_counts);
-        w.line(`let {grp_var} = p.peek_kind();`);
-        for let mut g = 0; g < groups.len(); g += 1 {
-            let grp = &groups[g];
-            let mut uf: Array<String> = [];
-            for let idx of grp { for let tk of first_sets[*idx] { if !array_contains_str(&uf, &tk) { uf.append(tk); } } }
-            let cond = kind_check_str(&uf, &grp_var);
-            if g == 0 { w.begin(`if {cond}`); } else { w.else_begin(`else if {cond}`); }
-            if grp.len() == 1 {
-                gen_elements_with_non_greedy(w, &alts[grp[0]].elements, all_rules, lit_tokens, name_counts);
-            } else {
-                let mut sg = grp.sorted();
-                sort_group_by_element_count(&mut sg, alts);
-                gen_backtracking_body(w, &sg, alts, all_rules, lit_tokens, name_counts);
-            }
-        }
-        w.end();
+fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+    if alts.len() == 0 {
         return;
     }
-
-    // Storable group: produce a group variable
-    let group_type = group_type_name_from_alts(alts);
-    let group_var = dedup_name(&"group", name_counts);
-
     if alts.len() == 1 {
-        let start_var = dedup_name(&"grp_start", name_counts);
-        w.line(`let {start_var} = p.peek().span.start;`);
-        // Snapshot name_counts before generating elements, then use the same
-        // snapshot to replay and discover what variable names were actually generated.
-        let mut snapshot: Array<[String, i32]> = [];
-        for let entry of name_counts {
-            snapshot.append([entry.0, entry.1]);
-        }
-        gen_group_alt_elements(w, &alts[0].elements, all_rules, lit_tokens, name_counts);
-        let mut fs = String::with_capacity(128);
-        fs.append(`span: Span::new({start_var}, p.last_end()), `);
-        let mut field_nc: Array<[String, i32]> = [];
-        for let elem of &alts[0].elements {
-            if has_field(&elem) {
-                let info = element_field_info(&elem);
-                let field_name = dedup_name(&info.0, &mut field_nc);
-                let var_name = dedup_name(&info.0, &mut snapshot);
-                if field_name == var_name {
-                    fs.append(`{field_name}, `);
-                } else {
-                    fs.append(`{field_name}: {var_name}, `);
-                }
-            }
-        }
-        w.line(`let {group_var} = {group_type} \{ {fs}\};`);
+        gen_elements_with_non_greedy(w, &alts[0].elements, all_rules, lit_tokens, name_counts);
         return;
     }
 
-    // Multi-alt: use if-expression
-    let start_var = dedup_name(&"grp_start", name_counts);
-    w.line(`let {start_var} = p.peek().span.start;`);
     let mut first_sets: Array<Array<String>> = [];
-    for let alt of alts { let mut v: Array<String> = []; first_sets.append(first_of_alt(&alt, all_rules, lit_tokens, &mut v)); }
+    for let alt of alts {
+        let mut visiting: Array<String> = [];
+        first_sets.append(first_of_alt(&alt, all_rules, lit_tokens, &mut visiting));
+    }
     let groups = compute_overlap_groups(&first_sets);
+
     let grp_var = dedup_name(&"grp_kind", name_counts);
     w.line(`let {grp_var} = p.peek_kind();`);
 
     for let mut g = 0; g < groups.len(); g += 1 {
-        let grp = &groups[g];
-        let alt_idx = grp[0];
-        let mut uf: Array<String> = [];
-        for let idx of grp { for let tk of first_sets[*idx] { if !array_contains_str(&uf, &tk) { uf.append(tk); } } }
-        let cond = kind_check_str(&uf, &grp_var);
-        if g == 0 {
-            w.write(`let {group_var}: {group_type} = if {cond} \{\n`);
-            w.indent();
-        } else {
-            w.dedent();
-            w.write(`\} else if {cond} \{\n`);
-            w.indent();
-        }
-        let alt = &alts[alt_idx];
-        let ci = group_alt_case_info(alt, alt_idx);
-        // For single-element alts (the only case group_can_store allows for multi-alt),
-        // parse the element and wrap directly in the variant.
-        if alt.elements.len() == 1 {
-            if let RuleRef(rname) = alt.elements[0] {
-                let var_name = dedup_name(&to_snake_case(&rname), name_counts);
-                w.line(`let {var_name} = parse_{to_snake_case(&rname)}(p)?;`);
-                w.line(`{group_type}::{ci.0}({var_name})`);
-            } else {
-                gen_group_alt_elements(w, &alt.elements, all_rules, lit_tokens, name_counts);
-                let info = element_field_info(&alt.elements[0]);
-                w.line(`{group_type}::{ci.0}({info.0})`);
-            }
-        } else {
-            gen_group_alt_elements(w, &alt.elements, all_rules, lit_tokens, name_counts);
-            let mut fs = String::with_capacity(64);
-            fs.append(`span: Span::new({start_var}, p.last_end()), `);
-            let mut fnc: Array<[String, i32]> = [];
-            for let elem of &alt.elements {
-                if has_field(&elem) { let info = element_field_info(&elem); let fname = dedup_name(&info.0, &mut fnc); fs.append(`{fname}, `); }
-            }
-            w.line(`{group_type}::{ci.0}({ci.1} \{ {fs}\})`);
-        }
-    }
-    w.dedent();
-    w.line(`\} else \{ panic("group: no matching alternative"); \};`);
-}
+        let group = &groups[g];
 
-fn gen_group_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
-    for let elem of elements {
-        gen_element(w, &elem, all_rules, lit_tokens, true, name_counts);
+        let mut union_first: Array<String> = [];
+        for let idx of group {
+            for let tk of first_sets[*idx] {
+                if !array_contains_str(&union_first, &tk) {
+                    union_first.append(tk);
+                }
+            }
+        }
+
+        let cond = kind_check_str(&union_first, &grp_var);
+        if g == 0 {
+            w.begin(`if {cond}`);
+        } else {
+            w.else_begin(`else if {cond}`);
+        }
+
+        if group.len() == 1 {
+            let alt_idx = group[0];
+            gen_elements_with_non_greedy(w, &alts[alt_idx].elements, all_rules, lit_tokens, name_counts);
+        } else {
+            let mut sorted_group = group.sorted();
+            sort_group_by_element_count(&mut sorted_group, alts);
+            gen_backtracking_body(w, &sorted_group, alts, all_rules, lit_tokens, name_counts);
+        }
     }
+    w.end();
 }
 
 fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
@@ -2965,18 +2886,28 @@ fn first_of_rule(name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Arra
     visiting.append(*name);
 
     let mut result: Array<String> = [];
-    if let Some(found_rule) = find_rule(name, all_rules) {
-        for let alt of found_rule.alternatives {
-            let af = first_of_alt(&alt, all_rules, lit_tokens, visiting);
-            for let tk of af {
-                if !array_contains_str(&result, &tk) {
-                    result.append(tk);
+    for let rule of all_rules {
+        if rule.name == *name {
+            for let alt of rule.alternatives {
+                let af = first_of_alt(&alt, all_rules, lit_tokens, visiting);
+                for let tk of af {
+                    if !array_contains_str(&result, &tk) {
+                        result.append(tk);
+                    }
                 }
             }
+            break;
         }
     }
 
-    remove_from_visiting(visiting, name);
+    let mut new_visiting: Array<String> = [];
+    for let v of visiting {
+        if *v != *name {
+            new_visiting.append(*v);
+        }
+    }
+    *visiting = new_visiting;
+
     return result;
 }
 
