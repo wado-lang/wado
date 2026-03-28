@@ -2051,29 +2051,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Look up the struct in the symbol table to resolve imports/aliases
         // We need both the struct name (for struct_fields lookup) and module_source (for disambiguation)
         // Local struct definitions (current module) shadow imported/prelude structs.
-        let (struct_name, symbol_module_source) = if self
-            .struct_fields
-            .get(name)
-            .is_some_and(|info| info.module_source == self.current_module_source)
+        // Resolve struct name and module_source.
+        // Local definitions shadow imported/prelude structs.
+        let (struct_name, struct_module_source) = if self
+            .lookup_struct_fields(name, &self.current_module_source)
+            .is_some()
         {
-            // Current module defines this struct locally - skip symbol table
-            (name.clone(), None)
+            (name.clone(), self.current_module_source.clone())
         } else if let Some(symbol) = self.symbols.lookup(name) {
             match &symbol.kind {
                 crate::symbol::SymbolKind::Struct(_) => {
-                    (symbol.name.clone(), Some(symbol.module_source.clone()))
+                    (symbol.name.clone(), symbol.module_source.clone())
                 }
-                _ => (name.clone(), None),
+                _ => (name.clone(), self.current_module_source.clone()),
             }
         } else {
-            // Fall back to local struct name
-            (name.clone(), None)
+            (name.clone(), self.current_module_source.clone())
         };
 
-        // Get expected field types for coercion (for generic structs)
+        // Get expected field types using (name, module_source) lookup.
         let struct_field_types: Vec<(String, TypeId)> = self
-            .struct_fields
-            .get(&struct_name)
+            .lookup_struct_fields(&struct_name, &struct_module_source)
             .map(|info| {
                 info.fields
                     .iter()
@@ -2161,6 +2159,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     deferred_coercions.push((index, index));
                 }
 
+                // Check field name exists in struct definition
+                if !struct_field_types.iter().any(|(n, _)| n == &field.name)
+                    && !struct_field_types.is_empty()
+                {
+                    let _ = self.logger.error(TypeError::FieldNotFound {
+                        struct_name: struct_name.clone(),
+                        field_name: field.name.clone(),
+                        span: field.span,
+                    });
+                }
+
                 // Check field value type against declared struct field type
                 if let Some((_, expected_type_id)) =
                     struct_field_types.iter().find(|(n, _)| n == &field.name)
@@ -2180,24 +2189,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
             .collect();
 
-        // Get module_source for this struct
-        // Priority: symbol table module_source > struct_fields > current_module_source
-        // The symbol table module_source is needed for imported structs (especially with aliases)
-        // to handle name collisions between local and imported structs
-        let struct_module_source = if let Some(ms) = symbol_module_source {
-            // Imported struct - use module_source from symbol table
-            ms
-        } else if let Some(info) = self.struct_fields.get(&struct_name) {
-            // Local struct found in struct_fields
-            info.module_source.clone()
-        } else {
-            // Fall back to current module
-            self.current_module_source.clone()
-        };
+        // struct_module_source was already determined above (before field resolution).
 
         // Check field visibility: non-pub fields cannot be set from other modules
         if struct_module_source != self.current_module_source
-            && let Some(struct_info) = self.struct_fields.get(&struct_name)
+            && let Some(struct_info) =
+                self.lookup_struct_fields(&struct_name, &struct_module_source)
         {
             for (fname, _, is_pub) in &struct_info.fields {
                 if !is_pub && fields.iter().any(|f| f.name == *fname) {
@@ -2280,7 +2277,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
 
             // Check trait bounds on inferred type arguments
-            if let Some(struct_info) = self.struct_fields.get(&struct_name).cloned() {
+            if let Some(struct_info) = self
+                .lookup_struct_fields(&struct_name, &struct_module_source)
+                .cloned()
+            {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
                     if let Some(&type_arg) = type_args.get(i) {
                         for bound in bounds {
