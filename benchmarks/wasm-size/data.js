@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774606629545,
+  "lastUpdate": 1774678427051,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8072,6 +8072,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 21926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dfc80cc363e1b5379f16c2de814ac584d2f97526",
+          "message": "Merge pull request #716 from wado-lang/claude/fix-ci-benchmark-VkhWU\n\nFix HFS miscompilation in LabeledBlock expressions",
+          "timestamp": "2026-03-28T15:10:55+09:00",
+          "tree_id": "9d0b1bbfee035d33dc949b4e87aaf6082490d52e",
+          "url": "https://github.com/wado-lang/wado/commit/dfc80cc363e1b5379f16c2de814ac584d2f97526"
+        },
+        "date": 1774678426833,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24726,
             "unit": "bytes"
           }
         ]
