@@ -3560,7 +3560,15 @@ fn infer_from_type(
                 ResolvedType::Ref(i) | ResolvedType::MutRef(i) => *i,
                 _ => return,
             };
-            infer_from_type(*inner, concrete_inner, real_params, offset, result, resolved, type_table);
+            infer_from_type(
+                *inner,
+                concrete_inner,
+                real_params,
+                offset,
+                result,
+                resolved,
+                type_table,
+            );
         }
         _ => {}
     }

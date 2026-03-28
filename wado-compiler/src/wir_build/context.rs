@@ -236,6 +236,14 @@ impl<'a> WirContext<'a> {
             .map(|(_, v)| v)
     }
 
+    pub fn lookup_variant_by_name(&self, name: &str) -> Option<&WirTypeId> {
+        let suffix = format!("//{name}");
+        self.variant_type_map
+            .iter()
+            .find(|(fq, _)| fq.ends_with(&suffix))
+            .map(|(_, v)| v)
+    }
+
     // === Function Registration ===
 
     /// Register a function import and return its `WirFuncId`.
@@ -626,6 +634,12 @@ impl<'a> WirContext<'a> {
             } => {
                 let fq = format!("{module_source}//{name}");
                 if let Some(type_id) = self.type_map.get(&fq) {
+                    WirType::Ref {
+                        type_id: type_id.clone(),
+                        nullable: false,
+                    }
+                } else if let Some(type_id) = self.lookup_variant_by_name(name) {
+                    // Name-only fallback: variant imported from another module
                     WirType::Ref {
                         type_id: type_id.clone(),
                         nullable: false,
