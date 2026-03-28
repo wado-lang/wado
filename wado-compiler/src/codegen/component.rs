@@ -14,7 +14,7 @@ use super::component_context::ComponentModelContext;
 use super::postprocess;
 use crate::ast::Type;
 use crate::bundled::wado_bundled_libm_wasm;
-use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
+use crate::component_model::{CmInstanceTypeGen, CmVariantCase, WasiFunctionInfo};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::project::Project;
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirModule};
@@ -363,10 +363,8 @@ fn emit_cm_val_type(
                     && own_resource_type_indices.contains_key(&named.name)
                 {
                     Some(ComponentValType::Type(own_resource_type_indices[&named.name]))
-                } else if let (Some(type_gen), Some(proj)) = (shared_type_gen, project)
-                    && !matches!(ok, Type::Named(_))
-                {
-                    // Complex ok types (records, options, etc.) use shared type gen
+                } else if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
+                    // Complex ok types (records, options, variants, etc.) use shared type gen
                     type_gen.set_next_idx(*local_type_idx);
                     let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                         .iter()
@@ -457,7 +455,15 @@ fn emit_cm_val_type(
             *local_type_idx += 1;
             ComponentValType::Type(idx)
         }
-        _ => type_to_cm_primitive_with_resources(ty, own_resource_type_indices),
+        _ => {
+            // Check enum/variant export indices first (e.g. DescriptorType)
+            if let Type::Named(named) = ty {
+                if let Some(&idx) = enum_export_indices.get(&named.name) {
+                    return ComponentValType::Type(idx);
+                }
+            }
+            type_to_cm_primitive_with_resources(ty, own_resource_type_indices)
+        }
     }
 }
 
@@ -1216,53 +1222,74 @@ fn generate_wasi_imports(
 
             // Determine if this interface defines its own ErrorCode (e.g. wasi:filesystem/types,
             // wasi:sockets/types) vs. using the shared wasi:cli/types error-code via outer alias.
+            // ErrorCode may be an enum (cli/types) or a variant (filesystem/types, sockets/types).
             let has_local_error_code = project
                 .wasi_registry
-                .has_enum_in_interface(&interface_info.path, "ErrorCode");
+                .has_enum_in_interface(&interface_info.path, "ErrorCode")
+                || project
+                    .wasi_registry
+                    .variants_for_interface(&interface_info.path)
+                    .any(|(name, _, _)| name == "ErrorCode");
 
-            // Collect enum types needed by functions
-            let mut needed_enums: Vec<String> = Vec::new();
-            for func in &supported_functions {
-                for (_, _, ty) in &func.params {
-                    if let Type::Named(named) = ty
-                        && project.wasi_registry.is_enum(&named.name)
-                        && !needed_enums.contains(&named.name)
-                    {
-                        needed_enums.push(named.name.clone());
-                    }
-                }
-                if let Some(ret_ty) = &func.return_type
-                    && let Type::Generic(g) = ret_ty
-                    && g.name == "Result"
-                {
-                    for arg in &g.args {
-                        if let Type::Named(named) = arg
-                            && project.wasi_registry.is_enum(&named.name)
-                            && !needed_enums.contains(&named.name)
-                        {
-                            // Skip ErrorCode for interfaces that don't define their own —
-                            // those use the shared wasi:cli/types error-code via outer alias.
-                            if named.name == "ErrorCode" && !has_local_error_code {
-                                continue;
-                            }
-                            needed_enums.push(named.name.clone());
+            /// Recursively collect Named types from a type tree.
+            fn collect_named_types(ty: &Type, out: &mut Vec<String>) {
+                match ty {
+                    Type::Named(named) if named.name != "()" => {
+                        if !out.contains(&named.name) {
+                            out.push(named.name.clone());
                         }
                     }
+                    Type::Generic(g) => {
+                        for arg in &g.args {
+                            collect_named_types(arg, out);
+                        }
+                    }
+                    Type::Tuple(elems) => {
+                        for elem in elems {
+                            collect_named_types(elem, out);
+                        }
+                    }
+                    _ => {}
                 }
             }
 
-            // Collect flags types needed by functions
-            let mut needed_flags: Vec<String> = Vec::new();
+            // Collect all named types referenced in function signatures
+            let mut referenced_types: Vec<String> = Vec::new();
             for func in &supported_functions {
                 for (_, _, ty) in &func.params {
-                    if let Type::Named(named) = ty
-                        && project.wasi_registry.is_flags(&named.name)
-                        && !needed_flags.contains(&named.name)
-                    {
-                        needed_flags.push(named.name.clone());
-                    }
+                    collect_named_types(ty, &mut referenced_types);
+                }
+                if let Some(ret_ty) = &func.return_type {
+                    collect_named_types(ret_ty, &mut referenced_types);
                 }
             }
+
+            // Partition into enums, variants, and flags
+            let needed_variants: Vec<String> = referenced_types
+                .iter()
+                .filter(|name| {
+                    project.wasi_registry.is_variant(name)
+                        && !(name.as_str() == "ErrorCode" && !has_local_error_code)
+                })
+                .cloned()
+                .collect();
+
+            // Enums: exclude types that are also registered as variants (variant takes priority)
+            let needed_enums: Vec<String> = referenced_types
+                .iter()
+                .filter(|name| {
+                    project.wasi_registry.is_enum(name)
+                        && !needed_variants.contains(name)
+                        && !(name.as_str() == "ErrorCode" && !has_local_error_code)
+                })
+                .cloned()
+                .collect();
+
+            let needed_flags: Vec<String> = referenced_types
+                .iter()
+                .filter(|name| project.wasi_registry.is_flags(name))
+                .cloned()
+                .collect();
 
             let mut enum_type_indices: IndexMap<String, u32> = IndexMap::default();
             let mut enum_export_indices: IndexMap<String, u32> = IndexMap::default();
@@ -1293,6 +1320,61 @@ fn generate_wasi_imports(
                         local_type_idx += 1;
                     }
                 }
+            }
+
+            // Emit variant types in the instance type
+            let mut variant_export_indices: IndexMap<String, u32> = IndexMap::default();
+            // Build a map from wado_name → (cm_name, cases) for this interface's variants
+            let interface_variants: IndexMap<String, (String, Vec<CmVariantCase>)> = project
+                .wasi_registry
+                .variants_for_interface(&interface_info.path)
+                .map(|(wado_name, cm_name, cases)| {
+                    (wado_name.to_string(), (cm_name.to_string(), cases.to_vec()))
+                })
+                .collect();
+            for variant_name in &needed_variants {
+                if let Some((_, cases)) = interface_variants.get(variant_name) {
+                    // Build CM variant cases: (kebab-name, optional payload type)
+                    let cm_cases: Vec<(&str, Option<ComponentValType>)> = cases
+                        .iter()
+                        .map(|c| {
+                            let payload = c.payload.as_ref().map(|ty| {
+                                emit_cm_val_type(
+                                    ty,
+                                    &mut instance_type,
+                                    &mut local_type_idx,
+                                    None,
+                                    has_local_error_code,
+                                    &enum_export_indices,
+                                    &own_resource_type_indices,
+                                    None,
+                                    None,
+                                    ctx,
+                                )
+                            });
+                            (c.cm_name.as_str(), payload)
+                        })
+                        .collect();
+                    instance_type.ty().defined_type().variant(cm_cases);
+                    let type_idx = local_type_idx;
+                    local_type_idx += 1;
+
+                    if let Some((variant_cm_name, _)) = interface_variants.get(variant_name) {
+                        let cm_name: &str = variant_cm_name.as_str();
+                        instance_type.export(
+                            cm_name,
+                            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(type_idx)),
+                        );
+                        variant_export_indices.insert(variant_name.clone(), local_type_idx);
+                        local_type_idx += 1;
+                    }
+                }
+            }
+
+            // Merge variant export indices into enum_export_indices so that
+            // resolve_error_code_idx can find ErrorCode regardless of enum/variant.
+            for (name, idx) in &variant_export_indices {
+                enum_export_indices.insert(name.clone(), *idx);
             }
 
             // Emit flags types in the instance type
