@@ -29,39 +29,39 @@ When `gc` is present, `lift_func` and `lower_func` operate on GC references inst
 
 ### CM Type → Core GC Type Mapping
 
-| CM Type | GC Lowering (value position) | GC Lowering (storage position) |
-|---------|------------------------------|-------------------------------|
-| `bool`, `s8`, `u8` | `i32` | `i8` |
-| `s16`, `u16` | `i32` | `i16` |
-| `s32`, `u32`, `char` | `i32` | `i32` |
-| `s64`, `u64` | `i64` | `i64` |
-| `f32`, `f64` | native | native |
-| `string` | `(ref null? (array (mut? i8)))` | — |
-| `record` / `tuple` | `(ref null? (struct ...))` | — |
-| `list<T>` | `(ref null? (array (mut? T')))` | — |
-| `variant` / `option` / `result` | subtype hierarchy (base struct + subtypes in same rec group) | — |
-| `own` / `borrow` / `future` / `stream` | `externref` | — |
+| CM Type                                | GC Lowering (value position)                                 | GC Lowering (storage position) |
+| -------------------------------------- | ------------------------------------------------------------ | ------------------------------ |
+| `bool`, `s8`, `u8`                     | `i32`                                                        | `i8`                           |
+| `s16`, `u16`                           | `i32`                                                        | `i16`                          |
+| `s32`, `u32`, `char`                   | `i32`                                                        | `i32`                          |
+| `s64`, `u64`                           | `i64`                                                        | `i64`                          |
+| `f32`, `f64`                           | native                                                       | native                         |
+| `string`                               | `(ref null? (array (mut? i8)))`                              | —                              |
+| `record` / `tuple`                     | `(ref null? (struct ...))`                                   | —                              |
+| `list<T>`                              | `(ref null? (array (mut? T')))`                              | —                              |
+| `variant` / `option` / `result`        | subtype hierarchy (base struct + subtypes in same rec group) | —                              |
+| `own` / `borrow` / `future` / `stream` | `externref`                                                  | —                              |
 
 Components choose nullability and mutability. The engine can pass values **zero-copy** when both sides use the same rec group and compatible mutability.
 
 ### Mutability and Copies
 
-| Scenario | Copies at CM boundary |
-|----------|----------------------|
-| Both immutable, same rec group | 0 |
-| Both immutable, different rec groups | 1 |
-| One mutable, one immutable | 1 |
-| Both mutable | 2 |
-| Current linear memory approach | 2 (always) |
+| Scenario                             | Copies at CM boundary |
+| ------------------------------------ | --------------------- |
+| Both immutable, same rec group       | 0                     |
+| Both immutable, different rec groups | 1                     |
+| One mutable, one immutable           | 1                     |
+| Both mutable                         | 2                     |
+| Current linear memory approach       | 2 (always)            |
 
 ### Upstream Status
 
-| Item | Status |
-|------|--------|
-| Wasm GC (core spec) | Shipped in Wasm 3.0 (Sept 2025) |
-| Core GC in wasmtime | Feature-complete (v27.0+) |
-| CM GC pre-proposal | [component-model#525](https://github.com/WebAssembly/component-model/issues/525) (June 2025, open) |
-| CM GC in wasmtime | [wasmtime#10325](https://github.com/bytecodealliance/wasmtime/issues/10325) (prototyping, 🛸 flag "very incomplete") |
+| Item                | Status                                                                                                               |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Wasm GC (core spec) | Shipped in Wasm 3.0 (Sept 2025)                                                                                      |
+| Core GC in wasmtime | Feature-complete (v27.0+)                                                                                            |
+| CM GC pre-proposal  | [component-model#525](https://github.com/WebAssembly/component-model/issues/525) (June 2025, open)                   |
+| CM GC in wasmtime   | [wasmtime#10325](https://github.com/bytecodealliance/wasmtime/issues/10325) (prototyping, 🛸 flag "very incomplete") |
 
 ## Phase 1: Align Internal Representations
 
@@ -131,14 +131,14 @@ enum CmMode {
 
 The synthesizer already dispatches on type shape. In GC mode, most composite types become **identity** (pass through directly) instead of lower/lift through linear memory:
 
-| Type | Linear Memory Mode | GC Mode |
-|------|-------------------|---------|
-| Scalars | identity | identity |
-| `String` | `cm_lower_string` / `memory_to_gc_string` | **identity** (same GC array type) |
-| `Array<u8>` | `cm_lower_array_u8` / `memory_to_gc_array` | **identity** |
-| Records | recursive field-by-field copy via LM | **identity or shallow copy** (if rec groups match) |
-| Variants | discriminant + payload via LM | **ref.cast + unwrap** or identity |
-| Resources | handle table (i32) | `externref` (unchanged) |
+| Type        | Linear Memory Mode                         | GC Mode                                            |
+| ----------- | ------------------------------------------ | -------------------------------------------------- |
+| Scalars     | identity                                   | identity                                           |
+| `String`    | `cm_lower_string` / `memory_to_gc_string`  | **identity** (same GC array type)                  |
+| `Array<u8>` | `cm_lower_array_u8` / `memory_to_gc_array` | **identity**                                       |
+| Records     | recursive field-by-field copy via LM       | **identity or shallow copy** (if rec groups match) |
+| Variants    | discriminant + payload via LM              | **ref.cast + unwrap** or identity                  |
+| Resources   | handle table (i32)                         | `externref` (unchanged)                            |
 
 For most types, GC mode synthesis is **dramatically simpler** than linear memory mode — many types need no adapter at all.
 
@@ -163,6 +163,7 @@ This requires `wasm_encoder` to support the new canonical options. Track `wasm-t
 ### 2.3 Memory Module
 
 In GC mode, the memory module (`mem`) is **still needed** for:
+
 - `stream.read` / `stream.write` (byte streams use linear memory even in GC mode)
 - `error-context` (uses memory for debug strings)
 - Any fallback to linear memory mode
@@ -195,13 +196,13 @@ Once the CM GC spec is merged and wasmtime enables it by default:
 
 The biggest wins are for data-heavy WASI calls:
 
-| Operation | Current (LM) | After (GC) | Improvement |
-|-----------|--------------|------------|-------------|
-| `String` export | O(n) copy GC→LM | O(1) ref pass | major |
-| `String` import | O(n) copy LM→GC | O(1) ref pass | major |
-| `Array<u8>` round-trip | 2× O(n) copies | 0 copies | major |
-| `i32` / scalar | identity | identity | none |
-| Record with 3 fields | 3× store + 3× load | O(1) ref pass | moderate |
+| Operation              | Current (LM)       | After (GC)    | Improvement |
+| ---------------------- | ------------------ | ------------- | ----------- |
+| `String` export        | O(n) copy GC→LM    | O(1) ref pass | major       |
+| `String` import        | O(n) copy LM→GC    | O(1) ref pass | major       |
+| `Array<u8>` round-trip | 2× O(n) copies     | 0 copies      | major       |
+| `i32` / scalar         | identity           | identity      | none        |
+| Record with 3 fields   | 3× store + 3× load | O(1) ref pass | moderate    |
 
 For HTTP handlers processing request/response bodies, this eliminates the dominant cost of crossing the CM boundary.
 
