@@ -652,3 +652,262 @@ test "parse complex multi-statement script" {
         panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
     }
 }
+
+// --- Queries from benchmark/sqlite_parse/queries.sql ---
+// Complex real-world queries covering JOINs, CTEs, subqueries, expressions, etc.
+
+test "bench: multi-join with aggregation" {
+    let result = sqlite::parse(&"
+SELECT u.username,
+       COUNT(DISTINCT p.id) AS post_count,
+       COUNT(DISTINCT c.id) AS comment_count,
+       COALESCE(SUM(p.view_count), 0) AS total_views
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id AND p.status = 'published'
+LEFT JOIN comments c ON u.id = c.user_id
+GROUP BY u.id
+ORDER BY total_views DESC;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: recursive CTE with join" {
+    let result = sqlite::parse(&"
+WITH RECURSIVE comment_tree(id, post_id, user_id, parent_id, body, depth) AS (
+    SELECT id, post_id, user_id, parent_id, body, 0
+    FROM comments
+    WHERE parent_id IS NULL AND post_id = 1
+    UNION ALL
+    SELECT c.id, c.post_id, c.user_id, c.parent_id, c.body, ct.depth + 1
+    FROM comments c
+    INNER JOIN comment_tree ct ON c.parent_id = ct.id
+)
+SELECT ct.depth, ct.body, u.username
+FROM comment_tree ct
+INNER JOIN users u ON ct.user_id = u.id
+ORDER BY ct.id;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: subquery in WHERE with NOT IN" {
+    let result = sqlite::parse(&"
+SELECT *
+FROM posts
+WHERE user_id IN (SELECT id FROM users WHERE is_active = 1)
+  AND id NOT IN (SELECT post_id FROM post_tags WHERE tag_id = 3)
+  AND status = 'published';");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: correlated subqueries in select list" {
+    let result = sqlite::parse(&"
+SELECT p.title,
+       (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
+       (SELECT COUNT(*) FROM post_tags pt WHERE pt.post_id = p.id) AS tag_count
+FROM posts p
+WHERE p.status = 'published'
+ORDER BY comment_count DESC;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: CASE expressions" {
+    let result = sqlite::parse(&"
+SELECT title,
+       CASE
+           WHEN view_count > 1000 THEN 'viral'
+           WHEN view_count > 100 THEN 'popular'
+           WHEN view_count > 10 THEN 'moderate'
+           ELSE 'low'
+       END AS popularity,
+       CASE status
+           WHEN 'published' THEN 1
+           WHEN 'draft' THEN 0
+           ELSE -1
+       END AS status_code
+FROM posts;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: UNION ALL set operation" {
+    let result = sqlite::parse(&"
+SELECT 'users' AS table_name, COUNT(*) AS row_count FROM users
+UNION ALL
+SELECT 'posts', COUNT(*) FROM posts
+UNION ALL
+SELECT 'comments', COUNT(*) FROM comments
+UNION ALL
+SELECT 'tags', COUNT(*) FROM tags;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: INTERSECT with joins" {
+    let result = sqlite::parse(&"
+SELECT u.username, p.title
+FROM users u
+CROSS JOIN posts p
+WHERE p.status = 'published'
+INTERSECT
+SELECT u.username, p.title
+FROM users u
+INNER JOIN comments c ON u.id = c.user_id
+INNER JOIN posts p ON c.post_id = p.id;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: CTE with multiple tables" {
+    let result = sqlite::parse(&"
+WITH user_activity AS (
+    SELECT u.id, u.username,
+           COUNT(DISTINCT p.id) AS posts,
+           COUNT(DISTINCT c.id) AS comments
+    FROM users u
+    LEFT JOIN posts p ON u.id = p.user_id
+    LEFT JOIN comments c ON u.id = c.user_id
+    GROUP BY u.id
+)
+SELECT ua.username, ua.posts, ua.comments
+FROM user_activity ua
+ORDER BY ua.username;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: CREATE VIEW with subquery" {
+    let result = sqlite::parse(&"
+CREATE VIEW published_posts_view AS
+SELECT p.id, p.title, p.slug, p.body, p.view_count,
+       u.username AS author,
+       p.published_at,
+       (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count
+FROM posts p
+INNER JOIN users u ON p.user_id = u.id
+WHERE p.status = 'published';");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: complex expressions with functions" {
+    let result = sqlite::parse(&"
+SELECT p.title,
+       SUBSTR(p.body, 1, 100) || '...' AS excerpt,
+       LENGTH(p.body) AS body_length,
+       REPLACE(LOWER(p.title), ' ', '-') AS generated_slug,
+       UPPER(u.username) AS author_upper,
+       TRIM(p.body) AS trimmed_body,
+       ABS(p.view_count - 100) AS distance_from_100,
+       TYPEOF(p.view_count) AS view_type
+FROM posts p
+INNER JOIN users u ON p.user_id = u.id
+WHERE p.body IS NOT NULL
+  AND LENGTH(p.body) > 0
+  AND p.published_at BETWEEN '2024-01-01' AND '2024-12-31'
+  AND p.view_count >= 0
+  AND (p.status = 'published' OR p.status = 'archived')
+ORDER BY p.published_at DESC
+LIMIT 50;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: EXISTS and NOT EXISTS" {
+    let result = sqlite::parse(&"
+SELECT DISTINCT u.username
+FROM users u
+WHERE EXISTS (
+    SELECT 1 FROM posts p
+    WHERE p.user_id = u.id AND p.status = 'published'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM comments c
+    WHERE c.user_id = u.id
+)
+ORDER BY u.username;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: NULLIF IFNULL COALESCE" {
+    let result = sqlite::parse(&"
+SELECT p.title,
+       NULLIF(p.view_count, 0) AS non_zero_views,
+       IFNULL(p.published_at, 'unpublished') AS pub_date,
+       COALESCE(p.body, p.title, 'no content') AS content
+FROM posts p
+ORDER BY p.id;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: INSERT OR REPLACE" {
+    let result = sqlite::parse(&"INSERT OR REPLACE INTO users (id, username, email, password_hash) VALUES (1, 'alice', 'newalice@example.com', 'newhash1');");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: REPLACE INTO" {
+    let result = sqlite::parse(&"REPLACE INTO tags (id, name) VALUES (1, 'sqlite3');");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: DELETE with subquery" {
+    let result = sqlite::parse(&"DELETE FROM comments WHERE user_id NOT IN (SELECT id FROM users WHERE is_active = 1);");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: nested JOIN with subquery" {
+    let result = sqlite::parse(&"
+SELECT p.title, c.body, u.username
+FROM posts p
+LEFT JOIN comments c ON p.id = c.post_id
+LEFT JOIN users u ON c.user_id = u.id
+WHERE p.id IN (SELECT post_id FROM post_tags WHERE tag_id IN (SELECT id FROM tags WHERE name = 'sqlite'))
+ORDER BY p.title, c.created_at;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: CAST with division" {
+    let result = sqlite::parse(&"SELECT CAST(COUNT(*) AS REAL) / (SELECT COUNT(*) FROM users) AS posts_per_user FROM posts;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
+
+test "bench: multiple correlated subqueries" {
+    let result = sqlite::parse(&"
+SELECT u.username,
+       (SELECT COUNT(*) FROM posts WHERE user_id = u.id) AS total_posts,
+       (SELECT COUNT(*) FROM posts WHERE user_id = u.id AND status = 'published') AS published_posts,
+       (SELECT COUNT(*) FROM posts WHERE user_id = u.id AND status = 'draft') AS draft_posts,
+       (SELECT COUNT(*) FROM comments WHERE user_id = u.id) AS total_comments
+FROM users u
+WHERE u.is_active = 1
+ORDER BY u.username;");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+}
