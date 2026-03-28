@@ -33,6 +33,10 @@ Key files:
 - `wado-compiler/src/codegen/component.rs` — component builder
 - `wado-compiler/src/component_model.rs` — CM types and registry
 
+### Why the CM MVP Chose Linear Memory Over GC
+
+The Explainer.md explicitly considered and **rejected** using immutable GC objects for cross-boundary data passing, citing "an unnecessary dependency on GC and needless copying." The CM MVP was designed to work without any GC dependency, using linear memory as the universal data exchange format. This was a deliberate choice to keep the CM spec independent of the GC proposal's timeline.
+
 ## The Pre-Proposal: GC-Native Canonical ABI (component-model#525)
 
 ### Overview
@@ -146,7 +150,17 @@ A reasonable estimate: **experimental support in wasmtime H2 2026, stable in 202
 - **Shared-everything linking**: modules within one component share linear memory (for C/Rust-style linking)
 - **GC in components**: GC types cross component boundaries (for GC-language interop)
 
-The [shared-everything-threads proposal](https://github.com/WebAssembly/shared-everything-threads) (separate from shared-everything linking) adds `shared` annotations for cross-thread sharing. This is also orthogonal.
+### Shared-Everything Threads (Separate Proposal)
+
+The [shared-everything-threads proposal](https://github.com/WebAssembly/shared-everything-threads/blob/main/proposals/shared-everything-threads/Overview.md) extends GC types with `shared` annotations for thread safety. While orthogonal to GC-in-components, it intersects with GC:
+
+- **Shared heap types**: `(shared struct ...)`, `(shared array ...)`, `(shared any)`, etc.
+- **Strict rule**: Shared and unshared types are **never subtypes** of one another
+- **Atomic access**: Reference-typed and i8/i16/i32 fields never tear; larger fields may tear
+- **`waitqueue`**: New shared-only GC type for futex-like synchronization
+- **CM integration**: Thread spawn builtins (`thread.spawn_ref`, `thread.spawn_indirect`, `thread.available_parallelism`)
+
+This is relevant if Wado ever targets multi-threaded components.
 
 ## Impact on Wado
 
