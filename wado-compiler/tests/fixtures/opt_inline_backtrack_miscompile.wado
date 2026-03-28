@@ -1,7 +1,8 @@
-// O3 miscompilation: copy propagation corrupts parser state after
-// inlining, causing backtracking dispatch to misparse subqueries.
-// Minimal SQL: SELECT with IN subquery containing WHERE clause.
-use sqlite from "./sub/sqlite.wado";
+// O3 miscompilation: copy_prop + HFS interaction corrupts parser position
+// in backtracking dispatch. Minimal SQL: SELECT with IN subquery + WHERE.
+// Root cause: copy_prop pass (skip = fix). Affects parse_create_trigger_stmt's
+// inner loop where HFS scalarizes p.pos.
+use sqlite from "../../../package-gale/tests/golden/sqlite.wado";
 
 export fn run() {
     let sql = "SELECT 1 WHERE 1 IN (SELECT 1 WHERE 1 = 1);";
