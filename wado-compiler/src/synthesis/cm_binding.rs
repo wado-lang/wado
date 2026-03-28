@@ -1923,8 +1923,11 @@ fn wasi_return_type_id(
     func_info: &WasiFunctionInfo,
     wasi_registry: &crate::component_model::WasiRegistry,
 ) -> TypeId {
-    if func_info.is_async {
-        // Async: raw call returns subtask handle (i32)
+    let needs_async_lower = func_info.is_async
+        || func_info.has_streaming_param()
+        || func_info.return_type_has_future();
+    if needs_async_lower {
+        // Async/streaming: raw call returns subtask handle (i32)
         TypeTable::I32
     } else {
         let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
@@ -2441,8 +2444,11 @@ fn synthesize_adapter(
     // ---- Handle outptr for async or complex returns ----
     // Track async outptr allocation info for later freeing.
     let mut async_outptr_info: Option<(u32, u32, u32)> = None; // (local_index, size, align)
-    if func_info.is_async {
-        // WASI P3 async calling convention:
+    let needs_async_lower = func_info.is_async
+        || func_info.has_streaming_param()
+        || func_info.return_type_has_future();
+    if needs_async_lower {
+        // WASI P3 async calling convention (also used for streaming functions per CM spec):
         // - MAX_FLAT_ASYNC_PARAMS = 4 flat params before switching to indirect.
         // - If flat_args exceeds 4, all params are passed via a single params_ptr
         //   (pointer to a linear-memory buffer with all lowered params).
@@ -2640,7 +2646,8 @@ fn synthesize_adapter(
     // The binding's return type to the Wado caller:
     let adapter_return_type;
 
-    let is_streaming_func = func_info.has_streaming_param() || func_info.return_type_has_future();
+    let is_streaming_func = !func_info.is_async
+        && (func_info.has_streaming_param() || func_info.return_type_has_future());
     if is_streaming_func {
         // Streaming function (has Stream<T>/Future<T> param or returns Future<T>):
         // canon lower is called with async option (CM spec requirement for stream/future).
@@ -2649,7 +2656,7 @@ fn synthesize_adapter(
         // (i32) directly. The caller is responsible for waiting via wait_for_subtask().
         body_stmts.push(return_stmt(Some(raw_call_expr)));
         adapter_return_type = TypeTable::I32;
-    } else if func_info.is_async {
+    } else if needs_async_lower {
         // WASI P3 async calling convention: the lowered function returns a subtask
         // handle (i32). 0 = completed synchronously; non-zero = async task in-flight.
         // In both cases, the result is written to the async results buffer in linear memory.
