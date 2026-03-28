@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774678857138,
+  "lastUpdate": 1774690140174,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8135,6 +8135,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b2e0f13bf1db4be7f00e8e7906b0fd51d72493a2"
         },
         "date": 1774678856928,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24726,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "64c181c3581941f7ea15b14e7428e434e6e05b78",
+          "message": "Merge pull request #717 from wado-lang/claude/optimize-sqlite-parser-of7JG\n\nFix match arm WIR explosion, optimize Gale rule lookups, detect unknown struct fields",
+          "timestamp": "2026-03-28T18:26:02+09:00",
+          "tree_id": "951962b0c7ce8d21ecef6d1fe14eddd53f9e9047",
+          "url": "https://github.com/wado-lang/wado/commit/64c181c3581941f7ea15b14e7428e434e6e05b78"
+        },
+        "date": 1774690139965,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
