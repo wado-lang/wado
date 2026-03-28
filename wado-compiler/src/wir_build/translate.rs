@@ -4244,14 +4244,44 @@ impl FunctionTranslator<'_, '_> {
             }
             ResolvedType::GenericInstance {
                 name, type_args, ..
-            } if name == "Result" && !type_args.is_empty() => {
+            } if name == "Result" && type_args.len() >= 2 => {
                 if matches!(self.type_table.get(type_args[0]), ResolvedType::Unit) {
-                    return CmFuturePayload::Transmission;
+                    // Determine ErrorCode source from the error type's package
+                    let source = self.error_code_source(type_args[1]);
+                    return CmFuturePayload::Transmission(source);
                 }
             }
             _ => {}
         }
         CmFuturePayload::Trailers
+    }
+
+    /// Determine the WASI package source for an ErrorCode type.
+    ///
+    /// Uses the WASI registry to find which package (cli, filesystem, http, sockets)
+    /// defines this ErrorCode. Falls back to "cli" if not found.
+    fn error_code_source(&self, error_type_id: TypeId) -> String {
+        // Try to get the type's module source
+        match self.type_table.get(error_type_id) {
+            ResolvedType::Enum {
+                module_source, ..
+            }
+            | ResolvedType::Variant {
+                module_source, ..
+            } => {
+                // Extract package from module source (e.g., "wasi:cli/types.wado" → "cli")
+                let source = module_source.to_string();
+                if source.contains("filesystem") {
+                    return "filesystem".to_string();
+                } else if source.contains("http") {
+                    return "http".to_string();
+                } else if source.contains("sockets") {
+                    return "sockets".to_string();
+                }
+                "cli".to_string()
+            }
+            _ => "cli".to_string(),
+        }
     }
 
     /// Dispatch canonical resource methods based on `#[cm("...")]` attribute.

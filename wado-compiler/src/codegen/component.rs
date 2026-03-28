@@ -93,19 +93,48 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
     let needs_trailers_future = all_canonical_intrinsics.iter().any(|i| {
         matches!(i.future_payload(), Some(CmFuturePayload::Trailers))
     });
-    let needs_transmission_future = all_canonical_intrinsics.iter().any(|i| {
-        matches!(i.future_payload(), Some(CmFuturePayload::Transmission))
-    });
-    let (trailers_future_type, transmission_future_type) = if needs_trailers_future {
-        // Trailers requires full HTTP types; Transmission is also built here
-        build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type)
-    } else if needs_transmission_future {
-        // Transmission only: future<result<_, error-code>> without HTTP-specific types
-        let transmission_future_type =
-            build_transmission_future_type(&mut builder, &mut ctx);
-        (0, transmission_future_type)
+    // Collect unique transmission sources (e.g., "cli", "filesystem")
+    let transmission_sources: IndexSet<String> = all_canonical_intrinsics
+        .iter()
+        .filter_map(|i| {
+            if let Some(CmFuturePayload::Transmission(ref source)) = i.future_payload() {
+                Some(source.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let (trailers_future_type, transmission_future_types) = if needs_trailers_future {
+        let (t, http_ft) = build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type);
+        let mut map: IndexMap<String, u32> = IndexMap::default();
+        // HTTP build creates http-error-code based transmission future
+        map.insert("http".to_string(), http_ft);
+        // Build additional transmission types for other error-code sources
+        for source in &transmission_sources {
+            if source != "http" && !map.contains_key(source.as_str()) {
+                let ft = build_transmission_future_type_for(
+                    &mut builder,
+                    &mut ctx,
+                    source,
+                );
+                map.insert(source.clone(), ft);
+            }
+        }
+        (t, map)
+    } else if !transmission_sources.is_empty() {
+        let mut map: IndexMap<String, u32> = IndexMap::default();
+        for source in &transmission_sources {
+            let ft = build_transmission_future_type_for(
+                &mut builder,
+                &mut ctx,
+                source,
+            );
+            map.insert(source.clone(), ft);
+        }
+        (0, map)
     } else {
-        (0, 0)
+        (0, IndexMap::default())
     };
 
     // Build scalar future types (e.g., future<s32>) from structured metadata
@@ -120,7 +149,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
         stream_u8_type,
         result_unit_type,
         trailers_future_type,
-        transmission_future_type,
+        &transmission_future_types,
         &scalar_future_types,
     );
 
@@ -683,28 +712,40 @@ fn embed_bundled_modules(
 ///
 /// Used when only `CmFuturePayload::Transmission` is needed (e.g., write_via_stream)
 /// but no HTTP types are imported.
-fn build_transmission_future_type(
+/// Build `future<result<_, error-code>>` type for a specific ErrorCode source.
+///
+/// Different WASI interfaces (cli, filesystem, http, sockets) have different
+/// error-code types, so each needs its own transmission future type.
+fn build_transmission_future_type_for(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
+    source: &str,
 ) -> u32 {
-    let error_code_idx = ctx.type_idx("error-code");
+    let error_code_key = if source == "cli" {
+        "error-code".to_string()
+    } else {
+        format!("{source}-error-code")
+    };
+    let error_code_idx = ctx.type_idx(&error_code_key);
 
-    ctx.register_type("http-transmission-result");
+    let result_key = format!("{source}-transmission-result");
+    ctx.register_type(&result_key);
     {
-        let (_, enc) = builder.ty(Some("http-transmission-result"));
+        let (_, enc) = builder.ty(Some(&result_key));
         enc.defined_type()
             .result(None, Some(ComponentValType::Type(error_code_idx)));
     }
 
-    ctx.register_type("http-transmission-future");
+    let future_key = format!("{source}-transmission-future");
+    ctx.register_type(&future_key);
     {
-        let transmission_result_idx = ctx.type_idx("http-transmission-result");
-        let (_, enc) = builder.ty(Some("http-transmission-future"));
+        let result_idx = ctx.type_idx(&result_key);
+        let (_, enc) = builder.ty(Some(&future_key));
         enc.defined_type()
-            .future(Some(ComponentValType::Type(transmission_result_idx)));
+            .future(Some(ComponentValType::Type(result_idx)));
     }
 
-    ctx.type_idx("http-transmission-future")
+    ctx.type_idx(&future_key)
 }
 
 fn build_future_intrinsic_types(
@@ -830,7 +871,7 @@ fn emit_canonical_intrinsics(
     stream_u8_type: u32,
     result_unit_type: u32,
     trailers_future_type: u32,
-    transmission_future_type: u32,
+    transmission_future_types: &IndexMap<String, u32>,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
 ) {
     for intrinsic in canonical_intrinsics {
@@ -872,18 +913,18 @@ fn emit_canonical_intrinsics(
             }
             CanonicalIntrinsic::FutureNew(payload) => {
                 let ft = resolve_future_type(
-                    *payload,
+                    payload.clone(),
                     trailers_future_type,
-                    transmission_future_type,
+                    &transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_new(ft);
             }
             CanonicalIntrinsic::FutureWrite(payload) => {
                 let ft = resolve_future_type(
-                    *payload,
+                    payload.clone(),
                     trailers_future_type,
-                    transmission_future_type,
+                    &transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_write(
@@ -897,9 +938,9 @@ fn emit_canonical_intrinsics(
             }
             CanonicalIntrinsic::FutureRead(payload) => {
                 let ft = resolve_future_type(
-                    *payload,
+                    payload.clone(),
                     trailers_future_type,
-                    transmission_future_type,
+                    &transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_read(
@@ -913,36 +954,36 @@ fn emit_canonical_intrinsics(
             }
             CanonicalIntrinsic::FutureCancelRead(payload) => {
                 let ft = resolve_future_type(
-                    *payload,
+                    payload.clone(),
                     trailers_future_type,
-                    transmission_future_type,
+                    &transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_cancel_read(ft, false);
             }
             CanonicalIntrinsic::FutureCancelWrite(payload) => {
                 let ft = resolve_future_type(
-                    *payload,
+                    payload.clone(),
                     trailers_future_type,
-                    transmission_future_type,
+                    &transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_cancel_write(ft, false);
             }
             CanonicalIntrinsic::FutureDropWritable(payload) => {
                 let ft = resolve_future_type(
-                    *payload,
+                    payload.clone(),
                     trailers_future_type,
-                    transmission_future_type,
+                    &transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_drop_writable(ft);
             }
             CanonicalIntrinsic::FutureDropReadable(payload) => {
                 let ft = resolve_future_type(
-                    *payload,
+                    payload.clone(),
                     trailers_future_type,
-                    transmission_future_type,
+                    &transmission_future_types,
                     scalar_future_types,
                 );
                 builder.future_drop_readable(ft);
@@ -1004,12 +1045,14 @@ fn emit_canonical_intrinsics(
 fn resolve_future_type(
     payload: CmFuturePayload,
     trailers_future_type: u32,
-    transmission_future_type: u32,
+    transmission_future_types: &IndexMap<String, u32>,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
 ) -> u32 {
     match payload {
         CmFuturePayload::Trailers => trailers_future_type,
-        CmFuturePayload::Transmission => transmission_future_type,
+        CmFuturePayload::Transmission(ref source) => *transmission_future_types
+            .get(source)
+            .unwrap_or_else(|| panic!("transmission future type not registered for source: {source}")),
         CmFuturePayload::Scalar(scalar) => scalar_future_types
             .iter()
             .find(|(s, _)| *s == scalar)
@@ -1601,6 +1644,28 @@ fn generate_wasi_imports(
                         ComponentExportKind::Type,
                     );
                 }
+            }
+        }
+
+        // Expose ErrorCode from this interface at outer component scope.
+        // Different interfaces (cli, filesystem, sockets) define different error-code types.
+        // We register them with source-qualified keys (e.g., "filesystem-error-code").
+        let interface_has_error_code = project
+            .wasi_registry
+            .has_enum_in_interface(&interface_info.path, "ErrorCode")
+            || project
+                .wasi_registry
+                .variants_for_interface(&interface_info.path)
+                .any(|(name, _, _)| name == "ErrorCode");
+        if interface_has_error_code {
+            let error_code_key = format!("{}-error-code", interface_info.package);
+            if !ctx.has_type(&error_code_key) {
+                ctx.register_type(&error_code_key);
+                builder.alias_export(
+                    ctx.instance_idx(&interface_info.interface),
+                    "error-code",
+                    ComponentExportKind::Type,
+                );
             }
         }
 

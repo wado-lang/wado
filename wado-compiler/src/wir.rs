@@ -298,12 +298,15 @@ impl fmt::Display for CmScalarType {
 /// - `Trailers` = `future<result<option<trailers>, error-code>>` (HTTP body trailers)
 /// - `Transmission` = `future<result<_, error-code>>` (HTTP transmission result)
 /// - `Scalar(s)` = `future<T>` where T is a primitive scalar type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmFuturePayload {
     /// The HTTP trailers pattern: `future<result<option<trailers>, error-code>>`
     Trailers,
-    /// The HTTP transmission result: `future<result<_, error-code>>`
-    Transmission,
+    /// `future<result<_, error-code>>` — error-code type identified by
+    /// the WASI package that defines it (e.g., "cli", "filesystem", "http").
+    /// Each package's error-code is a distinct CM type, so each needs
+    /// its own component-level `future<result<_, E>>` definition.
+    Transmission(String),
     /// A scalar value type like `future<s32>`
     Scalar(CmScalarType),
 }
@@ -357,13 +360,13 @@ impl CanonicalIntrinsic {
             Self::StreamDropWritable => "stream-drop-writable".to_string(),
             Self::StreamCancelRead => "stream-cancel-read".to_string(),
             Self::StreamCancelWrite => "stream-cancel-write".to_string(),
-            Self::FutureNew(p) => format_future_name("future-new", *p),
-            Self::FutureRead(p) => format_future_name("future-read", *p),
-            Self::FutureWrite(p) => format_future_name("future-write", *p),
-            Self::FutureDropReadable(p) => format_future_name("future-drop-readable", *p),
-            Self::FutureDropWritable(p) => format_future_name("future-drop-writable", *p),
-            Self::FutureCancelRead(p) => format_future_name("future-cancel-read", *p),
-            Self::FutureCancelWrite(p) => format_future_name("future-cancel-write", *p),
+            Self::FutureNew(p) => format_future_name("future-new", p.clone()),
+            Self::FutureRead(p) => format_future_name("future-read", p.clone()),
+            Self::FutureWrite(p) => format_future_name("future-write", p.clone()),
+            Self::FutureDropReadable(p) => format_future_name("future-drop-readable", p.clone()),
+            Self::FutureDropWritable(p) => format_future_name("future-drop-writable", p.clone()),
+            Self::FutureCancelRead(p) => format_future_name("future-cancel-read", p.clone()),
+            Self::FutureCancelWrite(p) => format_future_name("future-cancel-write", p.clone()),
             Self::WaitableSetNew => "waitable-set-new".to_string(),
             Self::WaitableSetWait => "waitable-set-wait".to_string(),
             Self::WaitableSetPoll => "waitable-set-poll".to_string(),
@@ -415,7 +418,7 @@ impl CanonicalIntrinsic {
     }
 
     /// Extract the future payload type, if this is a future intrinsic.
-    pub const fn future_payload(&self) -> Option<CmFuturePayload> {
+    pub fn future_payload(&self) -> Option<CmFuturePayload> {
         match self {
             Self::FutureNew(p)
             | Self::FutureRead(p)
@@ -423,7 +426,7 @@ impl CanonicalIntrinsic {
             | Self::FutureDropReadable(p)
             | Self::FutureDropWritable(p)
             | Self::FutureCancelRead(p)
-            | Self::FutureCancelWrite(p) => Some(*p),
+            | Self::FutureCancelWrite(p) => Some(p.clone()),
             _ => None,
         }
     }
@@ -432,7 +435,7 @@ impl CanonicalIntrinsic {
 fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
     match payload {
         CmFuturePayload::Trailers => base.to_string(),
-        CmFuturePayload::Transmission => format!("{base}:transmission"),
+        CmFuturePayload::Transmission(ref source) => format!("{base}:transmission-{source}"),
         CmFuturePayload::Scalar(scalar) => format!("{base}:{scalar}"),
     }
 }
