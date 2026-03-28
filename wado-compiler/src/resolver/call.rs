@@ -839,7 +839,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let callee_module_ast = self.loaded_modules.get(callee_module);
                 let (callee_imported, callee_original_names) = callee_module_ast.map_or_else(
                     || (IndexMap::default(), IndexMap::default()),
-                    |m| Self::build_imported_type_sources(m, callee_module, Some(&self.entry_module_source)),
+                    |m| {
+                        Self::build_imported_type_sources(
+                            m,
+                            callee_module,
+                            Some(&self.entry_module_source),
+                        )
+                    },
                 );
                 let callee_newtypes = Self::build_module_map(
                     &self.all_newtypes,

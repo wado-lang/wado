@@ -127,13 +127,13 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayRefIter<Point>::next" = fn(ref "core:allocator/ArrayRefIter<Point>") -> ref null Point;
+type "functype/ArrayRefIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayRefIter<Point>") -> ref null Point;
 
 type "functype/Array<Point>::append" = fn(ref Array<Point>, ref Point);
 
 type "functype/Array<Point>::grow" = fn(ref Array<Point>);
 
-type "functype/ArrayRefIter<i32>::next" = fn(ref "core:allocator/ArrayRefIter<i32>") -> ref null "core:internal/Box<i32>";
+type "functype/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayRefIter<i32>") -> ref null "core:internal/Box<i32>";
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
@@ -196,7 +196,7 @@ fn test_for_of_ref_array() with Stdout {
     };
     b0: block {
         l1: loop {
-            __pattern_temp_0 = ArrayRefIter<i32>::next(__iter_3);
+            __pattern_temp_0 = ArrayRefIter<i32>^Iterator::next(__iter_3);
             if ref.is_null(__pattern_temp_0) == 0 {
                 x = ref.as_non_null(__pattern_temp_0);
                 sum = sum + x.value;
@@ -268,7 +268,7 @@ fn test_for_of_ref_struct() with Stdout {
     };
     b4: block {
         l5: loop {
-            __pattern_temp_0 = ArrayRefIter<Point>::next(__iter_3);
+            __pattern_temp_0 = ArrayRefIter<Point>^Iterator::next(__iter_3);
             if ref.is_null(__pattern_temp_0) == 0 {
                 p = ref.as_non_null(__pattern_temp_0);
                 sum = sum + (p.x + p.y);
@@ -340,7 +340,7 @@ fn test_for_of_ref_var() with Stdout {
     };
     b8: block {
         l9: loop {
-            __pattern_temp_0 = ArrayRefIter<i32>::next(__iter_4);
+            __pattern_temp_0 = ArrayRefIter<i32>^Iterator::next(__iter_4);
             if ref.is_null(__pattern_temp_0) == 0 {
                 x = ref.as_non_null(__pattern_temp_0);
                 sum = sum + x.value;
@@ -772,7 +772,7 @@ fn ArrayIter<i32>^Iterator::next(self) {
     return 0; item;
 }
 
-fn ArrayRefIter<Point>::next(self) {
+fn ArrayRefIter<Point>^Iterator::next(self) {
     let val: ref Point;
     if self.index >= self.used {
         return ref.null none;
@@ -824,7 +824,7 @@ fn Array<Point>::grow(self) {
     self.repr = new_repr;
 }
 
-fn ArrayRefIter<i32>::next(self) {
+fn ArrayRefIter<i32>^Iterator::next(self) {
     let val: ref "core:internal/Box<i32>";
     if self.index >= self.used {
         return ref.null none;

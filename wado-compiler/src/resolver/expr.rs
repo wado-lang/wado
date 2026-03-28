@@ -3101,7 +3101,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         method_name: "from".to_string(),
                         method_type_args: vec![],
                         is_type_param_receiver: false,
-                is_ref_impl: false,
+                        is_ref_impl: false,
                         cm_name: None,
                     }),
                     is_cm_binding: false,

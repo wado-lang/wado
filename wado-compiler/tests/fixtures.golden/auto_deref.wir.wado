@@ -105,7 +105,7 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayRefIter<i32>::next" = fn(ref "core:allocator/ArrayRefIter<i32>") -> ref null "core:internal/Box<i32>";
+type "functype/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayRefIter<i32>") -> ref null "core:internal/Box<i32>";
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
@@ -177,7 +177,7 @@ fn auto_deref_for_of() with Stdout {
     };
     b0: block {
         l1: loop {
-            __pattern_temp_0 = ArrayRefIter<i32>::next(__iter_4);
+            __pattern_temp_0 = ArrayRefIter<i32>^Iterator::next(__iter_4);
             if ref.is_null(__pattern_temp_0) == 0 {
                 x = ref.as_non_null(__pattern_temp_0);
                 sum = sum + x.value;
@@ -778,7 +778,7 @@ fn String::append_char(self, c) {
     };
 }
 
-fn ArrayRefIter<i32>::next(self) {
+fn ArrayRefIter<i32>^Iterator::next(self) {
     let val: ref "core:internal/Box<i32>";
     if self.index >= self.used {
         return ref.null none;

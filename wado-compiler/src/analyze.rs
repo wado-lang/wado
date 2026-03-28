@@ -547,7 +547,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 // Resolve the import path to ModuleSource
-                let module_source = crate::name::resolve_import_with_entry(from_module_source, &use_decl.source, Some(&self.entry_module_source));
+                let module_source = crate::name::resolve_import_with_entry(
+                    from_module_source,
+                    &use_decl.source,
+                    Some(&self.entry_module_source),
+                );
 
                 // Check the module exists in pre-loaded modules
                 if !all_modules.contains_key(&module_source) {

@@ -299,7 +299,7 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     implicit_modules: IndexSet<ModuleSource>,
     /// The entry module source (for dedup when sub-modules import back to entry)
     entry_module_source: Option<ModuleSource>,
-    /// Canonical name of the entry module (e.g., "./cross_module_type_identity.wado")
+    /// Canonical name of the entry module (e.g., "./`cross_module_type_identity.wado`")
     entry_canonical_name: Option<String>,
 }
 

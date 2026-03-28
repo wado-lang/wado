@@ -714,7 +714,7 @@ impl LocalMethodName {
             method_name,
             method_type_args,
             is_type_param_receiver: false,
-                is_ref_impl: false,
+            is_ref_impl: false,
             cm_name: None,
         }
     }

@@ -162,8 +162,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Second sub-pass: resolve struct fields and newtypes
         for (module_source, module) in modules {
             // Build imported type sources for this module
-            let (imported_type_sources, import_original_names) =
-                Self::build_imported_type_sources(module, module_source, Some(&entry_module_source));
+            let (imported_type_sources, import_original_names) = Self::build_imported_type_sources(
+                module,
+                module_source,
+                Some(&entry_module_source),
+            );
 
             // Build module-specific flat maps for resolving types in this module
             let mut flat_newtypes = Self::build_module_map(
@@ -523,8 +526,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             let module = modules.get(module_source).expect("module should exist");
 
             // Build imported type sources and module-specific flat maps for this module
-            let (imported_type_sources, import_original_names) =
-                Self::build_imported_type_sources(module, module_source, Some(&entry_module_source));
+            let (imported_type_sources, import_original_names) = Self::build_imported_type_sources(
+                module,
+                module_source,
+                Some(&entry_module_source),
+            );
             let newtypes = Self::build_module_map(
                 &all_newtypes,
                 module_source,
@@ -616,8 +622,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             }
                             crate::ast::UseItem::Namespace { name } => {
                                 // Namespace import: all symbols from source module are available
-                                let source =
-                                    crate::name::resolve_import_with_entry(module_source, &use_decl.source, Some(&entry_module_source));
+                                let source = crate::name::resolve_import_with_entry(
+                                    module_source,
+                                    &use_decl.source,
+                                    Some(&entry_module_source),
+                                );
                                 for sym in symbols.get_module_symbols(&source) {
                                     imported_functions.insert(sym.name.clone());
                                 }
@@ -764,7 +773,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let mut original_names = IndexMap::default();
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                let source = name::resolve_import_with_entry(from_module, &use_decl.source, entry_module);
+                let source =
+                    name::resolve_import_with_entry(from_module, &use_decl.source, entry_module);
                 for use_item in &use_decl.items {
                     match use_item {
                         ast::UseItem::Simple { name, alias } => {
@@ -797,8 +807,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let Some(module) = self.loaded_modules.get(module_source) else {
             return;
         };
-        let (imported_sources, import_names) =
-            Self::build_imported_type_sources(module, module_source, Some(&self.entry_module_source));
+        let (imported_sources, import_names) = Self::build_imported_type_sources(
+            module,
+            module_source,
+            Some(&self.entry_module_source),
+        );
         let maps = ModuleTypeMaps {
             struct_fields: Self::build_module_map(
                 &self.all_struct_fields,
