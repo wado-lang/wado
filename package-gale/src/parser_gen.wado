@@ -13,10 +13,6 @@ use {
 } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
-use { TreeMap } from "core:collections";
-
-// Global rule index for O(log n) rule lookups.
-global mut RULE_INDEX: TreeMap<String, i32> = TreeMap::<String, i32>::new();
 
 // --- Prediction Engine ---
 
@@ -906,8 +902,10 @@ fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
 }
 
 fn find_rule(name: &String, all_rules: &Array<ParserRule>) -> Option<&ParserRule> {
-    if let Some(i) = RULE_INDEX.get(*name) {
-        return Option::<&ParserRule>::Some(&all_rules[i]);
+    for let mut i = 0; i < all_rules.len(); i += 1 {
+        if all_rules[i].name == *name {
+            return Option::<&ParserRule>::Some(&all_rules[i]);
+        }
     }
     return null;
 }
@@ -956,13 +954,6 @@ fn count_leaf_nodes(node: &PredictionNode) -> i32 {
 }
 
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
-    // Build rule name → index for O(log n) lookups.
-    let mut idx = TreeMap::<String, i32>::new();
-    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
-        idx[grammar.parser_rules[i].name] = i;
-    }
-    RULE_INDEX = idx;
-
     gen_parser_struct(w);
     for let rule of grammar.parser_rules {
         gen_parse_fn(w, &rule, &grammar.parser_rules, lit_tokens);
