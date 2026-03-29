@@ -273,17 +273,6 @@ struct TodoCompileError {
     compile_duration: Duration,
 }
 
-/// Check if a source file has `#![TODO]` module attribute by parsing the AST.
-fn source_has_todo_attr(path: &str) -> bool {
-    let Ok(source) = std::fs::read_to_string(path) else {
-        return false;
-    };
-    let Ok(parsed) = wado_compiler::parse(&source) else {
-        return false;
-    };
-    parsed.ast.has_todo()
-}
-
 /// Phase 1: Compile all test files and collect test jobs
 async fn collect_test_jobs(
     paths: &[String],
@@ -298,12 +287,10 @@ async fn collect_test_jobs(
     let mut todo_compile_errors = Vec::new();
 
     for (module_idx, path) in paths.iter().enumerate() {
-        let is_todo_module = source_has_todo_attr(path);
-
         // Compile with --world test so test functions become component exports
         // and non-test code is subject to DCE.
         let compile_start = Instant::now();
-        let wasm = compile::try_compile_with_full_opts(
+        let compile_result = compile::try_compile_with_full_opts(
             path,
             crate::compile::OptLevel::default(),
             wado_compiler::LogLevel::default(),
@@ -316,9 +303,9 @@ async fn collect_test_jobs(
         .await;
         let compile_duration = compile_start.elapsed();
 
-        let wasm = match wasm {
-            Ok(wasm) => wasm,
-            Err(_) if is_todo_module => {
+        let compile_result = match compile_result {
+            Ok(result) => result,
+            Err(failure) if failure.is_todo_module => {
                 // #![TODO] module failed to compile — expected, count as pass
                 todo_compile_errors.push(TodoCompileError {
                     path: path.clone(),
@@ -334,7 +321,7 @@ async fn collect_test_jobs(
 
         let load_start = Instant::now();
         let engine = Arc::new(runtime::create_test_engine(wasmtime::OptLevel::None)?);
-        let component = Arc::new(Component::new(&engine, &wasm)?);
+        let component = Arc::new(Component::new(&engine, &compile_result.wasm)?);
         let load_duration = load_start.elapsed();
 
         // Find test functions from exports

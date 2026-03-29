@@ -305,11 +305,18 @@ pub async fn try_compile_with_full_opts(
     inline_threshold: Option<usize>,
     opt_iterations: Option<u32>,
     allocator: Option<String>,
-) -> Result<Vec<u8>, String> {
+) -> Result<wado_compiler::CompileResult, wado_compiler::CompileFailure> {
     let path = Path::new(filename);
 
-    let source =
-        fs::read_to_string(path).map_err(|e| format!("Error reading '{}': {e}", path.display()))?;
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error reading '{}': {e}", path.display());
+            return Err(wado_compiler::CompileFailure {
+                is_todo_module: false,
+            });
+        }
+    };
 
     let base_path = path
         .parent()
@@ -328,12 +335,7 @@ pub async fn try_compile_with_full_opts(
         ..Default::default()
     };
 
-    let result = wado_compiler::compile_with_options(&source, &host, Some(filename), options).await;
-
-    match result {
-        Ok(result) => Ok(result.wasm),
-        Err(_bail) => Err(format!("compilation failed for {filename}")),
-    }
+    wado_compiler::compile_with_options(&source, &host, Some(filename), options).await
 }
 
 /// Compile a Wado source file with full options including target world

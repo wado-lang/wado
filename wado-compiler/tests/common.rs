@@ -19,7 +19,7 @@ use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, W
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpHooks, WasiHttpView};
 
-use wado_compiler::{Bail, CompileError, CompilerHost, Diagnostic, OptLevel, SourceError};
+use wado_compiler::{CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError};
 
 /// A filesystem-based CompilerHost for tests that need to load files
 pub struct FilesystemHost {
@@ -462,7 +462,7 @@ pub fn compile_source(source: &str) -> Result<wado_compiler::CompileResult, Comp
             None,
             OptLevel::default(),
         ))
-        .map_err(|_: Bail| bail_to_compile_error(&host.diagnostics(), None))
+        .map_err(|_: CompileFailure| bail_to_compile_error(&host.diagnostics(), None))
 }
 
 /// Compile a file using filesystem host
@@ -500,7 +500,7 @@ pub fn compile_source_with_opts(
             Some(&filename),
             opt_level,
         ))
-        .map_err(|_: Bail| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
+        .map_err(|_: CompileFailure| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
 /// Compile source code with full compiler options (including WIR backend flag)
@@ -536,7 +536,7 @@ pub fn compile_source_with_compiler_options_and_filename(
             Some(&filename),
             options,
         ))
-        .map_err(|_: Bail| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
+        .map_err(|_| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
 /// Compile a file asynchronously (for use within async context)
@@ -555,7 +555,7 @@ pub async fn compile_file_async(
 
     wado_compiler::compile_with_host(&source, &host, Some(&filename), opt_level)
         .await
-        .map_err(|_: Bail| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
+        .map_err(|_: CompileFailure| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
 /// Extract __DATA__ section from source file content

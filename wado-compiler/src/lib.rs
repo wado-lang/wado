@@ -71,7 +71,28 @@ pub struct CompileResult {
     pub module: ast::Module,
     /// WIR module (retained when `CompilerOptions::retain_wir` is true)
     pub wir_module: Option<wir::WirModule>,
+    /// Whether the entry module has `#![TODO]`
+    pub is_todo_module: bool,
 }
+
+/// Compilation failure with metadata from the successfully-parsed AST.
+///
+/// Internal `Bail` carries no data (errors are already emitted to the host).
+/// This wrapper adds the `is_todo_module` flag so callers can distinguish
+/// expected failures in `#![TODO]` modules from real errors.
+#[derive(Debug)]
+pub struct CompileFailure {
+    /// Whether the entry module has `#![TODO]`
+    pub is_todo_module: bool,
+}
+
+impl std::fmt::Display for CompileFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "compilation failed")
+    }
+}
+
+impl std::error::Error for CompileFailure {}
 
 /// Result of dumping compiler internal state
 #[derive(Debug)]
@@ -156,7 +177,7 @@ pub async fn compile_with_host<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
     opt_level: OptLevel,
-) -> Result<CompileResult, Bail> {
+) -> Result<CompileResult, CompileFailure> {
     let options = CompilerOptions {
         opt_level,
         target_world: None,
@@ -180,7 +201,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
     options: CompilerOptions,
-) -> Result<CompileResult, Bail> {
+) -> Result<CompileResult, CompileFailure> {
     let log_level = options.log_level.unwrap_or_default();
     let logger = Logger::new(host, log_level);
     let filename = filename.map(String::from);
@@ -198,14 +219,40 @@ pub async fn compile_with_options<H: CompilerHost>(
             .await
             .map_err(|e| {
                 let _ = logger.error(e);
-                Bail
+                // Parse failed — cannot determine TODO status
+                CompileFailure {
+                    is_todo_module: false,
+                }
             })?
     };
 
+    // Detect #![TODO] from the entry module AST (available after Phase 1)
+    let is_todo_module = load_result.entry_ast.has_todo();
+
+    // Wrap all subsequent Bail errors with is_todo_module
+    let result = compile_after_load(load_result, options, &logger, filename).await;
+    match result {
+        Ok((wasm, module, wir_module)) => Ok(CompileResult {
+            wasm,
+            module,
+            wir_module,
+            is_todo_module,
+        }),
+        Err(Bail) => Err(CompileFailure { is_todo_module }),
+    }
+}
+
+/// Internal: run compilation phases after module loading.
+async fn compile_after_load<H: CompilerHost>(
+    load_result: loader::LoadResult,
+    options: CompilerOptions,
+    logger: &Logger<'_, H>,
+    filename: Option<String>,
+) -> Result<(Vec<u8>, ast::Module, Option<wir::WirModule>), Bail> {
     // === Phase 2: Analyze all modules ===
     let symbols = {
         let _span = logger.span("analyze");
-        let mut analyzer = Analyzer::new(&logger);
+        let mut analyzer = Analyzer::new(logger);
         analyzer.analyze_loaded_modules(
             &load_result.modules,
             &load_result.entry_module_source,
@@ -214,7 +261,7 @@ pub async fn compile_with_options<H: CompilerHost>(
         analyzer.into_symbols()
     };
 
-    let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
+    let module_name = filename.unwrap_or_else(|| "module".to_string());
 
     // === Phase 6: Resolve all modules to Project ===
     let project = {
@@ -225,7 +272,7 @@ pub async fn compile_with_options<H: CompilerHost>(
             load_result.entry_module_source.clone(),
             load_result.implicit_modules.clone(),
             module_name,
-            &logger,
+            logger,
             &load_result.included_files,
         )?
     };
@@ -301,7 +348,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     // CM bindings are skipped (they are boundary code with special effect semantics).
     {
         let _span = logger.span("effect-check");
-        check_effects(&project.tir_modules, &logger)?;
+        check_effects(&project.tir_modules, logger)?;
     }
 
     // === Phase 8b: Stores Check ===
@@ -309,7 +356,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Runs before monomorphize/optimize so stores info is available for escape analysis.
     {
         let _span = logger.span("stores-check");
-        check_stores(&project.tir_modules, &logger)?;
+        check_stores(&project.tir_modules, logger)?;
     }
 
     // === Phase 8b: Erase Newtypes and Flags (Project -> Project) ===
@@ -342,7 +389,7 @@ pub async fn compile_with_options<H: CompilerHost>(
             options.opt_level,
             options.inline_threshold,
             options.opt_iterations,
-            &logger,
+            logger,
         )
     };
 
@@ -357,7 +404,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 11.5: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(&mut wir_module, options.opt_level, &logger);
+        wir_optimize::optimize_wir(&mut wir_module, options.opt_level, logger);
     }
 
     // === Phase 12: Emit Wasm (WirModule → Wasm component bytes) ===
@@ -367,15 +414,15 @@ pub async fn compile_with_options<H: CompilerHost>(
     };
 
     // Return the original (non-desugared) entry AST for tooling
-    Ok(CompileResult {
+    Ok((
         wasm,
-        module: load_result.entry_ast,
-        wir_module: if options.retain_wir {
+        load_result.entry_ast,
+        if options.retain_wir {
             Some(wir_module)
         } else {
             None
         },
-    })
+    ))
 }
 
 /// Deep-clone TIR modules so that each snapshot has its own independent `TypeTable`.
