@@ -1789,6 +1789,7 @@ fn gen_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Elemen
         }
 
         // Generate parsing code for this shape's elements
+        let mut nc: Array<[String, i32]> = [];
         for let mut k = 0; k < shape.len(); k += 1 {
             let idx = shape[k];
             let elem = &group_elements[idx];
@@ -1796,13 +1797,13 @@ fn gen_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Elemen
             if let Group(alts) = *actual {
                 if alts.len() == 1 {
                     for let mut j = 0; j < alts[0].elements.len(); j += 1 {
-                        gen_element(w, &alts[0].elements[j], all_rules, lit_tokens, name_counts);
+                        gen_element(w, &alts[0].elements[j], all_rules, lit_tokens, &mut nc);
                     }
                 } else {
-                    gen_element(w, actual, all_rules, lit_tokens, name_counts);
+                    gen_element(w, actual, all_rules, lit_tokens, &mut nc);
                 }
             } else {
-                gen_element(w, actual, all_rules, lit_tokens, name_counts);
+                gen_element(w, actual, all_rules, lit_tokens, &mut nc);
             }
         }
     }
@@ -1900,12 +1901,13 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, all_rules: &
             cond.append(cond_parts[i]);
         }
         w.begin(`if {cond}`);
+        let mut nc: Array<[String, i32]> = [];
         if let Group(alts) = *inner {
             for let mut i = 0; i < alts[0].elements.len(); i += 1 {
-                gen_element(w, &alts[0].elements[i], all_rules, lit_tokens, name_counts);
+                gen_element(w, &alts[0].elements[i], all_rules, lit_tokens, &mut nc);
             }
         } else {
-            gen_element(w, inner, all_rules, lit_tokens, name_counts);
+            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
         }
         w.end();
         return;
@@ -1918,17 +1920,17 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, all_rules: &
     w.line(`let {saved} = p.pos;`);
     w.begin(`{label}:`);
 
+    let mut bt_nc: Array<[String, i32]> = [];
     if let Group(alts) = *inner {
         if alts.len() == 1 {
             for let elem of alts[0].elements {
-                gen_element_failable(w, &elem, all_rules, lit_tokens, &saved, &label, name_counts);
+                gen_element_failable(w, &elem, all_rules, lit_tokens, &saved, &label, &mut bt_nc);
             }
         } else {
-            let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
+            gen_element(w, inner, all_rules, lit_tokens, &mut bt_nc);
         }
     } else {
-        gen_element_failable(w, inner, all_rules, lit_tokens, &saved, &label, name_counts);
+        gen_element_failable(w, inner, all_rules, lit_tokens, &saved, &label, &mut bt_nc);
     }
 
     w.end();  // label
@@ -2154,11 +2156,13 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &
 
         if group.len() == 1 {
             let alt_idx = group[0];
-            gen_elements_with_non_greedy(w, &alts[alt_idx].elements, all_rules, lit_tokens, name_counts);
+            let mut nc: Array<[String, i32]> = [];
+            gen_elements_with_non_greedy(w, &alts[alt_idx].elements, all_rules, lit_tokens, &mut nc);
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_element_count(&mut sorted_group, alts);
-            gen_backtracking_body(w, &sorted_group, alts, all_rules, lit_tokens, name_counts);
+            let mut nc: Array<[String, i32]> = [];
+            gen_backtracking_body(w, &sorted_group, alts, all_rules, lit_tokens, &mut nc);
         }
     }
     w.end();
