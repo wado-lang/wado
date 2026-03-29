@@ -650,9 +650,7 @@ pub async fn run(opts: TestOptions) {
         if let Some(todo_err) = todo_error_by_path.get(path.as_str()) {
             let compile = format_duration(todo_err.compile_duration);
             println!("Running tests in {path}... (compile error, {compile})");
-            println!(
-                "  \x1b[33m·\x1b[0m #![TODO] module — compile error (expected) ({compile})"
-            );
+            println!("  \x1b[33m·\x1b[0m #![TODO] module — compile error (expected) ({compile})");
             total_todo += 1;
             todo_entries.push(TodoEntry {
                 file_path: path.clone(),
