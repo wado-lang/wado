@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774753234957,
+  "lastUpdate": 1774760160962,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8369,6 +8369,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3aa85085f182188ff95dfe443c6d653c0efdac0f"
         },
         "date": 1774753234753,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1999,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9279,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24923,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "71fba5b97b81ec70e0e4b689515e5f538f6e7e9c",
+          "message": "Merge pull request #723 from wado-lang/claude/wasi-p3-update-eOVtf\n\nFix CM binding codegen for HTTP and streaming functions",
+          "timestamp": "2026-03-29T13:53:07+09:00",
+          "tree_id": "88baf37590e0d698e5cd405469a3aac4f5547739",
+          "url": "https://github.com/wado-lang/wado/commit/71fba5b97b81ec70e0e4b689515e5f538f6e7e9c"
+        },
+        "date": 1774760160748,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
