@@ -1766,6 +1766,18 @@ fn cm_param_store_plan(
         Type::Reference(_) | Type::MutReference(_) => vec![(0, "i32_store")],
         Type::Generic(g) => match g.name.as_str() {
             "Array" => vec![(0, "i32_store"), (4, "i32_store")],
+            "Option" if g.args.len() == 1 => {
+                // option<T>: disc (u8) at offset 0, payload at align_to(1, align(T))
+                let inner_align =
+                    crate::component_model::cm_align_with_registry(&g.args[0], wasi_registry);
+                let payload_offset = crate::cm_abi::align_to(1, inner_align);
+                let inner_store = cm_param_store_plan(&g.args[0], wasi_registry);
+                let mut stores = vec![(0, "i32_store8")]; // discriminant
+                for (sub_offset, store_name) in inner_store {
+                    stores.push((payload_offset + sub_offset, store_name));
+                }
+                stores
+            }
             _ => vec![(0, "i32_store")],
         },
         _ => vec![(0, "i32_store")],
