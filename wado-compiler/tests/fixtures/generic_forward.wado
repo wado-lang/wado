@@ -1,0 +1,30 @@
+trait Greet {
+    fn greet(&mut self, msg: &String);
+}
+
+struct Logger {
+    count: i32,
+}
+
+impl Greet for Logger {
+    fn greet(&mut self, msg: &String) {
+        self.count += 1;
+    }
+}
+
+fn outer<T: Greet>(g: &mut T) {
+    inner(g);
+}
+
+fn inner<T: Greet>(g: &mut T) {
+    g.greet(&"hello");
+}
+
+export fn run() {
+    let mut logger = Logger { count: 0 };
+    outer(&mut logger);
+    assert logger.count == 1;
+}
+
+__DATA__
+{"stdout": ""}

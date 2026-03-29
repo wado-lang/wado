@@ -1,0 +1,11 @@
+// Minimal reproduction: variant type used in test world via cross-module import
+use helper from "./sub/test_world_variant_group_helper.wado";
+
+test "use variant from imported module" {
+    let val = helper::make_a();
+    let result = helper::describe(&val);
+    assert result == "a";
+}
+
+__DATA__
+{"test": {}}

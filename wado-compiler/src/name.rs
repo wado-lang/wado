@@ -659,6 +659,10 @@ pub struct LocalMethodName {
     /// Whether the struct name is a type parameter that should be substituted directly
     /// during monomorphization (e.g., `T^Ord::cmp` where T should become i32).
     pub is_type_param_receiver: bool,
+    /// Whether this method is from an `impl Trait for &T` or `impl Trait for &mut T`.
+    /// When true, the function name uses the inner type name (e.g., "Array") but the
+    /// actual impl is on the reference type (e.g., &Array<T>).
+    pub is_ref_impl: bool,
     /// CM canonical name from `#[cm("...")]` attribute on resource methods.
     /// When set, synthesis generates a CM binding function and rewrites
     /// the call site to use it instead of the original resource method.
@@ -683,6 +687,7 @@ impl LocalMethodName {
             method_name,
             method_type_args: vec![],
             is_type_param_receiver: false,
+            is_ref_impl: false,
             cm_name: None,
         }
     }
@@ -709,6 +714,7 @@ impl LocalMethodName {
             method_name,
             method_type_args,
             is_type_param_receiver: false,
+            is_ref_impl: false,
             cm_name: None,
         }
     }
@@ -732,6 +738,7 @@ impl LocalMethodName {
             method_name: self.method_name.clone(),
             method_type_args: method_type_args.to_vec(),
             is_type_param_receiver: self.is_type_param_receiver,
+            is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
         }
     }
@@ -756,7 +763,8 @@ impl LocalMethodName {
             trait_name: self.trait_name.clone(),
             method_name: self.method_name.clone(),
             method_type_args: self.method_type_args.clone(),
-            is_type_param_receiver: false, // After substitution, it's a concrete type
+            is_type_param_receiver: false,
+            is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
         }
     }
@@ -1014,6 +1022,14 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
 /// # Returns
 /// The resolved `ModuleSource`.
 pub fn resolve_import(from_module: &ModuleSource, import_source: &str) -> ModuleSource {
+    resolve_import_with_entry(from_module, import_source, None)
+}
+
+pub fn resolve_import_with_entry(
+    from_module: &ModuleSource,
+    import_source: &str,
+    entry_module: Option<&ModuleSource>,
+) -> ModuleSource {
     // Handle special prefixes
     if let Some(name) = import_source.strip_prefix("core:") {
         return ModuleSource::Core {
@@ -1037,6 +1053,17 @@ pub fn resolve_import(from_module: &ModuleSource, import_source: &str) -> Module
         && (from_path.starts_with("./") || from_path.starts_with("../"))
     {
         let resolved = resolve_module_path(from_path, import_source);
+        // If this resolves to the entry module's canonical name, return the
+        // entry ModuleSource to maintain a single type identity.
+        if let Some(entry) = entry_module {
+            let entry_canonical = match entry {
+                ModuleSource::EntryPoint { filename } => canonicalize_entry_point(filename),
+                _ => entry.to_string(),
+            };
+            if resolved == entry_canonical {
+                return entry.clone();
+            }
+        }
         return ModuleSource::Local { path: resolved };
     }
 
