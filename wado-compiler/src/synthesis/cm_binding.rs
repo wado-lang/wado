@@ -99,13 +99,32 @@ pub fn wasi_type_to_type_id_scoped(
                 })
                 .or_else(|| type_table.find_resource_type_by_name(named.name.as_str()))
                 .or_else(|| type_table.find_variant_type_by_name(named.name.as_str()))
+                .or_else(|| {
+                    // Create variant from WASI registry when it exists in a
+                    // different module but not yet in this type_table.
+                    // Checked BEFORE find_enum_type_by_name to prevent a
+                    // same-named enum (e.g. cli ErrorCode) from shadowing
+                    // a package-scoped variant (e.g. filesystem ErrorCode).
+                    if let Some(reg) = registry
+                        && let Some(pkg) = wasi_package
+                        && reg.is_variant(&named.name)
+                    {
+                        Some(type_table.make_variant(
+                            named.name.clone(),
+                            ModuleSource::Wasi {
+                                interface: format!("{pkg}/types.wado"),
+                            },
+                        ))
+                    } else {
+                        None
+                    }
+                })
                 .or_else(|| type_table.find_enum_type_by_name(named.name.as_str()))
                 .or_else(|| {
                     // Check WASI struct registry
                     if let Some(reg) = registry
                         && reg.is_struct(&named.name)
                     {
-                        // Extract package name from the struct's source interface
                         let package = wasi_struct_package(reg, &named.name);
                         Some(type_table.make_struct(
                             named.name.clone(),
@@ -135,8 +154,18 @@ pub fn wasi_type_to_type_id_scoped(
                     wasi_type_to_type_id_scoped(&g.args[1], type_table, registry, wasi_package);
                 type_table.make_result(ok_type, err_type)
             }
-            // Stream/Future/Own/Borrow are handle types represented as i32
-            "Stream" | "Future" | "Own" | "Borrow" => TypeTable::I32,
+            "Stream" if g.args.len() == 1 => {
+                let inner =
+                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
+                type_table.make_stream(inner)
+            }
+            "Future" if g.args.len() == 1 => {
+                let inner =
+                    wasi_type_to_type_id_scoped(&g.args[0], type_table, registry, wasi_package);
+                type_table.make_future(inner)
+            }
+            // Own/Borrow are handle types represented as i32
+            "Own" | "Borrow" => TypeTable::I32,
             _ => TypeTable::UNIT,
         },
         Type::Tuple(types) if types.is_empty() => TypeTable::UNIT,
@@ -235,8 +264,9 @@ fn materialize_if_needed(
     // primitive types and handles (i32, i64, f32, f64, u8, u16, bool, char).
     let type_id = expr.type_id;
     let local = alloc_local(next_local, local_types, type_id);
-    stmts.push(let_stmt("__lifted_result", local, type_id, expr));
-    local_ref(local, "__lifted_result", type_id)
+    let name = format!("__lifted_result_{local}");
+    stmts.push(let_stmt(&name, local, type_id, expr));
+    local_ref(local, &name, type_id)
 }
 
 fn synthesize_lift_inner(
@@ -1110,7 +1140,9 @@ fn synthesize_lift_tuple(
         let mut tt = ctx.type_table.borrow_mut();
         let elem_type_ids: Vec<TypeId> = elems
             .iter()
-            .map(|t| wasi_type_to_type_id(t, &mut tt))
+            .map(|t| {
+                wasi_type_to_type_id_scoped(t, &mut tt, Some(ctx.wasi_registry), ctx.wasi_package)
+            })
             .collect();
         tt.make_tuple(elem_type_ids)
     } else {
@@ -1923,8 +1955,10 @@ fn wasi_return_type_id(
     func_info: &WasiFunctionInfo,
     wasi_registry: &crate::component_model::WasiRegistry,
 ) -> TypeId {
-    if func_info.is_async {
-        // Async: raw call returns subtask handle (i32)
+    let needs_async_lower =
+        func_info.is_async || func_info.has_streaming_param() || func_info.return_type_has_future();
+    if needs_async_lower {
+        // Async/streaming: raw call returns subtask handle (i32)
         TypeTable::I32
     } else {
         let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
@@ -2441,8 +2475,10 @@ fn synthesize_adapter(
     // ---- Handle outptr for async or complex returns ----
     // Track async outptr allocation info for later freeing.
     let mut async_outptr_info: Option<(u32, u32, u32)> = None; // (local_index, size, align)
-    if func_info.is_async {
-        // WASI P3 async calling convention:
+    let needs_async_lower =
+        func_info.is_async || func_info.has_streaming_param() || func_info.return_type_has_future();
+    if needs_async_lower {
+        // WASI P3 async calling convention (also used for streaming functions per CM spec):
         // - MAX_FLAT_ASYNC_PARAMS = 4 flat params before switching to indirect.
         // - If flat_args exceeds 4, all params are passed via a single params_ptr
         //   (pointer to a linear-memory buffer with all lowered params).
@@ -2640,14 +2676,71 @@ fn synthesize_adapter(
     // The binding's return type to the Wado caller:
     let adapter_return_type;
 
-    if func_info.is_async && func_info.has_streaming_param() {
-        // Streaming async function (has Stream<T> or Future<T> parameter):
-        // The caller must write to the stream before the subtask completes,
-        // so we cannot wait inside the binding. Return the packed subtask handle
-        // (i32) directly. The caller is responsible for waiting via wait_for_subtask().
-        body_stmts.push(return_stmt(Some(raw_call_expr)));
+    // Streaming path: functions with Stream params that callers must write to
+    // before the subtask completes. For functions returning tuples with Future
+    // (like read_via_stream -> [Stream, Future]), the async path lifts the full
+    // tuple from outptr after wait_for_subtask.
+    let is_streaming_func = !func_info.is_async && func_info.has_streaming_param();
+    if is_streaming_func {
+        // Streaming function (sync function with stream params, e.g. write_via_stream).
+        // canon lower with async option returns a packed subtask handle, but for sync
+        // functions the subtask completes immediately (Returned status). The actual
+        // return value (Future handle) is written to the outptr by the canon lower.
+        //
+        // We wait for the subtask (no-op for Returned), read the Future handle from
+        // outptr, free outptr, and return the Future handle. The caller writes stream
+        // data and then drops the Future to wait for completion.
+        if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
+            let subtask_local = next_local;
+            local_types.push(TypeTable::I32);
+            next_local += 1;
+            body_stmts.push(let_stmt(
+                "__subtask",
+                subtask_local,
+                TypeTable::I32,
+                raw_call_expr,
+            ));
+            body_stmts.push(expr_stmt(internal_call(
+                "wait_for_subtask",
+                vec![local_ref(subtask_local, "__subtask", TypeTable::I32)],
+                TypeTable::UNIT,
+            )));
+            // Read Future handle from outptr
+            let future_handle_local = next_local;
+            local_types.push(TypeTable::I32);
+            next_local += 1;
+            body_stmts.push(let_stmt(
+                "__future_handle",
+                future_handle_local,
+                TypeTable::I32,
+                builtin_call(
+                    "i32_load",
+                    vec![local_ref(outptr_local, "__async_outptr", TypeTable::I32)],
+                    TypeTable::I32,
+                ),
+            ));
+            // Free outptr
+            body_stmts.push(expr_stmt(builtin_call(
+                "realloc",
+                vec![
+                    local_ref(outptr_local, "__async_outptr", TypeTable::I32),
+                    i32_const(outptr_size as i32),
+                    i32_const(outptr_align as i32),
+                    i32_const(0),
+                ],
+                TypeTable::I32,
+            )));
+            body_stmts.push(return_stmt(Some(local_ref(
+                future_handle_local,
+                "__future_handle",
+                TypeTable::I32,
+            ))));
+        } else {
+            // No outptr (shouldn't happen for streaming functions with return type)
+            body_stmts.push(return_stmt(Some(raw_call_expr)));
+        }
         adapter_return_type = TypeTable::I32;
-    } else if func_info.is_async {
+    } else if needs_async_lower {
         // WASI P3 async calling convention: the lowered function returns a subtask
         // handle (i32). 0 = completed synchronously; non-zero = async task in-flight.
         // In both cases, the result is written to the async results buffer in linear memory.
@@ -2704,9 +2797,8 @@ fn synthesize_adapter(
                     ],
                     TypeTable::I32,
                 )));
-                let lifted_type_id = lifted.type_id;
-                body_stmts.push(return_stmt(Some(lifted)));
-                adapter_return_type = lifted_type_id;
+                body_stmts.push(return_stmt(Some(lifted.clone())));
+                adapter_return_type = lifted.type_id;
             } else {
                 // Has outptr but no return type: free the async results buffer.
                 body_stmts.push(expr_stmt(builtin_call(
@@ -5749,8 +5841,14 @@ fn fixup_wasi_derived_types_in_adapter(
         let resolved = wasi_registry.resolve_type(param_type);
         replace_wasi_derived_type_recursive(adapter, &resolved, new_type, type_table);
     }
-    // Also fix up return type's WASI-derived sub-types
-    if let Some(return_type) = &func_info.return_type {
+    // Also fix up return type's WASI-derived sub-types — but skip for CM bindings
+    // that return non-flat types (tuples, variants). Their return TypeId was set
+    // precisely by synthesis and should not be modified by the recursive type
+    // replacement, which can produce different TypeIds for the same logical type
+    // through different wasi_type_to_type_id resolution paths.
+    if !adapter.is_cm_binding
+        && let Some(return_type) = &func_info.return_type
+    {
         let resolved = wasi_registry.resolve_type(return_type);
         replace_wasi_derived_type_recursive(adapter, &resolved, user_return_type, type_table);
     }
@@ -5772,8 +5870,12 @@ fn replace_type_in_adapter(adapter: &mut TirFunction, old_type: TypeId, new_type
     if old_type == new_type {
         return;
     }
-    // Fix return type
-    if adapter.return_type == old_type {
+    // Don't replace the return type of CM binding adapters.
+    // The return type was set by synthesis with precise TypeIds from the entry
+    // module's TypeTable. Replacing it with a TypeId computed by wasi_type_to_type_id
+    // (which may produce different TypeIds for Stream/Future/Result composition)
+    // corrupts the type and causes WIR build failures.
+    if !adapter.is_cm_binding && adapter.return_type == old_type {
         adapter.return_type = new_type;
     }
     // Fix params
@@ -5808,8 +5910,8 @@ fn replace_type_in_adapter_with_names(
     if old_type == new_type {
         return;
     }
-    // Fix return type
-    if adapter.return_type == old_type {
+    // Don't replace return type of CM binding adapters (same as replace_type_in_adapter)
+    if !adapter.is_cm_binding && adapter.return_type == old_type {
         adapter.return_type = new_type;
     }
     // Fix params
@@ -6441,15 +6543,16 @@ fn rewrite_calls_in_expr(
             // Check if this is a streaming async function
             let is_streaming = wasi_registry
                 .get_function(&qualified)
-                .is_some_and(|f| f.is_async && f.has_streaming_param());
+                .is_some_and(|f| !f.is_async && f.has_streaming_param());
 
             // Fix up binding function types from the call site
             {
                 let mut adapter = adapter_rc.borrow_mut();
                 if is_streaming {
-                    // Streaming adapters return i32 (packed subtask handle).
-                    // Fix the call site's type to match.
-                    expr.type_id = TypeTable::I32;
+                    // Streaming adapters return i32 (Future handle) at WIR level.
+                    // Keep the caller's original Future type for Wado-level type
+                    // checking and CM method dispatch (.drop(), .read()).
+                    // WIR flattens Future<T> (GenericResource) to i32 automatically.
                 } else if adapter.return_type != expr.type_id {
                     let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;
@@ -6549,7 +6652,7 @@ fn rewrite_calls_in_expr(
             // Check if this is a streaming async function
             let is_streaming = wasi_registry
                 .get_function(&qualified)
-                .is_some_and(|f| f.is_async && f.has_streaming_param());
+                .is_some_and(|f| !f.is_async && f.has_streaming_param());
 
             // Extract receiver and args before replacing
             let (taken_receiver, mut taken_args) =
@@ -6570,9 +6673,10 @@ fn rewrite_calls_in_expr(
             {
                 let mut adapter = adapter_rc.borrow_mut();
                 if is_streaming {
-                    // Streaming adapters return i32 (packed subtask handle).
-                    // Fix the call site's type to match.
-                    expr.type_id = TypeTable::I32;
+                    // Streaming adapters return i32 (Future handle) at WIR level.
+                    // Keep the caller's original Future type for Wado-level type
+                    // checking and CM method dispatch (.drop(), .read()).
+                    // WIR flattens Future<T> (GenericResource) to i32 automatically.
                 } else if adapter.return_type != expr.type_id {
                     let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;
@@ -6616,9 +6720,13 @@ fn rewrite_calls_in_expr(
                         }
                     }
                 }
-                // Replace WASI-derived types in the body (including function names)
-                if let Some(func_info) = wasi_registry.get_function(&qualified) {
-                    // For method calls, call_args excludes self (self is handled above)
+                // Replace WASI-derived types in the body (including function names).
+                // Skip for CM bindings — their types were set precisely by synthesis
+                // and the recursive replacement can produce TypeId mismatches for
+                // complex return types like [Stream<T>, Future<Result<_, E>>].
+                if !adapter.is_cm_binding
+                    && let Some(func_info) = wasi_registry.get_function(&qualified)
+                {
                     let call_args: Vec<TirExpr> =
                         taken_args.iter().map(|a| a.expr.clone()).collect();
                     fixup_wasi_derived_types_in_adapter(
@@ -6742,10 +6850,10 @@ fn rewrite_calls_in_expr(
                     }
                 }
                 // Replace WASI-derived types in the body with the user's types.
-                // For each param that uses Array<T>/etc, the binding body may have
-                // created method calls using the WASI-derived TypeId which differs
-                // from the user's newtype-aliased TypeId.
-                if let Some(func_info) = &wasi_func_info {
+                // Skip for CM bindings (same reason as above).
+                if !adapter.is_cm_binding
+                    && let Some(func_info) = &wasi_func_info
+                {
                     fixup_wasi_derived_types_in_adapter(
                         &mut adapter,
                         func_info,

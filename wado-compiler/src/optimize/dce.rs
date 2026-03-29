@@ -1069,6 +1069,13 @@ pub fn remove_unreachable_functions(project: &mut Project) {
         module.functions.retain(|func_rc| {
             let func = func_rc.borrow();
 
+            // CM binding functions are referenced during WIR translation (not TIR
+            // call graph), so they must survive function DCE. Their return types
+            // may include synthesized TypeIds that must also survive type DCE.
+            if func.is_cm_binding {
+                return true;
+            }
+
             // Use TirFunction's method_info to check if this is a method
             if let Some(ref info) = func.method_info {
                 // Could be either:

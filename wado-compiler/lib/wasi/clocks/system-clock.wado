@@ -22,7 +22,7 @@ use { Duration } from "wasi:clocks/types.wado";
 /// 
 /// [POSIX's Seconds Since the Epoch]: https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xbd_chap04.html#tag_21_04_16
 /// [Unix Time]: https://en.wikipedia.org/wiki/Unix_time
-#[wasi("wasi:clocks/system-clock@0.3.0-rc-2026-01-06#instant")]
+#[wasi("wasi:clocks/system-clock@0.3.0-rc-2026-03-15#instant")]
 pub struct Instant {
     #[wasi("seconds")]
     pub seconds: i64,
@@ -40,7 +40,7 @@ pub struct Instant {
 /// monotonic, making it unsuitable for measuring elapsed time.
 /// 
 /// It is intended for reporting the current date and time for humans.
-#[wasi("wasi:clocks/system-clock@0.3.0-rc-2026-01-06")]
+#[wasi("wasi:clocks/system-clock@0.3.0-rc-2026-03-15")]
 pub effect SystemClock {
     /// Read the current value of the clock.
     /// 
@@ -48,10 +48,11 @@ pub effect SystemClock {
     /// will not necessarily produce a sequence of non-decreasing values.
     /// 
     /// The nanoseconds field of the output is always less than 1000000000.
-    #[wasi("wasi:clocks/system-clock@0.3.0-rc-2026-01-06#now")]
+    #[wasi("wasi:clocks/system-clock@0.3.0-rc-2026-03-15#now")]
     fn now() -> Instant;
     /// Query the resolution of the clock. Returns the smallest duration of time
     /// that the implementation permits distinguishing.
-    #[wasi("wasi:clocks/system-clock@0.3.0-rc-2026-01-06#get-resolution")]
+    #[wasi("wasi:clocks/system-clock@0.3.0-rc-2026-03-15#get-resolution")]
     fn get_resolution() -> Duration;
 }
+

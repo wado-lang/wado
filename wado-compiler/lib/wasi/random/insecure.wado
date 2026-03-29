@@ -7,9 +7,9 @@
 /// 
 /// It is intended to be portable at least between Unix-family platforms and
 /// Windows.
-#[wasi("wasi:random/insecure@0.3.0-rc-2026-01-06")]
+#[wasi("wasi:random/insecure@0.3.0-rc-2026-03-15")]
 pub effect Insecure {
-    /// Return `len` insecure pseudo-random bytes.
+    /// Return up to `max-len` insecure pseudo-random bytes.
     /// 
     /// This function is not cryptographically secure. Do not use it for
     /// anything related to security.
@@ -17,13 +17,21 @@ pub effect Insecure {
     /// There are no requirements on the values of the returned bytes, however
     /// implementations are encouraged to return evenly distributed values with
     /// a long period.
-    #[wasi("wasi:random/insecure@0.3.0-rc-2026-01-06#get-insecure-random-bytes")]
-    #[wasi_params("len")]
-    fn get_insecure_random_bytes(len: u64) -> Array<u8>;
+    /// 
+    /// Implementations MAY return fewer bytes than requested (a short read).
+    /// Callers that require exactly `max-len` bytes MUST call this function in
+    /// a loop until the desired number of bytes has been accumulated.
+    /// Implementations MUST return at least 1 byte when `max-len` is greater
+    /// than zero. When `max-len` is zero, implementations MUST return an empty
+    /// list without trapping.
+    #[wasi("wasi:random/insecure@0.3.0-rc-2026-03-15#get-insecure-random-bytes")]
+    #[wasi_params("max-len")]
+    fn get_insecure_random_bytes(max_len: u64) -> Array<u8>;
     /// Return an insecure pseudo-random `u64` value.
     /// 
     /// This function returns the same type of pseudo-random data as
     /// `get-insecure-random-bytes`, represented as a `u64`.
-    #[wasi("wasi:random/insecure@0.3.0-rc-2026-01-06#get-insecure-random-u64")]
+    #[wasi("wasi:random/insecure@0.3.0-rc-2026-03-15#get-insecure-random-u64")]
     fn get_insecure_random_u64() -> u64;
 }
+

@@ -17,8 +17,9 @@ use tokio::sync::Mutex;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::bindings::Service;
-use wasmtime_wasi_http::p3::{Request as WasiRequest, WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi_http::p3::{Request as WasiRequest, WasiHttpCtxView, WasiHttpView};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, OptLevel};
@@ -157,14 +158,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     })
 }
 
-struct HttpWasiCtx;
-
-impl WasiHttpCtx for HttpWasiCtx {}
-
 struct HttpWasiState {
     table: ResourceTable,
     wasi: WasiCtx,
-    http: HttpWasiCtx,
+    http: WasiHttpCtx,
 }
 
 impl WasiView for HttpWasiState {
@@ -181,6 +178,7 @@ impl WasiHttpView for HttpWasiState {
         WasiHttpCtxView {
             ctx: &mut self.http,
             table: &mut self.table,
+            hooks: Default::default(),
         }
     }
 }
@@ -196,7 +194,7 @@ fn create_http_state() -> HttpWasiState {
     HttpWasiState {
         table: ResourceTable::new(),
         wasi: WasiCtxBuilder::new().inherit_stdio().build(),
-        http: HttpWasiCtx,
+        http: WasiHttpCtx::new(),
     }
 }
 
@@ -233,13 +231,12 @@ async fn handle_http_request(
                 .run_concurrent(async |store| {
                     use std::pin::pin;
                     let handler = pin!(async {
-                        let (res, task) = match service.handle(store, wasi_req).await? {
-                            Ok(pair) => pair,
+                        let res = match service.handle(store, wasi_req).await? {
+                            Ok(res) => res,
                             Err(err) => return Ok(Err(Some(err))),
                         };
                         let _ =
                             tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
-                        task.block(store).await;
                         Ok(Ok(()))
                     });
                     let io = pin!(async {
@@ -256,15 +253,17 @@ async fn handle_http_request(
         async {
             let res = rx.await?;
             let (parts, body) = res.into_parts();
-            let body = body.collect().await?;
-            anyhow::Ok(http::Response::from_parts(parts, body))
+            let body = BodyExt::collect(body)
+                .await
+                .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?;
+            anyhow::Ok(http::Response::from_parts(parts, body.to_bytes()))
         }
     );
 
     match result {
         Ok((Ok(()), res)) => {
             let (parts, body) = res.into_parts();
-            Ok(HyperResponse::from_parts(parts, Full::new(body.to_bytes())))
+            Ok(HyperResponse::from_parts(parts, Full::new(body)))
         }
         Ok((Err(Some(error_code)), _)) => {
             // Handler returned error code - map to HTTP 500

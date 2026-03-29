@@ -46,13 +46,13 @@ pub effect Stdin {
 
 ```wado
 pub effect Stdout {
-    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+    fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
 }
 ```
 
 ```wado
 pub effect Stderr {
-    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+    fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
 }
 ```
 
@@ -124,60 +124,6 @@ pub flags OpenFlags {
 ### Enums
 
 ```wado
-pub enum DescriptorType {
-    Unknown,
-    BlockDevice,
-    CharacterDevice,
-    Directory,
-    Fifo,
-    SymbolicLink,
-    RegularFile,
-    Socket,
-}
-```
-
-```wado
-pub enum ErrorCode {
-    Access,
-    Already,
-    BadDescriptor,
-    Busy,
-    Deadlock,
-    Quota,
-    Exist,
-    FileTooLarge,
-    IllegalByteSequence,
-    InProgress,
-    Interrupted,
-    Invalid,
-    Io,
-    IsDirectory,
-    Loop,
-    TooManyLinks,
-    MessageSize,
-    NameTooLong,
-    NoDevice,
-    NoEntry,
-    NoLock,
-    InsufficientMemory,
-    InsufficientSpace,
-    NotDirectory,
-    NotEmpty,
-    NotRecoverable,
-    Unsupported,
-    NoTty,
-    NoSuchDevice,
-    Overflow,
-    NotPermitted,
-    Pipe,
-    ReadOnly,
-    InvalidSeek,
-    TextFileBusy,
-    CrossDevice,
-}
-```
-
-```wado
 pub enum Advice {
     Normal,
     Sequential,
@@ -201,15 +147,15 @@ pub effect Preopens {
 ```wado
 pub resource Descriptor {
     fn read_via_stream(self: &Descriptor, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>];
-    async fn write_via_stream(self: &Descriptor, data: Stream<u8>, offset: Filesize) -> Result<(), ErrorCode>;
-    async fn append_via_stream(self: &Descriptor, data: Stream<u8>) -> Result<(), ErrorCode>;
+    fn write_via_stream(self: &Descriptor, data: Stream<u8>, offset: Filesize) -> Future<Result<(), ErrorCode>>;
+    fn append_via_stream(self: &Descriptor, data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
     async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Result<(), ErrorCode>;
     async fn sync_data(self: &Descriptor) -> Result<(), ErrorCode>;
     async fn get_flags(self: &Descriptor) -> Result<DescriptorFlags, ErrorCode>;
     async fn get_type(self: &Descriptor) -> Result<DescriptorType, ErrorCode>;
     async fn set_size(self: &Descriptor, size: Filesize) -> Result<(), ErrorCode>;
     async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>;
-    async fn read_directory(self: &Descriptor) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>];
+    fn read_directory(self: &Descriptor) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>];
     async fn sync(self: &Descriptor) -> Result<(), ErrorCode>;
     async fn create_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>;
     async fn stat(self: &Descriptor) -> Result<DescriptorStat, ErrorCode>;
@@ -258,10 +204,65 @@ pub struct MetadataHashValue {
 ### Variants
 
 ```wado
+pub variant DescriptorType {
+    BlockDevice,
+    CharacterDevice,
+    Directory,
+    Fifo,
+    SymbolicLink,
+    RegularFile,
+    Socket,
+    Other(Option<String>),
+}
+```
+
+```wado
 pub variant NewTimestamp {
     NoChange,
     Now,
     Timestamp(Instant),
+}
+```
+
+```wado
+pub variant ErrorCode {
+    Access,
+    Already,
+    BadDescriptor,
+    Busy,
+    Deadlock,
+    Quota,
+    Exist,
+    FileTooLarge,
+    IllegalByteSequence,
+    InProgress,
+    Interrupted,
+    Invalid,
+    Io,
+    IsDirectory,
+    Loop,
+    TooManyLinks,
+    MessageSize,
+    NameTooLong,
+    NoDevice,
+    NoEntry,
+    NoLock,
+    InsufficientMemory,
+    InsufficientSpace,
+    NotDirectory,
+    NotEmpty,
+    NotRecoverable,
+    Unsupported,
+    NoTty,
+    NoSuchDevice,
+    Overflow,
+    NotPermitted,
+    Pipe,
+    ReadOnly,
+    InvalidSeek,
+    TextFileBusy,
+    CrossDevice,
+    Other(Option<String>),
 }
 ```
 
@@ -445,6 +446,8 @@ pub variant HeaderError {
     InvalidSyntax,
     Forbidden,
     Immutable,
+    SizeExceeded,
+    Other(Option<String>),
 }
 ```
 
@@ -452,6 +455,7 @@ pub variant HeaderError {
 pub variant RequestOptionsError {
     NotSupported,
     Immutable,
+    Other(Option<String>),
 }
 ```
 
@@ -511,14 +515,14 @@ pub effect InsecureSeed {
 
 ```wado
 pub effect Insecure {
-    fn get_insecure_random_bytes(len: u64) -> Array<u8>;
+    fn get_insecure_random_bytes(max_len: u64) -> Array<u8>;
     fn get_insecure_random_u64() -> u64;
 }
 ```
 
 ```wado
 pub effect Random {
-    fn get_random_bytes(len: u64) -> Array<u8>;
+    fn get_random_bytes(max_len: u64) -> Array<u8>;
     fn get_random_u64() -> u64;
 }
 ```
@@ -535,39 +539,9 @@ pub type Ipv6Address = [u16, u16, u16, u16, u16, u16, u16, u16];
 ### Enums
 
 ```wado
-pub enum ErrorCode {
-    Unknown,
-    AccessDenied,
-    NotSupported,
-    InvalidArgument,
-    OutOfMemory,
-    Timeout,
-    InvalidState,
-    AddressNotBindable,
-    AddressInUse,
-    RemoteUnreachable,
-    ConnectionRefused,
-    ConnectionReset,
-    ConnectionAborted,
-    DatagramTooLarge,
-}
-```
-
-```wado
 pub enum IpAddressFamily {
     Ipv4,
     Ipv6,
-}
-```
-
-```wado
-pub enum ErrorCode {
-    Unknown,
-    AccessDenied,
-    InvalidArgument,
-    NameUnresolvable,
-    TemporaryResolverFailure,
-    PermanentResolverFailure,
 }
 ```
 
@@ -587,7 +561,7 @@ pub resource TcpSocket {
     fn bind(self: &TcpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>;
     async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>;
     fn listen(self: &TcpSocket) -> Result<Stream<TcpSocket>, ErrorCode>;
-    async fn send(self: &TcpSocket, data: Stream<u8>) -> Result<(), ErrorCode>;
+    fn send(self: &TcpSocket, data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
     fn receive(self: &TcpSocket) -> [Stream<u8>, Future<Result<(), ErrorCode>>];
     fn get_local_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>;
     fn get_remote_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>;
@@ -652,6 +626,26 @@ pub struct Ipv6SocketAddress {
 ### Variants
 
 ```wado
+pub variant ErrorCode {
+    AccessDenied,
+    NotSupported,
+    InvalidArgument,
+    OutOfMemory,
+    Timeout,
+    InvalidState,
+    AddressNotBindable,
+    AddressInUse,
+    RemoteUnreachable,
+    ConnectionRefused,
+    ConnectionBroken,
+    ConnectionReset,
+    ConnectionAborted,
+    DatagramTooLarge,
+    Other(Option<String>),
+}
+```
+
+```wado
 pub variant IpAddress {
     Ipv4(Ipv4Address),
     Ipv6(Ipv6Address),
@@ -662,5 +656,16 @@ pub variant IpAddress {
 pub variant IpSocketAddress {
     Ipv4(Ipv4SocketAddress),
     Ipv6(Ipv6SocketAddress),
+}
+```
+
+```wado
+pub variant ErrorCode {
+    AccessDenied,
+    InvalidArgument,
+    NameUnresolvable,
+    TemporaryResolverFailure,
+    PermanentResolverFailure,
+    Other(Option<String>),
 }
 ```

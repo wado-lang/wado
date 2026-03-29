@@ -4716,25 +4716,25 @@ fn variant_eq_body(
                         )],
                         span,
                     ),
-                    else_branch: None,
+                    else_branch: Some(TirBlock::new(
+                        vec![TirStmt::new(
+                            TirStmtKind::Return {
+                                value: Some(TirExpr::new(
+                                    TirExprKind::BoolLiteral(false),
+                                    TypeTable::BOOL,
+                                    span,
+                                )),
+                            },
+                            span,
+                        )],
+                        span,
+                    )),
                 },
                 TypeTable::UNIT,
                 span,
             );
 
-            vec![
-                TirStmt::new(TirStmtKind::Expr(inner_if), span),
-                TirStmt::new(
-                    TirStmtKind::Return {
-                        value: Some(TirExpr::new(
-                            TirExprKind::BoolLiteral(false),
-                            TypeTable::BOOL,
-                            span,
-                        )),
-                    },
-                    span,
-                ),
-            ]
+            vec![TirStmt::new(TirStmtKind::Expr(inner_if), span)]
         };
 
         let if_expr = TirExpr::new(

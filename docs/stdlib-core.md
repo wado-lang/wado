@@ -3266,10 +3266,6 @@ CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc.
 #### `pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool)`
 
 Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
-Called AFTER the consumer (write_via_stream) has been started.
-
-Uses write_raw to pass String's internal GC array directly to the stream,
-avoiding the intermediate String → Array<u8> byte-by-byte copy.
 
 #### `pub fn println(message: String) with Stdout`
 
@@ -3318,14 +3314,12 @@ Exits with a specific status code.
 #### `pub fn log_stdout(message: String)`
 
 Logs a message with newline to stdout (ambient, no effect required).
-Waits for completion.
 Uses builtin::call_indirect__ to bypass the effect system — this is
 intentional for logging/debugging which must work without effects.
 
 #### `pub fn log_stderr(message: String)`
 
 Logs a message with newline to stderr (ambient, no effect required).
-Waits for completion.
 Uses builtin::call_indirect__ to bypass the effect system — this is
 intentional for logging/debugging which must work without effects.
 

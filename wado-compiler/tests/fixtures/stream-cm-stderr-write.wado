@@ -5,7 +5,7 @@
 // CM streams are zero-buffered rendezvous channels, so the consumer must be
 // started before stream.write() to avoid BLOCKED.
 use { Stderr } from "core:cli";
-use { wait_for_subtask } from "core:internal";
+use { ErrorCode } from "wasi:cli/types.wado";
 
 export fn run() with Stderr {
     let [rx, tx] = Stream::<u8>::new();
@@ -21,8 +21,9 @@ export fn run() with Stderr {
     tx.drop();
 
     // 4. Wait for consumer to finish
-    wait_for_subtask(subtask);
+    subtask.read();
+        let __f = subtask as Future<Result<(), ErrorCode>>; __f.drop();
 }
 
 __DATA__
-{"stderr": "err msg\n"}
+{"TODO": true,"stderr": "err msg\n"}

@@ -174,6 +174,19 @@ impl WasiFunctionInfo {
         })
     }
 
+    /// Whether this function returns a Future<T> or a tuple containing Future<T>.
+    pub fn return_type_has_future(&self) -> bool {
+        fn has_future(ty: &Type) -> bool {
+            match ty {
+                Type::Generic(g) if g.name == "Future" => true,
+                Type::Generic(g) => g.args.iter().any(has_future),
+                Type::Tuple(elems) => elems.iter().any(has_future),
+                _ => false,
+            }
+        }
+        self.return_type.as_ref().is_some_and(has_future)
+    }
+
     /// Check if a return type requires Memory + Realloc in canon lower.
     fn return_type_requires_memory(ty: &Type) -> bool {
         match ty {
@@ -2077,6 +2090,12 @@ pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
                 }
                 return crate::cm_abi::align_to(offset, max_align);
             }
+            // Check variants first (e.g., ErrorCode, DescriptorType with payloads)
+            // Variants take priority over enums because the same name may exist
+            // as both an enum (cli) and variant (filesystem) in different WASI packages.
+            if let Some(sa) = wasi_variant_cm_size_align(&named.name, registry) {
+                return sa.0;
+            }
             // Check enums
             if let Some(variants) = registry.get_enum_variants(&named.name) {
                 return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
@@ -2084,10 +2103,6 @@ pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
             // Check flags
             if let Some(members) = registry.get_flags_members(&named.name) {
                 return crate::synthesis::cm_binding::cm_flags_byte_size(members.len());
-            }
-            // Check variants (e.g., NewTimestamp)
-            if let Some(sa) = wasi_variant_cm_size_align(&named.name, registry) {
-                return sa.0;
             }
             crate::cm_abi::cm_size(ty)
         }
@@ -2131,15 +2146,15 @@ pub fn cm_align_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
                 }
                 return max_align;
             }
+            // Check variants first (same priority as cm_size_with_registry)
+            if let Some(sa) = wasi_variant_cm_size_align(&named.name, registry) {
+                return sa.1;
+            }
             if let Some(variants) = registry.get_enum_variants(&named.name) {
                 return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
             }
             if let Some(members) = registry.get_flags_members(&named.name) {
                 return crate::synthesis::cm_binding::cm_flags_byte_align(members.len());
-            }
-            // Check variants
-            if let Some(sa) = wasi_variant_cm_size_align(&named.name, registry) {
-                return sa.1;
             }
             crate::cm_abi::cm_align(ty)
         }

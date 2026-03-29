@@ -16,7 +16,8 @@ use std::sync::{Mutex, OnceLock};
 use wasmtime::component::{Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
-use wasmtime_wasi_http::p3::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi_http::WasiHttpCtx;
+use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpHooks, WasiHttpView};
 
 use wado_compiler::{Bail, CompileError, CompilerHost, Diagnostic, OptLevel, SourceError};
 
@@ -289,7 +290,7 @@ impl TestHttpCtx {
     }
 }
 
-impl WasiHttpCtx for TestHttpCtx {
+impl WasiHttpHooks for TestHttpCtx {
     fn send_request(
         &mut self,
         request: http::Request<
@@ -379,7 +380,8 @@ impl WasiHttpCtx for TestHttpCtx {
 pub struct WasiState {
     pub ctx: WasiCtx,
     pub table: ResourceTable,
-    pub http: TestHttpCtx,
+    pub http_ctx: WasiHttpCtx,
+    pub http_hooks: TestHttpCtx,
 }
 
 impl WasiView for WasiState {
@@ -394,8 +396,9 @@ impl WasiView for WasiState {
 impl WasiHttpView for WasiState {
     fn http(&mut self) -> WasiHttpCtxView<'_> {
         WasiHttpCtxView {
-            ctx: &mut self.http,
+            ctx: &mut self.http_ctx,
             table: &mut self.table,
+            hooks: &mut self.http_hooks,
         }
     }
 }
@@ -410,7 +413,8 @@ impl WasiState {
         Self {
             ctx,
             table: ResourceTable::new(),
-            http: TestHttpCtx::new(),
+            http_ctx: WasiHttpCtx::new(),
+            http_hooks: TestHttpCtx::new(),
         }
     }
 
@@ -420,7 +424,8 @@ impl WasiState {
         Self {
             ctx,
             table: ResourceTable::new(),
-            http: TestHttpCtx::new(),
+            http_ctx: WasiHttpCtx::new(),
+            http_hooks: TestHttpCtx::new(),
         }
     }
 }
@@ -656,7 +661,8 @@ pub fn run_wasm_with_full_options(
         let state = WasiState {
             ctx,
             table: ResourceTable::new(),
-            http: TestHttpCtx {
+            http_ctx: WasiHttpCtx::new(),
+            http_hooks: TestHttpCtx {
                 mocks: outgoing_mocks,
             },
         };

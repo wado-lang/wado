@@ -80,7 +80,14 @@ fn register_imports(ctx: &mut WirContext<'_>) {
         if import.namespace == "wasi"
             && let Some(intrinsic) = CanonicalIntrinsic::from_import_name(&import.canonical_name)
         {
-            ctx.needed_canonicals.insert(intrinsic, func_id.clone());
+            // Future-related canonicals with default Trailers payload are not tracked here.
+            // They are registered with the correct CmFuturePayload during WIR translation
+            // via CM method dispatch (cm_future_payload), which has access to the actual
+            // Future<T> type parameter. Tracking them with the wrong payload would force
+            // unnecessary HTTP type definitions.
+            if intrinsic.future_payload().is_none() {
+                ctx.needed_canonicals.insert(intrinsic, func_id.clone());
+            }
         }
 
         // Also register under the TIR builtin function name so call sites can resolve.
@@ -146,7 +153,10 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             // Async functions: per CM spec flatten_functype('lower'), the outptr (i32) is
             // only appended when len(flat_results) > 0 (i.e., when there is a return type).
             // Async void functions (e.g., wait_for, wait_until) have no results and no outptr.
-            if func.is_async {
+            // CM spec: canon lower requires async for functions with stream/future
+            let needs_async_lower =
+                func.is_async || func.has_streaming_param() || func.return_type_has_future();
+            if needs_async_lower {
                 let has_results = func.return_type.is_some();
                 if param_vts.len() > MAX_FLAT_ASYNC_PARAMS {
                     // Indirect convention: collapse all params to a single params_ptr.
@@ -177,8 +187,8 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             let params: Vec<WirType> = param_vts.into_iter().map(valtype_to_wir_type).collect();
 
             // Build result types using CM ABI type flattening
-            let results: Vec<WirType> = if func.is_async {
-                // Async functions always return i32 (subtask handle)
+            let results: Vec<WirType> = if needs_async_lower {
+                // Async/streaming functions always return i32 (subtask handle)
                 vec![WirType::I32]
             } else if let Some(ret_ty) = &func.return_type {
                 let resolved_ret_ty = wasi_registry.resolve_type(ret_ty);
