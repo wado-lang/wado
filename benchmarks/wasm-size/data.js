@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774790567200,
+  "lastUpdate": 1774790856891,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8564,6 +8564,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d1261f4098e030b232208d2020756e7f9dc66c74"
         },
         "date": 1774790566983,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1999,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9279,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24923,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5d55bf6009850509e25c54f2a848d52e318c80ec",
+          "message": "Merge pull request #728 from wado-lang/claude/redesign-todo-test-output-TEJKH\n\nRedesign TODO test output: separate axis with pending/resolved",
+          "timestamp": "2026-03-29T22:24:47+09:00",
+          "tree_id": "a7b1a0325b845fd8f2a817fbd2d50916911fc87f",
+          "url": "https://github.com/wado-lang/wado/commit/5d55bf6009850509e25c54f2a848d52e318c80ec"
+        },
+        "date": 1774790856677,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
