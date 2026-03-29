@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774760160962,
+  "lastUpdate": 1774761376150,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8408,6 +8408,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/71fba5b97b81ec70e0e4b689515e5f538f6e7e9c"
         },
         "date": 1774760160748,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1999,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9279,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24923,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3a4cffbe3697a67cfe3b2a35ea86082f185720fd",
+          "message": "Merge pull request #724 from wado-lang/claude/extract-jco-git-subm-LZ2bU\n\nAdd jco git submodule and jco debug/patch skill",
+          "timestamp": "2026-03-29T14:13:17+09:00",
+          "tree_id": "ab1b5ab8b487ff9cda0cd898d615ae1a09de18e1",
+          "url": "https://github.com/wado-lang/wado/commit/3a4cffbe3697a67cfe3b2a35ea86082f185720fd"
+        },
+        "date": 1774761375940,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
