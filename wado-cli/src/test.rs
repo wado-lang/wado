@@ -206,12 +206,26 @@ struct TestJob {
     timeout_ms: u64,
 }
 
+/// Outcome of a single test execution.
+///
+/// Regular tests are either Pass or Fail.
+/// TODO tests live on a separate axis:
+///   - TodoPending: trapped as expected (the feature is still unimplemented)
+///   - TodoResolved: passed unexpectedly (the feature may now work — remove #[TODO])
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TestOutcome {
+    Pass,
+    Fail,
+    TodoPending,
+    TodoResolved,
+}
+
 /// Result from a test execution
 struct TestResult {
     file_path: String,
     test_name: String,
     display_name: String,
-    passed: bool,
+    outcome: TestOutcome,
     error: Option<String>,
     duration: Duration,
 }
@@ -378,7 +392,7 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
                 file_path: module.path.clone(),
                 test_name: job.test_name.clone(),
                 display_name: job.display_name.clone(),
-                passed: false,
+                outcome: TestOutcome::Fail,
                 error: Some(format!("failed to set up store: {e}")),
                 duration: start.elapsed(),
             };
@@ -395,7 +409,7 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
                 file_path: module.path.clone(),
                 test_name: job.test_name.clone(),
                 display_name: job.display_name.clone(),
-                passed: false,
+                outcome: TestOutcome::Fail,
                 error: Some(format!("failed to set up linker: {e}")),
                 duration: start.elapsed(),
             };
@@ -413,7 +427,7 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
                 file_path: module.path.clone(),
                 test_name: job.test_name.clone(),
                 display_name: job.display_name.clone(),
-                passed: false,
+                outcome: TestOutcome::Fail,
                 error: Some(format!("failed to instantiate: {e}")),
                 duration: start.elapsed(),
             };
@@ -423,53 +437,56 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
     // Get and call the test function
     let test_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, &job.test_name);
 
-    let (passed, error) = match test_func {
+    let (outcome, error) = match test_func {
         Ok(func) => match func.call_async(&mut store, ()).await {
             Ok((Ok(()),)) => {
                 if job.is_todo {
+                    // TODO test passed — the feature may now work. This is good news,
+                    // not a failure. Report as "resolved" so the developer can remove #[TODO].
                     (
-                        false,
-                        Some(
-                            "TODO test passed unexpectedly — \
-                             the feature may be implemented; remove the #[TODO] attribute"
-                                .to_string(),
-                        ),
+                        TestOutcome::TodoResolved,
+                        Some("remove the #[TODO] attribute".to_string()),
                     )
                 } else if job.expect_trap {
                     (
-                        false,
+                        TestOutcome::Fail,
                         Some("expected trap but test returned Ok(())".to_string()),
                     )
                 } else {
-                    (true, None)
+                    (TestOutcome::Pass, None)
                 }
             }
-            Ok((Err(()),)) => (false, Some("test returned error".to_string())),
+            Ok((Err(()),)) => (TestOutcome::Fail, Some("test returned error".to_string())),
             Err(e) => {
                 let is_timeout = is_epoch_deadline_error(&e);
                 if is_timeout {
                     (
-                        false,
+                        TestOutcome::Fail,
                         Some(format!(
                             "test timed out after {}ms (use #[timeout_ms(N)] to increase)",
                             job.timeout_ms
                         )),
                     )
-                } else if job.expect_trap || job.is_todo {
-                    (true, None) // expected trap: pass
+                } else if job.is_todo {
+                    (TestOutcome::TodoPending, None) // TODO test trapped as expected
+                } else if job.expect_trap {
+                    (TestOutcome::Pass, None) // expect_trap test trapped as expected
                 } else {
-                    (false, Some(format!("{e}")))
+                    (TestOutcome::Fail, Some(format!("{e}")))
                 }
             }
         },
-        Err(e) => (false, Some(format!("failed to get test function: {e}"))),
+        Err(e) => (
+            TestOutcome::Fail,
+            Some(format!("failed to get test function: {e}")),
+        ),
     };
 
     TestResult {
         file_path: module.path.clone(),
         test_name: job.test_name.clone(),
         display_name: job.display_name.clone(),
-        passed,
+        outcome,
         error,
         duration: start.elapsed(),
     }
@@ -609,8 +626,18 @@ pub async fn run(opts: TestOptions) {
         .collect();
 
     // Display results in file order (matching input order)
-    let mut total_passed = 0;
-    let mut total_failed = 0;
+    let mut total_passed = 0u32;
+    let mut total_failed = 0u32;
+    let mut total_todo = 0u32;
+    let mut total_todo_resolved = 0u32;
+
+    // Collect TODO entries for the summary section at the end
+    struct TodoEntry {
+        file_path: String,
+        display_name: String,
+        resolved: bool,
+    }
+    let mut todo_entries: Vec<TodoEntry> = Vec::new();
 
     // Build a lookup from path to compiled module for compile duration
     let module_by_path: indexmap::IndexMap<&str, &CompiledTestModule> = modules
@@ -623,8 +650,15 @@ pub async fn run(opts: TestOptions) {
         if let Some(todo_err) = todo_error_by_path.get(path.as_str()) {
             let compile = format_duration(todo_err.compile_duration);
             println!("Running tests in {path}... (compile error, {compile})");
-            println!("  \x1b[32m✓\x1b[0m #![TODO] module — compile error (expected) ({compile})");
-            total_passed += 1;
+            println!(
+                "  \x1b[33m·\x1b[0m #![TODO] module — compile error (expected) ({compile})"
+            );
+            total_todo += 1;
+            todo_entries.push(TodoEntry {
+                file_path: path.clone(),
+                display_name: "#![TODO] module".to_string(),
+                resolved: false,
+            });
             continue;
         }
 
@@ -649,25 +683,92 @@ pub async fn run(opts: TestOptions) {
 
             for result in sorted_results {
                 let dur = format_duration(result.duration);
-                if result.passed {
-                    println!("  \x1b[32m✓\x1b[0m {} ({dur})", result.display_name);
-                    total_passed += 1;
-                } else {
-                    println!("  \x1b[31m✗\x1b[0m {} ({dur})", result.display_name);
-                    if let Some(ref error) = result.error {
-                        println!("    {error}");
+                match result.outcome {
+                    TestOutcome::Pass => {
+                        println!("  \x1b[32m✓\x1b[0m {} ({dur})", result.display_name);
+                        total_passed += 1;
                     }
-                    total_failed += 1;
+                    TestOutcome::Fail => {
+                        println!("  \x1b[31m✗\x1b[0m {} ({dur})", result.display_name);
+                        if let Some(ref error) = result.error {
+                            println!("    {error}");
+                        }
+                        total_failed += 1;
+                    }
+                    TestOutcome::TodoPending => {
+                        println!(
+                            "  \x1b[33m·\x1b[0m {} \x1b[33m# TODO\x1b[0m ({dur})",
+                            result.display_name
+                        );
+                        total_todo += 1;
+                        todo_entries.push(TodoEntry {
+                            file_path: result.file_path.clone(),
+                            display_name: result.display_name.clone(),
+                            resolved: false,
+                        });
+                    }
+                    TestOutcome::TodoResolved => {
+                        println!(
+                            "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO resolved\x1b[0m ({dur})",
+                            result.display_name
+                        );
+                        if let Some(ref error) = result.error {
+                            println!("    {error}");
+                        }
+                        total_todo_resolved += 1;
+                        todo_entries.push(TodoEntry {
+                            file_path: result.file_path.clone(),
+                            display_name: result.display_name.clone(),
+                            resolved: true,
+                        });
+                    }
                 }
             }
         }
     }
 
+    // TODO summary section
+    if !todo_entries.is_empty() {
+        println!();
+        let todo_total = total_todo + total_todo_resolved;
+        println!("TODO tests ({todo_total}):");
+        for entry in &todo_entries {
+            if entry.resolved {
+                println!(
+                    "  \x1b[36m✓ resolved\x1b[0m  {} — {}",
+                    entry.file_path, entry.display_name
+                );
+            } else {
+                println!(
+                    "  \x1b[33m· pending\x1b[0m   {} — {}",
+                    entry.file_path, entry.display_name
+                );
+            }
+        }
+        if total_todo_resolved > 0 {
+            println!();
+            println!(
+                "\x1b[36m{total_todo_resolved} TODO test(s) resolved — \
+                 remove the #[TODO] attribute\x1b[0m"
+            );
+        }
+    }
+
+    // Summary line: "N passed, N failed; N todo (M resolved)"
     let total_dur = format_duration(overall_start.elapsed());
     println!();
-    println!("{total_passed} passed, {total_failed} failed ({total_dur})");
+    let mut summary = format!("{total_passed} passed, {total_failed} failed");
+    let todo_total = total_todo + total_todo_resolved;
+    if todo_total > 0 {
+        summary.push_str(&format!("; {todo_total} todo"));
+        if total_todo_resolved > 0 {
+            summary.push_str(&format!(" ({total_todo_resolved} resolved)"));
+        }
+    }
+    summary.push_str(&format!(" ({total_dur})"));
+    println!("{summary}");
 
-    if total_failed > 0 {
+    if total_failed > 0 || total_todo_resolved > 0 {
         process::exit(1);
     }
 }
