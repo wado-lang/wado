@@ -407,7 +407,14 @@ fn try_lift_wasi_variant_or_enum(
     let tt = ctx.type_table.borrow();
 
     // Check WASI variants (e.g., HeaderError with cases InvalidSyntax, Forbidden, Immutable)
-    if let Some(cases) = ctx.wasi_registry.get_variant_cases(name) {
+    // Use package-scoped lookup when available to avoid name collisions
+    // (e.g., wasi:http/ErrorCode vs wasi:sockets/ErrorCode).
+    let cases_opt = if let Some(pkg) = ctx.wasi_package {
+        ctx.wasi_registry.get_variant_cases_by_package(pkg, name)
+    } else {
+        ctx.wasi_registry.get_variant_cases(name)
+    };
+    if let Some(cases) = cases_opt {
         let cases = cases.to_vec();
         let variant_type = tt.find_variant_type_by_name(name)?;
         drop(tt);

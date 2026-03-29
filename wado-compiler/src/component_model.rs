@@ -718,6 +718,23 @@ impl WasiRegistry {
         self.variants.get(name).map(|(_, cases)| cases.as_slice())
     }
 
+    /// Get the variant cases by WASI package name (e.g., "http") for disambiguation.
+    /// Searches for a full-key entry matching `wasi:{package}/...#{name}`.
+    /// Falls back to unqualified name lookup if no scoped entry is found.
+    pub fn get_variant_cases_by_package(
+        &self,
+        package: &str,
+        name: &str,
+    ) -> Option<&[CmVariantCase]> {
+        let prefix = format!("wasi:{package}/");
+        let suffix = format!("#{name}");
+        self.variants
+            .iter()
+            .find(|(key, _)| key.starts_with(&prefix) && key.ends_with(&suffix))
+            .map(|(_, (_, cases))| cases.as_slice())
+            .or_else(|| self.get_variant_cases(name))
+    }
+
     /// Get the variant cases by interface path + name for disambiguation.
     /// Tries interface-qualified key first, falls back to unqualified name.
     pub fn get_variant_cases_by_interface(

@@ -2040,10 +2040,11 @@ fn import_http_client(
             index: handler_result_type_idx,
         });
 
-        // Define: send: func(request: own<request>) -> result<own<response>, error-code>
+        // Define: send: async func(request: own<request>) -> result<own<response>, error-code>
         instance_type
             .ty()
             .function()
+            .async_(true)
             .params([("request", ComponentValType::Type(0))])
             .result(Some(ComponentValType::Type(1)));
         let send_func_type_idx = 2; // 0=request alias, 1=result alias, 2=func type
