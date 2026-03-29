@@ -170,6 +170,11 @@ struct Formatter {
     mut buf: ref String,
 }
 
+struct [Response, Future<Result<unit,ErrorCode>>] {
+    mut 0: i32,
+    mut 1: i32,
+}
+
 variant Option<String> {
     Some(ref String),
     None,
@@ -251,19 +256,21 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
+type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:http/Fields::new" = fn() -> i32;
 
 type "functype/wasi/wasi:http/Request::get_method" = fn(i32, i32);
 
-type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
+type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32) -> i32;
 
 type "functype/handle" = fn(i32);
 
 type "functype/__cm_binding__Request_get_method" = fn(i32) -> ref "wasi:http/types.wado/Method";
 
 type "functype/__cm_binding__Fields_new" = fn() -> i32;
+
+type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> ref "tuple/[Response, Future<Result<unit,ErrorCode>>]";
 
 type "functype/__cm_export__handle" = fn(i32);
 
@@ -272,6 +279,8 @@ type "functype/core:internal/memory_to_gc_array" = fn(i32, i32) -> ref array<u8>
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
 type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
+
+type "functype/core:internal/wait_for_subtask" = fn(i32);
 
 type "functype/core:internal/log_stderr" = fn(ref String);
 
@@ -307,13 +316,15 @@ type "functype/wasi/future-write" = fn(i32, i32) -> i32;
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
+type "functype/wasi/subtask-drop" = fn(i32);
+
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
-
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
+type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -330,6 +341,7 @@ import memory (1) from "mem/memory";
 import fn future-new from "wasi/future-new";
 import fn future-write from "wasi/future-write";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
+import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
@@ -476,6 +488,7 @@ fn handle(request) {
     let __packed_158: i64;
     let __ptr_159: i32;
     let __len_160: i32;
+    let __pattern_temp_1: ref "tuple/[Response, Future<Result<unit,ErrorCode>>]";
     method = __cm_binding__Request_get_method(request);
     let __match_scrut_0: ref "wasi:http/types.wado/Method";
     __match_scrut_0 = method;
@@ -514,10 +527,8 @@ condition: method matches { Patch }
     trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
     trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     headers = __cm_binding__Fields_new();
-    let __sroa___pattern_temp_1_0: i32;
-    let __sroa___pattern_temp_1_1: i32;
-    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_binding__Response_new(headers, 0, 0, trailers_future);
-    response = __sroa___pattern_temp_1_0;
+    __pattern_temp_1 = __cm_binding__Response_new(headers, 0, 0, trailers_future);
+    response = __pattern_temp_1.0;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;
@@ -888,15 +899,15 @@ fn __cm_binding__Fields_new() {
 }
 
 fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
-    let __outptr: i32;
-    let __lifted_result_5: i32;
-    let __lifted_result_6: i32;
-    __outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:http/Response::new"(headers, contents_flat0, contents_flat1, trailers, __outptr);
-    __lifted_result_5 = builtin::load_i32(__outptr + 0);
-    __lifted_result_6 = builtin::load_i32(__outptr + 4);
-    drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_5; __lifted_result_6;
+    let __async_outptr: i32;
+    let __subtask: i32;
+    let __future_handle: i32;
+    __async_outptr = "mem/realloc"(0, 0, 4, 8);
+    __subtask = "wasi/wasi:http/Response::new"(headers, contents_flat0, contents_flat1, trailers, __async_outptr);
+    "core:internal/wait_for_subtask"(__subtask);
+    __future_handle = builtin::load_i32(__async_outptr);
+    drop("mem/realloc"(__async_outptr, 8, 4, 0));
+    return __future_handle;
 }
 
 fn __cm_export__handle(request) {
@@ -957,6 +968,26 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
     "wasi/stream-drop-writable"(tx);
 }
 
+fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
+    let handle: i32;
+    let subtask: i32;
+    let ws: i32;
+    let __local_4: i32;
+    handle = packed >> 4;
+    if handle != 0 {
+        subtask = handle;
+        ws = "wasi/waitable-set-new"();
+        drop(__inline_cm_waitable_join_0: block -> i32 {
+            __local_4 = subtask;
+            "wasi/waitable-join"(__local_4, ws);
+            break __inline_cm_waitable_join_0: __local_4;
+        });
+        "core:internal/cm_waitable_set_wait"(ws);
+        "wasi/subtask-drop"(subtask);
+        "wasi/waitable-set-drop"(ws);
+    };
+}
+
 fn "core:internal/log_stderr"(message) {  // from core:internal
     let rx: i32;
     let tx: i32;
@@ -966,7 +997,13 @@ fn "core:internal/log_stderr"(message) {  // from core:internal
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
+    let __cis_outptr_1: i32;
+    let __cis_future_3: i32;
+    __cis_outptr_1 = "mem/realloc"(0, 0, 4, 4);
+    drop("wasi/wasi:cli/Stderr::write_via_stream"(rx, __cis_outptr_1));
+    __cis_future_3 = builtin::load_i32(__cis_outptr_1);
+    drop("mem/realloc"(__cis_outptr_1, 4, 4, 0));
+    future_handle = __cis_future_3;
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
     "wasi/future-drop-readable:transmission-cli"(future);
@@ -1024,6 +1061,14 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
+fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
+    let out_ptr: i32;
+    out_ptr = "mem/realloc"(0, 0, 4, 8);
+    drop("wasi/waitable-set-wait"(ws, out_ptr));
+    drop("mem/realloc"(out_ptr, 8, 4, 0));
+    return;
+}
+
 fn count_digits_i64(val) {
     let n: i32;
     let t: i64;
@@ -1034,13 +1079,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l60: loop {
+            l61: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l60;
+                continue l61;
             };
         };
     };
@@ -1057,14 +1102,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l64: loop {
+                l65: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l64;
+                    continue l65;
                 };
             };
         };
@@ -1174,13 +1219,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l76: loop {
+            l77: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l76;
+                continue l77;
             };
         };
     };

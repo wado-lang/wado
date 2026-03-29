@@ -141,6 +141,11 @@ struct ErrorCode::InternalError {
     payload_0: ref null String,
 }
 
+struct [Response, Future<Result<unit,ErrorCode>>] {
+    mut 0: i32,
+    mut 1: i32,
+}
+
 array array<Array<u8>> (mut ref Array<u8>);
 
 struct ArrayIter<Array<u8>> {  // from core:allocator  // ArrayIter<T> with T=Array<u8>
@@ -242,19 +247,25 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:http/Fields::new" = fn() -> i32;
 
-type "functype/wasi/wasi:http/Request::consume_body" = fn(i32, i32, i32);
+type "functype/wasi/wasi:http/Request::consume_body" = fn(i32, i32, i32) -> i32;
 
-type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
+type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32) -> i32;
 
 type "functype/handle" = fn(i32);
 
+type "functype/__cm_binding__Request_consume_body" = fn(i32, i32) -> i32;
+
 type "functype/__cm_binding__Fields_new" = fn() -> i32;
+
+type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> ref "tuple/[Response, Future<Result<unit,ErrorCode>>]";
 
 type "functype/__cm_export__handle" = fn(i32);
 
 type "functype/core:internal/memory_to_gc_array" = fn(i32, i32) -> ref array<u8>;
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
+
+type "functype/core:internal/wait_for_subtask" = fn(i32);
 
 type "functype/core:internal/cm_lower_string" = fn(ref String) -> i64;
 
@@ -284,9 +295,9 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/future-write" = fn(i32, i32) -> i32;
 
-type "functype/__cm_binding__Request_consume_body" = fn(i32, i32) -> [i32, i32];
+type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
 import fn realloc from "mem/realloc";
 import fn stream-read from "wasi/stream-read";
@@ -306,6 +317,7 @@ import fn future-new from "wasi/future-new";
 import fn stream-new from "wasi/stream-new";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn future-write from "wasi/future-write";
+import fn subtask-drop from "wasi/subtask-drop";
 
 fn handle(request) {
     let res_future: i32;
@@ -455,14 +467,14 @@ fn handle(request) {
     let __packed_165: i64;
     let __ptr_166: i32;
     let __len_167: i32;
+    let __pattern_temp_4: ref "tuple/[Response, Future<Result<unit,ErrorCode>>]";
     let __pattern_temp_5: ref null Array<u8>;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new:transmission-http"();
     res_future = builtin::i32_wrap_i64(__pair_temp_1);
-    let __sroa___pattern_temp_1_0: i32;
-    let __sroa___pattern_temp_1_1: i32;
-    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_binding__Request_consume_body(request, res_future);
-    body_stream = __sroa___pattern_temp_1_0;
+    drop(__cm_binding__Request_consume_body(request, res_future));
+    body_stream = unreachable;
+    drop(unreachable);
     chunks = __seq_lit: block -> ref Array<Array<u8>> {
         __local_5 = Array<Array<u8>> { repr: builtin::array_new<ref Array<u8>>(0), used: 0 };
         break __seq_lit: __local_5;
@@ -487,10 +499,8 @@ fn handle(request) {
     resp_rx = builtin::i32_wrap_i64(__pair_temp_3);
     resp_tx = builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64);
     headers = __cm_binding__Fields_new();
-    let __sroa___pattern_temp_4_0: i32;
-    let __sroa___pattern_temp_4_1: i32;
-    multivalue_bind [__sroa___pattern_temp_4_0, __sroa___pattern_temp_4_1] = __cm_binding__Response_new(headers, 1, resp_rx, trailers_future);
-    response = __sroa___pattern_temp_4_0;
+    __pattern_temp_4 = __cm_binding__Response_new(headers, 1, resp_rx, trailers_future);
+    response = __pattern_temp_4.0;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;
@@ -830,15 +840,15 @@ fn handle(request) {
 }
 
 fn __cm_binding__Request_consume_body(this, res) {
-    let __outptr: i32;
-    let __lifted_result_3: i32;
-    let __lifted_result_4: i32;
-    __outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:http/Request::consume_body"(this, res, __outptr);
-    __lifted_result_3 = builtin::load_i32(__outptr + 0);
-    __lifted_result_4 = builtin::load_i32(__outptr + 4);
-    drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_3; __lifted_result_4;
+    let __async_outptr: i32;
+    let __subtask: i32;
+    let __future_handle: i32;
+    __async_outptr = "mem/realloc"(0, 0, 4, 8);
+    __subtask = "wasi/wasi:http/Request::consume_body"(this, res, __async_outptr);
+    "core:internal/wait_for_subtask"(__subtask);
+    __future_handle = builtin::load_i32(__async_outptr);
+    drop("mem/realloc"(__async_outptr, 8, 4, 0));
+    return __future_handle;
 }
 
 fn __cm_binding__Fields_new() {
@@ -846,15 +856,15 @@ fn __cm_binding__Fields_new() {
 }
 
 fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
-    let __outptr: i32;
-    let __lifted_result_5: i32;
-    let __lifted_result_6: i32;
-    __outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:http/Response::new"(headers, contents_flat0, contents_flat1, trailers, __outptr);
-    __lifted_result_5 = builtin::load_i32(__outptr + 0);
-    __lifted_result_6 = builtin::load_i32(__outptr + 4);
-    drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_5; __lifted_result_6;
+    let __async_outptr: i32;
+    let __subtask: i32;
+    let __future_handle: i32;
+    __async_outptr = "mem/realloc"(0, 0, 4, 8);
+    __subtask = "wasi/wasi:http/Response::new"(headers, contents_flat0, contents_flat1, trailers, __async_outptr);
+    "core:internal/wait_for_subtask"(__subtask);
+    __future_handle = builtin::load_i32(__async_outptr);
+    drop("mem/realloc"(__async_outptr, 8, 4, 0));
+    return __future_handle;
 }
 
 fn __cm_export__handle(request) {
@@ -895,6 +905,26 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
                 continue l49;
             };
         };
+    };
+}
+
+fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
+    let handle: i32;
+    let subtask: i32;
+    let ws: i32;
+    let __local_4: i32;
+    handle = packed >> 4;
+    if handle != 0 {
+        subtask = handle;
+        ws = "wasi/waitable-set-new"();
+        drop(__inline_cm_waitable_join_0: block -> i32 {
+            __local_4 = subtask;
+            "wasi/waitable-join"(__local_4, ws);
+            break __inline_cm_waitable_join_0: __local_4;
+        });
+        "core:internal/cm_waitable_set_wait"(ws);
+        "wasi/subtask-drop"(subtask);
+        "wasi/waitable-set-drop"(ws);
     };
 }
 
@@ -967,6 +997,14 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
     drop("mem/realloc"(ptr, len, 1, 0));
 }
 
+fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
+    let out_ptr: i32;
+    out_ptr = "mem/realloc"(0, 0, 4, 8);
+    drop("wasi/waitable-set-wait"(ws, out_ptr));
+    drop("mem/realloc"(out_ptr, 8, 4, 0));
+    return;
+}
+
 fn ArrayIter<Array<u8>>^Iterator::next(self) {
     let item: ref Array<u8>;
     if self.index >= self.used {
@@ -1006,13 +1044,13 @@ fn Array<Array<u8>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l56: loop {
+            l57: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Array<u8>>(new_repr, i, builtin::array_get<ref Array<u8>>(old_repr, i));
                 i = i + 1;
-                continue l56;
+                continue l57;
             };
         };
     };

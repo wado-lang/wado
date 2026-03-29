@@ -1141,12 +1141,7 @@ fn synthesize_lift_tuple(
         let elem_type_ids: Vec<TypeId> = elems
             .iter()
             .map(|t| {
-                wasi_type_to_type_id_scoped(
-                    t,
-                    &mut tt,
-                    Some(ctx.wasi_registry),
-                    ctx.wasi_package,
-                )
+                wasi_type_to_type_id_scoped(t, &mut tt, Some(ctx.wasi_registry), ctx.wasi_package)
             })
             .collect();
         tt.make_tuple(elem_type_ids)
@@ -1960,9 +1955,8 @@ fn wasi_return_type_id(
     func_info: &WasiFunctionInfo,
     wasi_registry: &crate::component_model::WasiRegistry,
 ) -> TypeId {
-    let needs_async_lower = func_info.is_async
-        || func_info.has_streaming_param()
-        || func_info.return_type_has_future();
+    let needs_async_lower =
+        func_info.is_async || func_info.has_streaming_param() || func_info.return_type_has_future();
     if needs_async_lower {
         // Async/streaming: raw call returns subtask handle (i32)
         TypeTable::I32
@@ -2481,9 +2475,8 @@ fn synthesize_adapter(
     // ---- Handle outptr for async or complex returns ----
     // Track async outptr allocation info for later freeing.
     let mut async_outptr_info: Option<(u32, u32, u32)> = None; // (local_index, size, align)
-    let needs_async_lower = func_info.is_async
-        || func_info.has_streaming_param()
-        || func_info.return_type_has_future();
+    let needs_async_lower =
+        func_info.is_async || func_info.has_streaming_param() || func_info.return_type_has_future();
     if needs_async_lower {
         // WASI P3 async calling convention (also used for streaming functions per CM spec):
         // - MAX_FLAT_ASYNC_PARAMS = 4 flat params before switching to indirect.
@@ -5853,11 +5846,11 @@ fn fixup_wasi_derived_types_in_adapter(
     // precisely by synthesis and should not be modified by the recursive type
     // replacement, which can produce different TypeIds for the same logical type
     // through different wasi_type_to_type_id resolution paths.
-    if !adapter.is_cm_binding {
-        if let Some(return_type) = &func_info.return_type {
-            let resolved = wasi_registry.resolve_type(return_type);
-            replace_wasi_derived_type_recursive(adapter, &resolved, user_return_type, type_table);
-        }
+    if !adapter.is_cm_binding
+        && let Some(return_type) = &func_info.return_type
+    {
+        let resolved = wasi_registry.resolve_type(return_type);
+        replace_wasi_derived_type_recursive(adapter, &resolved, user_return_type, type_table);
     }
 }
 
@@ -6555,16 +6548,10 @@ fn rewrite_calls_in_expr(
             // Fix up binding function types from the call site
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                let returns_future = wasi_registry
-                    .get_function(&qualified)
-                    .is_some_and(|f| f.return_type_has_future());
-                if is_streaming && !returns_future {
-                    // Streaming adapters without Future return: set call site type to i32.
+                if is_streaming {
+                    // Streaming adapters return i32 (Future handle).
+                    // Caller must cast to the correct Future type before .drop().
                     expr.type_id = TypeTable::I32;
-                } else if is_streaming {
-                    // Streaming adapters returning Future: keep caller's original type
-                    // so that .drop() resolves via CM method dispatch to the correct
-                    // future-drop-readable canonical with the right payload type.
                 } else if adapter.return_type != expr.type_id {
                     let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;
@@ -6684,16 +6671,10 @@ fn rewrite_calls_in_expr(
             // The binding params include self as the first param
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                let returns_future = wasi_registry
-                    .get_function(&qualified)
-                    .is_some_and(|f| f.return_type_has_future());
-                if is_streaming && !returns_future {
-                    // Streaming adapters without Future return: set call site type to i32.
+                if is_streaming {
+                    // Streaming adapters return i32 (Future handle).
+                    // Caller must cast to the correct Future type before .drop().
                     expr.type_id = TypeTable::I32;
-                } else if is_streaming {
-                    // Streaming adapters returning Future: keep caller's original type
-                    // so that .drop() resolves via CM method dispatch to the correct
-                    // future-drop-readable canonical with the right payload type.
                 } else if adapter.return_type != expr.type_id {
                     let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;
@@ -6741,8 +6722,9 @@ fn rewrite_calls_in_expr(
                 // Skip for CM bindings — their types were set precisely by synthesis
                 // and the recursive replacement can produce TypeId mismatches for
                 // complex return types like [Stream<T>, Future<Result<_, E>>].
-                if !adapter.is_cm_binding {
-                  if let Some(func_info) = wasi_registry.get_function(&qualified) {
+                if !adapter.is_cm_binding
+                    && let Some(func_info) = wasi_registry.get_function(&qualified)
+                {
                     let call_args: Vec<TirExpr> =
                         taken_args.iter().map(|a| a.expr.clone()).collect();
                     fixup_wasi_derived_types_in_adapter(
@@ -6754,7 +6736,6 @@ fn rewrite_calls_in_expr(
                         wasi_registry,
                         true, // skip_self: call_args excludes self
                     );
-                  }
                 }
             }
 
@@ -6868,18 +6849,18 @@ fn rewrite_calls_in_expr(
                 }
                 // Replace WASI-derived types in the body with the user's types.
                 // Skip for CM bindings (same reason as above).
-                if !adapter.is_cm_binding {
-                    if let Some(func_info) = &wasi_func_info {
-                        fixup_wasi_derived_types_in_adapter(
-                            &mut adapter,
-                            func_info,
-                            &taken_args,
-                            expr.type_id,
-                            type_table,
-                            wasi_registry,
-                            false, // skip_self: static calls have no self
-                        );
-                    }
+                if !adapter.is_cm_binding
+                    && let Some(func_info) = &wasi_func_info
+                {
+                    fixup_wasi_derived_types_in_adapter(
+                        &mut adapter,
+                        func_info,
+                        &taken_args,
+                        expr.type_id,
+                        type_table,
+                        wasi_registry,
+                        false, // skip_self: static calls have no self
+                    );
                 }
             }
 

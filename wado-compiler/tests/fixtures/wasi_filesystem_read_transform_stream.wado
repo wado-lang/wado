@@ -16,6 +16,7 @@
 
 use { Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { ErrorCode } from "wasi:filesystem/types.wado";
 
 
 fn to_upper(data: Array<u8>) -> Array<u8> {
@@ -63,7 +64,7 @@ export fn run() with Stdout, Stderr, Preopens {
         }
         file_rx.drop();
         out_tx.drop();
-        subtask.drop();
+        let __f = subtask as Future<Result<(), ErrorCode>>; __f.drop();
         read_future.drop();
     }
 }

@@ -3311,6 +3311,10 @@ Exits with a specific status code.
 
 #### `pub fn log_stdout(message: String)`
 
+Logs a message with newline to stdout (ambient, no effect required).
+Uses builtin::call_indirect__ to bypass the effect system — this is
+intentional for logging/debugging which must work without effects.
+
 #### `pub fn log_stderr(message: String)`
 
 Logs a message with newline to stderr (ambient, no effect required).

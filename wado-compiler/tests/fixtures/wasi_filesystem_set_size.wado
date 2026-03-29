@@ -8,6 +8,7 @@
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, DescriptorFlags, PathFlags, OpenFlags } from "wasi:filesystem";
+use { ErrorCode } from "wasi:filesystem/types.wado";
 
 
 fn write_bytes(file: &Descriptor, data: Array<u8>) {
@@ -15,7 +16,7 @@ fn write_bytes(file: &Descriptor, data: Array<u8>) {
     let subtask = file.write_via_stream(write_rx, 0 as Filesize);
     write_tx.write(data);
     write_tx.drop();
-        subtask.drop();
+        let __f = subtask as Future<Result<(), ErrorCode>>; __f.drop();
 }
 
 fn read_all(file: &Descriptor) -> Array<u8> {

@@ -12,7 +12,7 @@ export fn run() with Stdout, Stdin {
     let [stdin_stream, _done] = Stdin::read_via_stream();
     let subtask = Stdout::write_via_stream(stdin_stream);
     subtask.read();
-        subtask.drop();
+        let __f = subtask as Future<Result<(), ErrorCode>>; __f.drop();
 }
 
 __DATA__

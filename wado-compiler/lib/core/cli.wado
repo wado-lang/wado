@@ -8,21 +8,18 @@
 //
 // WASI P3 write_via_stream ordering:
 // 1. Create stream pair: Stream::<u8>::new() → [rx, tx]
-// 2. Start write_via_stream(rx) — returns a Future handle
+// 2. Start write_via_stream(rx) — returns a Future handle (i32)
 // 3. Write data to tx via StreamWritable::write()
 // 4. Drop tx via StreamWritable::drop()
-// 5. Drop the Future to signal completion
+// 5. Cast handle to Future and drop to signal completion
 
 use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
+use { ErrorCode } from "wasi:cli/types.wado";
 
 // Re-export commonly used effects for convenience
 pub use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
 pub use { log_stdout, log_stderr } from "core:internal";
 /// Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
-/// Called AFTER the consumer (write_via_stream) has been started.
-///
-/// Uses write_raw to pass String's internal GC array directly to the stream,
-/// avoiding the intermediate String → Array<u8> byte-by-byte copy.
 pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
     let bytes = message.internal_raw_bytes();
     let len = message.len();
@@ -37,49 +34,51 @@ pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: boo
     tx.drop();
 }
 
+/// Drop a CLI write_via_stream Future handle.
+fn drop_write_future(handle: i32) {
+    let future = handle as Future<Result<(), ErrorCode>>;
+    future.drop();
+}
+
 /// Prints a line to stdout (adds newline).
 pub fn println(message: String) with Stdout {
     let [rx, tx] = Stream::<u8>::new();
-
-    let future = Stdout::write_via_stream(rx);
+    let handle = Stdout::write_via_stream(rx);
     write_to_stream(tx, message, true);
-    future.drop();
+    drop_write_future(handle);
 }
 
 /// Prints a line to stderr (adds newline).
 pub fn eprintln(message: String) with Stderr {
     let [rx, tx] = Stream::<u8>::new();
-
-    let future = Stderr::write_via_stream(rx);
+    let handle = Stderr::write_via_stream(rx);
     write_to_stream(tx, message, true);
-    future.drop();
+    drop_write_future(handle);
 }
 
 /// Prints to stdout without a trailing newline.
 pub fn print(message: String) with Stdout {
     let [rx, tx] = Stream::<u8>::new();
-
-    let future = Stdout::write_via_stream(rx);
+    let handle = Stdout::write_via_stream(rx);
     write_to_stream(tx, message, false);
-    future.drop();
+    drop_write_future(handle);
 }
 
 /// Prints to stderr without a trailing newline.
 pub fn eprint(message: String) with Stderr {
     let [rx, tx] = Stream::<u8>::new();
-
-    let future = Stderr::write_via_stream(rx);
+    let handle = Stderr::write_via_stream(rx);
     write_to_stream(tx, message, false);
-    future.drop();
+    drop_write_future(handle);
 }
+
 /// Writes raw bytes to stdout.
 pub fn print_bytes(data: Array<u8>) with Stdout {
     let [rx, tx] = Stream::<u8>::new();
-
-    let future = Stdout::write_via_stream(rx);
+    let handle = Stdout::write_via_stream(rx);
     tx.write(data);
     tx.drop();
-    future.drop();
+    drop_write_future(handle);
 }
 
 /// Returns the value of an environment variable by name.

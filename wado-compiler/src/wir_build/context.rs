@@ -653,9 +653,10 @@ impl<'a> WirContext<'a> {
                         .collect();
                     let found = self.tuple_type_map.iter().find(|(key_elems, _)| {
                         key_elems.len() == elem_wir_types.len()
-                            && key_elems.iter().zip(elem_wir_types.iter()).all(
-                                |(k, w)| self.type_id_to_wir_type(type_table, *k) == *w,
-                            )
+                            && key_elems
+                                .iter()
+                                .zip(elem_wir_types.iter())
+                                .all(|(k, w)| self.type_id_to_wir_type(type_table, *k) == *w)
                     });
                     if let Some((_, type_id)) = found {
                         WirType::Ref {
@@ -753,8 +754,8 @@ impl<'a> WirContext<'a> {
 
     /// Find a tuple WIR type that matches the given TIR elements by WIR type compatibility.
     ///
-    /// When CM binding synthesis creates tuple types, the TypeIds may not exactly match
-    /// the ones in tuple_type_map. This fallback searches by matching WIR types of elements.
+    /// When CM binding synthesis creates tuple types, the `TypeIds` may not exactly match
+    /// the ones in `tuple_type_map`. This fallback searches by matching WIR types of elements.
     pub fn find_tuple_type_for_elements(
         &self,
         type_table: &crate::tir::TypeTable,

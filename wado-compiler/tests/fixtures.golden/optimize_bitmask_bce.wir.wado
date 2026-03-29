@@ -43,7 +43,7 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
+type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
 
@@ -221,7 +221,13 @@ fn "core:internal/log_stderr"(message) {  // from core:internal
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
+    let __cis_outptr_1: i32;
+    let __cis_future_3: i32;
+    __cis_outptr_1 = "mem/realloc"(0, 0, 4, 4);
+    drop("wasi/wasi:cli/Stderr::write_via_stream"(rx, __cis_outptr_1));
+    __cis_future_3 = builtin::load_i32(__cis_outptr_1);
+    drop("mem/realloc"(__cis_outptr_1, 4, 4, 0));
+    future_handle = __cis_future_3;
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
     "wasi/future-drop-readable:transmission-cli"(future);

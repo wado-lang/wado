@@ -4204,17 +4204,29 @@ impl FunctionTranslator<'_, '_> {
                                 result_ty: WirType::I32,
                             });
                             return Some(WirInstr::Seq(vec![
-                                WirInstr::DeclareLocal { name: outptr_local.clone(), ty: WirType::I32 },
-                                WirInstr::DeclareLocal { name: subtask_local.clone(), ty: WirType::I32 },
-                                WirInstr::DeclareLocal { name: future_local.clone(), ty: WirType::I32 },
+                                WirInstr::DeclareLocal {
+                                    name: outptr_local.clone(),
+                                    ty: WirType::I32,
+                                },
+                                WirInstr::DeclareLocal {
+                                    name: subtask_local.clone(),
+                                    ty: WirType::I32,
+                                },
+                                WirInstr::DeclareLocal {
+                                    name: future_local.clone(),
+                                    ty: WirType::I32,
+                                },
                                 WirInstr::LocalSet {
                                     name: outptr_local.clone(),
                                     value: Box::new(outptr),
                                 },
                                 // Call WASI import with outptr
                                 WirInstr::LocalSet {
-                                    name: subtask_local.clone(),
-                                    value: Box::new(WirInstr::Call { func_id, args: call_args }),
+                                    name: subtask_local,
+                                    value: Box::new(WirInstr::Call {
+                                        func_id,
+                                        args: call_args,
+                                    }),
                                 },
                                 // Read Future handle from outptr
                                 WirInstr::LocalSet {
@@ -4232,14 +4244,20 @@ impl FunctionTranslator<'_, '_> {
                                 WirInstr::Drop(Box::new(WirInstr::Call {
                                     func_id: realloc_id,
                                     args: vec![
-                                        WirInstr::LocalGet { name: outptr_local, result_ty: WirType::I32 },
+                                        WirInstr::LocalGet {
+                                            name: outptr_local,
+                                            result_ty: WirType::I32,
+                                        },
                                         WirInstr::I32Const(4),
                                         WirInstr::I32Const(4),
                                         WirInstr::I32Const(0),
                                     ],
                                 })),
                                 // Return Future handle (not subtask handle)
-                                WirInstr::LocalGet { name: future_local, result_ty: WirType::I32 },
+                                WirInstr::LocalGet {
+                                    name: future_local,
+                                    result_ty: WirType::I32,
+                                },
                             ]));
                         }
                         // Fallback: no realloc available

@@ -45,9 +45,9 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
+type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
+type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/test_i32_to_f64" = fn();
 
@@ -117,6 +117,8 @@ type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
 type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
+type "functype/core:internal/wait_for_subtask" = fn(i32);
+
 type "functype/core:internal/log_stderr" = fn(ref String);
 
 type "functype/core:internal/panic" = fn(ref String);
@@ -179,6 +181,8 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
+type "functype/wasi/subtask-drop" = fn(i32);
+
 type "functype/unpack64" = fn(f64) -> [u64, i32];
 
 type "functype/pow10_coarse" = fn(i32) -> [u64, u64];
@@ -199,6 +203,8 @@ type "functype/f64::inspect_into" = fn(f64, ref Formatter);
 
 type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
 
+type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
+
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
 import fn task-return from "wasi/task-return";
@@ -212,6 +218,7 @@ import memory (1) from "mem/memory";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn subtask-drop from "wasi/subtask-drop";
 
 global mut POW10: ref null Array<u64> = ref.null none;
 global mut __modules_initialized: bool = 0;
@@ -1670,7 +1677,15 @@ fn run() with Stdout {
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
+    let __async_outptr: i32;
+    let __subtask: i32;
+    let __future_handle: i32;
+    __async_outptr = "mem/realloc"(0, 0, 4, 4);
+    __subtask = "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
+    "core:internal/wait_for_subtask"(__subtask);
+    __future_handle = builtin::load_i32(__async_outptr);
+    drop("mem/realloc"(__async_outptr, 4, 4, 0));
+    return __future_handle;
 }
 
 fn __cm_export__run() {
@@ -1706,13 +1721,15 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
 fn "core:cli/println"(message) with Stdout {  // from core:cli
     let rx: i32;
     let tx: i32;
+    let handle: i32;
     let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    future = __cm_binding__Stdout_write_via_stream(rx);
+    handle = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
+    future = handle;
     "wasi/future-drop-readable:transmission-cli"(future);
 }
 
@@ -1750,6 +1767,26 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
     "wasi/stream-drop-writable"(tx);
 }
 
+fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
+    let handle: i32;
+    let subtask: i32;
+    let ws: i32;
+    let __local_4: i32;
+    handle = packed >> 4;
+    if handle != 0 {
+        subtask = handle;
+        ws = "wasi/waitable-set-new"();
+        drop(__inline_cm_waitable_join_0: block -> i32 {
+            __local_4 = subtask;
+            "wasi/waitable-join"(__local_4, ws);
+            break __inline_cm_waitable_join_0: __local_4;
+        });
+        "core:internal/cm_waitable_set_wait"(ws);
+        "wasi/subtask-drop"(subtask);
+        "wasi/waitable-set-drop"(ws);
+    };
+}
+
 fn "core:internal/log_stderr"(message) {  // from core:internal
     let rx: i32;
     let tx: i32;
@@ -1759,7 +1796,13 @@ fn "core:internal/log_stderr"(message) {  // from core:internal
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
+    let __cis_outptr_1: i32;
+    let __cis_future_3: i32;
+    __cis_outptr_1 = "mem/realloc"(0, 0, 4, 4);
+    drop("wasi/wasi:cli/Stderr::write_via_stream"(rx, __cis_outptr_1));
+    __cis_future_3 = builtin::load_i32(__cis_outptr_1);
+    drop("mem/realloc"(__cis_outptr_1, 4, 4, 0));
+    future_handle = __cis_future_3;
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
     "wasi/future-drop-readable:transmission-cli"(future);
@@ -1810,6 +1853,14 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
+fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
+    let out_ptr: i32;
+    out_ptr = "mem/realloc"(0, 0, 4, 8);
+    drop("wasi/waitable-set-wait"(ws, out_ptr));
+    drop("mem/realloc"(out_ptr, 8, 4, 0));
+    return;
+}
+
 fn unpack64(f) {
     let bits: u64;
     let raw_mantissa: u64;
@@ -1845,39 +1896,39 @@ fn unrounded_div(u, d) {
 }
 
 fn pow10_coarse(i) {
-    b68: block {
-        b69: block {
-            b70: block {
-                b71: block {
-                    b72: block {
-                        b73: block {
-                            b74: block {
-                                b75: block {
-                                    b76: block {
-                                        b77: block {
-                                            b78: block {
-                                                b79: block {
-                                                    b80: block {
-                                                        b81: block {
-                                                            b82: block {
-                                                                b83: block {
-                                                                    b84: block {
-                                                                        b85: block {
-                                                                            b86: block {
-                                                                                b87: block {
-                                                                                    b88: block {
-                                                                                        b89: block {
-                                                                                            b90: block {
-                                                                                                b91: block {
-                                                                                                    b92: block {
-                                                                                                        b93: block {
-                                                                                                            b94: block {
-                                                                                                                b95: block {
+    b69: block {
+        b70: block {
+            b71: block {
+                b72: block {
+                    b73: block {
+                        b74: block {
+                            b75: block {
+                                b76: block {
+                                    b77: block {
+                                        b78: block {
+                                            b79: block {
+                                                b80: block {
+                                                    b81: block {
+                                                        b82: block {
+                                                            b83: block {
+                                                                b84: block {
+                                                                    b85: block {
+                                                                        b86: block {
+                                                                            b87: block {
+                                                                                b88: block {
+                                                                                    b89: block {
+                                                                                        b90: block {
+                                                                                            b91: block {
+                                                                                                b92: block {
+                                                                                                    b93: block {
+                                                                                                        b94: block {
+                                                                                                            b95: block {
+                                                                                                                b96: block {
                                                                                                                     br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26] default=0;
                                                                                                                 };
                                                                                                                 "core:internal/unreachable"();
                                                                                                                 unreachable;
-                                                                                                                break b68;
+                                                                                                                break b69;
                                                                                                             };
                                                                                                             return -9202643304706469457_i64; -2331608335343510137_i64;
                                                                                                         };
@@ -1934,118 +1985,118 @@ fn pow10_coarse(i) {
 }
 
 fn pow10_fine(i) {
-    return b96: block -> u64 {
-        b97: block {
-            b98: block {
-                b99: block {
-                    b100: block {
-                        b101: block {
-                            b102: block {
-                                b103: block {
-                                    b104: block {
-                                        b105: block {
-                                            b106: block {
-                                                b107: block {
-                                                    b108: block {
-                                                        b109: block {
-                                                            b110: block {
-                                                                b111: block {
-                                                                    b112: block {
-                                                                        b113: block {
-                                                                            b114: block {
-                                                                                b115: block {
-                                                                                    b116: block {
-                                                                                        b117: block {
-                                                                                            b118: block {
-                                                                                                b119: block {
-                                                                                                    b120: block {
-                                                                                                        b121: block {
-                                                                                                            b122: block {
-                                                                                                                b123: block {
-                                                                                                                    b124: block {
+    return b97: block -> u64 {
+        b98: block {
+            b99: block {
+                b100: block {
+                    b101: block {
+                        b102: block {
+                            b103: block {
+                                b104: block {
+                                    b105: block {
+                                        b106: block {
+                                            b107: block {
+                                                b108: block {
+                                                    b109: block {
+                                                        b110: block {
+                                                            b111: block {
+                                                                b112: block {
+                                                                    b113: block {
+                                                                        b114: block {
+                                                                            b115: block {
+                                                                                b116: block {
+                                                                                    b117: block {
+                                                                                        b118: block {
+                                                                                            b119: block {
+                                                                                                b120: block {
+                                                                                                    b121: block {
+                                                                                                        b122: block {
+                                                                                                            b123: block {
+                                                                                                                b124: block {
+                                                                                                                    b125: block {
                                                                                                                         br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27] default=0;
                                                                                                                     };
                                                                                                                     "core:internal/unreachable"();
                                                                                                                     unreachable;
-                                                                                                                    break b96;
+                                                                                                                    break b97;
                                                                                                                 };
                                                                                                                 -9223372036854775808_i64;
-                                                                                                                break b96;
+                                                                                                                break b97;
                                                                                                             };
                                                                                                             -6917529027641081856_i64;
-                                                                                                            break b96;
+                                                                                                            break b97;
                                                                                                         };
                                                                                                         -4035225266123964416_i64;
-                                                                                                        break b96;
+                                                                                                        break b97;
                                                                                                     };
                                                                                                     -432345564227567616_i64;
-                                                                                                    break b96;
+                                                                                                    break b97;
                                                                                                 };
                                                                                                 -7187745005283311616_i64;
-                                                                                                break b96;
+                                                                                                break b97;
                                                                                             };
                                                                                             -4372995238176751616_i64;
-                                                                                            break b96;
+                                                                                            break b97;
                                                                                         };
                                                                                         -854558029293551616_i64;
-                                                                                        break b96;
+                                                                                        break b97;
                                                                                     };
                                                                                     -7451627795949551616_i64;
-                                                                                    break b96;
+                                                                                    break b97;
                                                                                 };
                                                                                 -4702848726509551616_i64;
-                                                                                break b96;
+                                                                                break b97;
                                                                             };
                                                                             -1266874889709551616_i64;
-                                                                            break b96;
+                                                                            break b97;
                                                                         };
                                                                         -7709325833709551616_i64;
-                                                                        break b96;
+                                                                        break b97;
                                                                     };
                                                                     -5024971273709551616_i64;
-                                                                    break b96;
+                                                                    break b97;
                                                                 };
                                                                 -1669528073709551616_i64;
-                                                                break b96;
+                                                                break b97;
                                                             };
                                                             -7960984073709551616_i64;
-                                                            break b96;
+                                                            break b97;
                                                         };
                                                         -5339544073709551616_i64;
-                                                        break b96;
+                                                        break b97;
                                                     };
                                                     -2062744073709551616_i64;
-                                                    break b96;
+                                                    break b97;
                                                 };
                                                 -8206744073709551616_i64;
-                                                break b96;
+                                                break b97;
                                             };
                                             -5646744073709551616_i64;
-                                            break b96;
+                                            break b97;
                                         };
                                         -2446744073709551616_i64;
-                                        break b96;
+                                        break b97;
                                     };
                                     -8446744073709551616_i64;
-                                    break b96;
+                                    break b97;
                                 };
                                 -5946744073709551616_i64;
-                                break b96;
+                                break b97;
                             };
                             -2821744073709551616_i64;
-                            break b96;
+                            break b97;
                         };
                         -8681119073709551616_i64;
-                        break b96;
+                        break b97;
                     };
                     -6239712823709551616_i64;
-                    break b96;
+                    break b97;
                 };
                 -3187955011209551616_i64;
-                break b96;
+                break b97;
             };
             -8910000909647051616_i64;
-            break b96;
+            break b97;
         };
         -6525815118631426616_i64;
     };
@@ -2409,17 +2460,17 @@ fn write_digits_at(buf, offset, val, nd) {
     v = val;
     idx = (offset + nd) - 1;
     _licm_repr_9 = buf.repr;
-    b145: block {
-        l146: loop {
+    b146: block {
+        l147: loop {
             if (idx >= offset) == 0 {
-                break b145;
+                break b146;
             };
             index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
             builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
-            continue l146;
+            continue l147;
         };
     };
 }
@@ -2586,14 +2637,14 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         trailing_9 = (precision - leading_zeros) - digits_to_output;
         trim_d_10 = d;
         skip_11 = nd - digits_to_output;
-        b159: block {
-            l160: loop {
+        b160: block {
+            l161: loop {
                 if (skip_11 > 0) == 0 {
-                    break b159;
+                    break b160;
                 };
                 trim_d_10 = trim_d_10 /u 10_i64;
                 skip_11 = skip_11 - 1;
-                continue l160;
+                continue l161;
             };
         };
         digit_offset = buf.used;
@@ -2616,14 +2667,14 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
             output_nd = decimal_pos + precision;
             trim_d_16 = d;
             skip_17 = nd - output_nd;
-            b165: block {
-                l166: loop {
+            b166: block {
+                l167: loop {
                     if (skip_17 > 0) == 0 {
-                        break b165;
+                        break b166;
                     };
                     trim_d_16 = trim_d_16 /u 10_i64;
                     skip_17 = skip_17 - 1;
-                    continue l166;
+                    continue l167;
                 };
             };
             total = output_nd + 1;
@@ -2691,13 +2742,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l174: loop {
+            l175: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l174;
+                continue l175;
             };
         };
     };
@@ -2714,14 +2765,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l178: loop {
+                l179: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l178;
+                    continue l179;
                 };
             };
         };
@@ -2785,13 +2836,13 @@ fn Array<u64>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l186: loop {
+            l187: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
                 i = i + 1;
-                continue l186;
+                continue l187;
             };
         };
     };
@@ -3092,13 +3143,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l221: loop {
+            l222: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l221;
+                continue l222;
             };
         };
     };
@@ -3191,10 +3242,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_8 = content_len - 1;
         _licm_buf_29 = self.buf;
         _licm_repr_33 = _licm_buf_29.repr;
-        b231: block {
-            l232: loop {
+        b232: block {
+            l233: loop {
                 if (i_8 >= 0) == 0 {
-                    break b231;
+                    break b232;
                 };
                 index_14 = (start_pos + left_pad) + i_8;
                 value_15 = __inline_String__get_byte_2: block -> u8 {
@@ -3203,7 +3254,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l232;
+                continue l233;
             };
         };
         __for_1: block {
@@ -3211,14 +3262,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_30 = self.buf;
             _licm_repr_34 = _licm_buf_30.repr;
             block {
-                l235: loop {
+                l236: loop {
                     if (j_9 < left_pad) == 0 {
                         break __for_1;
                     };
                     index_19 = start_pos + j_9;
                     builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                     j_9 = j_9 + 1;
-                    continue l235;
+                    continue l236;
                 };
             };
         };
@@ -3228,10 +3279,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_10 = content_len - 1;
         _licm_buf_31 = self.buf;
         _licm_repr_35 = _licm_buf_31.repr;
-        b237: block {
-            l238: loop {
+        b238: block {
+            l239: loop {
                 if (i_10 >= 0) == 0 {
-                    break b237;
+                    break b238;
                 };
                 index_22 = (start_pos + padding) + i_10;
                 value_23 = __inline_String__get_byte_5: block -> u8 {
@@ -3240,7 +3291,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
-                continue l238;
+                continue l239;
             };
         };
         __for_2: block {
@@ -3248,14 +3299,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_32 = self.buf;
             _licm_repr_36 = _licm_buf_32.repr;
             block {
-                l241: loop {
+                l242: loop {
                     if (j_11 < padding) == 0 {
                         break __for_2;
                     };
                     index_27 = start_pos + j_11;
                     builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                     j_11 = j_11 + 1;
-                    continue l241;
+                    continue l242;
                 };
             };
         };
