@@ -90,3 +90,6 @@ It may include TODOs on WIP.
 - [Default Trait](./wep-2026-03-04-default-trait.md)
 - [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md)
 - [Conversion Traits (From, TryFrom, ? operator)](./wep-2026-03-16-conversion-traits.md)
+- [WIT Bundling in Component Binaries](./wep-2026-03-21-wit-bundling.md)
+- [Same-Scope Shadowing with Self-Reference](./wep-2026-03-25-same-scope-shadowing.md)
+- [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
