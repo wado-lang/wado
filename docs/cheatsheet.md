@@ -959,7 +959,8 @@ test "panics on invalid input" {
     panic("bad input");
 }
 
-// TODO test: like #[expect_trap], but should be solved in the future
+// TODO test: reported on a separate axis from pass/fail.
+// Pending (traps) = expected. Resolved (passes) = must remove #[TODO].
 #[TODO]
 test "not yet implemented" {
     panic("TODO: implement this");

@@ -554,9 +554,11 @@ fn run_test_world(
             match func.call_async(&mut store, ()).await {
                 Ok((Ok(()),)) => {
                     if is_todo {
+                        // TODO test passed — the feature may now work.
+                        // This is a hard failure: #[TODO] must be removed.
                         anyhow::bail!(
-                            "[{test_id}] TODO test '{test_name}' passed unexpectedly — \
-                             the feature may be implemented; remove the #[TODO] attribute"
+                            "[{test_id}] TODO test '{test_name}' resolved — \
+                             remove the #[TODO] attribute"
                         );
                     } else if expect_trap {
                         anyhow::bail!(
@@ -579,7 +581,7 @@ fn run_test_world(
                             "[{test_id}] test '{test_name}' trapped: {e}. stderr: {stderr_text}"
                         );
                     }
-                    // expected trap (expect_trap or TODO): pass
+                    // expected trap (expect_trap or TODO): pending
                 }
             }
 
@@ -665,12 +667,14 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
         match test_result {
             Ok(()) if spec.test_world.is_some() => {
                 // Test world: individual tests are already marked #[TODO] by the resolver.
-                // Success here means all TODO tests trapped as expected — this is correct.
+                // Success here means all TODO tests resolved — report but don't fail.
             }
             Ok(()) => {
+                // #![TODO] module passed — the feature may now work.
+                // This is a hard failure: #![TODO] must be removed.
                 panic!(
-                    "[{test_id}] #![TODO] module PASSED! The feature may be implemented.\n\
-                     Remove the #![TODO] attribute from the source file."
+                    "[{test_id}] #![TODO] module resolved — \
+                     remove the #![TODO] attribute from the source file."
                 );
             }
             Err(err) => {
@@ -679,13 +683,13 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
                     .map(String::as_str)
                     .or_else(|| err.downcast_ref::<&str>().copied())
                     .unwrap_or("(unknown panic)");
-                eprintln!("[{test_id}] #![TODO] module failed as expected: {msg}");
+                eprintln!("[{test_id}] #![TODO] module pending: {msg}");
                 return;
             }
         }
     }
 
-    // Normal test - run without panic recovery
+    // Normal test (or resolved TODO module) - run without panic recovery
     run_normal_test(fixture_path, source, opt_level, &spec, &test_id);
 }
 
