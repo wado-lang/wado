@@ -1800,6 +1800,30 @@ pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &Was
                     flatten_wasi_param_type(field_ty, out, registry);
                 }
             }
+            // Variant types flatten to: discriminant i32 + union(max payload)
+            name if registry.is_variant(name) => {
+                out.push(ValType::I32); // discriminant
+                if let Some(cases) = registry.get_variant_cases(name) {
+                    let mut max_flat: Vec<ValType> = Vec::new();
+                    for case in cases {
+                        if let Some(payload_ty) = &case.payload {
+                            let mut case_flat = Vec::new();
+                            flatten_wasi_param_type(payload_ty, &mut case_flat, registry);
+                            let len = case_flat.len().max(max_flat.len());
+                            for i in 0..len {
+                                let old = max_flat.get(i).copied();
+                                let new = case_flat.get(i).copied();
+                                if i < max_flat.len() {
+                                    max_flat[i] = join_val_types(old, new);
+                                } else {
+                                    max_flat.push(join_val_types(old, new));
+                                }
+                            }
+                        }
+                    }
+                    out.extend(max_flat);
+                }
+            }
             // Resource handles, enums, etc.
             _ => out.push(ValType::I32),
         },

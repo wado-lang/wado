@@ -443,8 +443,18 @@ fn emit_cm_val_type(
             ComponentValType::Type(idx)
         }
         Type::Generic(g) if g.name == "Option" && !g.args.is_empty() => {
-            let element_val_type =
-                type_to_cm_primitive_with_resources(&g.args[0], own_resource_type_indices);
+            let element_val_type = emit_cm_val_type(
+                &g.args[0],
+                instance_type,
+                local_type_idx,
+                error_code_idx,
+                has_local_error_code,
+                enum_export_indices,
+                own_resource_type_indices,
+                shared_type_gen,
+                project,
+                ctx,
+            );
             instance_type.ty().defined_type().option(element_val_type);
             let idx = *local_type_idx;
             *local_type_idx += 1;
@@ -488,6 +498,22 @@ fn emit_cm_val_type(
                 && let Some(&idx) = enum_export_indices.get(&named.name)
             {
                 return ComponentValType::Type(idx);
+            }
+            // Complex types (e.g. WASI records like Instant) use shared type gen
+            if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
+                type_gen.set_next_idx(*local_type_idx);
+                let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
+                    .iter()
+                    .map(|(k, &v)| (k.as_str(), v))
+                    .collect();
+                let val = type_gen.ast_type_to_cm(
+                    ty,
+                    instance_type,
+                    proj.wasi_registry,
+                    &resource_exports,
+                );
+                *local_type_idx = type_gen.next_idx();
+                return val;
             }
             type_to_cm_primitive_with_resources(ty, own_resource_type_indices)
         }
@@ -1407,6 +1433,13 @@ fn generate_wasi_imports(
                     (wado_name.to_string(), (cm_name.to_string(), cases.to_vec()))
                 })
                 .collect();
+            // Shared CmInstanceTypeGen for complex types across variant payloads and functions.
+            // Created early so variant payload types (e.g. Instant in NewTimestamp) are cached
+            // and reused when the same types appear in function signatures.
+            let mut shared_type_gen = CmInstanceTypeGen::new(local_type_idx);
+            for (name, &idx) in &enum_export_indices {
+                shared_type_gen.register_existing(&format!("enum:{name}"), idx);
+            }
             for variant_name in &needed_variants {
                 if let Some((_, cases)) = interface_variants.get(variant_name) {
                     // Build CM variant cases: (kebab-name, optional payload type)
@@ -1414,7 +1447,8 @@ fn generate_wasi_imports(
                         .iter()
                         .map(|c| {
                             let payload = c.payload.as_ref().map(|ty| {
-                                emit_cm_val_type(
+                                shared_type_gen.set_next_idx(local_type_idx);
+                                let val = emit_cm_val_type(
                                     ty,
                                     &mut instance_type,
                                     &mut local_type_idx,
@@ -1422,10 +1456,12 @@ fn generate_wasi_imports(
                                     has_local_error_code,
                                     &enum_export_indices,
                                     &own_resource_type_indices,
-                                    None,
-                                    None,
+                                    Some(&mut shared_type_gen),
+                                    Some(project),
                                     ctx,
-                                )
+                                );
+                                local_type_idx = shared_type_gen.next_idx().max(local_type_idx);
+                                val
                             });
                             (c.cm_name.as_str(), payload)
                         })
@@ -1476,17 +1512,11 @@ fn generate_wasi_imports(
 
             let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
 
-            // Shared CmInstanceTypeGen for complex ok types across all functions.
-            // Reusing one instance avoids duplicate type definitions and exports.
-            let mut shared_type_gen = CmInstanceTypeGen::new(local_type_idx);
-            for (name, &idx) in &enum_export_indices {
-                shared_type_gen.register_existing(&format!("enum:{name}"), idx);
-            }
+            // Register flags and variant export indices into shared_type_gen
             for (name, &idx) in &flags_export_indices {
                 shared_type_gen.register_existing(&format!("flags:{name}"), idx);
             }
             for (name, &idx) in &variant_export_indices {
-                // shared_type_gen uses CM kebab-case names for cache keys
                 if let Some((variant_cm_name, _)) = interface_variants.get(name) {
                     shared_type_gen.register_existing(&format!("variant:{variant_cm_name}"), idx);
                 }
