@@ -1,5 +1,5 @@
 use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind, LexerRule } from "./ir.wado";
-use { to_pascal_case, to_snake_case, to_lower, rule_type_name, literal_field_name, strip_suffix } from "./gen_util.wado";
+use { to_pascal_case, to_snake_case, to_lower, rule_type_name, literal_field_name, strip_suffix, is_simple_cst_group, group_variant_type_name, group_field_base_name, group_case_name } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
 use { gen_visitor } from "./visitor_gen.wado";
@@ -78,6 +78,7 @@ fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule) {
 }
 
 fn gen_struct_for_alt(w: &mut CodeWriter, type_name: &String, alt: &Alternative) {
+    gen_group_variant_types(w, &alt.elements);
     let fields = collect_fields(&alt.elements);
     let mut s = StructSpec::new(type_name);
     s.set_pub();
@@ -86,6 +87,57 @@ fn gen_struct_for_alt(w: &mut CodeWriter, type_name: &String, alt: &Alternative)
         s.add_pub_field(&field.name, &field.type_str);
     }
     s.emit(w);
+    w.blank();
+}
+
+fn repeat_inner_field(elem: &Element) -> Option<Field> {
+    if let Group(alts) = *elem {
+        if is_simple_cst_group(&alts) {
+            return Option::<Field>::Some(Field {
+                name: group_field_base_name(&alts),
+                type_str: group_variant_type_name(&alts),
+            });
+        }
+        return null;
+    }
+    return element_to_field(elem);
+}
+
+fn gen_group_variant_types(w: &mut CodeWriter, elements: &Array<Element>) {
+    for let elem of elements {
+        let alts = extract_group_alts(&elem);
+        if let Some(group_alts) = alts {
+            if is_simple_cst_group(group_alts) {
+                gen_group_variant_type(w, group_alts);
+            }
+        }
+    }
+}
+
+fn extract_group_alts(elem: &Element) -> Option<&Array<Alternative>> {
+    if let Group(alts) = elem {
+        return Option::Some(alts);
+    }
+    if let Repeat(rep) = elem {
+        if let Group(alts) = &rep.element {
+            return Option::Some(alts);
+        }
+    }
+    return null;
+}
+
+fn gen_group_variant_type(w: &mut CodeWriter, alts: &Array<Alternative>) {
+    let type_name = group_variant_type_name(alts);
+    let mut v = VariantSpec::new(&type_name);
+    v.set_pub();
+    for let alt of alts {
+        if let RuleRef(name) = &alt.elements[0] {
+            let case_name = to_pascal_case(name);
+            let payload = rule_type_name(name);
+            v.add_case_with_payload(&case_name, &payload);
+        }
+    }
+    v.emit(w);
     w.blank();
 }
 
@@ -148,7 +200,8 @@ fn element_to_field(elem: &Element) -> Option<Field> {
         });
     }
     if let Repeat(rep) = *elem {
-        if let Some(inner) = element_to_field(&rep.element) {
+        let inner_field = repeat_inner_field(&rep.element);
+        if let Some(inner) = inner_field {
             let field = match rep.kind {
                 Star | Plus => Field {
                     name: `{inner.name}_list`,
@@ -168,6 +221,15 @@ fn element_to_field(elem: &Element) -> Option<Field> {
             return Option::<Field>::Some(Field {
                 name: to_snake_case(&lab.name),
                 type_str: inner.type_str,
+            });
+        }
+        return null;
+    }
+    if let Group(alts) = *elem {
+        if is_simple_cst_group(&alts) {
+            return Option::<Field>::Some(Field {
+                name: group_field_base_name(&alts),
+                type_str: `Option<{group_variant_type_name(&alts)}>`,
             });
         }
         return null;

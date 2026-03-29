@@ -10,6 +10,10 @@ use {
     escape_string,
     literal_const_name,
     array_contains_str,
+    is_simple_cst_group,
+    group_variant_type_name,
+    group_field_base_name,
+    group_case_name,
 } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
@@ -1417,7 +1421,11 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, all_rules: &Array<ParserRule>
         return;
     }
     if let Group(alts) = *elem {
-        gen_consume_group(w, &alts, all_rules, lit_tokens, name_counts);
+        if store && is_simple_cst_group(&alts) {
+            gen_consume_group_store_optional(w, &alts, all_rules, lit_tokens, name_counts);
+        } else {
+            gen_consume_group(w, &alts, all_rules, lit_tokens, name_counts);
+        }
         return;
     }
     if let Label(lab) = *elem {
@@ -1433,23 +1441,36 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserR
 
     if has_field(inner) {
         let field_info = element_field_info(inner);
+        let is_group_store = is_group_with_store(inner);
         if let Star = rep.kind {
             let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
             w.line(`let mut {list_name}: Array<{field_info.1}> = [];`);
             w.begin(`while {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+            if is_group_store {
+                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc); }
+            } else {
+                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+            }
             w.line(`{list_name}.append({field_info.0});`);
             w.end();
         }
         if let Plus = rep.kind {
             let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+            if is_group_store {
+                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc); }
+            } else {
+                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+            }
             let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
             w.line(`let mut {list_name}: Array<{field_info.1}> = [{field_info.0}];`);
             w.begin(`while {first_check_str(&first)}`);
             let mut nc2: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, true, &mut nc2);
+            if is_group_store {
+                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc2); }
+            } else {
+                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc2);
+            }
             w.line(`{list_name}.append({field_info.0});`);
             w.end();
         }
@@ -1458,7 +1479,11 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserR
             let opt_name = dedup_name(&field_info.0, name_counts);
             w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+            if is_group_store {
+                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc); }
+            } else {
+                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+            }
             w.line(`Option::<{type_str}>::Some({field_info.0})`);
             w.else_begin("else");
             w.line("null");
@@ -1968,12 +1993,22 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, all_rules: &Array<Pa
     }
 }
 
+fn is_group_with_store(elem: &Element) -> bool {
+    if let Group(alts) = *elem {
+        return is_simple_cst_group(&alts);
+    }
+    return false;
+}
+
 fn has_field(elem: &Element) -> bool {
     if let TokenRef(_) | Literal(_) | RuleRef(_) = *elem {
         return true;
     }
     if let Label(lab) = *elem {
         return has_field(&lab.element);
+    }
+    if let Group(alts) = *elem {
+        return is_simple_cst_group(&alts);
     }
     return false;
 }
@@ -1990,6 +2025,11 @@ fn element_field_info(elem: &Element) -> [String, String] {
     }
     if let Label(lab) = *elem {
         return element_field_info(&lab.element);
+    }
+    if let Group(alts) = *elem {
+        if is_simple_cst_group(&alts) {
+            return [group_field_base_name(&alts), group_variant_type_name(&alts)];
+        }
     }
     return ["_", "Token"];
 }
@@ -2039,6 +2079,13 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
         }
         return;
     }
+    if let Group(alts) = *elem {
+        if is_simple_cst_group(&alts) {
+            let field_name = dedup_name(&group_field_base_name(&alts), name_counts);
+            w.line(`{field_name},`);
+        }
+        return;
+    }
 }
 
 /// Replay name counting for an element without emitting code.
@@ -2071,6 +2118,12 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) 
     if let Label(lab) = *elem {
         if has_field(&lab.element) {
             dedup_name(&to_snake_case(&lab.name), name_counts);
+        }
+        return;
+    }
+    if let Group(alts) = *elem {
+        if is_simple_cst_group(&alts) {
+            dedup_name(&group_field_base_name(&alts), name_counts);
         }
         return;
     }
@@ -2124,6 +2177,216 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &
         }
     }
     w.end();
+}
+
+fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+    let var_name = dedup_name(&group_field_base_name(alts), name_counts);
+    let type_name = group_variant_type_name(alts);
+
+    let mut first_sets: Array<Array<String>> = [];
+    for let alt of alts {
+        let mut visiting: Array<String> = [];
+        first_sets.append(first_of_alt(alt, all_rules, lit_tokens, &mut visiting));
+    }
+
+    let groups = compute_overlap_groups(&first_sets);
+    let has_overlaps = has_multi_alt_groups(&groups);
+
+    if !has_overlaps {
+        // Simple case: no overlapping FIRST sets
+        for let mut i = 0; i < alts.len(); i += 1 {
+            if let RuleRef(rule_name) = &alts[i].elements[0] {
+                let fn_name = `parse_{to_snake_case(rule_name)}`;
+                let local_var = to_snake_case(rule_name);
+                let case_name = group_case_name(&alts[i]);
+
+                if i == 0 {
+                    w.begin(`let {var_name}: {type_name} = if {first_check_str(&first_sets[i])}`);
+                } else if i < alts.len() - 1 {
+                    w.else_begin(`else if {first_check_str(&first_sets[i])}`);
+                } else {
+                    w.else_begin("else");
+                }
+
+                w.line(`let {local_var} = {fn_name}(p)?;`);
+                w.line(`{type_name}::{case_name}({local_var})`);
+            }
+        }
+        w.end_with(";");
+    } else {
+        // Complex case: overlapping FIRST sets, use Option + backtracking
+        let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
+        w.line(`let mut {opt_var}: Option<{type_name}> = null;`);
+
+        let grp_var = dedup_name(&"grp_kind", name_counts);
+        w.line(`let {grp_var} = p.peek_kind();`);
+
+        for let mut g = 0; g < groups.len(); g += 1 {
+            let group = &groups[g];
+
+            let mut union_first: Array<String> = [];
+            for let idx of group {
+                for let tk of first_sets[*idx] {
+                    if !array_contains_str(&union_first, &tk) {
+                        union_first.append(tk);
+                    }
+                }
+            }
+
+            let cond = kind_check_str(&union_first, &grp_var);
+            if g == 0 {
+                w.begin(`if {cond}`);
+            } else {
+                w.else_begin(`else if {cond}`);
+            }
+
+            if group.len() == 1 {
+                let alt_idx = group[0];
+                if let RuleRef(rule_name) = &alts[alt_idx].elements[0] {
+                    let fn_name = `parse_{to_snake_case(rule_name)}`;
+                    let local_var = to_snake_case(rule_name);
+                    let case_name = group_case_name(&alts[alt_idx]);
+                    w.line(`let {local_var} = {fn_name}(p)?;`);
+                    w.line(`{opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
+                }
+            } else {
+                // Backtracking for overlapping alternatives
+                let saved = dedup_name(&"saved_pos", name_counts);
+                let done = dedup_name(&"bt_done", name_counts);
+                w.line(`let {saved} = p.pos;`);
+                w.line(`let mut {done} = false;`);
+
+                let mut sorted_group = group.sorted();
+                sort_group_by_element_count(&mut sorted_group, alts);
+
+                for let mut k = 0; k < sorted_group.len(); k += 1 {
+                    let alt_idx = sorted_group[k];
+                    let is_last = k == sorted_group.len() - 1;
+                    if let RuleRef(rule_name) = &alts[alt_idx].elements[0] {
+                        let fn_name = `parse_{to_snake_case(rule_name)}`;
+                        let case_name = group_case_name(&alts[alt_idx]);
+
+                        if is_last {
+                            w.begin(`if !{done}`);
+                            let local_var = to_snake_case(rule_name);
+                            w.line(`let {local_var} = {fn_name}(p)?;`);
+                            w.line(`{opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
+                            w.end();
+                        } else {
+                            let bt_label = dedup_name(&"bt_try", name_counts);
+                            w.begin(`if !{done}`);
+                            w.begin(`{bt_label}:`);
+                            let r_var = dedup_name(&"opt_r", name_counts);
+                            w.line(`let {r_var} = {fn_name}(p);`);
+                            w.line(`if let Err(_) = {r_var} \{ p.pos = {saved}; break {bt_label}; \}`);
+                            w.line(`{opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({r_var}.unwrap()));`);
+                            w.line(`{done} = true;`);
+                            w.end(); // label
+                            w.end(); // if !done
+                        }
+                    }
+                }
+            }
+        }
+        w.end(); // if/else if chain
+
+        w.begin(`if let None = {opt_var}`);
+        let first_alt_name = group_case_name(&alts[0]);
+        w.line(`p.expect(-1, "{first_alt_name}")?;`);
+        w.end();
+        w.line(`let {var_name} = {opt_var}.unwrap();`);
+    }
+}
+
+fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+    let var_name = dedup_name(&group_field_base_name(alts), name_counts);
+    let type_name = group_variant_type_name(alts);
+
+    let mut first_sets: Array<Array<String>> = [];
+    for let alt of alts {
+        let mut visiting: Array<String> = [];
+        first_sets.append(first_of_alt(alt, all_rules, lit_tokens, &mut visiting));
+    }
+
+    let groups = compute_overlap_groups(&first_sets);
+    let has_overlaps = has_multi_alt_groups(&groups);
+
+    // Use Option wrapper — None when no branch matches (standalone Group).
+    let inner_var = dedup_name(&`{var_name}_inner`, name_counts);
+    w.line(`let mut {inner_var}: Option<{type_name}> = null;`);
+
+    let grp_var = dedup_name(&"grp_kind", name_counts);
+    w.line(`let {grp_var} = p.peek_kind();`);
+
+    for let mut g = 0; g < groups.len(); g += 1 {
+        let group = &groups[g];
+
+        let mut union_first: Array<String> = [];
+        for let idx of group {
+            for let tk of first_sets[*idx] {
+                if !array_contains_str(&union_first, &tk) {
+                    union_first.append(tk);
+                }
+            }
+        }
+
+        let cond = kind_check_str(&union_first, &grp_var);
+        if g == 0 {
+            w.begin(`if {cond}`);
+        } else {
+            w.else_begin(`else if {cond}`);
+        }
+
+        if group.len() == 1 {
+            let alt_idx = group[0];
+            if let RuleRef(rule_name) = &alts[alt_idx].elements[0] {
+                let fn_name = `parse_{to_snake_case(rule_name)}`;
+                let local_var = to_snake_case(rule_name);
+                let case_name = group_case_name(&alts[alt_idx]);
+                w.line(`let {local_var} = {fn_name}(p)?;`);
+                w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
+            }
+        } else {
+            let saved = dedup_name(&"saved_pos", name_counts);
+            let done = dedup_name(&"bt_done", name_counts);
+            w.line(`let {saved} = p.pos;`);
+            w.line(`let mut {done} = false;`);
+
+            let mut sorted_group = group.sorted();
+            sort_group_by_element_count(&mut sorted_group, alts);
+
+            for let mut k = 0; k < sorted_group.len(); k += 1 {
+                let alt_idx = sorted_group[k];
+                let is_last = k == sorted_group.len() - 1;
+                if let RuleRef(rule_name) = &alts[alt_idx].elements[0] {
+                    let fn_name = `parse_{to_snake_case(rule_name)}`;
+                    let case_name = group_case_name(&alts[alt_idx]);
+
+                    if is_last {
+                        w.begin(`if !{done}`);
+                        let local_var = to_snake_case(rule_name);
+                        w.line(`let {local_var} = {fn_name}(p)?;`);
+                        w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
+                        w.end();
+                    } else {
+                        let bt_label = dedup_name(&"bt_try", name_counts);
+                        w.begin(`if !{done}`);
+                        w.begin(`{bt_label}:`);
+                        let r_var = dedup_name(&"opt_r", name_counts);
+                        w.line(`let {r_var} = {fn_name}(p);`);
+                        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved}; break {bt_label}; \}`);
+                        w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{case_name}({r_var}.unwrap()));`);
+                        w.line(`{done} = true;`);
+                        w.end(); // label
+                        w.end(); // if !done
+                    }
+                }
+            }
+        }
+    }
+    w.end(); // if/else if chain
+
+    w.line(`let {var_name} = {inner_var};`);
 }
 
 fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
