@@ -154,13 +154,13 @@ condition: get_value() > 10
 fn __cm_binding__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     let __subtask: i32;
-    let __future_handle: i32;
+    let __lifted_result_3: i32;
     __async_outptr = "mem/realloc"(0, 0, 4, 4);
     __subtask = "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
     "core:internal/wait_for_subtask"(__subtask);
-    __future_handle = builtin::load_i32(__async_outptr);
+    __lifted_result_3 = builtin::load_i32(__async_outptr);
     drop("mem/realloc"(__async_outptr, 4, 4, 0));
-    return __future_handle;
+    return __lifted_result_3;
 }
 
 fn __cm_export__run() {

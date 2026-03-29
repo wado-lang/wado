@@ -1190,7 +1190,7 @@ pub struct CmInstanceTypeGen {
     cache: IndexMap<String, u32>,
     /// Optional interface path hint for disambiguating types with the same name
     /// across different WASI interfaces (e.g., "wasi:http/types@..." to select
-    /// HTTP's ErrorCode over filesystem's ErrorCode).
+    /// HTTP's `ErrorCode` over filesystem's `ErrorCode`).
     interface_hint: Option<String>,
 }
 
@@ -1502,23 +1502,21 @@ impl CmInstanceTypeGen {
                         self.cache.insert(cache_key, idx);
                         ComponentValType::Type(idx)
                     } else if wasi_registry.is_variant(name) {
-                        let (cm_name, cases) =
-                            if let Some(hint) = &self.interface_hint {
-                                let cm = wasi_registry
-                                    .get_variant_cm_name_by_interface(hint, name)
-                                    .unwrap()
-                                    .to_string();
-                                let cs = wasi_registry
-                                    .get_variant_cases_by_interface(hint, name)
-                                    .unwrap()
-                                    .to_vec();
-                                (cm, cs)
-                            } else {
-                                let cm =
-                                    wasi_registry.get_variant_cm_name(name).unwrap().to_string();
-                                let cs = wasi_registry.get_variant_cases(name).unwrap().to_vec();
-                                (cm, cs)
-                            };
+                        let (cm_name, cases) = if let Some(hint) = &self.interface_hint {
+                            let cm = wasi_registry
+                                .get_variant_cm_name_by_interface(hint, name)
+                                .unwrap()
+                                .to_string();
+                            let cs = wasi_registry
+                                .get_variant_cases_by_interface(hint, name)
+                                .unwrap()
+                                .to_vec();
+                            (cm, cs)
+                        } else {
+                            let cm = wasi_registry.get_variant_cm_name(name).unwrap().to_string();
+                            let cs = wasi_registry.get_variant_cases(name).unwrap().to_vec();
+                            (cm, cs)
+                        };
                         let idx = self.define_variant(
                             instance_type,
                             &cm_name,
