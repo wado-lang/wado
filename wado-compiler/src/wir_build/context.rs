@@ -193,6 +193,13 @@ impl<'a> WirContext<'a> {
 
     /// Register a type definition and return its `WirTypeId`.
     pub fn register_type(&mut self, fq: String, typedef: WirTypeDef) -> WirTypeId {
+        // Dedup: if the same fq name is already registered, return the existing type.
+        // This prevents cm_binding synthesis and WIR build from creating duplicate
+        // struct types for the same logical type (e.g., tuple types that appear in
+        // both the entry module and binding functions).
+        if let Some(existing) = self.type_map.get(&fq) {
+            return existing.clone();
+        }
         let index = u32::try_from(self.types.len()).expect("too many types");
         let fq_rc: Rc<str> = Rc::from(fq.as_str());
         let type_id = WirTypeId::new(index, fq_rc);

@@ -1974,11 +1974,12 @@ fn wasi_return_type_id(
     func_info: &WasiFunctionInfo,
     wasi_registry: &crate::component_model::WasiRegistry,
 ) -> TypeId {
-    // Wado uses stackful async: canon lower without the async canonopt.
-    // The raw call returns flat results directly (not a subtask handle).
-    let needs_async_lower = false;
+    // Truly async imports (e.g., Client::send) use canon lower async and
+    // return a subtask handle. Non-async imports with stream/future params
+    // use sync lower (handles passed as i32, results returned directly).
+    let needs_async_lower = func_info.is_async;
     if needs_async_lower {
-        // Callback-style async: raw call returns subtask handle (i32)
+        // Async canon lower: raw call returns subtask handle (i32)
         TypeTable::I32
     } else {
         let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
@@ -2495,9 +2496,9 @@ fn synthesize_adapter(
     // ---- Handle outptr for async or complex returns ----
     // Track async outptr allocation info for later freeing.
     let mut async_outptr_info: Option<(u32, u32, u32)> = None; // (local_index, size, align)
-    // Wado uses stackful async: canon lower without the async canonopt.
-    // Sync lower uses MAX_FLAT_PARAMS = 16, MAX_FLAT_RESULTS = 1.
-    let needs_async_lower = false;
+    // Only truly async imports use canon lower async (callback-style).
+    // Non-async imports with stream/future params use sync lower.
+    let needs_async_lower = func_info.is_async;
     if needs_async_lower {
         // Callback-style async (not used by Wado):
         // - MAX_FLAT_ASYNC_PARAMS = 4 flat params before switching to indirect.

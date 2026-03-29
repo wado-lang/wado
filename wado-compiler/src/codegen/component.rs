@@ -2624,8 +2624,12 @@ fn lower_wasi_functions(
 
             let mut options: Vec<CanonicalOption> = Vec::new();
 
-            // Wado uses stackful async: canon lower WITHOUT the async canonopt.
-            // Sync lower blocks the caller's fiber until the callee returns.
+            // Wado uses stackful sync lower for non-async imports (stream/future params
+            // are passed as handles). Truly async imports (e.g., Client::send) use
+            // canon lower async so that the caller can manage the subtask explicitly.
+            if func.is_async {
+                options.push(CanonicalOption::Async);
+            }
 
             let needs_memory = func.needs_memory_with_registry(project.wasi_registry);
             let needs_realloc = needs_memory;
