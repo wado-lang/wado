@@ -1,4 +1,3 @@
-#![TODO]
 // Tests: Read a file via stream, transform to uppercase, write to stdout.
 //
 // WASI P3 spec (vendor/wasmtime/crates/wasi/src/p3/wit/deps/filesystem.wit):
@@ -17,7 +16,6 @@
 
 use { Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
-use { ErrorCode } from "wasi:filesystem/types.wado";
 
 
 fn to_upper(data: Array<u8>) -> Array<u8> {
@@ -65,7 +63,7 @@ export fn run() with Stdout, Stderr, Preopens {
         }
         file_rx.drop();
         out_tx.drop();
-        let __f = subtask as Future<Result<(), ErrorCode>>; __f.drop();
+        subtask.drop();
         read_future.drop();
     }
 }
