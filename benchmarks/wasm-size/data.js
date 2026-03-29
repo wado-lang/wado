@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774777329780,
+  "lastUpdate": 1774790567200,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8525,6 +8525,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b8a38100c878e17dd27a887941adcdbb391e4d27"
         },
         "date": 1774777329571,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1999,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9279,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24923,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d1261f4098e030b232208d2020756e7f9dc66c74",
+          "message": "Merge pull request #727 from wado-lang/claude/fix-cross-module-bug-u2g8B\n\nFix cross-module ref-type iterator bug and add return/for-of type checks",
+          "timestamp": "2026-03-29T22:19:36+09:00",
+          "tree_id": "5dc0340042aca1b1a9960513bdbee08fe89d6dc5",
+          "url": "https://github.com/wado-lang/wado/commit/d1261f4098e030b232208d2020756e7f9dc66c74"
+        },
+        "date": 1774790566983,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
