@@ -215,15 +215,11 @@ type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32);
 
-type "functype/wasi/waitable-join" = fn(i32, i32);
-
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
-
 type "functype/wasi/wasi:http/Fields::new" = fn() -> i32;
 
 type "functype/wasi/wasi:http/Request::get_path_with_query" = fn(i32, i32);
 
-type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32) -> i32;
+type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
 type "functype/wasi/wasi:http/Response::set_status_code" = fn(i32, i32) -> i32;
 
@@ -241,8 +237,6 @@ type "functype/core:internal/memory_to_gc_array" = fn(i32, i32) -> ref array<u8>
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/wait_for_subtask" = fn(i32);
-
 type "functype/core:internal/cm_lower_string" = fn(ref String) -> i64;
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
@@ -255,18 +249,14 @@ type "functype/wasi/future-write" = fn(i32, i32) -> i32;
 
 type "functype/wasi/waitable-set-new" = fn() -> i32;
 
-type "functype/wasi/subtask-drop" = fn(i32);
+type "functype/wasi/waitable-join" = fn(i32, i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
+type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
-type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];
-
 import fn realloc from "mem/realloc";
 import fn task-return from "wasi/task-return";
-import fn waitable-join from "wasi/waitable-join";
-import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi:http/Request::get_path_with_query from "wasi/wasi:http/Request::get_path_with_query";
 import fn wasi:http/Response::new from "wasi/wasi:http/Response::new";
@@ -275,8 +265,8 @@ import memory (1) from "mem/memory";
 import fn future-new from "wasi/future-new";
 import fn future-write from "wasi/future-write";
 import fn waitable-set-new from "wasi/waitable-set-new";
-import fn subtask-drop from "wasi/subtask-drop";
-import fn waitable-set-drop from "wasi/waitable-set-drop";
+import fn waitable-join from "wasi/waitable-join";
+import fn waitable-set-wait from "wasi/waitable-set-wait";
 
 fn handle(request) {
     let path: ref null String;
@@ -790,17 +780,15 @@ fn __cm_binding__Fields_new() {
 }
 
 fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
-    let __async_outptr: i32;
-    let __subtask: i32;
+    let __outptr: i32;
+    let __lifted_result_5: i32;
     let __lifted_result_6: i32;
-    let __lifted_result_7: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 8);
-    __subtask = "wasi/wasi:http/Response::new"(headers, contents_flat0, contents_flat1, trailers, __async_outptr);
-    "core:internal/wait_for_subtask"(__subtask);
-    __lifted_result_6 = builtin::load_i32(__async_outptr + 0);
-    __lifted_result_7 = builtin::load_i32(__async_outptr + 4);
-    drop("mem/realloc"(__async_outptr, 8, 4, 0));
-    return __lifted_result_6; __lifted_result_7;
+    __outptr = "mem/realloc"(0, 0, 4, 8);
+    "wasi/wasi:http/Response::new"(headers, contents_flat0, contents_flat1, trailers, __outptr);
+    __lifted_result_5 = builtin::load_i32(__outptr + 0);
+    __lifted_result_6 = builtin::load_i32(__outptr + 4);
+    drop("mem/realloc"(__outptr, 8, 4, 0));
+    return __lifted_result_5; __lifted_result_6;
 }
 
 fn __cm_binding__Response_set_status_code(self, status_code) {
@@ -857,37 +845,6 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     };
 }
 
-fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
-    let handle: i32;
-    let subtask: i32;
-    let ws: i32;
-    let __local_5: i32;
-    handle = packed >> 4;
-    if handle != 0 {
-        subtask = handle;
-        ws = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_5 = subtask;
-            "wasi/waitable-join"(__local_5, ws);
-            break __inline_cm_waitable_join_0: __local_5;
-        });
-        b51: block {
-            l52: loop {
-                let __sroa_event_code: i32;
-                let __sroa_event_handle: i32;
-                let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
-                if __sroa_event_payload == 2 {
-                    break b51;
-                };
-                continue l52;
-            };
-        };
-        "wasi/subtask-drop"(subtask);
-        "wasi/waitable-set-drop"(ws);
-    };
-}
-
 fn "core:internal/cm_lower_string"(s) {  // from core:internal
     let len: i32;
     let bytes: ref array<u8>;
@@ -897,19 +854,6 @@ fn "core:internal/cm_lower_string"(s) {  // from core:internal
     ptr = "mem/realloc"(0, 0, 1, len);
     "core:internal/gc_array_to_memory"(bytes, ptr, len);
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
-}
-
-fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
-    let out_ptr: i32;
-    let code: i32;
-    let evt_handle: i32;
-    let payload: i32;
-    out_ptr = "mem/realloc"(0, 0, 4, 8);
-    code = "wasi/waitable-set-wait"(ws, out_ptr);
-    evt_handle = builtin::load_i32(out_ptr);
-    payload = builtin::load_i32(out_ptr + 4);
-    drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return code; evt_handle; payload;
 }
 
 fn String^Eq::eq(self, other) {
@@ -926,23 +870,15 @@ fn String^Eq::eq_bytes(a, b, len) {
     __for_1: block {
         i = 0;
         block {
-<<<<<<< HEAD
-            l56: loop {
-                if (i < len_a) == 0 {
-||||||| 1f27c95
-            l53: loop {
-                if (i < len_a) == 0 {
-=======
-            l53: loop {
+            l52: loop {
                 if (i < len) == 0 {
->>>>>>> origin/main
                     break __for_1;
                 };
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                     return 0;
                 };
                 i = i + 1;
-                continue l56;
+                continue l52;
             };
         };
     };

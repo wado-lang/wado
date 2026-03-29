@@ -38,7 +38,7 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
+type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
 type "functype/run" = fn();
 
@@ -51,8 +51,6 @@ type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
-
-type "functype/core:internal/wait_for_subtask" = fn(i32);
 
 type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
 
@@ -82,10 +80,6 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];
-
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/u64::fmt_decimal" = fn(u64, ref Formatter);
@@ -106,7 +100,6 @@ import memory (1) from "mem/memory";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
-import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout {
     let min_score: i32;
@@ -168,15 +161,7 @@ fn run() with Stdout {
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
-    let __async_outptr: i32;
-    let __subtask: i32;
-    let __lifted_result_3: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 4);
-    __subtask = "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
-    "core:internal/wait_for_subtask"(__subtask);
-    __lifted_result_3 = builtin::load_i32(__async_outptr);
-    drop("mem/realloc"(__async_outptr, 4, 4, 0));
-    return __lifted_result_3;
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn __cm_export__run() {
@@ -233,37 +218,6 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     };
 }
 
-fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
-    let handle: i32;
-    let subtask: i32;
-    let ws: i32;
-    let __local_5: i32;
-    handle = packed >> 4;
-    if handle != 0 {
-        subtask = handle;
-        ws = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_5 = subtask;
-            "wasi/waitable-join"(__local_5, ws);
-            break __inline_cm_waitable_join_0: __local_5;
-        });
-        b8: block {
-            l9: loop {
-                let __sroa_event_code: i32;
-                let __sroa_event_handle: i32;
-                let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
-                if __sroa_event_payload == 2 {
-                    break b8;
-                };
-                continue l9;
-            };
-        };
-        "wasi/subtask-drop"(subtask);
-        "wasi/waitable-set-drop"(ws);
-    };
-}
-
 fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
     let ptr: i32;
     ptr = "mem/realloc"(0, 0, 1, len);
@@ -300,19 +254,6 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
-    let out_ptr: i32;
-    let code: i32;
-    let evt_handle: i32;
-    let payload: i32;
-    out_ptr = "mem/realloc"(0, 0, 4, 8);
-    code = "wasi/waitable-set-wait"(ws, out_ptr);
-    evt_handle = builtin::load_i32(out_ptr);
-    payload = builtin::load_i32(out_ptr + 4);
-    drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return code; evt_handle; payload;
-}
-
 fn count_digits_i64(val) {
     let n: i32;
     let t: i64;
@@ -323,13 +264,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l14: loop {
+            l10: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l14;
+                continue l10;
             };
         };
     };
@@ -346,14 +287,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l18: loop {
+                l14: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l18;
+                    continue l14;
                 };
             };
         };
@@ -410,10 +351,10 @@ fn u64::fmt_decimal(self, f) {
     };
     digit_count = 0;
     temp = val_i64;
-    b22: block {
-        l23: loop {
+    b18: block {
+        l19: loop {
             if (temp != 0_i64) == 0 {
-                break b22;
+                break b18;
             };
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
@@ -428,7 +369,7 @@ fn u64::fmt_decimal(self, f) {
                 };
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             };
-            continue l23;
+            continue l19;
         };
     };
     offset_11 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
@@ -438,10 +379,10 @@ fn u64::fmt_decimal(self, f) {
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
-    b27: block {
-        l28: loop {
+    b23: block {
+        l24: loop {
             if (temp != 0_i64) == 0 {
-                break b27;
+                break b23;
             };
             pos = pos - 1;
             digit = 0;
@@ -464,7 +405,7 @@ fn u64::fmt_decimal(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             };
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l28;
+            continue l24;
         };
     };
 }
@@ -572,13 +513,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l46: loop {
+            l42: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l46;
+                continue l42;
             };
         };
     };

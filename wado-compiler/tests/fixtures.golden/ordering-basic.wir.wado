@@ -32,7 +32,7 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
+type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
 type "functype/run" = fn();
 
@@ -45,8 +45,6 @@ type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
-
-type "functype/core:internal/wait_for_subtask" = fn(i32);
 
 type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
 
@@ -74,10 +72,6 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];
-
 type "functype/i32^Ord::cmp" = fn(i32, i32) -> enum:Ordering;
 
 import fn realloc from "mem/realloc";
@@ -92,7 +86,6 @@ import memory (1) from "mem/memory";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
-import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout {
     let less: enum:Ordering;
@@ -166,15 +159,7 @@ fn run() with Stdout {
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
-    let __async_outptr: i32;
-    let __subtask: i32;
-    let __lifted_result_3: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 4);
-    __subtask = "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
-    "core:internal/wait_for_subtask"(__subtask);
-    __lifted_result_3 = builtin::load_i32(__async_outptr);
-    drop("mem/realloc"(__async_outptr, 4, 4, 0));
-    return __lifted_result_3;
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn __cm_export__run() {
@@ -231,37 +216,6 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     };
 }
 
-fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
-    let handle: i32;
-    let subtask: i32;
-    let ws: i32;
-    let __local_5: i32;
-    handle = packed >> 4;
-    if handle != 0 {
-        subtask = handle;
-        ws = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_5 = subtask;
-            "wasi/waitable-join"(__local_5, ws);
-            break __inline_cm_waitable_join_0: __local_5;
-        });
-        b17: block {
-            l18: loop {
-                let __sroa_event_code: i32;
-                let __sroa_event_handle: i32;
-                let __sroa_event_payload: u32;
-                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
-                if __sroa_event_payload == 2 {
-                    break b17;
-                };
-                continue l18;
-            };
-        };
-        "wasi/subtask-drop"(subtask);
-        "wasi/waitable-set-drop"(ws);
-    };
-}
-
 fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
     let ptr: i32;
     ptr = "mem/realloc"(0, 0, 1, len);
@@ -298,19 +252,6 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
-    let out_ptr: i32;
-    let code: i32;
-    let evt_handle: i32;
-    let payload: i32;
-    out_ptr = "mem/realloc"(0, 0, 4, 8);
-    code = "wasi/waitable-set-wait"(ws, out_ptr);
-    evt_handle = builtin::load_i32(out_ptr);
-    payload = builtin::load_i32(out_ptr + 4);
-    drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return code; evt_handle; payload;
-}
-
 fn i32^Ord::cmp(self, other) {
     if self < other {
         return 0;
@@ -335,23 +276,15 @@ fn String^Eq::eq_bytes(a, b, len) {
     __for_1: block {
         i = 0;
         block {
-<<<<<<< HEAD
-            l25: loop {
-                if (i < len_a) == 0 {
-||||||| 1f27c95
-            l22: loop {
-                if (i < len_a) == 0 {
-=======
-            l22: loop {
+            l21: loop {
                 if (i < len) == 0 {
->>>>>>> origin/main
                     break __for_1;
                 };
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                     return 0;
                 };
                 i = i + 1;
-                continue l25;
+                continue l21;
             };
         };
     };
@@ -375,7 +308,7 @@ fn String^Ord::cmp(self, other) {
     __for_2: block {
         i = 0;
         block {
-            l29: loop {
+            l25: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
                 };
@@ -388,7 +321,7 @@ fn String^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l29;
+                continue l25;
             };
         };
     };
@@ -415,7 +348,7 @@ fn Array<i32>^Eq::eq(self, other) {
         _licm_repr_4 = self.repr;
         _licm_repr_5 = other.repr;
         block {
-            l37: loop {
+            l33: loop {
                 if (i < _licm_used_3) == 0 {
                     break __for_3;
                 };
@@ -423,7 +356,7 @@ fn Array<i32>^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l37;
+                continue l33;
             };
         };
     };
@@ -449,7 +382,7 @@ fn Array<i32>^Ord::cmp(self, other) {
         _licm_repr_8 = self.repr;
         _licm_repr_9 = other.repr;
         block {
-            l41: loop {
+            l37: loop {
                 if (i < min_len) == 0 {
                     break __for_4;
                 };
@@ -462,7 +395,7 @@ fn Array<i32>^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l41;
+                continue l37;
             };
         };
     };
@@ -504,13 +437,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l49: loop {
+            l45: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l49;
+                continue l45;
             };
         };
     };
