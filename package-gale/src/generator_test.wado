@@ -213,6 +213,35 @@ test "generate group variant type for repeated group" {
     assert str_contains(&output, "    pub stmt_or_error_list: Array<StmtOrErrorGroup>,");
 }
 
+test "generate standalone group as optional field" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [
+            ParserRule {
+                name: "cmd",
+                alternatives: [
+                    Alternative {
+                        label: null,
+                        elements: [
+                            Element::Group([
+                                Alternative { label: null, elements: [Element::RuleRef("foo")] },
+                                Alternative { label: null, elements: [Element::RuleRef("bar")] },
+                            ]),
+                            Element::TokenRef("EOF"),
+                        ],
+                    },
+                ],
+            },
+        ],
+        lexer_rules: [],
+    };
+    let output = generate(&grammar);
+    assert str_contains(&output, "pub variant FooOrBarGroup {");
+    assert str_contains(&output, "    Foo(FooNode),");
+    assert str_contains(&output, "    Bar(BarNode),");
+    assert str_contains(&output, "    pub foo_or_bar: Option<FooOrBarGroup>,");
+}
+
 fn str_contains(haystack: &String, needle: &String) -> bool {
     let h_len = haystack.len();
     let n_len = needle.len();

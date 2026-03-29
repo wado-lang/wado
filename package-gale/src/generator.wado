@@ -225,6 +225,15 @@ fn element_to_field(elem: &Element) -> Option<Field> {
         }
         return null;
     }
+    if let Group(alts) = *elem {
+        if is_simple_cst_group(&alts) {
+            return Option::<Field>::Some(Field {
+                name: group_field_base_name(&alts),
+                type_str: `Option<{group_variant_type_name(&alts)}>`,
+            });
+        }
+        return null;
+    }
     return null;
 }
 

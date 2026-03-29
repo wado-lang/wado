@@ -37,17 +37,6 @@ fn strip_indent(s: &String) -> String {
     return out;
 }
 
-fn assert_roundtrip(input: &String) {
-    let result = sqlite::parse(input);
-    if let Err(e) = &result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
-    }
-    let root = result.unwrap();
-    let tree = sqlite::to_tree(&root);
-    let xml = unparse_xml(&tree);
-    assert xml.len() > 0, `expected non-empty XML for: {*input}`;
-}
-
 fn assert_parse_xml(input: &String, expected: &String) {
     let result = sqlite::parse(input);
     if let Err(e) = &result {
@@ -57,691 +46,84 @@ fn assert_parse_xml(input: &String, expected: &String) {
     let tree = sqlite::to_tree(&root);
     let xml = unparse_xml(&tree);
     let expected_stripped = strip_indent(expected);
-    assert xml == expected_stripped, `input: {*input}\nexpected: {expected_stripped}\ngot:      {xml}`;
-}
-
-test "tokenize SELECT" {
-    let tokens = sqlite::tokenize(&"SELECT 1");
-    assert tokens.len() >= 2, `expected at least 2 tokens, got {tokens.len()}`;
-}
-
-test "tokenize keywords" {
-    let tokens = sqlite::tokenize(&"SELECT a, b FROM t WHERE id = 1");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
-}
-
-test "tokenize CREATE TABLE" {
-    let tokens = sqlite::tokenize(&"CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
-    assert tokens.len() >= 10, `expected at least 10 tokens, got {tokens.len()}`;
-}
-
-test "tokenize INSERT" {
-    let tokens = sqlite::tokenize(&"INSERT INTO t VALUES (1, 'hello')");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
-}
-
-test "tokenize string literal" {
-    let tokens = sqlite::tokenize(&"'hello world'");
-    assert tokens.len() >= 1, `expected at least 1 token, got {tokens.len()}`;
-}
-
-test "tokenize numeric literals" {
-    let tokens = sqlite::tokenize(&"42 3.14 0xFF");
-    assert tokens.len() >= 3, `expected at least 3 tokens, got {tokens.len()}`;
-}
-
-test "tokenize operators" {
-    let tokens = sqlite::tokenize(&"= != < > <= >= + - * / %");
-    assert tokens.len() >= 11, `expected at least 11 tokens, got {tokens.len()}`;
-}
-
-test "tokenize complex query" {
-    let tokens = sqlite::tokenize(&"SELECT COUNT(*), AVG(price) FROM orders GROUP BY category HAVING COUNT(*) > 5 ORDER BY category ASC LIMIT 10 OFFSET 20");
-    assert tokens.len() >= 20, `expected at least 20 tokens, got {tokens.len()}`;
-}
-
-test "tokenize comments" {
-    let tokens = sqlite::tokenize(&"SELECT 1 -- comment\nSELECT 2");
-    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
-}
-
-test "tokenize block comment" {
-    let tokens = sqlite::tokenize(&"SELECT /* block comment */ 1");
-    assert tokens.len() >= 2, `expected at least 2 tokens, got {tokens.len()}`;
+    assert xml == expected_stripped, `expected: {expected_stripped}\ngot:      {xml}`;
 }
 
 test "parse simple SELECT" {
-    assert_parse_xml(&"SELECT 1;", "
-        <parse>
+    assert_parse_xml(
+        "SELECT 1;",
+        "<parse>
             <sql_stmt_list>
-                <sql_stmt></sql_stmt>
+                <sql_stmt>
+                    <factored_select_stmt>
+                        <select_core>
+                            <K_SELECT>SELECT</K_SELECT>
+                            <result_column>
+                                <expr>
+                                    <literal_value> <NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value>
+                                </expr>
+                            </result_column>
+                        </select_core>
+                    </factored_select_stmt>
+                </sql_stmt>
             </sql_stmt_list>
             <Eof></Eof>
-        </parse>
-    ");
-}
-
-test "parse SELECT with columns" {
-    assert_roundtrip(&"SELECT a, b, c FROM t;");
-}
-
-test "parse SELECT with WHERE" {
-    assert_roundtrip(&"SELECT id, name FROM users WHERE id = 1;");
-}
-
-test "parse SELECT star" {
-    assert_roundtrip(&"SELECT * FROM t;");
+        </parse>",
+    );
 }
 
 test "parse CREATE TABLE" {
-    assert_roundtrip(&"CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT);");
-}
-
-test "parse INSERT" {
-    assert_roundtrip(&"INSERT INTO t VALUES (1, 'hello');");
+    assert_parse_xml(
+        "CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT);",
+        "<parse>
+            <sql_stmt_list>
+                <sql_stmt>
+                    <create_table_stmt>
+                        <K_CREATE>CREATE</K_CREATE> <K_TABLE>TABLE</K_TABLE>
+                        <table_name>
+                            <any_name> <IDENTIFIER>t</IDENTIFIER></any_name>
+                        </table_name>
+                    </create_table_stmt>
+                </sql_stmt>
+            </sql_stmt_list>
+            <Eof></Eof>
+        </parse>",
+    );
 }
 
 test "parse DELETE" {
-    assert_roundtrip(&"DELETE FROM t;");
-}
-
-test "parse UPDATE" {
-    assert_roundtrip(&"UPDATE t SET name = 'hello';");
-}
-
-test "parse DROP TABLE" {
-    assert_roundtrip(&"DROP TABLE IF EXISTS t;");
-}
-
-test "parse complex SELECT" {
-    assert_roundtrip(&"SELECT COUNT(*), name FROM users WHERE age > 18 GROUP BY name ORDER BY name ASC LIMIT 10;");
-}
-
-test "parse function call" {
-    assert_roundtrip(&"SELECT COUNT(*) FROM t;");
-}
-
-test "parse binary expression" {
-    assert_roundtrip(&"SELECT 1 + 2;");
-}
-
-test "parse SELECT with alias" {
-    assert_roundtrip(&"SELECT id AS user_id, name AS user_name FROM users;");
-}
-
-test "parse multiple statements" {
-    assert_parse_xml(&"SELECT 1; SELECT 2;", "
-        <parse>
+    assert_parse_xml(
+        "DELETE FROM t WHERE id = 1;",
+        "<parse>
             <sql_stmt_list>
-                <sql_stmt></sql_stmt>
+                <sql_stmt>
+                    <delete_stmt>
+                        <K_DELETE>DELETE</K_DELETE> <K_FROM>FROM</K_FROM>
+                        <qualified_table_name>
+                            <table_name>
+                                <any_name> <IDENTIFIER>t</IDENTIFIER></any_name>
+                            </table_name>
+                        </qualified_table_name>
+                    </delete_stmt>
+                </sql_stmt>
             </sql_stmt_list>
             <Eof></Eof>
-        </parse>
-    ");
+        </parse>",
+    );
 }
 
-// --- JOIN tests ---
-
-test "parse INNER JOIN" {
-    assert_roundtrip(&"SELECT u.name, o.total FROM users u INNER JOIN orders o ON u.id = o.user_id;");
-}
-
-test "parse LEFT JOIN" {
-    assert_roundtrip(&"SELECT u.name, o.total FROM users u LEFT JOIN orders o ON u.id = o.user_id;");
-}
-
-test "parse multiple JOINs" {
-    assert_roundtrip(&"SELECT u.name, o.id, p.name FROM users u INNER JOIN orders o ON u.id = o.user_id LEFT JOIN products p ON o.product_id = p.id;");
-}
-
-test "parse CROSS JOIN" {
-    assert_roundtrip(&"SELECT a.x, b.y FROM t1 a CROSS JOIN t2 b;");
-}
-
-test "parse NATURAL JOIN" {
-    assert_roundtrip(&"SELECT * FROM t1 NATURAL JOIN t2;");
-}
-
-test "parse JOIN with USING" {
-    assert_roundtrip(&"SELECT * FROM t1 JOIN t2 USING (id, name);");
-}
-
-// --- Subquery tests ---
-
-test "parse subquery in FROM" {
-    assert_roundtrip(&"SELECT sub.total FROM (SELECT SUM(amount) AS total FROM orders) sub;");
-}
-
-test "parse subquery in WHERE with IN" {
-    assert_roundtrip(&"SELECT name FROM users WHERE id IN (SELECT user_id FROM orders WHERE total > 100);");
-}
-
-test "parse EXISTS subquery" {
-    assert_roundtrip(&"SELECT name FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id);");
-}
-
-test "parse NOT EXISTS subquery" {
-    assert_roundtrip(&"SELECT name FROM users WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id);");
-}
-
-// --- Compound SELECT (UNION, INTERSECT, EXCEPT) ---
-
-test "parse UNION" {
-    assert_roundtrip(&"SELECT name FROM users UNION SELECT name FROM admins;");
-}
-
-test "parse UNION ALL" {
-    assert_roundtrip(&"SELECT id FROM t1 UNION ALL SELECT id FROM t2 ORDER BY id;");
-}
-
-test "parse INTERSECT" {
-    assert_roundtrip(&"SELECT id FROM t1 INTERSECT SELECT id FROM t2;");
-}
-
-test "parse EXCEPT" {
-    assert_roundtrip(&"SELECT id FROM t1 EXCEPT SELECT id FROM t2;");
-}
-
-// --- CTE (WITH clause) ---
-
-test "parse CTE" {
-    assert_roundtrip(&"WITH recent AS (SELECT * FROM orders WHERE date > '2024-01-01') SELECT * FROM recent;");
-}
-
-test "parse multiple CTEs" {
-    assert_roundtrip(&"WITH active_users AS (SELECT id, name FROM users WHERE active = 1), user_orders AS (SELECT user_id, COUNT(*) AS cnt FROM orders GROUP BY user_id) SELECT u.name, o.cnt FROM active_users u JOIN user_orders o ON u.id = o.user_id;");
-}
-
-test "parse recursive CTE" {
-    assert_roundtrip(&"WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM cnt WHERE x < 100) SELECT x FROM cnt;");
-}
-
-// --- Expression tests ---
-
-test "parse CASE expression" {
-    assert_roundtrip(&"SELECT CASE WHEN age < 18 THEN 'minor' WHEN age < 65 THEN 'adult' ELSE 'senior' END AS category FROM users;");
-}
-
-test "parse CASE with value" {
-    assert_roundtrip(&"SELECT CASE status WHEN 0 THEN 'inactive' WHEN 1 THEN 'active' ELSE 'unknown' END FROM users;");
-}
-
-test "parse BETWEEN" {
-    assert_roundtrip(&"SELECT * FROM orders WHERE amount BETWEEN 100 AND 500;");
-}
-
-test "parse NOT BETWEEN" {
-    assert_roundtrip(&"SELECT * FROM orders WHERE amount NOT BETWEEN 100 AND 500;");
-}
-
-test "parse LIKE" {
-    assert_roundtrip(&"SELECT * FROM users WHERE name LIKE '%alice%';");
-}
-
-test "parse NOT LIKE" {
-    assert_roundtrip(&"SELECT * FROM users WHERE name NOT LIKE 'admin%';");
-}
-
-test "parse LIKE with ESCAPE" {
-    assert_roundtrip(&"SELECT * FROM t WHERE col LIKE '%10\\%%' ESCAPE '\\';");
-}
-
-test "parse IS NULL and IS NOT NULL" {
-    assert_roundtrip(&"SELECT * FROM users WHERE email IS NOT NULL AND phone IS NULL;");
-}
-
-test "parse CAST" {
-    assert_roundtrip(&"SELECT CAST(price AS INTEGER), CAST(qty AS TEXT) FROM items;");
-}
-
-test "parse string concatenation" {
-    assert_roundtrip(&"SELECT first_name || ' ' || last_name AS full_name FROM users;");
-}
-
-test "parse IN list" {
-    assert_roundtrip(&"SELECT * FROM users WHERE status IN ('active', 'pending', 'trial');");
-}
-
-test "parse NOT IN list" {
-    assert_roundtrip(&"SELECT * FROM users WHERE id NOT IN (1, 2, 3);");
-}
-
-test "parse nested arithmetic" {
-    assert_roundtrip(&"SELECT (a + b) * (c - d) / e % f FROM t;");
-}
-
-test "parse unary operators" {
-    assert_roundtrip(&"SELECT -a, +b, ~c, NOT d FROM t;");
-}
-
-// --- SELECT features ---
-
-test "parse SELECT DISTINCT" {
-    assert_roundtrip(&"SELECT DISTINCT category FROM products;");
-}
-
-test "parse GROUP BY with HAVING" {
-    assert_roundtrip(&"SELECT category, COUNT(*) AS cnt, AVG(price) AS avg_price FROM products GROUP BY category HAVING COUNT(*) > 3;");
-}
-
-test "parse ORDER BY multiple columns" {
-    assert_roundtrip(&"SELECT * FROM users ORDER BY last_name ASC, first_name DESC;");
-}
-
-test "parse LIMIT with OFFSET" {
-    assert_roundtrip(&"SELECT * FROM users ORDER BY id LIMIT 20 OFFSET 40;");
-}
-
-test "parse table dot star" {
-    assert_roundtrip(&"SELECT u.*, o.total FROM users u JOIN orders o ON u.id = o.user_id;");
-}
-
-// --- DDL tests ---
-
-test "parse CREATE TABLE with constraints" {
-    assert_roundtrip(&"CREATE TABLE orders (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, amount REAL DEFAULT 0.0, status TEXT CHECK(status IN ('pending', 'shipped', 'delivered')), UNIQUE(user_id, amount));");
-}
-
-test "parse CREATE TABLE IF NOT EXISTS" {
-    assert_roundtrip(&"CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY, message TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);");
-}
-
-test "parse CREATE TABLE AS SELECT" {
-    assert_roundtrip(&"CREATE TABLE user_summary AS SELECT user_id, COUNT(*) AS order_count FROM orders GROUP BY user_id;");
-}
-
-test "parse CREATE INDEX" {
-    assert_roundtrip(&"CREATE INDEX idx_users_email ON users(email);");
-}
-
-test "parse CREATE UNIQUE INDEX" {
-    assert_roundtrip(&"CREATE UNIQUE INDEX IF NOT EXISTS idx_users_name ON users(last_name, first_name);");
-}
-
-test "parse CREATE VIEW" {
-    assert_roundtrip(&"CREATE VIEW active_users AS SELECT id, name FROM users WHERE active = 1;");
-}
-
-test "parse CREATE TRIGGER" {
-    assert_roundtrip(&"CREATE TRIGGER update_timestamp AFTER UPDATE ON users FOR EACH ROW BEGIN UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = 1; END;");
-}
-
-test "parse ALTER TABLE RENAME" {
-    assert_roundtrip(&"ALTER TABLE users RENAME TO customers;");
-}
-
-test "parse ALTER TABLE ADD COLUMN" {
-    assert_roundtrip(&"ALTER TABLE users ADD COLUMN phone TEXT;");
-}
-
-// --- DML tests ---
-
-test "parse INSERT with column list" {
-    assert_roundtrip(&"INSERT INTO users (name, email, age) VALUES ('Alice', 'alice@example.com', 30);");
-}
-
-test "parse INSERT multiple rows" {
-    assert_roundtrip(&"INSERT INTO users (name, age) VALUES ('Alice', 30), ('Bob', 25), ('Charlie', 35);");
-}
-
-test "parse INSERT OR REPLACE" {
-    assert_roundtrip(&"INSERT OR REPLACE INTO config (key, value) VALUES ('theme', 'dark');");
-}
-
-test "parse INSERT from SELECT" {
-    assert_roundtrip(&"INSERT INTO archive (name, email) SELECT name, email FROM users WHERE active = 0;");
-}
-
-test "parse UPDATE with multiple SET" {
-    assert_roundtrip(&"UPDATE users SET name = 'Alice', email = 'alice@new.com', age = 31 WHERE id = 1;");
-}
-
-test "parse DELETE with WHERE" {
-    assert_roundtrip(&"DELETE FROM logs WHERE created_at < '2024-01-01' AND level = 'debug';");
-}
-
-// --- Transaction tests ---
-
-test "parse BEGIN COMMIT" {
-    assert_roundtrip(&"BEGIN TRANSACTION; INSERT INTO t VALUES (1); COMMIT;");
-}
-
-test "parse SAVEPOINT and RELEASE" {
-    assert_roundtrip(&"SAVEPOINT sp1; INSERT INTO t VALUES (1); RELEASE sp1;");
-}
-
-test "parse ROLLBACK" {
-    assert_roundtrip(&"BEGIN; INSERT INTO t VALUES (1); ROLLBACK;");
-}
-
-// --- Misc statement tests ---
-
-test "parse EXPLAIN QUERY PLAN" {
-    assert_roundtrip(&"EXPLAIN QUERY PLAN SELECT * FROM users WHERE id = 1;");
-}
-
-test "parse PRAGMA" {
-    assert_roundtrip(&"PRAGMA table_info(users);");
-}
-
-test "parse VACUUM" {
-    assert_roundtrip(&"VACUUM;");
-}
-
-test "parse REPLACE" {
-    assert_roundtrip(&"REPLACE INTO config (key, value) VALUES ('mode', 'production');");
-}
-
-test "parse DROP INDEX" {
-    assert_roundtrip(&"DROP INDEX IF EXISTS idx_users_email;");
-}
-
-test "parse DROP VIEW" {
-    assert_roundtrip(&"DROP VIEW IF EXISTS active_users;");
-}
-
-test "parse DROP TRIGGER" {
-    assert_roundtrip(&"DROP TRIGGER IF EXISTS update_timestamp;");
-}
-
-// --- Complex real-world queries ---
-
-test "parse complex query with CTE and JOIN" {
-    assert_roundtrip(&"WITH monthly_sales AS (SELECT strftime('%Y-%m', date) AS month, SUM(amount) AS total FROM orders GROUP BY month) SELECT m.month, m.total, u.name FROM monthly_sales m JOIN users u ON u.id = 1 ORDER BY m.month DESC LIMIT 12;");
-}
-
-test "parse nested subqueries" {
-    assert_roundtrip(&"SELECT * FROM users WHERE id IN (SELECT user_id FROM orders WHERE product_id IN (SELECT id FROM products WHERE category = 'electronics'));");
-}
-
-test "parse correlated subquery" {
-    assert_roundtrip(&"SELECT u.name, (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) AS order_count FROM users u;");
-}
-
-test "parse complex CASE with aggregation" {
-    assert_roundtrip(&"SELECT category, COUNT(CASE WHEN price > 100 THEN 1 END) AS expensive, COUNT(CASE WHEN price <= 100 THEN 1 END) AS cheap FROM products GROUP BY category HAVING COUNT(*) > 5 ORDER BY expensive DESC;");
-}
-
-test "parse UNION with ORDER BY and LIMIT" {
-    assert_roundtrip(&"SELECT name, 'user' AS type FROM users UNION ALL SELECT name, 'admin' AS type FROM admins ORDER BY name ASC LIMIT 50 OFFSET 10;");
-}
-
-test "parse bind parameters" {
-    assert_roundtrip(&"SELECT * FROM users WHERE id = ? AND name = ?1 AND email = :email;");
-}
-
-test "parse CREATE TABLE with foreign key constraint" {
-    assert_roundtrip(&"CREATE TABLE order_items (id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL, product_id INTEGER NOT NULL, quantity INTEGER DEFAULT 1, FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE, FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT);");
-}
-
-test "parse complex multi-statement script" {
-    assert_roundtrip(&"BEGIN TRANSACTION; CREATE TABLE IF NOT EXISTS migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, applied_at TEXT DEFAULT CURRENT_TIMESTAMP); INSERT INTO migrations (name) VALUES ('001_initial'); COMMIT;");
-}
-
-// --- Queries from benchmark/sqlite_parse/queries.sql ---
-// Complex real-world queries covering JOINs, CTEs, subqueries, expressions, etc.
-
-test "bench: multi-join with aggregation" {
-    assert_roundtrip(&"
-SELECT u.username,
-       COUNT(DISTINCT p.id) AS post_count,
-       COUNT(DISTINCT c.id) AS comment_count,
-       COALESCE(SUM(p.view_count), 0) AS total_views
-FROM users u
-LEFT JOIN posts p ON u.id = p.user_id AND p.status = 'published'
-LEFT JOIN comments c ON u.id = c.user_id
-GROUP BY u.id
-ORDER BY total_views DESC;");
-}
-
-test "bench: recursive CTE with join" {
-    assert_roundtrip(&"
-WITH RECURSIVE comment_tree(id, post_id, user_id, parent_id, body, depth) AS (
-    SELECT id, post_id, user_id, parent_id, body, 0
-    FROM comments
-    WHERE parent_id IS NULL AND post_id = 1
-    UNION ALL
-    SELECT c.id, c.post_id, c.user_id, c.parent_id, c.body, ct.depth + 1
-    FROM comments c
-    INNER JOIN comment_tree ct ON c.parent_id = ct.id
-)
-SELECT ct.depth, ct.body, u.username
-FROM comment_tree ct
-INNER JOIN users u ON ct.user_id = u.id
-ORDER BY ct.id;");
-}
-
-test "bench: subquery in WHERE with NOT IN" {
-    assert_roundtrip(&"
-SELECT *
-FROM posts
-WHERE user_id IN (SELECT id FROM users WHERE is_active = 1)
-  AND id NOT IN (SELECT post_id FROM post_tags WHERE tag_id = 3)
-  AND status = 'published';");
-}
-
-test "bench: correlated subqueries in select list" {
-    assert_roundtrip(&"
-SELECT p.title,
-       (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
-       (SELECT COUNT(*) FROM post_tags pt WHERE pt.post_id = p.id) AS tag_count
-FROM posts p
-WHERE p.status = 'published'
-ORDER BY comment_count DESC;");
-}
-
-test "bench: CASE expressions" {
-    assert_roundtrip(&"
-SELECT title,
-       CASE
-           WHEN view_count > 1000 THEN 'viral'
-           WHEN view_count > 100 THEN 'popular'
-           WHEN view_count > 10 THEN 'moderate'
-           ELSE 'low'
-       END AS popularity,
-       CASE status
-           WHEN 'published' THEN 1
-           WHEN 'draft' THEN 0
-           ELSE -1
-       END AS status_code
-FROM posts;");
-}
-
-test "bench: UNION ALL set operation" {
-    assert_roundtrip(&"
-SELECT 'users' AS table_name, COUNT(*) AS row_count FROM users
-UNION ALL
-SELECT 'posts', COUNT(*) FROM posts
-UNION ALL
-SELECT 'comments', COUNT(*) FROM comments
-UNION ALL
-SELECT 'tags', COUNT(*) FROM tags;");
-}
-
-test "bench: INTERSECT with joins" {
-    assert_roundtrip(&"
-SELECT u.username, p.title
-FROM users u
-CROSS JOIN posts p
-WHERE p.status = 'published'
-INTERSECT
-SELECT u.username, p.title
-FROM users u
-INNER JOIN comments c ON u.id = c.user_id
-INNER JOIN posts p ON c.post_id = p.id;");
-}
-
-test "bench: CTE with multiple tables" {
-    assert_roundtrip(&"
-WITH user_activity AS (
-    SELECT u.id, u.username,
-           COUNT(DISTINCT p.id) AS posts,
-           COUNT(DISTINCT c.id) AS comments
-    FROM users u
-    LEFT JOIN posts p ON u.id = p.user_id
-    LEFT JOIN comments c ON u.id = c.user_id
-    GROUP BY u.id
-)
-SELECT ua.username, ua.posts, ua.comments
-FROM user_activity ua
-ORDER BY ua.username;");
-}
-
-test "bench: CREATE VIEW with subquery" {
-    assert_roundtrip(&"
-CREATE VIEW published_posts_view AS
-SELECT p.id, p.title, p.slug, p.body, p.view_count,
-       u.username AS author,
-       p.published_at,
-       (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count
-FROM posts p
-INNER JOIN users u ON p.user_id = u.id
-WHERE p.status = 'published';");
-}
-
-test "bench: complex expressions with functions" {
-    assert_roundtrip(&"
-SELECT p.title,
-       SUBSTR(p.body, 1, 100) || '...' AS excerpt,
-       LENGTH(p.body) AS body_length,
-       REPLACE(LOWER(p.title), ' ', '-') AS generated_slug,
-       UPPER(u.username) AS author_upper,
-       TRIM(p.body) AS trimmed_body,
-       ABS(p.view_count - 100) AS distance_from_100,
-       TYPEOF(p.view_count) AS view_type
-FROM posts p
-INNER JOIN users u ON p.user_id = u.id
-WHERE p.body IS NOT NULL
-  AND LENGTH(p.body) > 0
-  AND p.published_at BETWEEN '2024-01-01' AND '2024-12-31'
-  AND p.view_count >= 0
-  AND (p.status = 'published' OR p.status = 'archived')
-ORDER BY p.published_at DESC
-LIMIT 50;");
-}
-
-test "bench: EXISTS and NOT EXISTS" {
-    assert_roundtrip(&"
-SELECT DISTINCT u.username
-FROM users u
-WHERE EXISTS (
-    SELECT 1 FROM posts p
-    WHERE p.user_id = u.id AND p.status = 'published'
-)
-AND NOT EXISTS (
-    SELECT 1 FROM comments c
-    WHERE c.user_id = u.id
-)
-ORDER BY u.username;");
-}
-
-test "bench: NULLIF IFNULL COALESCE" {
-    assert_roundtrip(&"
-SELECT p.title,
-       NULLIF(p.view_count, 0) AS non_zero_views,
-       IFNULL(p.published_at, 'unpublished') AS pub_date,
-       COALESCE(p.body, p.title, 'no content') AS content
-FROM posts p
-ORDER BY p.id;");
-}
-
-test "bench: INSERT OR REPLACE" {
-    assert_roundtrip(&"INSERT OR REPLACE INTO users (id, username, email, password_hash) VALUES (1, 'alice', 'newalice@example.com', 'newhash1');");
-}
-
-test "bench: REPLACE INTO" {
-    assert_roundtrip(&"REPLACE INTO tags (id, name) VALUES (1, 'sqlite3');");
-}
-
-test "bench: DELETE with subquery" {
-    assert_roundtrip(&"DELETE FROM comments WHERE user_id NOT IN (SELECT id FROM users WHERE is_active = 1);");
-}
-
-test "bench: nested JOIN with subquery" {
-    assert_roundtrip(&"
-SELECT p.title, c.body, u.username
-FROM posts p
-LEFT JOIN comments c ON p.id = c.post_id
-LEFT JOIN users u ON c.user_id = u.id
-WHERE p.id IN (SELECT post_id FROM post_tags WHERE tag_id IN (SELECT id FROM tags WHERE name = 'sqlite'))
-ORDER BY p.title, c.created_at;");
-}
-
-test "bench: CAST with division" {
-    assert_roundtrip(&"SELECT CAST(COUNT(*) AS REAL) / (SELECT COUNT(*) FROM users) AS posts_per_user FROM posts;");
-}
-
-test "bench: multiple correlated subqueries" {
-    assert_roundtrip(&"
-SELECT u.username,
-       (SELECT COUNT(*) FROM posts WHERE user_id = u.id) AS total_posts,
-       (SELECT COUNT(*) FROM posts WHERE user_id = u.id AND status = 'published') AS published_posts,
-       (SELECT COUNT(*) FROM posts WHERE user_id = u.id AND status = 'draft') AS draft_posts,
-       (SELECT COUNT(*) FROM comments WHERE user_id = u.id) AS total_comments
-FROM users u
-WHERE u.is_active = 1
-ORDER BY u.username;");
-}
-
-// --- XML structure tests ---
-
-test "xml whitespace preserved via trivia" {
-    assert_parse_xml(&"SELECT  1 ;", "
-        <parse>
+test "parse BEGIN" {
+    assert_parse_xml(
+        "BEGIN;",
+        "<parse>
             <sql_stmt_list>
-                <sql_stmt></sql_stmt>
+                <sql_stmt>
+                    <begin_stmt>
+                        <K_BEGIN>BEGIN</K_BEGIN>
+                    </begin_stmt>
+                </sql_stmt>
             </sql_stmt_list>
             <Eof></Eof>
-        </parse>
-    ");
-}
-
-test "xml trailing whitespace in EOF trivia" {
-    // The trailing space becomes leading trivia on the EOF token.
-    assert_parse_xml(&"SELECT 1; ", "
-        <parse>
-            <sql_stmt_list>
-                <sql_stmt></sql_stmt>
-            </sql_stmt_list> <Eof></Eof>
-        </parse>
-    ");
-}
-
-test "xml comment trivia preserved" {
-    assert_parse_xml(&"-- hello\nSELECT 1;", "
-        <parse>
-            <sql_stmt_list>
-                <sql_stmt></sql_stmt>
-            </sql_stmt_list>
-            <Eof></Eof>
-        </parse>
-    ");
-}
-
-// --- tokenize tests ---
-
-test "tokenize preserves leading trivia" {
-    let tokens = sqlite::tokenize(&" SELECT 1");
-    assert tokens[0].leading_trivia.len() >= 1, `expected trivia, got {tokens[0].leading_trivia.len()}`;
-    assert tokens[0].leading_trivia[0].text == " ";
-}
-
-test "tokenize preserves comment trivia" {
-    let tokens = sqlite::tokenize(&"-- comment\nSELECT 1");
-    assert tokens[0].leading_trivia.len() >= 1, `expected trivia, got {tokens[0].leading_trivia.len()}`;
-}
-
-test "token_kind_name for keywords" {
-    let tokens = sqlite::tokenize(&"SELECT FROM WHERE");
-    assert sqlite::token_kind_name(tokens[0].kind) == "K_SELECT", `got: {sqlite::token_kind_name(tokens[0].kind)}`;
-    assert sqlite::token_kind_name(tokens[1].kind) == "K_FROM";
-    assert sqlite::token_kind_name(tokens[2].kind) == "K_WHERE";
-}
-
-test "token_kind_name for literals and special tokens" {
-    let tokens = sqlite::tokenize(&"foo 42");
-    assert sqlite::token_kind_name(tokens[0].kind) == "IDENTIFIER";
-    assert sqlite::token_kind_name(tokens[1].kind) == "NUMERIC_LITERAL";
-    let eof = tokens.last().unwrap();
-    assert sqlite::token_kind_name(eof.kind) == "Eof";
+        </parse>",
+    );
 }

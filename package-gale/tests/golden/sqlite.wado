@@ -373,6 +373,7 @@ pub variant AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrComp
 
 pub struct SqlStmtNode {
     pub span: Span,
+    pub alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt: Option<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>,
 }
 
 pub struct AlterTableStmtNode {
@@ -6442,201 +6443,190 @@ fn parse_sql_stmt(p: &mut Parser) -> Result<SqlStmtNode, ParseError> {
     } else if p.peek_kind() == TK_K_EXPLAIN {
         let tok_4 = p.expect(TK_K_EXPLAIN, "K_EXPLAIN")?;
     }
+    let mut alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner: Option<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_ALTER {
-        let tok_5 = parse_alter_table_stmt(p)?;
+        let alter_table_stmt = parse_alter_table_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::AlterTableStmt(alter_table_stmt));
     } else if grp_kind == TK_K_ANALYZE {
-        let tok_6 = parse_analyze_stmt(p)?;
+        let analyze_stmt = parse_analyze_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::AnalyzeStmt(analyze_stmt));
     } else if grp_kind == TK_K_ATTACH {
-        let tok_7 = parse_attach_stmt(p)?;
+        let attach_stmt = parse_attach_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::AttachStmt(attach_stmt));
     } else if grp_kind == TK_K_BEGIN {
-        let tok_8 = parse_begin_stmt(p)?;
+        let begin_stmt = parse_begin_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::BeginStmt(begin_stmt));
     } else if grp_kind == TK_K_COMMIT || grp_kind == TK_K_END {
-        let tok_9 = parse_commit_stmt(p)?;
+        let commit_stmt = parse_commit_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::CommitStmt(commit_stmt));
     } else if grp_kind == TK_K_WITH || grp_kind == TK_K_SELECT || grp_kind == TK_K_VALUES || grp_kind == TK_K_DELETE || grp_kind == TK_K_INSERT || grp_kind == TK_K_REPLACE || grp_kind == TK_K_UPDATE {
-        if p.peek_kind() == TK_K_WITH {
-            let saved_pos = p.pos;
-            let mut bt_done = false;
-            if !bt_done {
-                bt_try: {
-                    let opt_r = parse_compound_select_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos; break bt_try; }
-                    bt_done = true;
-                }
+        let saved_pos = p.pos;
+        let mut bt_done = false;
+        if !bt_done {
+            bt_try: {
+                let opt_r = parse_compound_select_stmt(p);
+                if let Err(_) = opt_r { p.pos = saved_pos; break bt_try; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::CompoundSelectStmt(opt_r.unwrap()));
+                bt_done = true;
             }
-            if !bt_done {
-                bt_try_2: {
-                    let opt_r = parse_delete_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos; break bt_try_2; }
-                    bt_done = true;
-                }
+        }
+        if !bt_done {
+            bt_try_2: {
+                let opt_r_2 = parse_delete_stmt(p);
+                if let Err(_) = opt_r_2 { p.pos = saved_pos; break bt_try_2; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::DeleteStmt(opt_r_2.unwrap()));
+                bt_done = true;
             }
-            if !bt_done {
-                bt_try_3: {
-                    let opt_r = parse_delete_stmt_limited(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos; break bt_try_3; }
-                    bt_done = true;
-                }
+        }
+        if !bt_done {
+            bt_try_3: {
+                let opt_r_3 = parse_delete_stmt_limited(p);
+                if let Err(_) = opt_r_3 { p.pos = saved_pos; break bt_try_3; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::DeleteStmtLimited(opt_r_3.unwrap()));
+                bt_done = true;
             }
-            if !bt_done {
-                bt_try_4: {
-                    let opt_r = parse_factored_select_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos; break bt_try_4; }
-                    bt_done = true;
-                }
+        }
+        if !bt_done {
+            bt_try_4: {
+                let opt_r_4 = parse_factored_select_stmt(p);
+                if let Err(_) = opt_r_4 { p.pos = saved_pos; break bt_try_4; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::FactoredSelectStmt(opt_r_4.unwrap()));
+                bt_done = true;
             }
-            if !bt_done {
-                bt_try_5: {
-                    let opt_r = parse_insert_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos; break bt_try_5; }
-                    bt_done = true;
-                }
+        }
+        if !bt_done {
+            bt_try_5: {
+                let opt_r_5 = parse_insert_stmt(p);
+                if let Err(_) = opt_r_5 { p.pos = saved_pos; break bt_try_5; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::InsertStmt(opt_r_5.unwrap()));
+                bt_done = true;
             }
-            if !bt_done {
-                bt_try_6: {
-                    let opt_r = parse_simple_select_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos; break bt_try_6; }
-                    bt_done = true;
-                }
+        }
+        if !bt_done {
+            bt_try_6: {
+                let opt_r_6 = parse_simple_select_stmt(p);
+                if let Err(_) = opt_r_6 { p.pos = saved_pos; break bt_try_6; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::SimpleSelectStmt(opt_r_6.unwrap()));
+                bt_done = true;
             }
-            if !bt_done {
-                bt_try_7: {
-                    let opt_r = parse_select_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos; break bt_try_7; }
-                    bt_done = true;
-                }
+        }
+        if !bt_done {
+            bt_try_7: {
+                let opt_r_7 = parse_select_stmt(p);
+                if let Err(_) = opt_r_7 { p.pos = saved_pos; break bt_try_7; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::SelectStmt(opt_r_7.unwrap()));
+                bt_done = true;
             }
-            if !bt_done {
-                bt_try_8: {
-                    let opt_r = parse_update_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos; break bt_try_8; }
-                    bt_done = true;
-                }
+        }
+        if !bt_done {
+            bt_try_8: {
+                let opt_r_8 = parse_update_stmt(p);
+                if let Err(_) = opt_r_8 { p.pos = saved_pos; break bt_try_8; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::UpdateStmt(opt_r_8.unwrap()));
+                bt_done = true;
             }
-            if !bt_done {
-                let tok = parse_update_stmt_limited(p)?;
-            }
-        } else if p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_VALUES {
-            let saved_pos_2 = p.pos;
-            let mut bt_done_2 = false;
-            if !bt_done_2 {
-                bt_try_9: {
-                    let opt_r = parse_compound_select_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_2; break bt_try_9; }
-                    bt_done_2 = true;
-                }
-            }
-            if !bt_done_2 {
-                bt_try_10: {
-                    let opt_r = parse_factored_select_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_2; break bt_try_10; }
-                    bt_done_2 = true;
-                }
-            }
-            if !bt_done_2 {
-                bt_try_11: {
-                    let opt_r = parse_simple_select_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_2; break bt_try_11; }
-                    bt_done_2 = true;
-                }
-            }
-            if !bt_done_2 {
-                let tok = parse_select_stmt(p)?;
-            }
-        } else if p.peek_kind() == TK_K_DELETE {
-            let saved_pos_3 = p.pos;
-            let mut bt_done_3 = false;
-            if !bt_done_3 {
-                bt_try_12: {
-                    let opt_r = parse_delete_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_3; break bt_try_12; }
-                    bt_done_3 = true;
-                }
-            }
-            if !bt_done_3 {
-                let tok = parse_delete_stmt_limited(p)?;
-            }
-        } else if p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_REPLACE {
-            let tok_10 = parse_insert_stmt(p)?;
-        } else if p.peek_kind() == TK_K_UPDATE {
-            let saved_pos_4 = p.pos;
-            let mut bt_done_4 = false;
-            if !bt_done_4 {
-                bt_try_13: {
-                    let opt_r = parse_update_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_4; break bt_try_13; }
-                    bt_done_4 = true;
-                }
-            }
-            if !bt_done_4 {
-                let tok = parse_update_stmt_limited(p)?;
-            }
+        }
+        if !bt_done {
+            let update_stmt_limited = parse_update_stmt_limited(p)?;
+            alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::UpdateStmtLimited(update_stmt_limited));
         }
     } else if grp_kind == TK_K_CREATE {
-        if p.peek_kind() == TK_K_CREATE {
-            let saved_pos_5 = p.pos;
-            let mut bt_done_5 = false;
-            if !bt_done_5 {
-                bt_try_14: {
-                    let opt_r = parse_create_index_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_5; break bt_try_14; }
-                    bt_done_5 = true;
-                }
+        let saved_pos_2 = p.pos;
+        let mut bt_done_2 = false;
+        if !bt_done_2 {
+            bt_try_9: {
+                let opt_r_9 = parse_create_index_stmt(p);
+                if let Err(_) = opt_r_9 { p.pos = saved_pos_2; break bt_try_9; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::CreateIndexStmt(opt_r_9.unwrap()));
+                bt_done_2 = true;
             }
-            if !bt_done_5 {
-                bt_try_15: {
-                    let opt_r = parse_create_table_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_5; break bt_try_15; }
-                    bt_done_5 = true;
-                }
+        }
+        if !bt_done_2 {
+            bt_try_10: {
+                let opt_r_10 = parse_create_table_stmt(p);
+                if let Err(_) = opt_r_10 { p.pos = saved_pos_2; break bt_try_10; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::CreateTableStmt(opt_r_10.unwrap()));
+                bt_done_2 = true;
             }
-            if !bt_done_5 {
-                bt_try_16: {
-                    let opt_r = parse_create_trigger_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_5; break bt_try_16; }
-                    bt_done_5 = true;
-                }
+        }
+        if !bt_done_2 {
+            bt_try_11: {
+                let opt_r_11 = parse_create_trigger_stmt(p);
+                if let Err(_) = opt_r_11 { p.pos = saved_pos_2; break bt_try_11; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::CreateTriggerStmt(opt_r_11.unwrap()));
+                bt_done_2 = true;
             }
-            if !bt_done_5 {
-                bt_try_17: {
-                    let opt_r = parse_create_view_stmt(p);
-                    if let Err(_) = opt_r { p.pos = saved_pos_5; break bt_try_17; }
-                    bt_done_5 = true;
-                }
+        }
+        if !bt_done_2 {
+            bt_try_12: {
+                let opt_r_12 = parse_create_view_stmt(p);
+                if let Err(_) = opt_r_12 { p.pos = saved_pos_2; break bt_try_12; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::CreateViewStmt(opt_r_12.unwrap()));
+                bt_done_2 = true;
             }
-            if !bt_done_5 {
-                let tok = parse_create_virtual_table_stmt(p)?;
-            }
+        }
+        if !bt_done_2 {
+            let create_virtual_table_stmt = parse_create_virtual_table_stmt(p)?;
+            alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::CreateVirtualTableStmt(create_virtual_table_stmt));
         }
     } else if grp_kind == TK_K_DETACH {
-        let tok_11 = parse_detach_stmt(p)?;
+        let detach_stmt = parse_detach_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::DetachStmt(detach_stmt));
     } else if grp_kind == TK_K_DROP {
-        if p.peek_kind() == TK_K_DROP {
-            if p.peek_at(1) == TK_K_INDEX {
-                let tok_12 = parse_drop_index_stmt(p)?;
-            } else if p.peek_at(1) == TK_K_TABLE {
-                let tok_13 = parse_drop_table_stmt(p)?;
-            } else if p.peek_at(1) == TK_K_TRIGGER {
-                let tok_14 = parse_drop_trigger_stmt(p)?;
-            } else if p.peek_at(1) == TK_K_VIEW {
-                let tok_15 = parse_drop_view_stmt(p)?;
+        let saved_pos_3 = p.pos;
+        let mut bt_done_3 = false;
+        if !bt_done_3 {
+            bt_try_13: {
+                let opt_r_13 = parse_drop_index_stmt(p);
+                if let Err(_) = opt_r_13 { p.pos = saved_pos_3; break bt_try_13; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::DropIndexStmt(opt_r_13.unwrap()));
+                bt_done_3 = true;
             }
         }
+        if !bt_done_3 {
+            bt_try_14: {
+                let opt_r_14 = parse_drop_table_stmt(p);
+                if let Err(_) = opt_r_14 { p.pos = saved_pos_3; break bt_try_14; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::DropTableStmt(opt_r_14.unwrap()));
+                bt_done_3 = true;
+            }
+        }
+        if !bt_done_3 {
+            bt_try_15: {
+                let opt_r_15 = parse_drop_trigger_stmt(p);
+                if let Err(_) = opt_r_15 { p.pos = saved_pos_3; break bt_try_15; }
+                alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::DropTriggerStmt(opt_r_15.unwrap()));
+                bt_done_3 = true;
+            }
+        }
+        if !bt_done_3 {
+            let drop_view_stmt = parse_drop_view_stmt(p)?;
+            alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::DropViewStmt(drop_view_stmt));
+        }
     } else if grp_kind == TK_K_PRAGMA {
-        let tok_16 = parse_pragma_stmt(p)?;
+        let pragma_stmt = parse_pragma_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::PragmaStmt(pragma_stmt));
     } else if grp_kind == TK_K_REINDEX {
-        let tok_17 = parse_reindex_stmt(p)?;
+        let reindex_stmt = parse_reindex_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::ReindexStmt(reindex_stmt));
     } else if grp_kind == TK_K_RELEASE {
-        let tok_18 = parse_release_stmt(p)?;
+        let release_stmt = parse_release_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::ReleaseStmt(release_stmt));
     } else if grp_kind == TK_K_ROLLBACK {
-        let tok_19 = parse_rollback_stmt(p)?;
+        let rollback_stmt = parse_rollback_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::RollbackStmt(rollback_stmt));
     } else if grp_kind == TK_K_SAVEPOINT {
-        let tok_20 = parse_savepoint_stmt(p)?;
+        let savepoint_stmt = parse_savepoint_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::SavepointStmt(savepoint_stmt));
     } else if grp_kind == TK_K_VACUUM {
-        let tok_21 = parse_vacuum_stmt(p)?;
+        let vacuum_stmt = parse_vacuum_stmt(p)?;
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner = Option::<AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup>::Some(AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup::VacuumStmt(vacuum_stmt));
     }
+    let alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt = alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt_inner;
     return Result::<SqlStmtNode, ParseError>::Ok(SqlStmtNode {
         span: Span::new(start, p.last_end()),
+        alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt,
     });
 }
 
@@ -11130,6 +11120,100 @@ pub fn walk_sql_stmt_list<V: Visitor>(v: &mut V, node: &SqlStmtListNode) {
 
 pub fn walk_sql_stmt<V: Visitor>(v: &mut V, node: &SqlStmtNode) {
     v.enter_rule(&"sql_stmt", &node.span);
+    if let Some(item) = &node.alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt {
+        match item {
+            AlterTableStmt(inner) => {
+                walk_alter_table_stmt(v, inner);
+            }
+            AnalyzeStmt(inner) => {
+                walk_analyze_stmt(v, inner);
+            }
+            AttachStmt(inner) => {
+                walk_attach_stmt(v, inner);
+            }
+            BeginStmt(inner) => {
+                walk_begin_stmt(v, inner);
+            }
+            CommitStmt(inner) => {
+                walk_commit_stmt(v, inner);
+            }
+            CompoundSelectStmt(inner) => {
+                walk_compound_select_stmt(v, inner);
+            }
+            CreateIndexStmt(inner) => {
+                walk_create_index_stmt(v, inner);
+            }
+            CreateTableStmt(inner) => {
+                walk_create_table_stmt(v, inner);
+            }
+            CreateTriggerStmt(inner) => {
+                walk_create_trigger_stmt(v, inner);
+            }
+            CreateViewStmt(inner) => {
+                walk_create_view_stmt(v, inner);
+            }
+            CreateVirtualTableStmt(inner) => {
+                walk_create_virtual_table_stmt(v, inner);
+            }
+            DeleteStmt(inner) => {
+                walk_delete_stmt(v, inner);
+            }
+            DeleteStmtLimited(inner) => {
+                walk_delete_stmt_limited(v, inner);
+            }
+            DetachStmt(inner) => {
+                walk_detach_stmt(v, inner);
+            }
+            DropIndexStmt(inner) => {
+                walk_drop_index_stmt(v, inner);
+            }
+            DropTableStmt(inner) => {
+                walk_drop_table_stmt(v, inner);
+            }
+            DropTriggerStmt(inner) => {
+                walk_drop_trigger_stmt(v, inner);
+            }
+            DropViewStmt(inner) => {
+                walk_drop_view_stmt(v, inner);
+            }
+            FactoredSelectStmt(inner) => {
+                walk_factored_select_stmt(v, inner);
+            }
+            InsertStmt(inner) => {
+                walk_insert_stmt(v, inner);
+            }
+            PragmaStmt(inner) => {
+                walk_pragma_stmt(v, inner);
+            }
+            ReindexStmt(inner) => {
+                walk_reindex_stmt(v, inner);
+            }
+            ReleaseStmt(inner) => {
+                walk_release_stmt(v, inner);
+            }
+            RollbackStmt(inner) => {
+                walk_rollback_stmt(v, inner);
+            }
+            SavepointStmt(inner) => {
+                walk_savepoint_stmt(v, inner);
+            }
+            SimpleSelectStmt(inner) => {
+                walk_simple_select_stmt(v, inner);
+            }
+            SelectStmt(inner) => {
+                walk_select_stmt(v, inner);
+            }
+            UpdateStmt(inner) => {
+                walk_update_stmt(v, inner);
+            }
+            UpdateStmtLimited(inner) => {
+                walk_update_stmt_limited(v, inner);
+            }
+            VacuumStmt(inner) => {
+                walk_vacuum_stmt(v, inner);
+            }
+        }
+    }
     v.exit_rule(&"sql_stmt", &node.span);
 }
 

@@ -221,6 +221,25 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
         }
         return null;
     }
+    if let Group(alts) = *elem {
+        if is_simple_cst_group(&alts) {
+            let mut cases: Array<GroupCaseInfo> = [];
+            for let alt of &alts {
+                if let RuleRef(name) = &alt.elements[0] {
+                    cases.append(GroupCaseInfo {
+                        case_name: to_pascal_case(name),
+                        rule_name: *name,
+                    });
+                }
+            }
+            return Option::Some(WalkField {
+                name: group_field_base_name(&alts),
+                action: WalkAction::WalkGroup(cases),
+                wrapper: WalkWrapper::OptionalWrap,
+            });
+        }
+        return null;
+    }
     return null;
 }
 
