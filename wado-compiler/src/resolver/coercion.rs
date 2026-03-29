@@ -1047,4 +1047,86 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
     }
+
+    /// Check that a return value's type is compatible with the declared return type.
+    /// Catches cases like `fn foo() -> i32 { return "hello"; }`.
+    pub(super) fn check_return_type_mismatch(
+        &mut self,
+        actual: TypeId,
+        expected: TypeId,
+        span: Span,
+    ) {
+        if actual == expected
+            || actual == TypeTable::UNKNOWN
+            || expected == TypeTable::UNKNOWN
+            || actual == TypeTable::NEVER
+            || expected == TypeTable::UNIT
+        {
+            return;
+        }
+
+        let type_table = self.type_table.borrow();
+
+        // Skip when either side involves unresolved generics (type params,
+        // associated type projections, or generic instances containing them).
+        // These will be checked after monomorphization when types are concrete.
+        if self.type_contains_params(actual, &type_table)
+            || self.type_contains_params(expected, &type_table)
+        {
+            return;
+        }
+
+        // Unwrap references for comparison
+        let actual_inner = match type_table.get(actual) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => actual,
+        };
+        let expected_inner = match type_table.get(expected) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => expected,
+        };
+
+        if actual_inner == expected_inner {
+            return;
+        }
+
+        // Skip function types — structural equivalence is complex (effects, closures).
+        if matches!(type_table.get(actual_inner), ResolvedType::Function { .. })
+            || matches!(
+                type_table.get(expected_inner),
+                ResolvedType::Function { .. }
+            )
+        {
+            return;
+        }
+
+        let expected_display = type_table.type_name(expected);
+        let actual_display = type_table.type_name(actual);
+        drop(type_table);
+
+        let _ = self.logger.error(TypeError::TypeMismatch {
+            expected: expected_display,
+            found: actual_display,
+            span,
+        });
+    }
+
+    /// Returns true if the type involves unresolved type parameters or projections.
+    fn type_contains_params(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
+        match type_table.get(type_id) {
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. } => true,
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.type_contains_params(*inner, type_table)
+            }
+            ResolvedType::GenericInstance { type_args, .. } => type_args
+                .iter()
+                .any(|t| self.type_contains_params(*t, type_table)),
+            ResolvedType::Tuple(elems) => elems
+                .iter()
+                .any(|t| self.type_contains_params(*t, type_table)),
+            _ => false,
+        }
+    }
 }

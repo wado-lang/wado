@@ -1,0 +1,13 @@
+use { Item as ItemA } from "./sub/error_return_cross_module_a.wado";
+use { Item as ItemB } from "./sub/error_return_cross_module_b.wado";
+
+fn wrong() -> ItemA {
+    return ItemB { x: 1 };
+}
+
+export fn run() {
+    wrong();
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

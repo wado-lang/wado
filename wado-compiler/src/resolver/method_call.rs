@@ -234,7 +234,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             param_is_mut: _,
             inherited_from_base,
             cm_name,
-            is_ref_impl: _is_ref_impl,
+            is_ref_impl,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -348,7 +348,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Adjust receiver based on what the method expects (self_kind)
         receiver =
-            self.adjust_receiver_for_self_kind(receiver, self_kind, _is_ref_impl, method_call.span);
+            self.adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, method_call.span);
 
         // Build unified substitution context for double generics
         // Type param indices are assigned as follows:
@@ -516,6 +516,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
         .with_type_args(&impl_type_arg_names, &method_type_arg_names);
         method_info.is_type_param_receiver = is_type_param_receiver;
+        method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
 
         // Use trait impl module source if this is a trait method,

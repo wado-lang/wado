@@ -1264,11 +1264,11 @@ fn __test_7_iterator_fold() {
     let __local_88: i32;
     let __local_89: ref Option<i32>;
     let __local_91: i32;
-    let __local_94: ref "core:allocator/ArrayIter<i32>";
+    let __local_93: ref "core:allocator/ArrayIter<i32>";
+    let __local_96: i32;
     let __local_97: i32;
-    let __local_98: i32;
-    let __local_99: ref Option<i32>;
-    let __local_101: i32;
+    let __local_98: ref Option<i32>;
+    let __local_100: i32;
     nums = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_0;
@@ -1324,17 +1324,17 @@ condition: sum == 15
         });
         unreachable;
     };
-    product = __inline_ArrayIter_i32__Iterator__fold_i32____Closure_11_2: block -> i32 {
-        __local_94 = "core:allocator/ArrayIter<i32>" { repr: nums.repr, used: nums.used, index: 0 };
-        __local_97 = 1;
+    product = __inline_ArrayIter_i32__Iterator__fold_i32____Closure_11_1: block -> i32 {
+        __local_93 = "core:allocator/ArrayIter<i32>" { repr: nums.repr, used: nums.used, index: 0 };
+        __local_96 = 1;
         b43: block {
             l44: loop {
-                __local_99 = ArrayIter<i32>^Iterator::next(__local_94);
-                if ref.test Option<i32>::Some(__local_99) {
-                    __local_98 = ref.cast Option<i32>::Some(__local_99).payload_0;
-                    __local_97 = __inline___Closure_11____call_0: block -> i32 {
-                        __local_101 = __local_97;
-                        break __inline___Closure_11____call_0: __local_101 * __local_98;
+                __local_98 = ArrayIter<i32>^Iterator::next(__local_93);
+                if ref.test Option<i32>::Some(__local_98) {
+                    __local_97 = ref.cast Option<i32>::Some(__local_98).payload_0;
+                    __local_96 = __inline___Closure_11____call_0: block -> i32 {
+                        __local_100 = __local_96;
+                        break __inline___Closure_11____call_0: __local_100 * __local_97;
                     };
                 } else {
                     break b43;
@@ -1342,7 +1342,7 @@ condition: sum == 15
                 continue l44;
             };
         };
-        break __inline_ArrayIter_i32__Iterator__fold_i32____Closure_11_2: __local_97;
+        break __inline_ArrayIter_i32__Iterator__fold_i32____Closure_11_1: __local_96;
     };
     __cond_7 = product == 120;
     if __cond_7 == 0 {
