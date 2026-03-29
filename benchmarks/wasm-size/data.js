@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774822941250,
+  "lastUpdate": 1774824005447,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8681,6 +8681,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/eae653b69b2f3903b5e5b457d9f2eefcd6373bd2"
         },
         "date": 1774822941164,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24674,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c49e4611e5a41b30debfd429759fbb889cd29205",
+          "message": "Merge pull request #731 from wado-lang/claude/fix-cst-group-afN1p\n\nImplement CST Group support for Gale parser generator",
+          "timestamp": "2026-03-30T07:37:16+09:00",
+          "tree_id": "872778e0b51154b0e27b8c12f9cda785314d3d55",
+          "url": "https://github.com/wado-lang/wado/commit/c49e4611e5a41b30debfd429759fbb889cd29205"
+        },
+        "date": 1774824005273,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
