@@ -170,20 +170,18 @@ impl Add for String {
 impl Eq for String {
     pub fn eq(&self, other: &Self) -> bool {
         let len_a = self.len();
-        let len_b = other.len();
-
-        if len_a != len_b {
+        if len_a != other.len() {
             return false;
         }
+        return String::eq_bytes(self.internal_raw_bytes(), other.internal_raw_bytes(), len_a);
+    }
 
-        let a_repr = self.internal_raw_bytes();
-        let b_repr = other.internal_raw_bytes();
-        for let mut i = 0; i < len_a; i += 1 {
-            if builtin::array_get_u8(a_repr, i) != builtin::array_get_u8(b_repr, i) {
+    fn eq_bytes(a: builtin::array<u8>, b: builtin::array<u8>, len: i32) -> bool {
+        for let mut i = 0; i < len; i += 1 {
+            if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                 return false;
             }
         }
-
         return true;
     }
 }
