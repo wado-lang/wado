@@ -148,12 +148,12 @@ impl<T: Display> Array<T> {
 | `ends_with(pat)`                     | `ends_with(pat)`                      | NEW                                     |
 | `find(pat)`                          | `find(pat)`                           | NEW                                     |
 | `rfind(pat)`                         | `rfind(pat)`                          | NEW                                     |
-| `split(pat)`                         | `split(pat)`                          | NEW                                     |
-| `splitn(n, pat)`                     | `splitn(n, pat)`                      | NEW                                     |
+| `split(pat)`                         | `split(sep)`                          | NEW (returns iterator)                  |
+| `splitn(n, pat)`                     | `splitn(n, sep)`                      | NEW (returns iterator)                  |
 | `rsplit(pat)`                        | —                                     | niche                                   |
 | `rsplitn(n, pat)`                    | —                                     | niche                                   |
-| `split_whitespace()`                 | `split_whitespace()`                  | NEW                                     |
-| `lines()`                            | `lines()`                             | NEW                                     |
+| `split_whitespace()`                 | `split_whitespace()`                  | NEW (returns iterator)                  |
+| `lines()`                            | `lines()`                             | NEW (returns iterator)                  |
 | `trim()`                             | `trim()`                              | OK                                      |
 | `trim_start()`                       | `trim_start()`                        | OK                                      |
 | `trim_end()`                         | `trim_end()`                          | OK                                      |
@@ -233,10 +233,10 @@ impl String {
     pub fn rfind(&self, pat: String) -> Option<i32>;         // byte index
     pub fn contains_char(&self, ch: char) -> bool;
     pub fn find_char(&self, pred: fn(&char) -> bool) -> Option<i32>;  // byte index
-    pub fn split(&self, sep: String) -> Array<String>;
-    pub fn splitn(&self, n: i32, sep: String) -> Array<String>;
-    pub fn split_whitespace(&self) -> Array<String>;
-    pub fn lines(&self) -> Array<String>;
+    pub fn split(&self, sep: String) -> StrSplitIter;           // Iterator<Item = String>
+    pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter; // Iterator<Item = String>
+    pub fn split_whitespace(&self) -> StrSplitWhitespaceIter;  // Iterator<Item = String>
+    pub fn lines(&self) -> StrLinesIter;                       // Iterator<Item = String>
     pub fn replace(&self, from: String, to: String) -> String;
     pub fn replacen(&self, from: String, to: String, count: i32) -> String;
     pub fn to_lowercase(&self) -> String;
@@ -288,7 +288,6 @@ These have no direct Rust counterpart but are useful in Wado:
 
 1. **Breaking rename**: `append` → `push` / `push_str` requires migration (mitigated by deprecation period).
 2. **Byte-index convention for String**: Char-boundary panics can surprise users unfamiliar with UTF-8. Documented clearly.
-3. **Eager `split` / `lines`**: Returns `Array<String>` instead of lazy iterator. Simpler but less efficient for large strings. Can add lazy variants later.
 
 ### Implementation Priority
 
