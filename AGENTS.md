@@ -14,121 +14,10 @@ If you need detailed specification, read the `docs/spec.md`.
 
 The compiler is implemented in `wado-compiler/`.
 
-Standard libraries (stdlib) are implemented in `wado-compiler/lib`, with `wasi/` for WASI interface and `core/` for the core library.
-
-For other important files:
-
-- `wado-compiler/lib/core/builtin.wado` for compiler intrinsics.
-- `wado-compiler/lib/core/internal.wado` for utilities to implement language features
-
 See also:
 
 - `docs/compiler.md` for the compiler internals.
 - `docs/optimizer.md` for the optimization passes.
-
-### Wasm Compatibility
-
-`wado-compiler` must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules in production code. CI enforces this with a wasm32 build check.
-
-### E2E Test Specification (Compiler Tests)
-
-E2E tests verify language features and compiler behaviors (codegen, error messages, optimization). They are `.wado` files in `wado-compiler/tests/fixtures/` with a `__DATA__` section containing JSON test specification.
-
-Each test fixture group has the same prefix in their filenames.
-
-By default, only O0 and O2 run locally; O1/O3/Os require `WADO_FULL_TEST=1`.
-
-#### Data Section Schema
-
-The target world is indicated by the top-level key in the JSON object:
-
-- No world key → `wasi:cli/command` (default)
-- `"test": {}` → test world (runs test block exports)
-- `"wasi:http/service": {...}` → HTTP service world
-
-| Field                 | Type                 | Description                                                 |
-| --------------------- | -------------------- | ----------------------------------------------------------- |
-| `"test"`              | `{}`                 | Run as test world (`wasi:test`), executing test exports     |
-| `"wasi:http/service"` | `object`             | Run as HTTP service (see HTTP sub-fields below)             |
-| `stdout`              | `string`             | Expected stdout (exact match)                               |
-| `stderr`              | `string`             | Expected stderr (exact match)                               |
-| `stdout_contains`     | `string[]`           | Strings that must appear in stdout                          |
-| `stderr_contains`     | `string[]`           | Strings that must appear in stderr                          |
-| `trapped`             | `bool`               | Whether the program should trap                             |
-| `compile_error`       | `string`             | Expected compile error (substring match)                    |
-| `TODO`                | `bool`               | Mark as TODO test - must fail until feature is implemented  |
-| `skip_os`             | `bool`               | Skip this test under `-Os` (e.g. tests relying on names)    |
-| `preopened_dirs`      | `[string, string][]` | Preopened directories `[host_path, guest_path]`             |
-| `allocator`           | `string`             | Override allocator: `"bump"` (default) or `"debug"`         |
-| `wir_expect:Ox`       | `string[]`           | Patterns that must appear in WIR at `-Ox` (substring match) |
-| `wir_not_expect:Ox`   | `string[]`           | Patterns that must NOT appear in WIR at `-Ox`               |
-| `outgoing_mocks`      | `object`             | Mock responses for outgoing HTTP requests (see below)       |
-
-HTTP sub-fields (inside `"wasi:http/service": {...}`):
-
-| Field             | Type                 | Description                                   |
-| ----------------- | -------------------- | --------------------------------------------- |
-| `request`         | `object`             | Injected HTTP request (defaults to `GET /`)   |
-| `request.method`  | `string`             | HTTP method (default: `"GET"`)                |
-| `request.path`    | `string`             | Request path (default: `"/"`)                 |
-| `request.headers` | `[string, string][]` | Request headers                               |
-| `request.body`    | `string`             | Request body as UTF-8                         |
-| `status`          | `number`             | Expected HTTP status code                     |
-| `body`            | `string`             | Expected response body (exact UTF-8 match)    |
-| `body_contains`   | `string[]`           | Strings that must appear in the response body |
-| `headers_contain` | `[string, string][]` | Response headers that must be present         |
-
-Outgoing mock sub-fields (inside each entry of `"outgoing_mocks": {...}`):
-
-Keys are URL patterns matched against the request URI (exact match on full URI or path).
-
-| Field     | Type                 | Description                             |
-| --------- | -------------------- | --------------------------------------- |
-| `status`  | `number`             | HTTP status code (default: 200)         |
-| `body`    | `string`             | Response body as UTF-8 (default: empty) |
-| `headers` | `[string, string][]` | Response headers                        |
-
-#### Examples
-
-```wado
-test "Hello, world!" {
-    let x = 1;
-    assert x == 1;
-}
-
-__DATA__
-{"test": {}}
-```
-
-```wado
-// WIR pattern test - verify optimization effects at a specific -Ox level
-// Use `wado dump [-O0|-O2] file.wado` to discover WIR patterns
-export fn run() {
-    let a: Array<i32> = [10, 20, 30];
-    assert a.len() == 3;
-}
-
-__DATA__
-{
-    "stdout": "",
-    "wir_expect:O1": ["SequenceLiteralBuilder::push_literal("]
-    "wir_expect:O2": ["array.new_fixed<i32>(10, 20, 30)"],
-}
-```
-
-### Adding Test Fixtures
-
-After adding new `.wado` files to `wado-compiler/tests/fixtures/`, you must touch `wado-compiler/tests/e2e.rs` to trigger `datatest_mini` to rediscover test files:
-
-```sh
-touch wado-compiler/tests/e2e.rs
-```
-
-Without this, `cargo test` will not detect the new fixture because `datatest_mini` discovers files at compile time.
-
-### Standard Library Tests (Library Logic)
-
-Tests for standard library logic live alongside implementations in `wado-compiler/lib/`. These are `.wado` files with `test` blocks (e.g., `zlib_test.wado`, `string_test.wado`) , run with `wado test`.
 
 ### The `wasi:*` Modules
 
@@ -176,7 +65,7 @@ wado compile --allocator debug file.wado
 wado run --allocator debug file.wado      # not yet wired, use compile + wasmtime
 ```
 
-The debug allocator is **automatically selected** when compiling for tests.
+The debug allocator is selected when compiling for the test world, and enabled in E2E tests as well.
 
 ### Serve Command
 
@@ -238,7 +127,7 @@ The compiler bundles Wasm modules for the language futures:
 
 - `wado-bundled-libm/` - deterministic Math functions with `libm` crate
 
-### Wasm and WASI
+## Wasm and WASI
 
 Wado is designed on the following Wasm features:
 
@@ -253,17 +142,22 @@ Wado is designed on the following Wasm features:
   - P3 is supported by wasmtime v42
   - See wasmtime P3 support: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
 
+## Vendor submodules
+
+There are reference repositories in `vendor/` for the specification of Wasm & Component Model, and also runtimes such as wasmtime.
+
+To initialize: `git submodule update --init`
+
 ## General Rules
 
-- Don't be anchored by existing implementations or conventions. Always design from first principles toward the optimal solution.
 - All the documents and comments must be written in English.
-- When referring to WAT, use folded style syntax.
-- If you find a compiler bug or a limitation, fix it. Such a problem must be treated as the highest priority.
+- If you find a compiler bug, fix it with the highest priority by TDD - a standalone minimum reproducible e2e fixture is required before fixing the bug.
 - Use sub-agents only for research tasks (searching, reading, exploring). Never use sub-agents for editing files.
-- `CLAUDE.md` is a symlink to `AGENTS.md`. Editing either one is sufficient.
+- `CLAUDE.md` is a symlink to `AGENTS.md`.
 
 ## Rules for Rust
 
+- Write correct code with correct design.
 - Manage dependencies in the workspace `Cargo.toml`.
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!` for things that are not yet implemented or not supported.
@@ -272,17 +166,11 @@ Wado is designed on the following Wasm features:
 - Do not use any comment sections to separate or organize code.
 - Follow TDD: write a failing test case first, then implement the concern.
 
-### Rules for the Compiler Code Base
-
-- The principle: `codegen.rs` emits the `Project` as is, which does not have the knowledge of the previous phases.
-- Use utilities in `name.rs` to handle name mangling and monomorphization. Other components must not know the details of name formats.
-- Minimize hard-coded logic for compiler builtins or WASI. Define builtin and internal functions in Wado source files in `lib/core/*.wado` or `lib/wasi/*.wado`.
-
 ## Wado Evolution Proposals (WEP)
 
 Wado has a set of document for significant language features and architecture decisions.
 
-See [docs/WEP.md] for details and existing WEPs.
+See `docs/` for  existing WEPs.
 
 ## Project Development
 
@@ -304,8 +192,8 @@ Then run `mise run on-task-started` to install the development tools.
 ### Development Tasks
 
 ```sh
-mise run test        # test Rust crates (included in on-task-done)
-mise run test-wado   # test Wado modules (included in on-task-done)
+mise run test        # test Rust crates
+mise run test-wado   # test Wado modules
 mise run format      # format Rust files and Markdown files
 
 mise run benchmark-all # count-prime, mandelbrot, sieve, fts, and zlib
@@ -317,7 +205,7 @@ mise run report-wasm-size # hello_world, pi_approx, and zlib
 The compiler emits timestamped diagnostics to stderr. Use `--log-level` to control verbosity.
 
 ```sh
-wado compile --log-level debug file.wado # all messages including phase spans
+wado compile --log-level debug file.wado
 ```
 
 ## Development Workflow
@@ -335,13 +223,13 @@ mise run on-task-started   # install project tools
 
 When you have completed a task, make sure everything is up-to-date and tested:
 
-- Update the docs if necessary:
+- Update docs if necessary:
   - docs/spec.md
   - docs/cheatsheet.md
   - docs/compiler.md
   - docs/optimizer.md
 - Run `time mise run on-task-done`
-  - It performs format, clippy-fix, update golden fixtures, regenerate stdlib docs, and tests.
-  - It will take 15+ minutes
-  - Run in foreground and commit the results with without `| tail` in order not to lost the results.
-  - CI's integrity check fails if generated files are uncommitted.
+  - It performs format, clippy-fix, update golden fixtures, generation of stdlib docs, and tests.
+  - It will take 20+ minutes.
+  - Run it in foreground without `| tail` in order not to lost the results.
+  - Commit the entire results of `on-task-done`.
