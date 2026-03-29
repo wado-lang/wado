@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774769618747,
+  "lastUpdate": 1774777329780,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8486,6 +8486,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1f27c95ae49fe55a6b16028cabe337bd2dd04832"
         },
         "date": 1774769618528,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1999,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9279,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24923,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b8a38100c878e17dd27a887941adcdbb391e4d27",
+          "message": "Merge pull request #726 from wado-lang/claude/profile-gale-gen-8gAXY\n\nSplit String::eq into fast path + slow path for inlining",
+          "timestamp": "2026-03-29T18:39:16+09:00",
+          "tree_id": "07aa304c5bf7a3a641cf00acc409f27528036357",
+          "url": "https://github.com/wado-lang/wado/commit/b8a38100c878e17dd27a887941adcdbb391e4d27"
+        },
+        "date": 1774777329571,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
