@@ -210,13 +210,9 @@ type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32);
 
-type "functype/wasi/waitable-join" = fn(i32, i32);
-
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
-
 type "functype/wasi/wasi:http/Fields::new" = fn() -> i32;
 
-type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32) -> i32;
+type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
 type "functype/handle" = fn(i32);
 
@@ -226,8 +222,6 @@ type "functype/__cm_export__handle" = fn(i32);
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/wait_for_subtask" = fn(i32);
-
 type "functype/core:internal/cm_lower_string" = fn(ref String) -> i64;
 
 type "functype/wasi/future-new" = fn() -> i64;
@@ -236,26 +230,22 @@ type "functype/wasi/future-write" = fn(i32, i32) -> i32;
 
 type "functype/wasi/waitable-set-new" = fn() -> i32;
 
-type "functype/wasi/subtask-drop" = fn(i32);
+type "functype/wasi/waitable-join" = fn(i32, i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
+type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
-type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
-
 import fn realloc from "mem/realloc";
 import fn task-return from "wasi/task-return";
-import fn waitable-join from "wasi/waitable-join";
-import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
 import fn future-new from "wasi/future-new";
 import fn future-write from "wasi/future-write";
 import fn waitable-set-new from "wasi/waitable-set-new";
-import fn subtask-drop from "wasi/subtask-drop";
-import fn waitable-set-drop from "wasi/waitable-set-drop";
+import fn waitable-join from "wasi/waitable-join";
+import fn waitable-set-wait from "wasi/waitable-set-wait";
 
 fn handle(request) {
     let trailers_future: i32;
@@ -735,17 +725,15 @@ fn __cm_binding__Fields_new() {
 }
 
 fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
-    let __async_outptr: i32;
-    let __subtask: i32;
+    let __outptr: i32;
+    let __lifted_result_5: i32;
     let __lifted_result_6: i32;
-    let __lifted_result_7: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 8);
-    __subtask = "wasi/wasi:http/Response::new"(headers, contents_flat0, contents_flat1, trailers, __async_outptr);
-    "core:internal/wait_for_subtask"(__subtask);
-    __lifted_result_6 = builtin::load_i32(__async_outptr + 0);
-    __lifted_result_7 = builtin::load_i32(__async_outptr + 4);
-    drop("mem/realloc"(__async_outptr, 8, 4, 0));
-    return __lifted_result_6; __lifted_result_7;
+    __outptr = "mem/realloc"(0, 0, 4, 8);
+    "wasi/wasi:http/Response::new"(headers, contents_flat0, contents_flat1, trailers, __outptr);
+    __lifted_result_5 = builtin::load_i32(__outptr + 0);
+    __lifted_result_6 = builtin::load_i32(__outptr + 4);
+    drop("mem/realloc"(__outptr, 8, 4, 0));
+    return __lifted_result_5; __lifted_result_6;
 }
 
 fn __cm_export__handle(request) {
@@ -769,26 +757,6 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     };
 }
 
-fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
-    let handle: i32;
-    let subtask: i32;
-    let ws: i32;
-    let __local_4: i32;
-    handle = packed >> 4;
-    if handle != 0 {
-        subtask = handle;
-        ws = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_4 = subtask;
-            "wasi/waitable-join"(__local_4, ws);
-            break __inline_cm_waitable_join_0: __local_4;
-        });
-        "core:internal/cm_waitable_set_wait"(ws);
-        "wasi/subtask-drop"(subtask);
-        "wasi/waitable-set-drop"(ws);
-    };
-}
-
 fn "core:internal/cm_lower_string"(s) {  // from core:internal
     let len: i32;
     let bytes: ref array<u8>;
@@ -798,14 +766,6 @@ fn "core:internal/cm_lower_string"(s) {  // from core:internal
     ptr = "mem/realloc"(0, 0, 1, len);
     "core:internal/gc_array_to_memory"(bytes, ptr, len);
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
-}
-
-fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
-    let out_ptr: i32;
-    out_ptr = "mem/realloc"(0, 0, 4, 8);
-    drop("wasi/waitable-set-wait"(ws, out_ptr));
-    drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return;
 }
 
 export fn __cm_export__handle as "handle"

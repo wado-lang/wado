@@ -1592,7 +1592,12 @@ pub fn wait_for_subtask(packed: i32) {
         let subtask: Subtask = handle as Subtask;
         let ws: WaitableSet = cm_raw_call waitable-set-new();
         core::internal::cm_waitable_join(&subtask as i32, &ws);
-        core::internal::cm_waitable_set_wait(&ws as i32);
+        loop {
+            let event: WaitEvent = core::internal::cm_waitable_set_wait(&ws as i32);
+            if (event.payload == 2) {
+                break;
+            }
+        }
         cm_raw_call subtask-drop(&subtask as i32);
         cm_raw_call waitable-set-drop(&ws as i32);
     }

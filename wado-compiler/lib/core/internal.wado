@@ -51,19 +51,25 @@ pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newli
     tx.drop();
 }
 
-/// Waits for a pending async subtask to complete.
+/// Waits for a pending async subtask to complete (reach RETURNED state).
 /// In WASI P3 async calling convention, canon lower async returns (handle << 4) | status:
 ///   status = 0 (Starting): async guest task in flight, handle is nonzero
 ///   status = 1 (Started):  async host task in flight, handle is nonzero
 ///   status = 2 (Returned): sync completion, packed value = 2, handle = 0
 /// If the upper 28 bits (handle) are nonzero, an async task is in flight.
+/// A subtask transitions through Starting → Started → Returned. Each call to
+/// waitable-set.wait delivers one transition, so we must loop until RETURNED.
 pub fn wait_for_subtask(packed: i32) {
     let handle = packed >> 4;
     if handle != 0 {
         let subtask = handle as Subtask;
         let ws = WaitableSet::new();
         subtask.join(&ws);
-        ws.wait();
+        loop {
+            let event = ws.wait();
+            // payload == 2 means the subtask reached RETURNED state
+            if event.payload == 2 { break; }
+        }
         subtask.drop();
         ws.drop();
     }

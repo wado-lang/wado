@@ -407,7 +407,14 @@ fn try_lift_wasi_variant_or_enum(
     let tt = ctx.type_table.borrow();
 
     // Check WASI variants (e.g., HeaderError with cases InvalidSyntax, Forbidden, Immutable)
-    if let Some(cases) = ctx.wasi_registry.get_variant_cases(name) {
+    // Use package-scoped lookup when available to avoid name collisions
+    // (e.g., wasi:http/ErrorCode vs wasi:sockets/ErrorCode).
+    let cases_opt = if let Some(pkg) = ctx.wasi_package {
+        ctx.wasi_registry.get_variant_cases_by_package(pkg, name)
+    } else {
+        ctx.wasi_registry.get_variant_cases(name)
+    };
+    if let Some(cases) = cases_opt {
         let cases = cases.to_vec();
         let variant_type = tt.find_variant_type_by_name(name)?;
         drop(tt);
@@ -1759,6 +1766,18 @@ fn cm_param_store_plan(
         Type::Reference(_) | Type::MutReference(_) => vec![(0, "i32_store")],
         Type::Generic(g) => match g.name.as_str() {
             "Array" => vec![(0, "i32_store"), (4, "i32_store")],
+            "Option" if g.args.len() == 1 => {
+                // option<T>: disc (u8) at offset 0, payload at align_to(1, align(T))
+                let inner_align =
+                    crate::component_model::cm_align_with_registry(&g.args[0], wasi_registry);
+                let payload_offset = crate::cm_abi::align_to(1, inner_align);
+                let inner_store = cm_param_store_plan(&g.args[0], wasi_registry);
+                let mut stores = vec![(0, "i32_store8")]; // discriminant
+                for (sub_offset, store_name) in inner_store {
+                    stores.push((payload_offset + sub_offset, store_name));
+                }
+                stores
+            }
             _ => vec![(0, "i32_store")],
         },
         _ => vec![(0, "i32_store")],
@@ -1955,10 +1974,12 @@ fn wasi_return_type_id(
     func_info: &WasiFunctionInfo,
     wasi_registry: &crate::component_model::WasiRegistry,
 ) -> TypeId {
-    let needs_async_lower =
-        func_info.is_async || func_info.has_streaming_param() || func_info.return_type_has_future();
+    // Truly async imports (e.g., Client::send) use canon lower async and
+    // return a subtask handle. Non-async imports with stream/future params
+    // use sync lower (handles passed as i32, results returned directly).
+    let needs_async_lower = func_info.is_async;
     if needs_async_lower {
-        // Async/streaming: raw call returns subtask handle (i32)
+        // Async canon lower: raw call returns subtask handle (i32)
         TypeTable::I32
     } else {
         let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
@@ -2475,10 +2496,11 @@ fn synthesize_adapter(
     // ---- Handle outptr for async or complex returns ----
     // Track async outptr allocation info for later freeing.
     let mut async_outptr_info: Option<(u32, u32, u32)> = None; // (local_index, size, align)
-    let needs_async_lower =
-        func_info.is_async || func_info.has_streaming_param() || func_info.return_type_has_future();
+    // Only truly async imports use canon lower async (callback-style).
+    // Non-async imports with stream/future params use sync lower.
+    let needs_async_lower = func_info.is_async;
     if needs_async_lower {
-        // WASI P3 async calling convention (also used for streaming functions per CM spec):
+        // Callback-style async (not used by Wado):
         // - MAX_FLAT_ASYNC_PARAMS = 4 flat params before switching to indirect.
         // - If flat_args exceeds 4, all params are passed via a single params_ptr
         //   (pointer to a linear-memory buffer with all lowered params).

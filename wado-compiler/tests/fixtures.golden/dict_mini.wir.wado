@@ -60,7 +60,7 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
+type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
 type "functype/run" = fn();
 
@@ -73,8 +73,6 @@ type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
-
-type "functype/core:internal/wait_for_subtask" = fn(i32);
 
 type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
 
@@ -114,8 +112,6 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/wasi/subtask-drop" = fn(i32);
-
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/MiniDict<String,String>::has" = fn(ref Array<Tuple<String,String>>, ref String) -> bool;
@@ -123,8 +119,6 @@ type "functype/MiniDict<String,String>::has" = fn(ref Array<Tuple<String,String>
 type "functype/MiniDict<String,String>::get" = fn(ref Array<Tuple<String,String>>, ref String) -> ref null String;
 
 type "functype/MiniDict<String,String>::set" = fn(ref Array<Tuple<String,String>>, ref String, ref String);
-
-type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -138,7 +132,6 @@ import memory (1) from "mem/memory";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
-import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout {
     let dict: ref MiniDict<String,String>;
@@ -258,15 +251,7 @@ fn run() with Stdout {
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
-    let __async_outptr: i32;
-    let __subtask: i32;
-    let __lifted_result_3: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 4);
-    __subtask = "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
-    "core:internal/wait_for_subtask"(__subtask);
-    __lifted_result_3 = builtin::load_i32(__async_outptr);
-    drop("mem/realloc"(__async_outptr, 4, 4, 0));
-    return __lifted_result_3;
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn __cm_export__run() {
@@ -323,26 +308,6 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     };
 }
 
-fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
-    let handle: i32;
-    let subtask: i32;
-    let ws: i32;
-    let __local_4: i32;
-    handle = packed >> 4;
-    if handle != 0 {
-        subtask = handle;
-        ws = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_4 = subtask;
-            "wasi/waitable-join"(__local_4, ws);
-            break __inline_cm_waitable_join_0: __local_4;
-        });
-        "core:internal/cm_waitable_set_wait"(ws);
-        "wasi/subtask-drop"(subtask);
-        "wasi/waitable-set-drop"(ws);
-    };
-}
-
 fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
     let ptr: i32;
     ptr = "mem/realloc"(0, 0, 1, len);
@@ -379,14 +344,6 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
-    let out_ptr: i32;
-    out_ptr = "mem/realloc"(0, 0, 4, 8);
-    drop("wasi/waitable-set-wait"(ws, out_ptr));
-    drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return;
-}
-
 fn count_digits_i64(val) {
     let n: i32;
     let t: i64;
@@ -397,13 +354,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l14: loop {
+            l13: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l14;
+                continue l13;
             };
         };
     };
@@ -420,14 +377,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l18: loop {
+                l17: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l18;
+                    continue l17;
                 };
             };
         };
@@ -517,7 +474,7 @@ fn String^Eq::eq_bytes(a, b, len) {
     __for_1: block {
         i = 0;
         block {
-            l27: loop {
+            l26: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
@@ -525,7 +482,7 @@ fn String^Eq::eq_bytes(a, b, len) {
                     return 0;
                 };
                 i = i + 1;
-                continue l27;
+                continue l26;
             };
         };
     };
@@ -588,13 +545,13 @@ fn Array<Tuple<String,String>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l36: loop {
+            l35: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref "tuple/[String, String]">(new_repr, i, builtin::array_get<ref "tuple/[String, String]">(old_repr, i));
                 i = i + 1;
-                continue l36;
+                continue l35;
             };
         };
     };
@@ -613,7 +570,7 @@ fn MiniDict<String,String>::has(self, key) {
         _licm_used_7 = _licm_entries_6.used;
         _licm_repr_8 = _licm_entries_6.repr;
         block {
-            l39: loop {
+            l38: loop {
                 if (i < _licm_used_7) == 0 {
                     break __for_2;
                 };
@@ -624,7 +581,7 @@ fn MiniDict<String,String>::has(self, key) {
                     return 1;
                 };
                 i = i + 1;
-                continue l39;
+                continue l38;
             };
         };
     };
@@ -644,7 +601,7 @@ fn MiniDict<String,String>::get(self, key) {
         _licm_used_9 = _licm_entries_8.used;
         _licm_repr_10 = _licm_entries_8.repr;
         block {
-            l43: loop {
+            l42: loop {
                 if (i < _licm_used_9) == 0 {
                     break __for_1;
                 };
@@ -658,7 +615,7 @@ fn MiniDict<String,String>::get(self, key) {
                     }.1;
                 };
                 i = i + 1;
-                continue l43;
+                continue l42;
             };
         };
     };
@@ -679,7 +636,7 @@ fn MiniDict<String,String>::set(self, key, value) {
         _licm_used_11 = _licm_entries_10.used;
         _licm_repr_12 = _licm_entries_10.repr;
         block {
-            l47: loop {
+            l46: loop {
                 if (i < _licm_used_11) == 0 {
                     break __for_0;
                 };
@@ -693,7 +650,7 @@ fn MiniDict<String,String>::set(self, key, value) {
                     return;
                 };
                 i = i + 1;
-                continue l47;
+                continue l46;
             };
         };
     };
@@ -707,13 +664,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l51: loop {
+            l50: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l51;
+                continue l50;
             };
         };
     };

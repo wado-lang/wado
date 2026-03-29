@@ -23,21 +23,11 @@ export fn run() {
 }
 
 fn __cm_binding__Stdout_write_via_stream(data: i32) -> i32 {
-    let __async_outptr: i32 = core::builtin::realloc(0, 0, 4, 4);
-    let __subtask: i32 = cm_raw_call wasi:cli/Stdout::write_via_stream(data, __async_outptr);
-    core::internal::wait_for_subtask(__subtask);
-    let __lifted_result_3: i32 = core::builtin::i32_load(__async_outptr);
-    core::builtin::realloc(__async_outptr, 4, 4, 0);
-    return __lifted_result_3;
+    return cm_raw_call wasi:cli/Stdout::write_via_stream(data);
 }
 
 fn __cm_binding__Stderr_write_via_stream(data: i32) -> i32 {
-    let __async_outptr: i32 = core::builtin::realloc(0, 0, 4, 4);
-    let __subtask: i32 = cm_raw_call wasi:cli/Stderr::write_via_stream(data, __async_outptr);
-    core::internal::wait_for_subtask(__subtask);
-    let __lifted_result_3: i32 = core::builtin::i32_load(__async_outptr);
-    core::builtin::realloc(__async_outptr, 4, 4, 0);
-    return __lifted_result_3;
+    return cm_raw_call wasi:cli/Stderr::write_via_stream(data);
 }
 
 fn __cm_binding__Environment_get_environment() -> Array<[String, String]> {

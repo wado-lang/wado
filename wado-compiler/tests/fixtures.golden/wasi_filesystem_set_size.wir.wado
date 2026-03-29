@@ -176,15 +176,15 @@ type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
+type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
+type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
 type "functype/wasi/wasi:filesystem/Preopens::get_directories" = fn(i32);
 
-type "functype/wasi/wasi:filesystem/Descriptor::read_via_stream" = fn(i32, i64, i32) -> i32;
+type "functype/wasi/wasi:filesystem/Descriptor::read_via_stream" = fn(i32, i64, i32);
 
-type "functype/wasi/wasi:filesystem/Descriptor::write_via_stream" = fn(i32, i32, i64, i32) -> i32;
+type "functype/wasi/wasi:filesystem/Descriptor::write_via_stream" = fn(i32, i32, i64) -> i32;
 
 type "functype/wasi/wasi:filesystem/Descriptor::set_size" = fn(i32, i64, i32) -> i32;
 
@@ -286,13 +286,13 @@ type "functype/__cm_binding__Descriptor_read_via_stream" = fn(i32, i64) -> [i32,
 
 type "functype/core:internal/cm_stream_read_u8" = fn(i32, i32) -> [ref array<u8>, i32];
 
+type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];
+
 type "functype/ArrayIter<u8>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u8>") -> [i32, u8];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/u64::fmt_decimal" = fn(u64, ref Formatter);
-
-type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
 import fn realloc from "mem/realloc";
 import fn stream-read from "wasi/stream-read";
@@ -563,53 +563,27 @@ fn run() with Stdout, Stderr, Preopens {
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
-    let __async_outptr: i32;
-    let __subtask: i32;
-    let __lifted_result_3: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 4);
-    __subtask = "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
-    "core:internal/wait_for_subtask"(__subtask);
-    __lifted_result_3 = builtin::load_i32(__async_outptr);
-    drop("mem/realloc"(__async_outptr, 4, 4, 0));
-    return __lifted_result_3;
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn __cm_binding__Stderr_write_via_stream(data) {
-    let __async_outptr: i32;
-    let __subtask: i32;
-    let __lifted_result_3: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 4);
-    __subtask = "wasi/wasi:cli/Stderr::write_via_stream"(data, __async_outptr);
-    "core:internal/wait_for_subtask"(__subtask);
-    __lifted_result_3 = builtin::load_i32(__async_outptr);
-    drop("mem/realloc"(__async_outptr, 4, 4, 0));
-    return __lifted_result_3;
+    return "wasi/wasi:cli/Stderr::write_via_stream"(data);
 }
 
 fn __cm_binding__Descriptor_write_via_stream(self, data, offset) {
-    let __async_outptr: i32;
-    let __subtask: i32;
-    let __lifted_result_5: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 4);
-    __subtask = "wasi/wasi:filesystem/Descriptor::write_via_stream"(self, data, offset, __async_outptr);
-    "core:internal/wait_for_subtask"(__subtask);
-    __lifted_result_5 = builtin::load_i32(__async_outptr);
-    drop("mem/realloc"(__async_outptr, 4, 4, 0));
-    return __lifted_result_5;
+    return "wasi/wasi:filesystem/Descriptor::write_via_stream"(self, data, offset);
 }
 
 fn __cm_binding__Descriptor_read_via_stream(self, offset) {
-    let __async_outptr: i32;
-    let __subtask: i32;
+    let __outptr: i32;
+    let __lifted_result_3: i32;
     let __lifted_result_4: i32;
-    let __lifted_result_5: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 8);
-    __subtask = "wasi/wasi:filesystem/Descriptor::read_via_stream"(self, offset, __async_outptr);
-    "core:internal/wait_for_subtask"(__subtask);
-    __lifted_result_4 = builtin::load_i32(__async_outptr + 0);
-    __lifted_result_5 = builtin::load_i32(__async_outptr + 4);
-    drop("mem/realloc"(__async_outptr, 8, 4, 0));
-    return __lifted_result_4; __lifted_result_5;
+    __outptr = "mem/realloc"(0, 0, 4, 8);
+    "wasi/wasi:filesystem/Descriptor::read_via_stream"(self, offset, __outptr);
+    __lifted_result_3 = builtin::load_i32(__outptr + 0);
+    __lifted_result_4 = builtin::load_i32(__outptr + 4);
+    drop("mem/realloc"(__outptr, 8, 4, 0));
+    return __lifted_result_3; __lifted_result_4;
 }
 
 fn __cm_binding__Preopens_get_directories() {
@@ -698,6 +672,68 @@ fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
             __vresult = "wasi:filesystem/types.wado/ErrorCode" { 3 };
         } else if __vdisc == 4 {
             __vresult = "wasi:filesystem/types.wado/ErrorCode" { 4 };
+        } else if __vdisc == 5 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 5 };
+        } else if __vdisc == 6 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 6 };
+        } else if __vdisc == 7 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 7 };
+        } else if __vdisc == 8 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 8 };
+        } else if __vdisc == 9 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 9 };
+        } else if __vdisc == 10 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 10 };
+        } else if __vdisc == 11 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 11 };
+        } else if __vdisc == 12 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 12 };
+        } else if __vdisc == 13 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 13 };
+        } else if __vdisc == 14 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 14 };
+        } else if __vdisc == 15 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 15 };
+        } else if __vdisc == 16 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 16 };
+        } else if __vdisc == 17 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 17 };
+        } else if __vdisc == 18 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 18 };
+        } else if __vdisc == 19 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 19 };
+        } else if __vdisc == 20 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 20 };
+        } else if __vdisc == 21 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 21 };
+        } else if __vdisc == 22 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 22 };
+        } else if __vdisc == 23 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 23 };
+        } else if __vdisc == 24 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 24 };
+        } else if __vdisc == 25 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 25 };
+        } else if __vdisc == 26 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 26 };
+        } else if __vdisc == 27 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 27 };
+        } else if __vdisc == 28 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 28 };
+        } else if __vdisc == 29 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 29 };
+        } else if __vdisc == 30 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 30 };
+        } else if __vdisc == 31 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 31 };
+        } else if __vdisc == 32 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 32 };
+        } else if __vdisc == 33 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 33 };
+        } else if __vdisc == 34 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 34 };
+        } else if __vdisc == 35 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 35 };
         } else {
             __disc_13 = builtin::load_u8((__async_outptr + 4) + 4);
             __option_result = ref.null none;
@@ -710,7 +746,7 @@ fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
             };
-            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
+            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
         };
         __result_val = Result<Descriptor,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
@@ -832,6 +868,68 @@ fn __cm_binding__Descriptor_stat(self) {
             __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 3 };
         } else if __vdisc_27 == 4 {
             __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 4 };
+        } else if __vdisc_27 == 5 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 5 };
+        } else if __vdisc_27 == 6 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 6 };
+        } else if __vdisc_27 == 7 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 7 };
+        } else if __vdisc_27 == 8 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 8 };
+        } else if __vdisc_27 == 9 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 9 };
+        } else if __vdisc_27 == 10 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 10 };
+        } else if __vdisc_27 == 11 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 11 };
+        } else if __vdisc_27 == 12 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 12 };
+        } else if __vdisc_27 == 13 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 13 };
+        } else if __vdisc_27 == 14 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 14 };
+        } else if __vdisc_27 == 15 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 15 };
+        } else if __vdisc_27 == 16 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 16 };
+        } else if __vdisc_27 == 17 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 17 };
+        } else if __vdisc_27 == 18 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 18 };
+        } else if __vdisc_27 == 19 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 19 };
+        } else if __vdisc_27 == 20 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 20 };
+        } else if __vdisc_27 == 21 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 21 };
+        } else if __vdisc_27 == 22 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 22 };
+        } else if __vdisc_27 == 23 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 23 };
+        } else if __vdisc_27 == 24 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 24 };
+        } else if __vdisc_27 == 25 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 25 };
+        } else if __vdisc_27 == 26 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 26 };
+        } else if __vdisc_27 == 27 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 27 };
+        } else if __vdisc_27 == 28 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 28 };
+        } else if __vdisc_27 == 29 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 29 };
+        } else if __vdisc_27 == 30 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 30 };
+        } else if __vdisc_27 == 31 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 31 };
+        } else if __vdisc_27 == 32 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 32 };
+        } else if __vdisc_27 == 33 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 33 };
+        } else if __vdisc_27 == 34 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 34 };
+        } else if __vdisc_27 == 35 {
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode" { 35 };
         } else {
             __disc_29 = builtin::load_u8((__async_outptr + 8) + 4);
             __option_result_30 = ref.null none;
@@ -844,7 +942,7 @@ fn __cm_binding__Descriptor_stat(self) {
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 4) + 4), builtin::load_i32((((__async_outptr + 8) + 4) + 4) + 4), 1, 0));
             };
-            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result_30 };
+            __vresult_28 = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result_30 };
         };
         __result_val = Result<DescriptorStat,ErrorCode>::Err { discriminant: 1, payload_0: __vresult_28 };
     };
@@ -884,6 +982,68 @@ fn __cm_binding__Descriptor_set_size(self, size) {
             __vresult = "wasi:filesystem/types.wado/ErrorCode" { 3 };
         } else if __vdisc == 4 {
             __vresult = "wasi:filesystem/types.wado/ErrorCode" { 4 };
+        } else if __vdisc == 5 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 5 };
+        } else if __vdisc == 6 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 6 };
+        } else if __vdisc == 7 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 7 };
+        } else if __vdisc == 8 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 8 };
+        } else if __vdisc == 9 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 9 };
+        } else if __vdisc == 10 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 10 };
+        } else if __vdisc == 11 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 11 };
+        } else if __vdisc == 12 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 12 };
+        } else if __vdisc == 13 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 13 };
+        } else if __vdisc == 14 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 14 };
+        } else if __vdisc == 15 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 15 };
+        } else if __vdisc == 16 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 16 };
+        } else if __vdisc == 17 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 17 };
+        } else if __vdisc == 18 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 18 };
+        } else if __vdisc == 19 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 19 };
+        } else if __vdisc == 20 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 20 };
+        } else if __vdisc == 21 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 21 };
+        } else if __vdisc == 22 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 22 };
+        } else if __vdisc == 23 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 23 };
+        } else if __vdisc == 24 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 24 };
+        } else if __vdisc == 25 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 25 };
+        } else if __vdisc == 26 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 26 };
+        } else if __vdisc == 27 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 27 };
+        } else if __vdisc == 28 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 28 };
+        } else if __vdisc == 29 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 29 };
+        } else if __vdisc == 30 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 30 };
+        } else if __vdisc == 31 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 31 };
+        } else if __vdisc == 32 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 32 };
+        } else if __vdisc == 33 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 33 };
+        } else if __vdisc == 34 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 34 };
+        } else if __vdisc == 35 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 35 };
         } else {
             __disc_8 = builtin::load_u8((__async_outptr + 4) + 4);
             __option_result = ref.null none;
@@ -896,7 +1056,7 @@ fn __cm_binding__Descriptor_set_size(self, size) {
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
             };
-            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
+            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
         };
         __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
@@ -938,6 +1098,68 @@ fn __cm_binding__Descriptor_unlink_file_at(self, path) {
             __vresult = "wasi:filesystem/types.wado/ErrorCode" { 3 };
         } else if __vdisc == 4 {
             __vresult = "wasi:filesystem/types.wado/ErrorCode" { 4 };
+        } else if __vdisc == 5 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 5 };
+        } else if __vdisc == 6 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 6 };
+        } else if __vdisc == 7 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 7 };
+        } else if __vdisc == 8 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 8 };
+        } else if __vdisc == 9 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 9 };
+        } else if __vdisc == 10 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 10 };
+        } else if __vdisc == 11 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 11 };
+        } else if __vdisc == 12 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 12 };
+        } else if __vdisc == 13 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 13 };
+        } else if __vdisc == 14 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 14 };
+        } else if __vdisc == 15 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 15 };
+        } else if __vdisc == 16 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 16 };
+        } else if __vdisc == 17 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 17 };
+        } else if __vdisc == 18 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 18 };
+        } else if __vdisc == 19 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 19 };
+        } else if __vdisc == 20 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 20 };
+        } else if __vdisc == 21 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 21 };
+        } else if __vdisc == 22 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 22 };
+        } else if __vdisc == 23 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 23 };
+        } else if __vdisc == 24 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 24 };
+        } else if __vdisc == 25 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 25 };
+        } else if __vdisc == 26 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 26 };
+        } else if __vdisc == 27 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 27 };
+        } else if __vdisc == 28 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 28 };
+        } else if __vdisc == 29 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 29 };
+        } else if __vdisc == 30 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 30 };
+        } else if __vdisc == 31 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 31 };
+        } else if __vdisc == 32 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 32 };
+        } else if __vdisc == 33 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 33 };
+        } else if __vdisc == 34 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 34 };
+        } else if __vdisc == 35 {
+            __vresult = "wasi:filesystem/types.wado/ErrorCode" { 35 };
         } else {
             __disc_9 = builtin::load_u8((__async_outptr + 4) + 4);
             __option_result = ref.null none;
@@ -950,7 +1172,7 @@ fn __cm_binding__Descriptor_unlink_file_at(self, path) {
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
             };
-            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
+            __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
         };
         __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
@@ -1017,13 +1239,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
     __for_0: block {
         i = 0;
         block {
-            l73: loop {
+            l197: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l73;
+                continue l197;
             };
         };
     };
@@ -1035,13 +1257,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l76: loop {
+            l200: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l76;
+                continue l200;
             };
         };
     };
@@ -1068,17 +1290,28 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
     let handle: i32;
     let subtask: i32;
     let ws: i32;
-    let __local_4: i32;
+    let __local_5: i32;
     handle = packed >> 4;
     if handle != 0 {
         subtask = handle;
         ws = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_4 = subtask;
-            "wasi/waitable-join"(__local_4, ws);
-            break __inline_cm_waitable_join_0: __local_4;
+            __local_5 = subtask;
+            "wasi/waitable-join"(__local_5, ws);
+            break __inline_cm_waitable_join_0: __local_5;
         });
-        "core:internal/cm_waitable_set_wait"(ws);
+        b204: block {
+            l205: loop {
+                let __sroa_event_code: i32;
+                let __sroa_event_handle: i32;
+                let __sroa_event_payload: u32;
+                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
+                if __sroa_event_payload == 2 {
+                    break b204;
+                };
+                continue l205;
+            };
+        };
         "wasi/subtask-drop"(subtask);
         "wasi/waitable-set-drop"(ws);
     };
@@ -1093,13 +1326,7 @@ fn "core:internal/log_stderr"(message) {  // from core:internal
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    let __cis_outptr_1: i32;
-    let __cis_future_3: i32;
-    __cis_outptr_1 = "mem/realloc"(0, 0, 4, 4);
-    drop("wasi/wasi:cli/Stderr::write_via_stream"(rx, __cis_outptr_1));
-    __cis_future_3 = builtin::load_i32(__cis_outptr_1);
-    drop("mem/realloc"(__cis_outptr_1, 4, 4, 0));
-    future_handle = __cis_future_3;
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
     "core:internal/write_string_to_stream"(tx, message, 1);
     future = future_handle;
     "wasi/future-drop-readable:transmission-cli"(future);
@@ -1196,10 +1423,15 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
 
 fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     let out_ptr: i32;
+    let code: i32;
+    let evt_handle: i32;
+    let payload: i32;
     out_ptr = "mem/realloc"(0, 0, 4, 8);
-    drop("wasi/waitable-set-wait"(ws, out_ptr));
+    code = "wasi/waitable-set-wait"(ws, out_ptr);
+    evt_handle = builtin::load_i32(out_ptr);
+    payload = builtin::load_i32(out_ptr + 4);
     drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return;
+    return code; evt_handle; payload;
 }
 
 fn count_digits_i64(val) {
@@ -1212,13 +1444,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l85: loop {
+            l212: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l85;
+                continue l212;
             };
         };
     };
@@ -1235,14 +1467,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l89: loop {
+                l216: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l89;
+                    continue l216;
                 };
             };
         };
@@ -1299,10 +1531,10 @@ fn u64::fmt_decimal(self, f) {
     };
     digit_count = 0;
     temp = val_i64;
-    b93: block {
-        l94: loop {
+    b220: block {
+        l221: loop {
             if (temp != 0_i64) == 0 {
-                break b93;
+                break b220;
             };
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
@@ -1317,7 +1549,7 @@ fn u64::fmt_decimal(self, f) {
                 };
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             };
-            continue l94;
+            continue l221;
         };
     };
     offset_11 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
@@ -1327,10 +1559,10 @@ fn u64::fmt_decimal(self, f) {
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
-    b98: block {
-        l99: loop {
+    b225: block {
+        l226: loop {
             if (temp != 0_i64) == 0 {
-                break b98;
+                break b225;
             };
             pos = pos - 1;
             digit = 0;
@@ -1353,7 +1585,7 @@ fn u64::fmt_decimal(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             };
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l99;
+            continue l226;
         };
     };
 }
@@ -1463,13 +1695,13 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l114: loop {
+            l241: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref "tuple/[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple/[Descriptor, String]">(old_repr, i));
                 i = i + 1;
-                continue l114;
+                continue l241;
             };
         };
     };
@@ -1505,13 +1737,13 @@ fn Array<u8>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l118: loop {
+            l245: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l118;
+                continue l245;
             };
         };
     };
@@ -1535,13 +1767,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l122: loop {
+            l249: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l122;
+                continue l249;
             };
         };
     };

@@ -2129,7 +2129,12 @@ pub fn wait_for_subtask(packed: i32) {
         let subtask: Subtask = handle as Subtask;
         let ws: WaitableSet = cm_raw_call waitable-set-new();
         core::internal::cm_waitable_join(&subtask as i32, &ws);
-        core::internal::cm_waitable_set_wait(&ws as i32);
+        loop {
+            let event: WaitEvent = core::internal::cm_waitable_set_wait(&ws as i32);
+            if (event.payload == 2) {
+                break;
+            }
+        }
         cm_raw_call subtask-drop(&subtask as i32);
         cm_raw_call waitable-set-drop(&ws as i32);
     }
@@ -16767,21 +16772,11 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J:
 }
 
 fn __cm_binding__Stdout_write_via_stream(data: i32) -> i32 {
-    let __async_outptr: i32 = core::builtin::realloc(0, 0, 4, 4);
-    let __subtask: i32 = cm_raw_call wasi:cli/Stdout::write_via_stream(data, __async_outptr);
-    core::internal::wait_for_subtask(__subtask);
-    let __lifted_result_3: i32 = core::builtin::i32_load(__async_outptr);
-    core::builtin::realloc(__async_outptr, 4, 4, 0);
-    return __lifted_result_3;
+    return cm_raw_call wasi:cli/Stdout::write_via_stream(data);
 }
 
 fn __cm_binding__Stderr_write_via_stream(data: i32) -> i32 {
-    let __async_outptr: i32 = core::builtin::realloc(0, 0, 4, 4);
-    let __subtask: i32 = cm_raw_call wasi:cli/Stderr::write_via_stream(data, __async_outptr);
-    core::internal::wait_for_subtask(__subtask);
-    let __lifted_result_3: i32 = core::builtin::i32_load(__async_outptr);
-    core::builtin::realloc(__async_outptr, 4, 4, 0);
-    return __lifted_result_3;
+    return cm_raw_call wasi:cli/Stderr::write_via_stream(data);
 }
 
 fn __cm_binding__Environment_get_environment() -> Array<[String, String]> {

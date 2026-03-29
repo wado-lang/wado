@@ -153,9 +153,8 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             // Async functions: per CM spec flatten_functype('lower'), the outptr (i32) is
             // only appended when len(flat_results) > 0 (i.e., when there is a return type).
             // Async void functions (e.g., wait_for, wait_until) have no results and no outptr.
-            // CM spec: canon lower requires async for functions with stream/future
-            let needs_async_lower =
-                func.is_async || func.has_streaming_param() || func.return_type_has_future();
+            // Only truly async imports use canon lower async.
+            let needs_async_lower = func.is_async;
             if needs_async_lower {
                 let has_results = func.return_type.is_some();
                 if param_vts.len() > MAX_FLAT_ASYNC_PARAMS {
