@@ -28,7 +28,7 @@ fn strip_indent(s: &String) -> String {
         if c == '\n' {
             at_line_start = true;
         } else if at_line_start && (c == ' ' || c == '\t') {
-            // skip indentation
+            // skip leading whitespace per line
         } else {
             at_line_start = false;
             out.append_char(c);
@@ -37,7 +37,7 @@ fn strip_indent(s: &String) -> String {
     return out;
 }
 
-fn assert_parse_xml(input: &String, expected: &String) {
+fn assert_xml(input: &String, expected: &String) {
     let result = sqlite::parse(input);
     if let Err(e) = &result {
         panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
@@ -49,8 +49,8 @@ fn assert_parse_xml(input: &String, expected: &String) {
     assert xml == expected_stripped, `expected: {expected_stripped}\ngot:      {xml}`;
 }
 
-test "parse simple SELECT" {
-    assert_parse_xml(
+test "SELECT literal" {
+    assert_xml(
         "SELECT 1;",
         "<parse>
             <sql_stmt_list>
@@ -72,8 +72,33 @@ test "parse simple SELECT" {
     );
 }
 
-test "parse CREATE TABLE" {
-    assert_parse_xml(
+test "SELECT column" {
+    assert_xml(
+        "SELECT a, b FROM t;",
+        "<parse>
+            <sql_stmt_list>
+                <sql_stmt>
+                    <factored_select_stmt>
+                        <select_core>
+                            <K_SELECT>SELECT</K_SELECT>
+                            <result_column>
+                                <expr>
+                                    <column_name>
+                                        <any_name> <IDENTIFIER>a</IDENTIFIER></any_name>
+                                    </column_name>
+                                </expr>
+                            </result_column>
+                        </select_core>
+                    </factored_select_stmt>
+                </sql_stmt>
+            </sql_stmt_list>
+            <Eof></Eof>
+        </parse>",
+    );
+}
+
+test "CREATE TABLE" {
+    assert_xml(
         "CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT);",
         "<parse>
             <sql_stmt_list>
@@ -91,8 +116,26 @@ test "parse CREATE TABLE" {
     );
 }
 
-test "parse DELETE" {
-    assert_parse_xml(
+test "INSERT" {
+    assert_xml(
+        "INSERT INTO t VALUES (1, 'hello');",
+        "<parse>
+            <sql_stmt_list>
+                <sql_stmt>
+                    <insert_stmt> <K_INTO>INTO</K_INTO>
+                        <table_name>
+                            <any_name> <IDENTIFIER>t</IDENTIFIER></any_name>
+                        </table_name>
+                    </insert_stmt>
+                </sql_stmt>
+            </sql_stmt_list>
+            <Eof></Eof>
+        </parse>",
+    );
+}
+
+test "DELETE" {
+    assert_xml(
         "DELETE FROM t WHERE id = 1;",
         "<parse>
             <sql_stmt_list>
@@ -112,8 +155,54 @@ test "parse DELETE" {
     );
 }
 
-test "parse BEGIN" {
-    assert_parse_xml(
+test "UPDATE" {
+    assert_xml(
+        "UPDATE t SET name = 'hello';",
+        "<parse>
+            <sql_stmt_list>
+                <sql_stmt>
+                    <update_stmt>
+                        <K_UPDATE>UPDATE</K_UPDATE>
+                        <qualified_table_name>
+                            <table_name>
+                                <any_name> <IDENTIFIER>t</IDENTIFIER></any_name>
+                            </table_name>
+                        </qualified_table_name> <K_SET>SET</K_SET>
+                        <column_name>
+                            <any_name> <IDENTIFIER>name</IDENTIFIER></any_name>
+                        </column_name> <TK_LIT_EQ>=</TK_LIT_EQ>
+                        <expr>
+                            <literal_value> <STRING_LITERAL>'hello'</STRING_LITERAL></literal_value>
+                        </expr>
+                    </update_stmt>
+                </sql_stmt>
+            </sql_stmt_list>
+            <Eof></Eof>
+        </parse>",
+    );
+}
+
+test "DROP TABLE" {
+    assert_xml(
+        "DROP TABLE IF EXISTS t;",
+        "<parse>
+            <sql_stmt_list>
+                <sql_stmt>
+                    <drop_table_stmt>
+                        <K_DROP>DROP</K_DROP> <K_TABLE>TABLE</K_TABLE>
+                        <table_name>
+                            <any_name> <IDENTIFIER>t</IDENTIFIER></any_name>
+                        </table_name>
+                    </drop_table_stmt>
+                </sql_stmt>
+            </sql_stmt_list>
+            <Eof></Eof>
+        </parse>",
+    );
+}
+
+test "BEGIN" {
+    assert_xml(
         "BEGIN;",
         "<parse>
             <sql_stmt_list>
