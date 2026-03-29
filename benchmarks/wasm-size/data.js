@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774749700734,
+  "lastUpdate": 1774753234957,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8345,6 +8345,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 24726,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3aa85085f182188ff95dfe443c6d653c0efdac0f",
+          "message": "Merge pull request #721 from wado-lang/claude/update-wasmtime-5iyBC\n\nUpdate wasmtime from v42 to v43",
+          "timestamp": "2026-03-29T11:55:20+09:00",
+          "tree_id": "3b3bbf013649cbf5558fe947edd07128249ed20b",
+          "url": "https://github.com/wado-lang/wado/commit/3aa85085f182188ff95dfe443c6d653c0efdac0f"
+        },
+        "date": 1774753234753,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1999,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9279,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24923,
             "unit": "bytes"
           }
         ]
