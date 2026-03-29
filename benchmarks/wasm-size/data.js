@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774824005447,
+  "lastUpdate": 1774826826705,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8720,6 +8720,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c49e4611e5a41b30debfd429759fbb889cd29205"
         },
         "date": 1774824005273,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24674,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5b8974c10e5153d03a4607bb395255238df20f52",
+          "message": "Merge pull request #732 from wado-lang/claude/remove-store-option-ROr85\n\nRemove `store` parameter from `gen_element`",
+          "timestamp": "2026-03-30T08:24:07+09:00",
+          "tree_id": "9cc5bff7b0347a8df31b5b92bbf9a20c4560d0ad",
+          "url": "https://github.com/wado-lang/wado/commit/5b8974c10e5153d03a4607bb395255238df20f52"
+        },
+        "date": 1774826826492,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
