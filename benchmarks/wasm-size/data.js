@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774742973390,
+  "lastUpdate": 1774749700734,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8291,6 +8291,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/171cec0d5dd339b45066d5f314159c97373e0f5b"
         },
         "date": 1774742973239,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24726,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bccc8bbb0afcffdc7e79c5268f1f46c99cd40a8f",
+          "message": "Merge pull request #722 from wado-lang/gfx/update_agent_mds\n\nreorganize docs",
+          "timestamp": "2026-03-29T10:58:54+09:00",
+          "tree_id": "740dbe857336c190358400273814e0f5e830c480",
+          "url": "https://github.com/wado-lang/wado/commit/bccc8bbb0afcffdc7e79c5268f1f46c99cd40a8f"
+        },
+        "date": 1774749700519,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
