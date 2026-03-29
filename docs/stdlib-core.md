@@ -1698,6 +1698,8 @@ String will contain invalid UTF-8, which may cause undefined behavior.
 
 ###### `pub fn eq(&self, other: &Self) -> bool`
 
+###### `fn eq_bytes(a: builtin::array<u8>, b: builtin::array<u8>, len: i32) -> bool`
+
 ##### `impl Ord for String`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`

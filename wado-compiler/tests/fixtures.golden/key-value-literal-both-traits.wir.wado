@@ -97,6 +97,8 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
+type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> bool;
+
 type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
@@ -726,25 +728,23 @@ fn String::append(self, other) {
 
 fn String^Eq::eq(self, other) {
     let len_a: i32;
-    let len_b: i32;
-    let a_repr: ref array<u8>;
-    let b_repr: ref array<u8>;
-    let i: i32;
     len_a = self.used;
-    len_b = other.used;
-    if len_a != len_b {
+    if len_a != other.used {
         return 0;
     };
-    a_repr = self.repr;
-    b_repr = other.repr;
+    return String^Eq::eq_bytes(self.repr, other.repr, len_a);
+}
+
+fn String^Eq::eq_bytes(a, b, len) {
+    let i: i32;
     __for_1: block {
         i = 0;
         block {
             l32: loop {
-                if (i < len_a) == 0 {
+                if (i < len) == 0 {
                     break __for_1;
                 };
-                if builtin::array_get_u8(a_repr, i) != builtin::array_get_u8(b_repr, i) {
+                if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                     return 0;
                 };
                 i = i + 1;
