@@ -4175,9 +4175,10 @@ impl FunctionTranslator<'_, '_> {
                         "Stdout::write_via_stream"
                     };
                     let func_info = self.ctx.project.wasi_registry.get_function(effect_method);
-                    let needs_async = func_info.is_some_and(|f| {
-                        f.is_async || f.has_streaming_param() || f.return_type_has_future()
-                    });
+                    // Wado uses stackful async: canon lower without async flag.
+                    // Sync lower returns the result directly (no subtask handle).
+                    let needs_async = false;
+                    let _ = func_info; // suppress unused warning
                     if needs_async {
                         // Allocate outptr for async result (Future handle)
                         let realloc_id = self.ctx.func_map.get("builtin/realloc").cloned();

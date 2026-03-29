@@ -1974,10 +1974,11 @@ fn wasi_return_type_id(
     func_info: &WasiFunctionInfo,
     wasi_registry: &crate::component_model::WasiRegistry,
 ) -> TypeId {
-    let needs_async_lower =
-        func_info.is_async || func_info.has_streaming_param() || func_info.return_type_has_future();
+    // Wado uses stackful async: canon lower without the async canonopt.
+    // The raw call returns flat results directly (not a subtask handle).
+    let needs_async_lower = false;
     if needs_async_lower {
-        // Async/streaming: raw call returns subtask handle (i32)
+        // Callback-style async: raw call returns subtask handle (i32)
         TypeTable::I32
     } else {
         let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
@@ -2494,10 +2495,11 @@ fn synthesize_adapter(
     // ---- Handle outptr for async or complex returns ----
     // Track async outptr allocation info for later freeing.
     let mut async_outptr_info: Option<(u32, u32, u32)> = None; // (local_index, size, align)
-    let needs_async_lower =
-        func_info.is_async || func_info.has_streaming_param() || func_info.return_type_has_future();
+    // Wado uses stackful async: canon lower without the async canonopt.
+    // Sync lower uses MAX_FLAT_PARAMS = 16, MAX_FLAT_RESULTS = 1.
+    let needs_async_lower = false;
     if needs_async_lower {
-        // WASI P3 async calling convention (also used for streaming functions per CM spec):
+        // Callback-style async (not used by Wado):
         // - MAX_FLAT_ASYNC_PARAMS = 4 flat params before switching to indirect.
         // - If flat_args exceeds 4, all params are passed via a single params_ptr
         //   (pointer to a linear-memory buffer with all lowered params).

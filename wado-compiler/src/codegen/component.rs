@@ -162,7 +162,6 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
             Some("http-response-new"),
             ctx.comp_func_idx("http-response-new"),
             [
-                CanonicalOption::Async,
                 CanonicalOption::Memory(ctx.memory_idx()),
                 CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
             ],
@@ -2625,11 +2624,8 @@ fn lower_wasi_functions(
 
             let mut options: Vec<CanonicalOption> = Vec::new();
 
-            // CM spec requires async for canon lower when function signature
-            // contains stream<T> or future<T> (Explainer.md line 1328).
-            if func.is_async || func.has_streaming_param() || func.return_type_has_future() {
-                options.push(CanonicalOption::Async);
-            }
+            // Wado uses stackful async: canon lower WITHOUT the async canonopt.
+            // Sync lower blocks the caller's fiber until the callee returns.
 
             let needs_memory = func.needs_memory_with_registry(project.wasi_registry);
             let needs_realloc = needs_memory;
