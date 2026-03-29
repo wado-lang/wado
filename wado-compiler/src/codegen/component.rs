@@ -162,6 +162,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
             Some("http-response-new"),
             ctx.comp_func_idx("http-response-new"),
             [
+                CanonicalOption::Async,
                 CanonicalOption::Memory(ctx.memory_idx()),
                 CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
             ],
@@ -1730,8 +1731,16 @@ fn import_http_types_for_service(
         // Type generation starts after the SubResource exports.
         // CmInstanceTypeGen emits error-code and its payload structs
         // on demand when the parameter/return types are processed.
+        // Use interface hint to disambiguate types shared across packages
+        // (e.g., ErrorCode exists in http, filesystem, sockets).
         let resource_count = http_resources.len() as u32;
-        let mut type_gen = CmInstanceTypeGen::new(resource_count);
+        let http_version = project
+            .wasi_registry
+            .get_package_version("http")
+            .expect("WASI HTTP version not found in registry");
+        let http_types_interface = format!("wasi:http/types@{http_version}");
+        let mut type_gen =
+            CmInstanceTypeGen::with_interface_hint(resource_count, &http_types_interface);
         let resource_exports: IndexMap<&str, u32> = http_resources
             .iter()
             .enumerate()

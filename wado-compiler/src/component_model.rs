@@ -718,6 +718,33 @@ impl WasiRegistry {
         self.variants.get(name).map(|(_, cases)| cases.as_slice())
     }
 
+    /// Get the variant cases by interface path + name for disambiguation.
+    /// Tries interface-qualified key first, falls back to unqualified name.
+    pub fn get_variant_cases_by_interface(
+        &self,
+        interface_path: &str,
+        name: &str,
+    ) -> Option<&[CmVariantCase]> {
+        let full_key = format!("{interface_path}#{name}");
+        self.variants
+            .get(&full_key)
+            .or_else(|| self.variants.get(name))
+            .map(|(_, cases)| cases.as_slice())
+    }
+
+    /// Get the CM variant name by interface path + name for disambiguation.
+    pub fn get_variant_cm_name_by_interface(
+        &self,
+        interface_path: &str,
+        name: &str,
+    ) -> Option<&str> {
+        let full_key = format!("{interface_path}#{name}");
+        self.variants
+            .get(&full_key)
+            .or_else(|| self.variants.get(name))
+            .map(|(cm_name, _)| cm_name.as_str())
+    }
+
     /// Check if a type name is a registered struct (WIT record)
     pub fn is_struct(&self, name: &str) -> bool {
         self.structs.contains_key(name)
@@ -1161,6 +1188,10 @@ use wasm_encoder::{ComponentValType, InstanceType, PrimitiveValType, TypeBounds}
 pub struct CmInstanceTypeGen {
     next_idx: u32,
     cache: IndexMap<String, u32>,
+    /// Optional interface path hint for disambiguating types with the same name
+    /// across different WASI interfaces (e.g., "wasi:http/types@..." to select
+    /// HTTP's ErrorCode over filesystem's ErrorCode).
+    interface_hint: Option<String>,
 }
 
 impl CmInstanceTypeGen {
@@ -1168,6 +1199,16 @@ impl CmInstanceTypeGen {
         Self {
             next_idx: start_idx,
             cache: IndexMap::default(),
+            interface_hint: None,
+        }
+    }
+
+    /// Create a new generator with an interface hint for type disambiguation.
+    pub fn with_interface_hint(start_idx: u32, interface_hint: &str) -> Self {
+        Self {
+            next_idx: start_idx,
+            cache: IndexMap::default(),
+            interface_hint: Some(interface_hint.to_string()),
         }
     }
 
@@ -1461,8 +1502,23 @@ impl CmInstanceTypeGen {
                         self.cache.insert(cache_key, idx);
                         ComponentValType::Type(idx)
                     } else if wasi_registry.is_variant(name) {
-                        let cm_name = wasi_registry.get_variant_cm_name(name).unwrap().to_string();
-                        let cases = wasi_registry.get_variant_cases(name).unwrap().to_vec();
+                        let (cm_name, cases) =
+                            if let Some(hint) = &self.interface_hint {
+                                let cm = wasi_registry
+                                    .get_variant_cm_name_by_interface(hint, name)
+                                    .unwrap()
+                                    .to_string();
+                                let cs = wasi_registry
+                                    .get_variant_cases_by_interface(hint, name)
+                                    .unwrap()
+                                    .to_vec();
+                                (cm, cs)
+                            } else {
+                                let cm =
+                                    wasi_registry.get_variant_cm_name(name).unwrap().to_string();
+                                let cs = wasi_registry.get_variant_cases(name).unwrap().to_vec();
+                                (cm, cs)
+                            };
                         let idx = self.define_variant(
                             instance_type,
                             &cm_name,
