@@ -1265,7 +1265,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
                 gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
             }
         } else {
-            gen_element(w, elem, all_rules, lit_tokens, true, &mut name_counts);
+            gen_element(w, elem, all_rules, lit_tokens, &mut name_counts);
         }
     }
 
@@ -1349,7 +1349,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, all_rules: &A
                 gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
             }
         } else {
-            gen_element(w, elem, all_rules, lit_tokens, true, &mut name_counts);
+            gen_element(w, elem, all_rules, lit_tokens, &mut name_counts);
         }
     }
 }
@@ -1363,10 +1363,10 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, a
                 let follow_second = compute_follow_second(elements, i + 1, all_rules, lit_tokens);
                 gen_repeat_non_greedy(w, &rep, all_rules, lit_tokens, &follow, &follow_second, name_counts);
             } else {
-                gen_element(w, elem, all_rules, lit_tokens, false, name_counts);
+                gen_element(w, elem, all_rules, lit_tokens, name_counts);
             }
         } else {
-            gen_element(w, elem, all_rules, lit_tokens, false, name_counts);
+            gen_element(w, elem, all_rules, lit_tokens, name_counts);
         }
     }
 }
@@ -1381,39 +1381,24 @@ fn is_ruleref_optional(elem: &Element) -> bool {
     return false;
 }
 
-fn gen_element(w: &mut CodeWriter, elem: &Element, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, store: bool, name_counts: &mut Array<[String, i32]>) {
+fn gen_element(w: &mut CodeWriter, elem: &Element, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
     if let TokenRef(name) = *elem {
         let const_name = `TK_{name}`;
-        if store {
-            let field_name = dedup_name(&to_lower(&name), name_counts);
-            w.line(`let {field_name} = p.expect({const_name}, {escape_string(&name)})?;`);
-        } else {
-            let discard = dedup_name(&"tok", name_counts);
-            w.line(`let {discard} = p.expect({const_name}, {escape_string(&name)})?;`);
-        }
+        let field_name = dedup_name(&to_lower(&name), name_counts);
+        w.line(`let {field_name} = p.expect({const_name}, {escape_string(&name)})?;`);
         return;
     }
     if let Literal(text) = *elem {
         let const_name = literal_const_name(&text);
         let display = `'{text}'`;
-        if store {
-            let field_name = dedup_name(&literal_field_name(&text), name_counts);
-            w.line(`let {field_name} = p.expect({const_name}, {escape_string(&display)})?;`);
-        } else {
-            let discard = dedup_name(&"tok", name_counts);
-            w.line(`let {discard} = p.expect({const_name}, {escape_string(&display)})?;`);
-        }
+        let field_name = dedup_name(&literal_field_name(&text), name_counts);
+        w.line(`let {field_name} = p.expect({const_name}, {escape_string(&display)})?;`);
         return;
     }
     if let RuleRef(name) = *elem {
         let fn_name = `parse_{to_snake_case(&name)}`;
-        if store {
-            let field_name = dedup_name(&to_snake_case(&name), name_counts);
-            w.line(`let {field_name} = {fn_name}(p)?;`);
-        } else {
-            let discard = dedup_name(&"tok", name_counts);
-            w.line(`let {discard} = {fn_name}(p)?;`);
-        }
+        let field_name = dedup_name(&to_snake_case(&name), name_counts);
+        w.line(`let {field_name} = {fn_name}(p)?;`);
         return;
     }
     if let Repeat(rep) = *elem {
@@ -1421,7 +1406,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, all_rules: &Array<ParserRule>
         return;
     }
     if let Group(alts) = *elem {
-        if store && is_simple_cst_group(&alts) {
+        if is_simple_cst_group(&alts) {
             gen_consume_group_store_optional(w, &alts, all_rules, lit_tokens, name_counts);
         } else {
             gen_consume_group(w, &alts, all_rules, lit_tokens, name_counts);
@@ -1429,7 +1414,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, all_rules: &Array<ParserRule>
         return;
     }
     if let Label(lab) = *elem {
-        gen_element(w, &lab.element, all_rules, lit_tokens, store, name_counts);
+        gen_element(w, &lab.element, all_rules, lit_tokens, name_counts);
         return;
     }
 }
@@ -1450,7 +1435,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserR
             if is_group_store {
                 if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc); }
             } else {
-                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+                gen_element(w, inner, all_rules, lit_tokens, &mut nc);
             }
             w.line(`{list_name}.append({field_info.0});`);
             w.end();
@@ -1460,7 +1445,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserR
             if is_group_store {
                 if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc); }
             } else {
-                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+                gen_element(w, inner, all_rules, lit_tokens, &mut nc);
             }
             let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
             w.line(`let mut {list_name}: Array<{field_info.1}> = [{field_info.0}];`);
@@ -1469,7 +1454,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserR
             if is_group_store {
                 if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc2); }
             } else {
-                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc2);
+                gen_element(w, inner, all_rules, lit_tokens, &mut nc2);
             }
             w.line(`{list_name}.append({field_info.0});`);
             w.end();
@@ -1482,7 +1467,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserR
             if is_group_store {
                 if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc); }
             } else {
-                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+                gen_element(w, inner, all_rules, lit_tokens, &mut nc);
             }
             w.line(`Option::<{type_str}>::Some({field_info.0})`);
             w.else_begin("else");
@@ -1493,14 +1478,14 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserR
         if let Star = rep.kind {
             w.begin(`while {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, false, &mut nc);
+            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
             w.end();
         }
         if let Plus = rep.kind {
-            gen_element(w, inner, all_rules, lit_tokens, false, name_counts);
+            gen_element(w, inner, all_rules, lit_tokens, name_counts);
             w.begin(`while {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, false, &mut nc);
+            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
             w.end();
         }
         if let Optional = rep.kind {
@@ -1578,13 +1563,13 @@ fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Ar
         let field_info = element_field_info(inner);
         if is_plus {
             let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
             let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
             w.line(`let mut {list_name}: Array<{field_info.1}> = [{field_info.0}];`);
             if while_cond != "false" {
                 w.begin(`while {while_cond}`);
                 let mut nc2: Array<[String, i32]> = [];
-                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc2);
+                gen_element(w, inner, all_rules, lit_tokens, &mut nc2);
                 w.line(`{list_name}.append({field_info.0});`);
                 w.end();
             }
@@ -1594,19 +1579,19 @@ fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Ar
             if while_cond != "false" {
                 w.begin(`while {while_cond}`);
                 let mut nc: Array<[String, i32]> = [];
-                gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+                gen_element(w, inner, all_rules, lit_tokens, &mut nc);
                 w.line(`{list_name}.append({field_info.0});`);
                 w.end();
             }
         }
     } else {
         if is_plus {
-            gen_element(w, inner, all_rules, lit_tokens, false, name_counts);
+            gen_element(w, inner, all_rules, lit_tokens, name_counts);
         }
         if while_cond != "false" {
             w.begin(`while {while_cond}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, false, &mut nc);
+            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
             w.end();
         }
     }
@@ -1658,7 +1643,7 @@ fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &A
         let opt_name = dedup_name(&field_info.0, name_counts);
         w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
         let mut nc: Array<[String, i32]> = [];
-        gen_element(w, inner, all_rules, lit_tokens, true, &mut nc);
+        gen_element(w, inner, all_rules, lit_tokens, &mut nc);
         w.line(`Option::<{type_str}>::Some({field_info.0})`);
         w.else_begin("else");
         w.line("null");
@@ -1804,6 +1789,7 @@ fn gen_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Elemen
         }
 
         // Generate parsing code for this shape's elements
+        let mut nc: Array<[String, i32]> = [];
         for let mut k = 0; k < shape.len(); k += 1 {
             let idx = shape[k];
             let elem = &group_elements[idx];
@@ -1811,13 +1797,13 @@ fn gen_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Elemen
             if let Group(alts) = *actual {
                 if alts.len() == 1 {
                     for let mut j = 0; j < alts[0].elements.len(); j += 1 {
-                        gen_element(w, &alts[0].elements[j], all_rules, lit_tokens, false, name_counts);
+                        gen_element(w, &alts[0].elements[j], all_rules, lit_tokens, &mut nc);
                     }
                 } else {
-                    gen_element(w, actual, all_rules, lit_tokens, false, name_counts);
+                    gen_element(w, actual, all_rules, lit_tokens, &mut nc);
                 }
             } else {
-                gen_element(w, actual, all_rules, lit_tokens, false, name_counts);
+                gen_element(w, actual, all_rules, lit_tokens, &mut nc);
             }
         }
     }
@@ -1915,12 +1901,13 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, all_rules: &
             cond.append(cond_parts[i]);
         }
         w.begin(`if {cond}`);
+        let mut nc: Array<[String, i32]> = [];
         if let Group(alts) = *inner {
             for let mut i = 0; i < alts[0].elements.len(); i += 1 {
-                gen_element(w, &alts[0].elements[i], all_rules, lit_tokens, false, name_counts);
+                gen_element(w, &alts[0].elements[i], all_rules, lit_tokens, &mut nc);
             }
         } else {
-            gen_element(w, inner, all_rules, lit_tokens, false, name_counts);
+            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
         }
         w.end();
         return;
@@ -1933,17 +1920,17 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, all_rules: &
     w.line(`let {saved} = p.pos;`);
     w.begin(`{label}:`);
 
+    let mut bt_nc: Array<[String, i32]> = [];
     if let Group(alts) = *inner {
         if alts.len() == 1 {
             for let elem of alts[0].elements {
-                gen_element_failable(w, &elem, all_rules, lit_tokens, &saved, &label, name_counts);
+                gen_element_failable(w, &elem, all_rules, lit_tokens, &saved, &label, &mut bt_nc);
             }
         } else {
-            let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, false, &mut nc);
+            gen_element(w, inner, all_rules, lit_tokens, &mut bt_nc);
         }
     } else {
-        gen_element_failable(w, inner, all_rules, lit_tokens, &saved, &label, name_counts);
+        gen_element_failable(w, inner, all_rules, lit_tokens, &saved, &label, &mut bt_nc);
     }
 
     w.end();  // label
@@ -2169,11 +2156,13 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &
 
         if group.len() == 1 {
             let alt_idx = group[0];
-            gen_elements_with_non_greedy(w, &alts[alt_idx].elements, all_rules, lit_tokens, name_counts);
+            let mut nc: Array<[String, i32]> = [];
+            gen_elements_with_non_greedy(w, &alts[alt_idx].elements, all_rules, lit_tokens, &mut nc);
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_element_count(&mut sorted_group, alts);
-            gen_backtracking_body(w, &sorted_group, alts, all_rules, lit_tokens, name_counts);
+            let mut nc: Array<[String, i32]> = [];
+            gen_backtracking_body(w, &sorted_group, alts, all_rules, lit_tokens, &mut nc);
         }
     }
     w.end();
@@ -2422,12 +2411,12 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
                     continue;
                 }
             }
-            gen_element(w, &elem, all_rules, lit_tokens, false, name_counts);
+            gen_element(w, &elem, all_rules, lit_tokens, name_counts);
         }
         return;
     }
     if let Consume(c) = *node {
-        gen_element(w, &c.element, all_rules, lit_tokens, false, name_counts);
+        gen_element(w, &c.element, all_rules, lit_tokens, name_counts);
         gen_group_prediction_code_skip(w, &c.child, alts, all_rules, lit_tokens, name_counts, skip + 1);
         return;
     }
@@ -2446,7 +2435,7 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
                 w.begin(`if !{done_var}`);
                 let mut nc: Array<[String, i32]> = [];
                 for let mut i = skip; i < alt.elements.len(); i += 1 {
-                    gen_element(w, &alt.elements[i], all_rules, lit_tokens, false, &mut nc);
+                    gen_element(w, &alt.elements[i], all_rules, lit_tokens, &mut nc);
                 }
                 w.end();
             } else {
@@ -2580,12 +2569,12 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                     let discard = dedup_name(&"op_tok", &mut name_counts);
                     w.line(`let {discard} = p.advance();`);
                 } else {
-                    gen_element(w, elem, all_rules, lit_tokens, false, &mut name_counts);
+                    gen_element(w, elem, all_rules, lit_tokens, &mut name_counts);
                 }
             } else if let Repeat(rep) = *elem {
                 gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
             } else {
-                gen_element(w, elem, all_rules, lit_tokens, true, &mut name_counts);
+                gen_element(w, elem, all_rules, lit_tokens, &mut name_counts);
             }
         }
 
@@ -2889,7 +2878,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         return;
     }
     if let Consume(c) = *node {
-        gen_element(w, &c.element, all_rules, lit_tokens, true, name_counts);
+        gen_element(w, &c.element, all_rules, lit_tokens, name_counts);
         gen_prediction_code_inner(w, &c.child, fn_name, alts, type_name, all_rules, lit_tokens, skip + 1, name_counts);
         return;
     }
