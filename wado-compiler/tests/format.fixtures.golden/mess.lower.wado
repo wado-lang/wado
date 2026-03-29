@@ -8717,7 +8717,7 @@ pub fn "u8^TryFrom<u32>::try_from"(value: u32) -> Result<u8, ConvertError> {
 
 pub fn "u8^TryFrom<u16>::try_from"(value: u16) -> Result<u8, ConvertError> {
     if (value > 255 as u16) {
-        return Result<u16, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"(__tmpl: {
+        return Result<u8, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"(__tmpl: {
             let mut __r: String = "core::prelude/string.wado::String::with_capacity"(36);
             let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
             Box<u16> { value: value }."u16^Display::fmt"(&mut __f);
@@ -8725,7 +8725,7 @@ pub fn "u8^TryFrom<u16>::try_from"(value: u16) -> Result<u8, ConvertError> {
             break __tmpl: __r;
         }));
     }
-    return Result<u16, ConvertError>::Ok(value as u8);
+    return Result<u8, ConvertError>::Ok(value as u8);
 }
 
 pub fn "f32^TryFrom<i64>::try_from"(value: i64) -> Result<f32, ConvertError> {
@@ -9294,20 +9294,21 @@ pub fn "String^Add::add"(self: &String, other: &String) -> String {
 
 pub fn "String^Eq::eq"(self: &String, other: &String) -> bool {
     let len_a: i32 = self.String::len();
-    let len_b: i32 = other.String::len();
-    if (len_a != len_b) {
+    if (len_a != other.String::len()) {
         return false;
     }
-    let a_repr: builtin::array<u8> = self.String::internal_raw_bytes();
-    let b_repr: builtin::array<u8> = other.String::internal_raw_bytes();
+    return "core::prelude/string.wado::String^Eq::eq_bytes"(self.String::internal_raw_bytes(), other.String::internal_raw_bytes(), len_a);
+}
+
+fn "String^Eq::eq_bytes"(a: builtin::array<u8>, b: builtin::array<u8>, len: i32) -> bool {
     __for_1: {
         let mut i: i32 = 0;
         loop {
-            if !(i < len_a) {
+            if !(i < len) {
                 break __for_1;
             }
             __for_1_body: {
-                if (core::builtin::array_get_u8(a_repr, i) != core::builtin::array_get_u8(b_repr, i)) {
+                if (core::builtin::array_get_u8(a, i) != core::builtin::array_get_u8(b, i)) {
                     return false;
                 }
             }
@@ -9761,7 +9762,7 @@ pub fn String::truncate_bytes(self: &mut String, byte_len: i32) {
                 __r.String::append("core:prelude/string.wado");
                 __r.String::append(":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 357 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 355 }."i32^Display::fmt"(&mut __f);
                 __r.String::append(": ");
                 __r.String::append("negative length");
                 __r.String::append("\ncondition: byte_len >= 0\n");
@@ -9790,7 +9791,7 @@ pub fn String::truncate_bytes(self: &mut String, byte_len: i32) {
                     __r.String::append("core:prelude/string.wado");
                     __r.String::append(":");
                     let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                    Box<i32> { value: 362 }."i32^Display::fmt"(&mut __f);
+                    Box<i32> { value: 360 }."i32^Display::fmt"(&mut __f);
                     __r.String::append(": ");
                     __r.String::append("not on a UTF-8 character boundary");
                     __r.String::append("\ncondition: b < 0x80 || b >= 0xC0\n");

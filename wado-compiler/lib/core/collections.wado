@@ -422,7 +422,10 @@ impl<T: Ord> TreeSet<T> {
 
     /// Returns an iterator over the elements in insertion order.
     pub fn iter(&self) -> TreeSetIter<T> {
-        return self.into_iter();
+        return TreeSetIter {
+            entries: self.inner.entries,
+            index: 0,
+        };
     }
 }
 

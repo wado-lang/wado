@@ -3301,8 +3301,8 @@ test {
     unreachable();
 }
 
-// TODO test: passes while the feature is unimplemented (body traps).
-// When it stops trapping, the runner warns to remove the attribute.
+// TODO test: marks a test for an unimplemented feature.
+// Reported on a separate axis from pass/fail (see Test Outcome Model).
 #[TODO]
 test "not yet implemented" {
     panic("TODO: implement this feature");
@@ -3359,7 +3359,7 @@ test "panics on null dereference" {
 
 **`#[TODO]` Attribute:**
 
-The `#[TODO]` attribute marks a test as a placeholder for a feature not yet implemented. It has the same trap-expectation semantics as `#[expect_trap]`, but the runner emits a distinct failure message when the body unexpectedly passes, reminding the developer to remove the attribute.
+The `#[TODO]` attribute marks a test as a placeholder for a feature not yet implemented. TODO tests are reported on a separate axis from regular pass/fail results (see Test Outcome Model below). When the body traps, the test is reported as **pending** (expected). When the body completes normally, the test is reported as **resolved**, which is a hard failure requiring the developer to remove the `#[TODO]` attribute.
 
 **`#[timeout_ms(N)]` Attribute:**
 
@@ -3372,6 +3372,79 @@ test "large data processing" {
     assert result.len() > 0;
 }
 ```
+
+### Test Outcome Model
+
+Test results are classified into two independent axes: the **pass/fail axis** for regular tests, and the **TODO axis** for tests marked with `#[TODO]`.
+
+#### Regular Tests
+
+| Condition                                               | Outcome  |
+| ------------------------------------------------------- | -------- |
+| Body completes normally                                 | **pass** |
+| Body traps (panic, assert failure, unreachable)         | **fail** |
+| Body traps and `#[expect_trap]` is present              | **pass** |
+| Body completes normally and `#[expect_trap]` is present | **fail** |
+
+#### TODO Tests
+
+Tests marked with `#[TODO]` are reported separately from regular tests. They do not contribute to the pass or fail count.
+
+| Condition               | Outcome             | Action Required                           |
+| ----------------------- | ------------------- | ----------------------------------------- |
+| Body traps              | **todo (pending)**  | None — the feature is still unimplemented |
+| Body completes normally | **todo (resolved)** | Remove `#[TODO]` — the feature now works  |
+
+A **resolved** TODO test is a hard failure (exit code 1). This enforces cleanup: once the underlying feature is implemented, the `#[TODO]` attribute must be removed so the test joins the regular pass/fail pool.
+
+A **pending** TODO test never causes a failure. This means fixing a compiler bug cannot increase the failure count — newly-passing TODO tests appear as "resolved" on the TODO axis rather than as unexpected failures on the pass/fail axis.
+
+#### `#![TODO]` Modules
+
+The `#![TODO]` inner attribute applies TODO semantics to an entire module:
+
+- If the module fails to compile, it is reported as a single **pending** TODO entry.
+- If the module compiles successfully, each test block is implicitly treated as `#[TODO]`.
+- If the module compiles and all tests pass (i.e., the feature is implemented), it is reported as **resolved** — a hard failure.
+
+#### Output Format
+
+The test runner displays results grouped by file. Regular tests use `✓` (green) and `✗` (red). TODO tests use `·` (yellow, pending) and `✓` (cyan, resolved):
+
+```
+Running tests in math_test.wado... (compiled in 50ms)
+  ✓ addition (2ms)
+  ✗ division_edge_case (3ms)
+    assertion failed at line 15
+  · future_feature # TODO (1ms)
+  ✓ now_works # TODO resolved (2ms)
+    remove the #[TODO] attribute
+```
+
+At the end of the run, a TODO summary section lists all TODO tests with their status:
+
+```
+TODO tests (3):
+  · pending   math_test.wado — future_feature
+  ✓ resolved  math_test.wado — now_works
+  · pending   unimpl_test.wado — #![TODO] module
+
+1 TODO test(s) resolved — remove the #[TODO] attribute
+```
+
+The final summary line reports both axes:
+
+```
+N passed, N failed; N todo (M resolved) (duration)
+```
+
+#### Exit Codes
+
+| Condition                                 | Exit Code |
+| ----------------------------------------- | --------- |
+| All regular tests pass, no resolved TODOs | 0         |
+| One or more regular tests fail            | 1         |
+| One or more TODO tests resolved           | 1         |
 
 **Effects:**
 
@@ -3407,25 +3480,9 @@ wado test --help
 
 When no files are specified, `wado test` searches for `**/*_test.wado` files recursively from the current directory.
 
-**Output:**
+**Output and Exit Codes:**
 
-```
-Running tests in math_test.wado...
-  ✓ addition works
-  ✓ subtraction works
-  ✗ division edge case
-    assertion failed at line 15
-
-Running tests in string_test.wado...
-  ✓ concatenation
-
-3 passed, 1 failed
-```
-
-**Exit Codes:**
-
-- `0`: All tests passed
-- `1`: One or more tests failed
+See Test Outcome Model above for the full output format, TODO summary, and exit code rules.
 
 ### Test File Conventions
 
@@ -4348,16 +4405,29 @@ struct Foo {
 }
 ```
 
-#### `#[expect_trap]` / `#[TODO]`
+#### `#[expect_trap]`
 
-Test block attributes. `#[expect_trap]` marks a test that is expected to trap. `#[TODO]` marks a test for an unimplemented feature (must fail; the test itself fails if the body passes, to remind you to remove the annotation).
+Test block attribute. Marks a test that is expected to trap. The test passes if the body traps, and fails if it completes normally.
 
 ```wado
 #[expect_trap]
 test "panics on invalid input" {
     panic("bad input");
 }
+```
 
+#### `#[TODO]`
+
+Test block attribute. Marks a test for an unimplemented feature. TODO tests are reported on a separate axis from regular pass/fail results:
+
+- If the body traps, the test is **pending** (expected — the feature is still unimplemented).
+- If the body completes normally, the test is **resolved** (hard failure — the `#[TODO]` attribute must be removed).
+
+Pending TODO tests never cause the test runner to fail. Resolved TODO tests always cause the test runner to fail with exit code 1.
+
+See Test Outcome Model in the Testing section for the full specification.
+
+```wado
 #[TODO]
 test "not yet implemented" {
     panic("TODO: implement this");
@@ -4395,7 +4465,13 @@ Module-level inner attribute. Prevents the automatic import of `core:prelude`. U
 
 #### `#![TODO]`
 
-Module-level inner attribute. Marks the entire module as TODO for `wado test`. The source must parse successfully (otherwise the attribute cannot be recognized), but compilation errors are tolerated. If compilation fails, the module is reported as a passing TODO test. If compilation succeeds, all test blocks are treated as `#[TODO]` tests: they must fail (trap or error). If any test passes, it becomes a test failure, signaling that the `#![TODO]` attribute should be removed.
+Module-level inner attribute. Marks the entire module as TODO for `wado test`. The source must parse successfully (otherwise the attribute cannot be recognized), but compilation errors are tolerated:
+
+- If compilation fails, the module is reported as a single **pending** TODO entry.
+- If compilation succeeds, all test blocks are implicitly treated as `#[TODO]` tests.
+- If the module compiles and all tests pass, it is reported as **resolved** (hard failure — the `#![TODO]` attribute must be removed).
+
+See Test Outcome Model in the Testing section for the full specification.
 
 ```wado
 #![TODO]

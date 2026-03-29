@@ -732,6 +732,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Check return value type matches function return type
         if let Some(value) = &value {
             self.check_ref_type_mismatch(value.type_id, return_type, ret_stmt.span);
+            self.check_return_type_mismatch(value.type_id, return_type, ret_stmt.span);
         }
 
         TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)
@@ -1470,6 +1471,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, ctx)
             }
         } else {
+            // Check that the iterable type implements IntoIterator
+            let mut inner_type_id = iterable_type_id;
+            while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                self.type_table.borrow().get(inner_type_id).clone()
+            {
+                inner_type_id = t;
+            }
+            if !self.type_implements_trait(iterable_type_id, "IntoIterator")
+                && !self.type_implements_trait(inner_type_id, "IntoIterator")
+                && !matches!(
+                    self.type_table.borrow().get(iterable_type_id),
+                    ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+                )
+            {
+                let type_name = self.type_table.borrow().type_name(iterable_type_id);
+                let _ = self.logger.error(TypeError::TypeMismatch {
+                    expected: "type that implements IntoIterator".to_string(),
+                    found: format!("'{type_name}' does not implement IntoIterator"),
+                    span: for_of.span,
+                });
+            }
             self.resolve_iterator_for_of(for_of, is_enumerate, ctx)
         }
     }
@@ -1803,6 +1825,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
             span,
         };
         let iter_let_tir = self.resolve_let(&into_iter_let, ctx);
+
+        // Check that the iterator type implements Iterator
+        if let TirStmtKind::Let { type_id, .. } = &iter_let_tir.kind {
+            let iter_type_id = *type_id;
+            if !self.type_implements_trait(iter_type_id, "Iterator")
+                && !matches!(
+                    self.type_table.borrow().get(iter_type_id),
+                    ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+                )
+            {
+                let type_name = self.type_table.borrow().type_name(iter_type_id);
+                let _ = self.logger.error(TypeError::TypeMismatch {
+                    expected: "iterator type that implements Iterator".to_string(),
+                    found: format!("'{type_name}' does not implement Iterator"),
+                    span,
+                });
+            }
+        }
 
         // __iter_N.next()
         let next_call = Expr::MethodCall(Box::new(MethodCallExpr {

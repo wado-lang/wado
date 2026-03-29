@@ -1,0 +1,26 @@
+struct MyIter {
+    x: i32,
+}
+
+struct MyCollection {
+    data: i32,
+}
+
+impl IntoIterator for MyCollection {
+    type Item = i32;
+    type Iter = MyIter;
+
+    fn into_iter(&self) -> Self::Iter {
+        return MyIter { x: self.data };
+    }
+}
+
+export fn run() {
+    let c = MyCollection { data: 42 };
+    for let item of c {
+        assert item == 42;
+    }
+}
+
+__DATA__
+{"compile_error": "does not implement Iterator"}

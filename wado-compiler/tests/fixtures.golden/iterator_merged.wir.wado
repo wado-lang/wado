@@ -122,6 +122,8 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
+type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> bool;
+
 type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> ref null String;
@@ -193,12 +195,12 @@ fn __test_0_basic_next() {
     let __pattern_temp_0: ref Option<i32>;
     let __pattern_temp_1: ref Option<i32>;
     let __pattern_temp_2: ref Option<i32>;
-    let __local_48: ref Formatter;
-    let __local_53: ref Formatter;
-    let __local_65: ref Formatter;
-    let __local_70: ref Formatter;
-    let __local_82: ref Formatter;
-    let __local_87: ref Formatter;
+    let __local_47: ref Formatter;
+    let __local_52: ref Formatter;
+    let __local_64: ref Formatter;
+    let __local_69: ref Formatter;
+    let __local_81: ref Formatter;
+    let __local_86: ref Formatter;
     arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
@@ -220,8 +222,8 @@ fn __test_0_basic_next() {
                 String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/iterator_merged.wado"), used: 49 });
                 String::append_char(__local_16, 58);
                 __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
-                __local_48 = __local_17;
-                i32::fmt_decimal(6, __local_48);
+                __local_47 = __local_17;
+                i32::fmt_decimal(6, __local_47);
                 String::append(__local_16, String { repr: array.new_data<u8>("
 condition: a == 10
 "), used: 20 });
@@ -229,8 +231,8 @@ condition: a == 10
                 String::append_char(__local_16, 58);
                 String::append_char(__local_16, 32);
                 __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
-                __local_53 = __local_17;
-                i32::fmt_decimal(a, __local_53);
+                __local_52 = __local_17;
+                i32::fmt_decimal(a, __local_52);
                 String::append_char(__local_16, 10);
                 break __tmpl: __local_16;
             });
@@ -275,8 +277,8 @@ condition: false
                 String::append(__local_20, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/iterator_merged.wado"), used: 49 });
                 String::append_char(__local_20, 58);
                 __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
-                __local_65 = __local_21;
-                i32::fmt_decimal(12, __local_65);
+                __local_64 = __local_21;
+                i32::fmt_decimal(12, __local_64);
                 String::append(__local_20, String { repr: array.new_data<u8>("
 condition: b == 20
 "), used: 20 });
@@ -284,8 +286,8 @@ condition: b == 20
                 String::append_char(__local_20, 58);
                 String::append_char(__local_20, 32);
                 __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
-                __local_70 = __local_21;
-                i32::fmt_decimal(b, __local_70);
+                __local_69 = __local_21;
+                i32::fmt_decimal(b, __local_69);
                 String::append_char(__local_20, 10);
                 break __tmpl: __local_20;
             });
@@ -330,8 +332,8 @@ condition: false
                 String::append(__local_24, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/iterator_merged.wado"), used: 49 });
                 String::append_char(__local_24, 58);
                 __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
-                __local_82 = __local_25;
-                i32::fmt_decimal(18, __local_82);
+                __local_81 = __local_25;
+                i32::fmt_decimal(18, __local_81);
                 String::append(__local_24, String { repr: array.new_data<u8>("
 condition: c == 30
 "), used: 20 });
@@ -339,8 +341,8 @@ condition: c == 30
                 String::append_char(__local_24, 58);
                 String::append_char(__local_24, 32);
                 __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
-                __local_87 = __local_25;
-                i32::fmt_decimal(c, __local_87);
+                __local_86 = __local_25;
+                i32::fmt_decimal(c, __local_86);
                 String::append_char(__local_24, 10);
                 break __tmpl: __local_24;
             });
@@ -559,9 +561,9 @@ fn __test_3_strings() {
     let __pattern_temp_0: ref null String;
     let __pattern_temp_1: ref null String;
     let __pattern_temp_2: ref null String;
-    let __local_39: ref Formatter;
-    let __local_46: ref Formatter;
-    let __local_53: ref Formatter;
+    let __local_38: ref Formatter;
+    let __local_45: ref Formatter;
+    let __local_52: ref Formatter;
     arr = __seq_lit: block -> ref Array<String> {
         __local_0 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("hello"), used: 5 }, String { repr: array.new_data<u8>("world"), used: 5 }, String { repr: array.new_data<u8>("!"), used: 1 }), used: 3 };
         break __seq_lit: __local_0;
@@ -584,8 +586,8 @@ fn __test_3_strings() {
                 String::append(__local_13, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/iterator_merged.wado"), used: 49 });
                 String::append_char(__local_13, 58);
                 __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
-                __local_39 = __local_14;
-                i32::fmt_decimal(52, __local_39);
+                __local_38 = __local_14;
+                i32::fmt_decimal(52, __local_38);
                 String::append(__local_13, String { repr: array.new_data<u8>("
 condition: s == \"hello\"
 "), used: 25 });
@@ -617,8 +619,8 @@ condition: s == \"hello\"
                 String::append(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/iterator_merged.wado"), used: 49 });
                 String::append_char(__local_15, 58);
                 __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
-                __local_46 = __local_16;
-                i32::fmt_decimal(55, __local_46);
+                __local_45 = __local_16;
+                i32::fmt_decimal(55, __local_45);
                 String::append(__local_15, String { repr: array.new_data<u8>("
 condition: s == \"world\"
 "), used: 25 });
@@ -650,8 +652,8 @@ condition: s == \"world\"
                 String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/iterator_merged.wado"), used: 49 });
                 String::append_char(__local_17, 58);
                 __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
-                __local_53 = __local_18;
-                i32::fmt_decimal(58, __local_53);
+                __local_52 = __local_18;
+                i32::fmt_decimal(58, __local_52);
                 String::append(__local_17, String { repr: array.new_data<u8>("
 condition: s == \"!\"
 "), used: 21 });
@@ -929,25 +931,23 @@ fn String::append(self, other) {
 
 fn String^Eq::eq(self, other) {
     let len_a: i32;
-    let len_b: i32;
-    let a_repr: ref array<u8>;
-    let b_repr: ref array<u8>;
-    let i: i32;
     len_a = self.used;
-    len_b = other.used;
-    if len_a != len_b {
+    if len_a != other.used {
         return 0;
     };
-    a_repr = self.repr;
-    b_repr = other.repr;
+    return String^Eq::eq_bytes(self.repr, other.repr, len_a);
+}
+
+fn String^Eq::eq_bytes(a, b, len) {
+    let i: i32;
     __for_1: block {
         i = 0;
         block {
             l44: loop {
-                if (i < len_a) == 0 {
+                if (i < len) == 0 {
                     break __for_1;
                 };
-                if builtin::array_get_u8(a_repr, i) != builtin::array_get_u8(b_repr, i) {
+                if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                     return 0;
                 };
                 i = i + 1;

@@ -1968,7 +1968,15 @@ impl Monomorphizer {
             }
             let recv_mangled = type_table.mangle_type_name(recv_inner);
             let recv_base = type_table.base_type_name(recv_inner);
-            info.with_substituted_struct_name(&recv_mangled, &recv_base)
+            let mut new_info = info.with_substituted_struct_name(&recv_mangled, &recv_base);
+            // For ref-type impls (e.g., impl IntoIterator for &Array<T>), preserve
+            // the ref base_struct_name ("&" or "&mut") so that the monomorphizer
+            // selects the correct generic function template
+            // ("&^IntoIterator::into_iter" instead of "Array^IntoIterator::into_iter").
+            if info.is_ref_impl {
+                new_info.base_struct_name = info.base_struct_name.clone();
+            }
+            new_info
         } else {
             info.clone()
         };
