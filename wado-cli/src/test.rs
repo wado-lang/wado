@@ -210,8 +210,8 @@ struct TestJob {
 ///
 /// Regular tests are either Pass or Fail.
 /// TODO tests live on a separate axis:
-///   - TodoPending: trapped as expected (the feature is still unimplemented)
-///   - TodoResolved: passed unexpectedly (the feature may now work — remove #[TODO])
+///   - `TodoPending`: trapped as expected (the feature is still unimplemented)
+///   - `TodoResolved`: passed unexpectedly (the feature may now work — remove #[TODO])
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TestOutcome {
     Pass,
