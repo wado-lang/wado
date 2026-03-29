@@ -195,6 +195,33 @@ pub fn cm_stream_read_u8(handle: i32, max: i32) -> Array<u8> {
     return Array::<u8>::internal_from_raw(arr, count);
 }
 
+/// CM adapter for stream.read(max) on Stream<T> where T is a CM record.
+/// Allocates a linear memory buffer sized for max*element_size bytes,
+/// calls stream-read, handles BLOCKED, and returns [ptr, count].
+/// The caller must decode each record from the buffer.
+pub fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element_align: i32) -> [i32, i32] {
+    let byte_count = max * element_size;
+    let ptr = builtin::realloc(0, 0, element_align, byte_count);
+    let mut result = builtin::stream_read(handle, ptr, max);
+    if result == -1 {
+        result = wait_for_blocked(handle);
+    }
+    let count = result >> 4;
+    return [ptr, count];
+}
+
+/// Create a new empty Array<u8> with the given capacity.
+/// Used by synthesized stream-read binding functions for non-u8 types.
+/// The type parameter is monomorphized away during compilation.
+pub fn array_new_empty(capacity: i32) -> Array<u8> {
+    return Array::<u8>::with_capacity(capacity);
+}
+
+/// Free a buffer previously allocated by cm_stream_read_raw.
+pub fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i32) {
+    let freed = builtin::realloc(ptr, byte_count, element_align, 0);
+}
+
 /// CM adapter for stream.write(data) on Stream<u8>.
 /// Lowers Array<u8> to linear memory, calls stream-write, handles BLOCKED.
 pub fn cm_stream_write_u8(handle: i32, data: Array<u8>) {
