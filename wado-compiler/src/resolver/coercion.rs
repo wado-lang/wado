@@ -1091,13 +1091,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Skip function types — structural equivalence is complex (effects, closures).
-        if matches!(
-            type_table.get(actual_inner),
-            ResolvedType::Function { .. }
-        ) || matches!(
-            type_table.get(expected_inner),
-            ResolvedType::Function { .. }
-        ) {
+        if matches!(type_table.get(actual_inner), ResolvedType::Function { .. })
+            || matches!(
+                type_table.get(expected_inner),
+                ResolvedType::Function { .. }
+            )
+        {
             return;
         }
 
@@ -1121,12 +1120,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.type_contains_params(*inner, type_table)
             }
-            ResolvedType::GenericInstance { type_args, .. } => {
-                type_args.iter().any(|t| self.type_contains_params(*t, type_table))
-            }
-            ResolvedType::Tuple(elems) => {
-                elems.iter().any(|t| self.type_contains_params(*t, type_table))
-            }
+            ResolvedType::GenericInstance { type_args, .. } => type_args
+                .iter()
+                .any(|t| self.type_contains_params(*t, type_table)),
+            ResolvedType::Tuple(elems) => elems
+                .iter()
+                .any(|t| self.type_contains_params(*t, type_table)),
             _ => false,
         }
     }
