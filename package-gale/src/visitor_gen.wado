@@ -7,7 +7,7 @@ use {
     LabelElement,
     RepeatKind,
 } from "./ir.wado";
-use { to_snake_case, to_lower, rule_type_name, literal_field_name, strip_suffix } from "./gen_util.wado";
+use { to_snake_case, to_lower, to_pascal_case, rule_type_name, literal_field_name, strip_suffix, is_simple_cst_group, group_variant_type_name, group_field_base_name, group_case_name } from "./gen_util.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
 /// Generate Visitor walk functions and to_tree for a grammar.
@@ -59,6 +59,7 @@ fn gen_walk_field(w: &mut CodeWriter, field: &WalkField, var: &String) {
             match &field.action {
                 VisitToken => w.line(`v.visit_token(&{var}.{name});`),
                 WalkRule(rule_name) => w.line(`walk_{rule_name}(v, &{var}.{name});`),
+                WalkGroup(cases) => gen_walk_group_match(w, `&{var}.{name}`, cases),
             }
         },
         ArrayWrap => {
@@ -66,6 +67,7 @@ fn gen_walk_field(w: &mut CodeWriter, field: &WalkField, var: &String) {
             match &field.action {
                 VisitToken => w.line("v.visit_token(item);"),
                 WalkRule(rule_name) => w.line(`walk_{rule_name}(v, item);`),
+                WalkGroup(cases) => gen_walk_group_match(w, "item", cases),
             }
             w.end();
         },
@@ -74,10 +76,44 @@ fn gen_walk_field(w: &mut CodeWriter, field: &WalkField, var: &String) {
             match &field.action {
                 VisitToken => w.line("v.visit_token(item);"),
                 WalkRule(rule_name) => w.line(`walk_{rule_name}(v, item);`),
+                WalkGroup(cases) => gen_walk_group_match(w, "item", cases),
             }
             w.end();
         },
     }
+}
+
+fn repeat_inner_walk_field(elem: &Element) -> Option<WalkField> {
+    if let Group(alts) = *elem {
+        if is_simple_cst_group(&alts) {
+            let mut cases: Array<GroupCaseInfo> = [];
+            for let alt of &alts {
+                if let RuleRef(name) = &alt.elements[0] {
+                    cases.append(GroupCaseInfo {
+                        case_name: to_pascal_case(name),
+                        rule_name: *name,
+                    });
+                }
+            }
+            return Option::Some(WalkField {
+                name: group_field_base_name(&alts),
+                action: WalkAction::WalkGroup(cases),
+                wrapper: WalkWrapper::Direct,
+            });
+        }
+        return null;
+    }
+    return element_to_walk_field(elem);
+}
+
+fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GroupCaseInfo>) {
+    w.begin(`match {expr}`);
+    for let c of cases {
+        w.begin(`{c.case_name}(inner) =>`);
+        w.line(`walk_{c.rule_name}(v, inner);`);
+        w.end();
+    }
+    w.end();
 }
 
 fn gen_to_tree_fn(w: &mut CodeWriter, grammar: &Grammar) {
@@ -93,9 +129,15 @@ fn gen_to_tree_fn(w: &mut CodeWriter, grammar: &Grammar) {
     w.blank();
 }
 
+struct GroupCaseInfo {
+    case_name: String,
+    rule_name: String,
+}
+
 variant WalkAction {
     VisitToken,
     WalkRule(String),
+    WalkGroup(Array<GroupCaseInfo>),
 }
 
 enum WalkWrapper {
@@ -148,7 +190,8 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
         });
     }
     if let Repeat(rep) = *elem {
-        if let Some(inner) = element_to_walk_field(&rep.element) {
+        let inner_field = repeat_inner_walk_field(&rep.element);
+        if let Some(inner) = inner_field {
             match rep.kind {
                 Star | Plus => {
                     return Option::Some(WalkField {

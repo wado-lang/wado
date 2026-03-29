@@ -1,3 +1,5 @@
+use { Alternative } from "./ir.wado";
+
 pub fn to_pascal_case(name: &String) -> String {
     let mut result = String::with_capacity(name.len());
     let mut capitalize_next = true;
@@ -193,6 +195,49 @@ pub fn strip_suffix(s: &String, suffix: &String) -> String {
         result.append_char(s_chars[i]);
     }
     return result;
+}
+
+pub fn is_simple_cst_group(alts: &Array<Alternative>) -> bool {
+    if alts.len() < 2 { return false; }
+    for let alt of alts {
+        if alt.elements.len() != 1 { return false; }
+        if let RuleRef(_) = alt.elements[0] {
+            // ok
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+pub fn group_variant_type_name(alts: &Array<Alternative>) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 { result.append("Or"); }
+        if let RuleRef(name) = &alts[i].elements[0] {
+            result.append(&to_pascal_case(name));
+        }
+    }
+    result.append("Group");
+    return result;
+}
+
+pub fn group_field_base_name(alts: &Array<Alternative>) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 { result.append("_or_"); }
+        if let RuleRef(name) = &alts[i].elements[0] {
+            result.append(&to_snake_case(name));
+        }
+    }
+    return result;
+}
+
+pub fn group_case_name(alt: &Alternative) -> String {
+    if let RuleRef(name) = &alt.elements[0] {
+        return to_pascal_case(name);
+    }
+    return "Unknown";
 }
 
 pub fn array_contains_str(arr: &Array<String>, value: &String) -> bool {

@@ -315,8 +315,14 @@ pub enum TokenKind {
     Error,
 }
 
+pub variant SqlStmtListOrErrorGroup {
+    SqlStmtList(SqlStmtListNode),
+    Error(ErrorNode),
+}
+
 pub struct ParseNode {
     pub span: Span,
+    pub sql_stmt_list_or_error_list: Array<SqlStmtListOrErrorGroup>,
     pub eof: Token,
 }
 
@@ -330,6 +336,39 @@ pub struct SqlStmtListNode {
     pub semicolon_list: Array<Token>,
     pub sql_stmt: SqlStmtNode,
     pub semicolon_list_2: Array<Token>,
+}
+
+pub variant AlterTableStmtOrAnalyzeStmtOrAttachStmtOrBeginStmtOrCommitStmtOrCompoundSelectStmtOrCreateIndexStmtOrCreateTableStmtOrCreateTriggerStmtOrCreateViewStmtOrCreateVirtualTableStmtOrDeleteStmtOrDeleteStmtLimitedOrDetachStmtOrDropIndexStmtOrDropTableStmtOrDropTriggerStmtOrDropViewStmtOrFactoredSelectStmtOrInsertStmtOrPragmaStmtOrReindexStmtOrReleaseStmtOrRollbackStmtOrSavepointStmtOrSimpleSelectStmtOrSelectStmtOrUpdateStmtOrUpdateStmtLimitedOrVacuumStmtGroup {
+    AlterTableStmt(AlterTableStmtNode),
+    AnalyzeStmt(AnalyzeStmtNode),
+    AttachStmt(AttachStmtNode),
+    BeginStmt(BeginStmtNode),
+    CommitStmt(CommitStmtNode),
+    CompoundSelectStmt(CompoundSelectStmtNode),
+    CreateIndexStmt(CreateIndexStmtNode),
+    CreateTableStmt(CreateTableStmtNode),
+    CreateTriggerStmt(CreateTriggerStmtNode),
+    CreateViewStmt(CreateViewStmtNode),
+    CreateVirtualTableStmt(CreateVirtualTableStmtNode),
+    DeleteStmt(DeleteStmtNode),
+    DeleteStmtLimited(DeleteStmtLimitedNode),
+    DetachStmt(DetachStmtNode),
+    DropIndexStmt(DropIndexStmtNode),
+    DropTableStmt(DropTableStmtNode),
+    DropTriggerStmt(DropTriggerStmtNode),
+    DropViewStmt(DropViewStmtNode),
+    FactoredSelectStmt(FactoredSelectStmtNode),
+    InsertStmt(InsertStmtNode),
+    PragmaStmt(PragmaStmtNode),
+    ReindexStmt(ReindexStmtNode),
+    ReleaseStmt(ReleaseStmtNode),
+    RollbackStmt(RollbackStmtNode),
+    SavepointStmt(SavepointStmtNode),
+    SimpleSelectStmt(SimpleSelectStmtNode),
+    SelectStmt(SelectStmtNode),
+    UpdateStmt(UpdateStmtNode),
+    UpdateStmtLimited(UpdateStmtLimitedNode),
+    VacuumStmt(VacuumStmtNode),
 }
 
 pub struct SqlStmtNode {
@@ -6336,17 +6375,21 @@ impl Parser {
 
 fn parse_parse(p: &mut Parser) -> Result<ParseNode, ParseError> {
     let start = p.peek().span.start;
+    let mut sql_stmt_list_or_error_list: Array<SqlStmtListOrErrorGroup> = [];
     while p.peek_kind() == TK_LIT_SEMI || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_UNEXPECTED_CHAR {
-        let grp_kind = p.peek_kind();
-        if grp_kind == TK_LIT_SEMI || grp_kind == TK_K_EXPLAIN || grp_kind == TK_K_ALTER || grp_kind == TK_K_ANALYZE || grp_kind == TK_K_ATTACH || grp_kind == TK_K_BEGIN || grp_kind == TK_K_COMMIT || grp_kind == TK_K_END || grp_kind == TK_K_WITH || grp_kind == TK_K_SELECT || grp_kind == TK_K_VALUES || grp_kind == TK_K_CREATE || grp_kind == TK_K_DELETE || grp_kind == TK_K_DETACH || grp_kind == TK_K_DROP || grp_kind == TK_K_INSERT || grp_kind == TK_K_REPLACE || grp_kind == TK_K_PRAGMA || grp_kind == TK_K_REINDEX || grp_kind == TK_K_RELEASE || grp_kind == TK_K_ROLLBACK || grp_kind == TK_K_SAVEPOINT || grp_kind == TK_K_UPDATE || grp_kind == TK_K_VACUUM {
-            let tok = parse_sql_stmt_list(p)?;
-        } else if grp_kind == TK_UNEXPECTED_CHAR {
-            let tok_2 = parse_error(p)?;
-        }
+        let sql_stmt_list_or_error: SqlStmtListOrErrorGroup = if p.peek_kind() == TK_LIT_SEMI || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_VACUUM {
+            let sql_stmt_list = parse_sql_stmt_list(p)?;
+            SqlStmtListOrErrorGroup::SqlStmtList(sql_stmt_list)
+        } else {
+            let error = parse_error(p)?;
+            SqlStmtListOrErrorGroup::Error(error)
+        };
+        sql_stmt_list_or_error_list.append(sql_stmt_list_or_error);
     }
     let eof = p.expect(TK_EOF, "EOF")?;
     return Result::<ParseNode, ParseError>::Ok(ParseNode {
         span: Span::new(start, p.last_end()),
+        sql_stmt_list_or_error_list,
         eof,
     });
 }
@@ -11053,6 +11096,16 @@ pub fn parse(input: &String) -> Result<ParseNode, ParseError> {
 
 pub fn walk_parse<V: Visitor>(v: &mut V, node: &ParseNode) {
     v.enter_rule(&"parse", &node.span);
+    for let item of &node.sql_stmt_list_or_error_list {
+        match item {
+            SqlStmtList(inner) => {
+                walk_sql_stmt_list(v, inner);
+            }
+            Error(inner) => {
+                walk_error(v, inner);
+            }
+        }
+    }
     v.visit_token(&node.eof);
     v.exit_rule(&"parse", &node.span);
 }
