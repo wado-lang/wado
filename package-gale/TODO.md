@@ -3,6 +3,7 @@
 ## Remove `store` parameter from `gen_element`
 
 `gen_element` has a `store: bool` parameter that controls generated variable naming:
+
 - `store=true`: `let field_name = parse_xxx(p)?;` (meaningful name for struct field assignment)
 - `store=false`: `let tok = parse_xxx(p)?;` (throwaway name)
 
@@ -43,5 +44,6 @@ The XML unparse output is missing tokens/nodes for several patterns due to `stor
 - **Multi-element single-alt groups**: `(';'+ sql_stmt)*` — the Star inner group has two elements (Plus and RuleRef), not a simple CST group, so second statements are not stored.
 
 Fixing these requires either:
+
 1. Extending `is_simple_cst_group` to handle token-only and mixed groups (generating variant types for tokens too).
 2. Or making `gen_repeat` for Star/Plus store all inner elements (requires struct types for group alternatives with multiple elements).
