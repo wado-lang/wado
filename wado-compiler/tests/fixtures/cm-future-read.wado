@@ -1,4 +1,3 @@
-#![TODO]
 // Future::read E2E test
 // Tests Future::read() and FutureWritable::write() with scalar numeric types.
 // The CM spec allows same-instance read/write for number types via the
@@ -15,9 +14,6 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     // Read from the future — should get Some(42)
     let result = future_rx.read();
-
-    // Drop the future handle
-    future_rx.drop();
 
     // Return 200 OK
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

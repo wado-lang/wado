@@ -1,4 +1,3 @@
-#![TODO]
 // Test: Write raw bytes to stderr via CM stream resource API
 // Verifies that Stream<u8> data correctly reaches stderr through the CM adapter.
 //
@@ -6,7 +5,6 @@
 // CM streams are zero-buffered rendezvous channels, so the consumer must be
 // started before stream.write() to avoid BLOCKED.
 use { Stderr } from "core:cli";
-use { ErrorCode } from "wasi:cli/types.wado";
 
 export fn run() with Stderr {
     let [rx, tx] = Stream::<u8>::new();
@@ -23,7 +21,6 @@ export fn run() with Stderr {
 
     // 4. Wait for consumer to finish
     subtask.read();
-        let __f = subtask as Future<Result<(), ErrorCode>>; __f.drop();
 }
 
 __DATA__
