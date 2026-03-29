@@ -266,19 +266,44 @@ fn extract_display_name(test_name: &str) -> String {
     }
 }
 
+/// A `#![TODO]` module that failed to compile.
+/// Treated as a passing result since the module is expected to have errors.
+struct TodoCompileError {
+    path: String,
+    compile_duration: Duration,
+}
+
+/// Check if a source file has `#![TODO]` module attribute by parsing the AST.
+fn source_has_todo_attr(path: &str) -> bool {
+    let Ok(source) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(parsed) = wado_compiler::parse(&source) else {
+        return false;
+    };
+    parsed.ast.has_todo()
+}
+
 /// Phase 1: Compile all test files and collect test jobs
 async fn collect_test_jobs(
     paths: &[String],
     filter: Option<&str>,
-) -> Result<(Vec<Arc<CompiledTestModule>>, Vec<TestJob>)> {
+) -> Result<(
+    Vec<Arc<CompiledTestModule>>,
+    Vec<TestJob>,
+    Vec<TodoCompileError>,
+)> {
     let mut modules = Vec::new();
     let mut jobs = Vec::new();
+    let mut todo_compile_errors = Vec::new();
 
     for (module_idx, path) in paths.iter().enumerate() {
+        let is_todo_module = source_has_todo_attr(path);
+
         // Compile with --world test so test functions become component exports
         // and non-test code is subject to DCE.
         let compile_start = Instant::now();
-        let wasm = compile::compile_with_full_opts(
+        let wasm = compile::try_compile_with_full_opts(
             path,
             crate::compile::OptLevel::default(),
             wado_compiler::LogLevel::default(),
@@ -290,6 +315,23 @@ async fn collect_test_jobs(
         )
         .await;
         let compile_duration = compile_start.elapsed();
+
+        let wasm = match wasm {
+            Ok(wasm) => wasm,
+            Err(_) if is_todo_module => {
+                // #![TODO] module failed to compile — expected, count as pass
+                todo_compile_errors.push(TodoCompileError {
+                    path: path.clone(),
+                    compile_duration,
+                });
+                continue;
+            }
+            Err(_) => {
+                // Non-TODO module failed to compile — fatal
+                process::exit(1);
+            }
+        };
+
         let load_start = Instant::now();
         let engine = Arc::new(runtime::create_test_engine(wasmtime::OptLevel::None)?);
         let component = Arc::new(Component::new(&engine, &wasm)?);
@@ -334,7 +376,7 @@ async fn collect_test_jobs(
         }));
     }
 
-    Ok((modules, jobs))
+    Ok((modules, jobs, todo_compile_errors))
 }
 
 /// Run a single test in its own Store
@@ -545,15 +587,16 @@ pub async fn run(opts: TestOptions) {
     let overall_start = Instant::now();
 
     // Phase 1: Compile all files and collect test jobs
-    let (modules, jobs) = match collect_test_jobs(&opts.paths, opts.filter.as_deref()).await {
-        Ok(result) => result,
-        Err(e) => {
-            eprintln!("Error collecting tests: {e}");
-            process::exit(1);
-        }
-    };
+    let (modules, jobs, todo_compile_errors) =
+        match collect_test_jobs(&opts.paths, opts.filter.as_deref()).await {
+            Ok(result) => result,
+            Err(e) => {
+                eprintln!("Error collecting tests: {e}");
+                process::exit(1);
+            }
+        };
 
-    let total_tests = jobs.len();
+    let total_tests = jobs.len() + todo_compile_errors.len();
     if total_tests == 0 {
         println!("No tests found");
         return;
@@ -572,6 +615,12 @@ pub async fn run(opts: TestOptions) {
             .push(result);
     }
 
+    // Build lookup maps for display
+    let todo_error_by_path: indexmap::IndexMap<&str, &TodoCompileError> = todo_compile_errors
+        .iter()
+        .map(|e| (e.path.as_str(), e))
+        .collect();
+
     // Display results in file order (matching input order)
     let mut total_passed = 0;
     let mut total_failed = 0;
@@ -583,6 +632,15 @@ pub async fn run(opts: TestOptions) {
         .collect();
 
     for path in &opts.paths {
+        // Handle #![TODO] modules that failed to compile
+        if let Some(todo_err) = todo_error_by_path.get(path.as_str()) {
+            let compile = format_duration(todo_err.compile_duration);
+            println!("Running tests in {path}... (compile error, {compile})");
+            println!("  \x1b[32m✓\x1b[0m #![TODO] module — compile error (expected) ({compile})");
+            total_passed += 1;
+            continue;
+        }
+
         if let Some(file_results) = results_by_file.get(path) {
             let timing = module_by_path
                 .get(path.as_str())

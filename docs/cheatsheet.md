@@ -1121,7 +1121,7 @@ Paths in `#include_str` and `#include_bytes` are resolved relative to the source
 
 ```wado
 #![no_prelude]             // disable auto-import of core:prelude
-#![TODO]                   // all tests must fail; passing tests become failures
+#![TODO]                   // all tests must fail; compile errors also accepted
 #![generated]              // marks machine-generated code (wado-from-wit, gale)
 
 struct Foo {

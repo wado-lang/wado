@@ -4395,7 +4395,7 @@ Module-level inner attribute. Prevents the automatic import of `core:prelude`. U
 
 #### `#![TODO]`
 
-Module-level inner attribute. Marks the entire module as TODO for `wado test`. All test blocks in a `#![TODO]` module are treated as `#[TODO]` tests: they compile and run, but must fail (trap or error). If any test passes, it becomes a test failure, signaling that the `#![TODO]` attribute should be removed.
+Module-level inner attribute. Marks the entire module as TODO for `wado test`. The source must parse successfully (otherwise the attribute cannot be recognized), but compilation errors are tolerated. If compilation fails, the module is reported as a passing TODO test. If compilation succeeds, all test blocks are treated as `#[TODO]` tests: they must fail (trap or error). If any test passes, it becomes a test failure, signaling that the `#![TODO]` attribute should be removed.
 
 ```wado
 #![TODO]

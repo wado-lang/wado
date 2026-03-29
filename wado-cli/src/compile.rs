@@ -294,6 +294,48 @@ pub async fn compile_with_opts(
     .await
 }
 
+/// Try to compile a Wado source file, returning Result instead of exiting on error.
+/// Used by the test runner to gracefully handle compilation failures for `#![TODO]` modules.
+pub async fn try_compile_with_full_opts(
+    filename: &str,
+    opt_level: OptLevel,
+    log_level: LogLevel,
+    target_world: Option<String>,
+    skip_validation: bool,
+    inline_threshold: Option<usize>,
+    opt_iterations: Option<u32>,
+    allocator: Option<String>,
+) -> Result<Vec<u8>, String> {
+    let path = Path::new(filename);
+
+    let source =
+        fs::read_to_string(path).map_err(|e| format!("Error reading '{}': {e}", path.display()))?;
+
+    let base_path = path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
+    let host = FilesystemCompilerHost::with_log_level(base_path, log_level);
+
+    let options = wado_compiler::CompilerOptions {
+        opt_level: to_compiler_opt_level(opt_level),
+        target_world,
+        skip_validation,
+        inline_threshold,
+        opt_iterations,
+        log_level: Some(log_level),
+        allocator,
+        ..Default::default()
+    };
+
+    let result = wado_compiler::compile_with_options(&source, &host, Some(filename), options).await;
+
+    match result {
+        Ok(result) => Ok(result.wasm),
+        Err(_bail) => Err(format!("compilation failed for {filename}")),
+    }
+}
+
 /// Compile a Wado source file with full options including target world
 pub async fn compile_with_full_opts(
     filename: &str,
