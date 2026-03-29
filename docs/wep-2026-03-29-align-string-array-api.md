@@ -44,7 +44,7 @@ Wado intentionally omits Rust concepts tied to ownership and lifetimes (`as_str(
 | `sort()`                 | `sort()`                                  | OK                                   |
 | `sort_by(cmp)`           | `sort_by(cmp)`                            | OK                                   |
 | `sort_by_key(f)`         | —                                         | use `sort_by`                        |
-| `sort_unstable()`        | —                                         | `sort()` is unstable already (Wasm)  |
+| `sort_unstable()`        | —                                         | `sort()` is stable; unstable not needed |
 | `binary_search(&x)`      | `binary_search(&x)`                       | NEW                                  |
 | `reverse()`              | `reverse()`                               | NEW                                  |
 | `dedup()`                | `dedup()`                                 | NEW                                  |
