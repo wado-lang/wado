@@ -1068,13 +1068,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let type_table = self.type_table.borrow();
 
         // Skip type param receivers (generic functions)
-        if matches!(
-            type_table.get(actual),
-            ResolvedType::TypeParam { .. }
-        ) || matches!(
-            type_table.get(expected),
-            ResolvedType::TypeParam { .. }
-        ) {
+        if matches!(type_table.get(actual), ResolvedType::TypeParam { .. })
+            || matches!(type_table.get(expected), ResolvedType::TypeParam { .. })
+        {
             return;
         }
 

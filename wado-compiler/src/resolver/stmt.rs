@@ -1487,7 +1487,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             {
                 let type_name = self.type_table.borrow().type_name(iterable_type_id);
                 let _ = self.logger.error(TypeError::TypeMismatch {
-                    expected: format!("type that implements IntoIterator"),
+                    expected: "type that implements IntoIterator".to_string(),
                     found: format!("'{type_name}' does not implement IntoIterator"),
                     span: for_of.span,
                 });
@@ -1837,7 +1837,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             {
                 let type_name = self.type_table.borrow().type_name(iter_type_id);
                 let _ = self.logger.error(TypeError::TypeMismatch {
-                    expected: format!("iterator type that implements Iterator"),
+                    expected: "iterator type that implements Iterator".to_string(),
                     found: format!("'{type_name}' does not implement Iterator"),
                     span,
                 });
