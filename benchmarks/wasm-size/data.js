@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774696606952,
+  "lastUpdate": 1774742973390,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8252,6 +8252,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0e052e964da2551888cb1f58c016b3b85864709d"
         },
         "date": 1774696606741,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1858,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9092,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24726,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "171cec0d5dd339b45066d5f314159c97373e0f5b",
+          "message": "Merge pull request #720 from wado-lang/claude/enhance-gale-tests-q8i0n\n\nEnhance gale tests: Visitor/CstNode, trivia, compiler bug fixes",
+          "timestamp": "2026-03-29T09:06:35+09:00",
+          "tree_id": "80b5c4cfd01efddd07bd0f4498cef4539a01ef3a",
+          "url": "https://github.com/wado-lang/wado/commit/171cec0d5dd339b45066d5f314159c97373e0f5b"
+        },
+        "date": 1774742973239,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
