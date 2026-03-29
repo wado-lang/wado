@@ -1067,9 +1067,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         let type_table = self.type_table.borrow();
 
-        // Skip type param receivers (generic functions)
-        if matches!(type_table.get(actual), ResolvedType::TypeParam { .. })
-            || matches!(type_table.get(expected), ResolvedType::TypeParam { .. })
+        // Skip when either side involves unresolved generics (type params,
+        // associated type projections, or generic instances containing them).
+        // These will be checked after monomorphization when types are concrete.
+        if self.type_contains_params(actual, &type_table)
+            || self.type_contains_params(expected, &type_table)
         {
             return;
         }
@@ -1088,18 +1090,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return;
         }
 
-        // Compare base type names (handles cross-module same-name types)
-        let actual_name = type_table.base_type_name(actual_inner);
-        let expected_name = type_table.base_type_name(expected_inner);
-
-        if actual_name == expected_name {
-            return;
-        }
-
-        // Allow Option/variant coercions (null → None already handled by resolve_expr)
-        if matches!(type_table.get(expected_inner), ResolvedType::Variant { .. })
-            && matches!(type_table.get(actual_inner), ResolvedType::Variant { .. })
-        {
+        // Skip function types — structural equivalence is complex (effects, closures).
+        if matches!(
+            type_table.get(actual_inner),
+            ResolvedType::Function { .. }
+        ) || matches!(
+            type_table.get(expected_inner),
+            ResolvedType::Function { .. }
+        ) {
             return;
         }
 
@@ -1112,5 +1110,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
             found: actual_display,
             span,
         });
+    }
+
+    /// Returns true if the type involves unresolved type parameters or projections.
+    fn type_contains_params(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
+        match type_table.get(type_id) {
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. } => true,
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.type_contains_params(*inner, type_table)
+            }
+            ResolvedType::GenericInstance { type_args, .. } => {
+                type_args.iter().any(|t| self.type_contains_params(*t, type_table))
+            }
+            ResolvedType::Tuple(elems) => {
+                elems.iter().any(|t| self.type_contains_params(*t, type_table))
+            }
+            _ => false,
+        }
     }
 }
