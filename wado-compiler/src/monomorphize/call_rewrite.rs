@@ -1,9 +1,10 @@
 //! Post-monomorphization rewrites: function call rewriting to monomorphized names.
 
+use crate::name::LocalMethodName;
 use crate::name::MethodName;
 use crate::tir::{
-    FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirModule, TirStmt, TirStmtKind, TirTemplatePart, TypeId, TypeTable,
+    CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
+    TirExprKind, TirModule, TirStmt, TirStmtKind, TirTemplatePart, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirMutVisitor;
 
@@ -207,19 +208,38 @@ impl Monomorphizer {
     }
     fn rewrite_call_expr(&self, expr: &mut TirExpr, type_table: &TypeTable) {
         if let TirExprKind::Call {
-            func, type_args, ..
+            func,
+            type_args,
+            args,
+            ..
         } = &mut expr.kind
         {
             let original_func_name = func.name.clone();
             let original_method_info = func.method_info.clone();
             let qualified_func_name =
                 generic_function_key(func.is_method(), &func.module_source, &func.name);
-            // If this is a generic call, rewrite to monomorphized name
-            if !type_args.is_empty() {
+
+            // Resolve type_args: use explicit ones, or infer from args for implicit generic calls.
+            // Only attempt inference for free functions (not method calls), since method calls
+            // have their own rewriting logic below.
+            let effective_type_args: Option<Vec<TypeId>> = if !type_args.is_empty() {
+                Some(type_args.clone())
+            } else if func.method_info.is_none() && func.monomorph_info.is_none() {
+                self.infer_instantiated_type_args(
+                    &qualified_func_name,
+                    &original_method_info,
+                    args,
+                    type_table,
+                )
+            } else {
+                None
+            };
+
+            if let Some(inferred_args) = effective_type_args {
                 let key = InstantiationKey {
                     name: qualified_func_name,
                     impl_type_args: vec![],
-                    method_type_args: type_args.clone(),
+                    method_type_args: inferred_args,
                     method_info: original_method_info.clone(),
                 };
                 if let Some(mangled) = self.functions.instantiated.get(&key) {
@@ -534,6 +554,39 @@ impl Monomorphizer {
                 };
             }
         }
+    }
+
+    /// For implicit generic calls (where `type_args` is empty but the callee was instantiated),
+    /// try to find the matching instantiation by checking all instantiated variants of the callee.
+    fn infer_instantiated_type_args(
+        &self,
+        qualified_func_name: &str,
+        method_info: &Option<LocalMethodName>,
+        args: &[CallArg],
+        type_table: &TypeTable,
+    ) -> Option<Vec<TypeId>> {
+        // Look for any instantiation whose name matches and whose arg types match
+        for (key, _mangled) in &self.functions.instantiated {
+            if key.name != qualified_func_name {
+                continue;
+            }
+            if key.method_info != *method_info {
+                continue;
+            }
+            if key.method_type_args.is_empty() {
+                continue;
+            }
+            // Found a candidate. Check if it's the right one by verifying
+            // that no type params remain in the args (concrete call).
+            // For single-instantiation cases (the common case), this is sufficient.
+            let all_args_concrete = args
+                .iter()
+                .all(|a| !type_table.contains_type_param(a.expr.type_id));
+            if all_args_concrete {
+                return Some(key.method_type_args.clone());
+            }
+        }
+        None
     }
 }
 

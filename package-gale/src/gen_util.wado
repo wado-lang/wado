@@ -37,13 +37,20 @@ pub fn to_lower(name: &String) -> String {
 }
 
 pub fn escape_char(c: char) -> String {
-    match c {
-        '\'' => return "'\\''",
-        '\\' => return "'\\\\'",
-        '\n' => return "'\\n'",
-        '\r' => return "'\\r'",
-        '\t' => return "'\\t'",
-        _ => {},
+    if c == '\'' {
+        return "'\\''";
+    }
+    if c == '\\' {
+        return "'\\\\'";
+    }
+    if c == '\n' {
+        return "'\\n'";
+    }
+    if c == '\r' {
+        return "'\\r'";
+    }
+    if c == '\t' {
+        return "'\\t'";
     }
     let code = c as i32;
     if code >= 32 && code < 127 {
@@ -87,45 +94,85 @@ pub fn rule_type_name(name: &String) -> String {
 }
 
 pub fn literal_field_name(text: &String) -> String {
-    let result = match *text {
-        "+" => "plus",
-        "-" => "minus",
-        "*" => "star",
-        "/" => "slash",
-        "%" => "percent",
-        "=" => "eq",
-        "!" => "bang",
-        "<" => "lt",
-        ">" => "gt",
-        "&" => "amp",
-        "|" => "pipe",
-        "^" => "caret",
-        "~" => "tilde",
-        "." => "dot",
-        "," => "comma",
-        ":" => "colon",
-        ";" => "semicolon",
-        "(" => "lparen",
-        ")" => "rparen",
-        "{" => "lbrace",
-        "}" => "rbrace",
-        "[" => "lbracket",
-        "]" => "rbracket",
-        _ => "",
-    };
-    if result.len() > 0 {
-        return result;
+    if *text == "+" {
+        return "plus";
     }
-    let mut fallback = String::with_capacity(text.len() + 4);
-    fallback.append("lit_");
+    if *text == "-" {
+        return "minus";
+    }
+    if *text == "*" {
+        return "star";
+    }
+    if *text == "/" {
+        return "slash";
+    }
+    if *text == "%" {
+        return "percent";
+    }
+    if *text == "=" {
+        return "eq";
+    }
+    if *text == "!" {
+        return "bang";
+    }
+    if *text == "<" {
+        return "lt";
+    }
+    if *text == ">" {
+        return "gt";
+    }
+    if *text == "&" {
+        return "amp";
+    }
+    if *text == "|" {
+        return "pipe";
+    }
+    if *text == "^" {
+        return "caret";
+    }
+    if *text == "~" {
+        return "tilde";
+    }
+    if *text == "." {
+        return "dot";
+    }
+    if *text == "," {
+        return "comma";
+    }
+    if *text == ":" {
+        return "colon";
+    }
+    if *text == ";" {
+        return "semicolon";
+    }
+    if *text == "(" {
+        return "lparen";
+    }
+    if *text == ")" {
+        return "rparen";
+    }
+    if *text == "{" {
+        return "lbrace";
+    }
+    if *text == "}" {
+        return "rbrace";
+    }
+    if *text == "[" {
+        return "lbracket";
+    }
+    if *text == "]" {
+        return "rbracket";
+    }
+    let mut result = String::with_capacity(text.len() + 4);
+    result.append("lit_");
     for let c of text.chars() {
         if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
-            fallback.append_char(c.to_ascii_lowercase());
+            result.append_char(c.to_ascii_lowercase());
         } else {
-            fallback.append_char('_');
+            result.append_char('_');
         }
     }
-    return fallback;
+    return result;
 }
 
 pub fn strip_suffix(s: &String, suffix: &String) -> String {

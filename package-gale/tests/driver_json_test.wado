@@ -1,4 +1,28 @@
 use json from "./golden/json.wado";
+use { CstNode, CstChild } from "./golden/json.wado";
+
+/// Unparse a CstNode tree to XML-tagged text.
+/// Non-trivia tokens are wrapped in <KIND>text</KIND> tags.
+/// Trivia (whitespace, comments) in leading_trivia is emitted as-is.
+fn unparse_xml(node: &CstNode) -> String {
+    let mut out = String::with_capacity(256);
+    out.append(`<{node.name}>`);
+    for let child of &node.children {
+        if let Token(t) = *child {
+            for let trivia of &t.leading_trivia {
+                out.append(trivia.text);
+            }
+            let kind_name = json::token_kind_name(t.kind);
+            out.append(`<{kind_name}>`);
+            out.append(t.text);
+            out.append(`</{kind_name}>`);
+        } else if let Node(n) = *child {
+            out.append(&unparse_xml(n));
+        }
+    }
+    out.append(`</{node.name}>`);
+    return out;
+}
 
 test "tokenize number" {
     let tokens = json::tokenize(&"42");
@@ -52,4 +76,35 @@ test "parse nested" {
     if let Err(e) = &result {
         panic(`parse failed: {e.message}`);
     }
+}
+
+test "to_tree produces CstNode" {
+    let root = json::parse(&"42").unwrap();
+    let tree = json::to_tree(&root);
+    assert tree.name == "json";
+    assert tree.children.len() == 2;  // value + eof
+}
+
+test "unparse_xml for number" {
+    let root = json::parse(&"42").unwrap();
+    let tree = json::to_tree(&root);
+    let xml = unparse_xml(&tree);
+    let expected = "<json><value><NUMBER>42</NUMBER></value><Eof></Eof></json>";
+    assert xml == expected, `got: {xml}`;
+}
+
+test "unparse_xml preserves whitespace" {
+    let root = json::parse(&" 42 ").unwrap();
+    let tree = json::to_tree(&root);
+    let xml = unparse_xml(&tree);
+    let expected = "<json><value> <NUMBER>42</NUMBER></value> <Eof></Eof></json>";
+    assert xml == expected, `got: {xml}`;
+}
+
+test "unparse_xml for string" {
+    let root = json::parse(&"\"hello\"").unwrap();
+    let tree = json::to_tree(&root);
+    let xml = unparse_xml(&tree);
+    let expected = "<json><value><STRING>\"hello\"</STRING></value><Eof></Eof></json>";
+    assert xml == expected, `got: {xml}`;
 }

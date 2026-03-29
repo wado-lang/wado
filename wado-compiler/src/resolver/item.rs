@@ -844,6 +844,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 method_name: func.name.clone(),
                 method_type_args: vec![],
                 is_type_param_receiver: false,
+                is_ref_impl: false,
                 cm_name: None,
             }),
             params,

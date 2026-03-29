@@ -90,6 +90,8 @@ pub struct Resolver<'a, H: CompilerHost> {
     logger: &'a Logger<'a, H>,
     /// Current module source being resolved (for struct type `module_source`)
     current_module_source: ModuleSource,
+    /// Entry module source (for cross-module import dedup)
+    entry_module_source: ModuleSource,
     /// Current module items (for local function parameter lookup)
     current_module_items: Vec<Item>,
     /// Mutable trait resolution context: type params, bounds, associated type bindings, self type.
@@ -190,6 +192,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             namespace_imports: IndexMap::default(),
             logger,
             current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
+            entry_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
             current_module_items: Vec::new(),
             effect_sources: IndexMap::default(),
             current_effect_params: IndexSet::default(),

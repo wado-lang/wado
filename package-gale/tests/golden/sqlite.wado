@@ -29,15 +29,21 @@ impl Eq for Span {
 }
 
 /// Token represents a lexed token with its kind, text, and position.
+/// Leading trivia (whitespace, comments) is attached to each token.
 pub struct Token {
     pub kind: i32,
     pub text: String,
     pub span: Span,
+    pub leading_trivia: Array<Token>,
 }
 
 impl Token {
     pub fn new(kind: i32, text: String, span: Span) -> Token {
-        return Token { kind, text, span };
+        return Token { kind, text, span, leading_trivia: [] };
+    }
+
+    pub fn with_trivia(kind: i32, text: String, span: Span, leading_trivia: Array<Token>) -> Token {
+        return Token { kind, text, span, leading_trivia };
     }
 }
 
@@ -58,6 +64,92 @@ impl ParseError {
     pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
         return ParseError { message, span, expected };
     }
+}
+
+/// CstChild is either a terminal token or a non-terminal sub-tree.
+pub variant CstChild {
+    Token(Token),
+    Node(CstNode),
+}
+
+/// CstNode is a generic (untyped) concrete syntax tree node.
+pub struct CstNode {
+    pub name: String,
+    pub span: Span,
+    pub children: Array<CstChild>,
+}
+
+/// Visitor trait for walking typed CST nodes.
+/// Default methods are no-ops; override to add behavior.
+pub trait Visitor {
+    fn enter_rule(&mut self, name: &String, span: &Span) {}
+    fn exit_rule(&mut self, name: &String, span: &Span) {}
+    fn visit_token(&mut self, token: &Token) {}
+}
+
+/// TreeRecorder is a Visitor that records events for building a CstNode tree.
+pub struct TreeRecorder {
+    events: Array<TreeEvent>,
+}
+
+variant TreeEvent {
+    Enter(TreeEnterInfo),
+    Exit,
+    VisitToken(Token),
+}
+
+struct TreeEnterInfo {
+    name: String,
+    span: Span,
+}
+
+impl TreeRecorder {
+    pub fn new() -> TreeRecorder {
+        return TreeRecorder { events: [] };
+    }
+
+    pub fn build(&self) -> CstNode {
+        let mut pos = 0;
+        return tree_build_node(&self.events, &mut pos);
+    }
+}
+
+impl Visitor for TreeRecorder {
+    fn enter_rule(&mut self, name: &String, span: &Span) {
+        self.events.append(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
+    }
+
+    fn exit_rule(&mut self, name: &String, span: &Span) {
+        self.events.append(TreeEvent::Exit);
+    }
+
+    fn visit_token(&mut self, token: &Token) {
+        self.events.append(TreeEvent::VisitToken(*token));
+    }
+}
+
+fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
+    if let Enter(info) = events[*pos] {
+        *pos += 1;
+        let mut children: Array<CstChild> = [];
+        loop {
+            if *pos >= events.len() { break; }
+            let ev = events[*pos];
+            if let Exit = ev {
+                *pos += 1;
+                break;
+            }
+            if let Enter(_) = ev {
+                children.append(CstChild::Node(tree_build_node(events, pos)));
+            } else if let VisitToken(t) = ev {
+                children.append(CstChild::Token(t));
+                *pos += 1;
+            }
+        }
+        return CstNode { name: info.name, span: info.span, children };
+    }
+    panic("TreeRecorder: expected Enter event");
+    return CstNode { name: "", span: Span::new(0, 0), children: [] };
 }
 
 pub enum TokenKind {
@@ -5617,6 +5709,7 @@ fn try_lit_tilde(chars: &Array<char>, start: i32) -> i32 {
 pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: Array<Token> = [];
+    let mut trivia: Array<Token> = [];
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
@@ -5985,18 +6078,211 @@ pub fn tokenize(input: &String) -> Array<Token> {
         end = try_unexpected_char(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; }
         if best_end <= start {
-            tokens.append(Token::new(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1)));
+            let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
+            tokens.append(tok);
+            trivia = [];
             lexer.pos = start + 1;
         } else {
             let is_skip = false || best_kind == TK_SINGLE_LINE_COMMENT || best_kind == TK_MULTILINE_COMMENT || best_kind == TK_SPACES;
-            if !is_skip {
-                tokens.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+            if is_skip {
+                trivia.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+            } else {
+                let tok = Token::with_trivia(best_kind, lexer.slice(start, best_end), Span::new(start, best_end), trivia);
+                tokens.append(tok);
+                trivia = [];
             }
             lexer.pos = best_end;
         }
     }
-    tokens.append(Token::new(TK_EOF, "", Span::new(lexer.pos, lexer.pos)));
+    tokens.append(Token::with_trivia(TK_EOF, "", Span::new(lexer.pos, lexer.pos), trivia));
     return tokens;
+}
+
+pub fn token_kind_name(kind: i32) -> String {
+    if kind == TK_SCOL { return "SCOL"; }
+    if kind == TK_DOT { return "DOT"; }
+    if kind == TK_OPEN_PAR { return "OPEN_PAR"; }
+    if kind == TK_CLOSE_PAR { return "CLOSE_PAR"; }
+    if kind == TK_COMMA { return "COMMA"; }
+    if kind == TK_ASSIGN { return "ASSIGN"; }
+    if kind == TK_STAR { return "STAR"; }
+    if kind == TK_PLUS { return "PLUS"; }
+    if kind == TK_MINUS { return "MINUS"; }
+    if kind == TK_TILDE { return "TILDE"; }
+    if kind == TK_PIPE2 { return "PIPE2"; }
+    if kind == TK_DIV { return "DIV"; }
+    if kind == TK_MOD { return "MOD"; }
+    if kind == TK_LT2 { return "LT2"; }
+    if kind == TK_GT2 { return "GT2"; }
+    if kind == TK_AMP { return "AMP"; }
+    if kind == TK_PIPE { return "PIPE"; }
+    if kind == TK_LT { return "LT"; }
+    if kind == TK_LT_EQ { return "LT_EQ"; }
+    if kind == TK_GT { return "GT"; }
+    if kind == TK_GT_EQ { return "GT_EQ"; }
+    if kind == TK_EQ { return "EQ"; }
+    if kind == TK_NOT_EQ1 { return "NOT_EQ1"; }
+    if kind == TK_NOT_EQ2 { return "NOT_EQ2"; }
+    if kind == TK_K_ABORT { return "K_ABORT"; }
+    if kind == TK_K_ACTION { return "K_ACTION"; }
+    if kind == TK_K_ADD { return "K_ADD"; }
+    if kind == TK_K_AFTER { return "K_AFTER"; }
+    if kind == TK_K_ALL { return "K_ALL"; }
+    if kind == TK_K_ALTER { return "K_ALTER"; }
+    if kind == TK_K_ANALYZE { return "K_ANALYZE"; }
+    if kind == TK_K_AND { return "K_AND"; }
+    if kind == TK_K_AS { return "K_AS"; }
+    if kind == TK_K_ASC { return "K_ASC"; }
+    if kind == TK_K_ATTACH { return "K_ATTACH"; }
+    if kind == TK_K_AUTOINCREMENT { return "K_AUTOINCREMENT"; }
+    if kind == TK_K_BEFORE { return "K_BEFORE"; }
+    if kind == TK_K_BEGIN { return "K_BEGIN"; }
+    if kind == TK_K_BETWEEN { return "K_BETWEEN"; }
+    if kind == TK_K_BY { return "K_BY"; }
+    if kind == TK_K_CASCADE { return "K_CASCADE"; }
+    if kind == TK_K_CASE { return "K_CASE"; }
+    if kind == TK_K_CAST { return "K_CAST"; }
+    if kind == TK_K_CHECK { return "K_CHECK"; }
+    if kind == TK_K_COLLATE { return "K_COLLATE"; }
+    if kind == TK_K_COLUMN { return "K_COLUMN"; }
+    if kind == TK_K_COMMIT { return "K_COMMIT"; }
+    if kind == TK_K_CONFLICT { return "K_CONFLICT"; }
+    if kind == TK_K_CONSTRAINT { return "K_CONSTRAINT"; }
+    if kind == TK_K_CREATE { return "K_CREATE"; }
+    if kind == TK_K_CROSS { return "K_CROSS"; }
+    if kind == TK_K_CURRENT_DATE { return "K_CURRENT_DATE"; }
+    if kind == TK_K_CURRENT_TIME { return "K_CURRENT_TIME"; }
+    if kind == TK_K_CURRENT_TIMESTAMP { return "K_CURRENT_TIMESTAMP"; }
+    if kind == TK_K_DATABASE { return "K_DATABASE"; }
+    if kind == TK_K_DEFAULT { return "K_DEFAULT"; }
+    if kind == TK_K_DEFERRABLE { return "K_DEFERRABLE"; }
+    if kind == TK_K_DEFERRED { return "K_DEFERRED"; }
+    if kind == TK_K_DELETE { return "K_DELETE"; }
+    if kind == TK_K_DESC { return "K_DESC"; }
+    if kind == TK_K_DETACH { return "K_DETACH"; }
+    if kind == TK_K_DISTINCT { return "K_DISTINCT"; }
+    if kind == TK_K_DROP { return "K_DROP"; }
+    if kind == TK_K_EACH { return "K_EACH"; }
+    if kind == TK_K_ELSE { return "K_ELSE"; }
+    if kind == TK_K_END { return "K_END"; }
+    if kind == TK_K_ESCAPE { return "K_ESCAPE"; }
+    if kind == TK_K_EXCEPT { return "K_EXCEPT"; }
+    if kind == TK_K_EXCLUSIVE { return "K_EXCLUSIVE"; }
+    if kind == TK_K_EXISTS { return "K_EXISTS"; }
+    if kind == TK_K_EXPLAIN { return "K_EXPLAIN"; }
+    if kind == TK_K_FAIL { return "K_FAIL"; }
+    if kind == TK_K_FOR { return "K_FOR"; }
+    if kind == TK_K_FOREIGN { return "K_FOREIGN"; }
+    if kind == TK_K_FROM { return "K_FROM"; }
+    if kind == TK_K_FULL { return "K_FULL"; }
+    if kind == TK_K_GLOB { return "K_GLOB"; }
+    if kind == TK_K_GROUP { return "K_GROUP"; }
+    if kind == TK_K_HAVING { return "K_HAVING"; }
+    if kind == TK_K_IF { return "K_IF"; }
+    if kind == TK_K_IGNORE { return "K_IGNORE"; }
+    if kind == TK_K_IMMEDIATE { return "K_IMMEDIATE"; }
+    if kind == TK_K_IN { return "K_IN"; }
+    if kind == TK_K_INDEX { return "K_INDEX"; }
+    if kind == TK_K_INDEXED { return "K_INDEXED"; }
+    if kind == TK_K_INITIALLY { return "K_INITIALLY"; }
+    if kind == TK_K_INNER { return "K_INNER"; }
+    if kind == TK_K_INSERT { return "K_INSERT"; }
+    if kind == TK_K_INSTEAD { return "K_INSTEAD"; }
+    if kind == TK_K_INTERSECT { return "K_INTERSECT"; }
+    if kind == TK_K_INTO { return "K_INTO"; }
+    if kind == TK_K_IS { return "K_IS"; }
+    if kind == TK_K_ISNULL { return "K_ISNULL"; }
+    if kind == TK_K_JOIN { return "K_JOIN"; }
+    if kind == TK_K_KEY { return "K_KEY"; }
+    if kind == TK_K_LEFT { return "K_LEFT"; }
+    if kind == TK_K_LIKE { return "K_LIKE"; }
+    if kind == TK_K_LIMIT { return "K_LIMIT"; }
+    if kind == TK_K_MATCH { return "K_MATCH"; }
+    if kind == TK_K_NATURAL { return "K_NATURAL"; }
+    if kind == TK_K_NO { return "K_NO"; }
+    if kind == TK_K_NOT { return "K_NOT"; }
+    if kind == TK_K_NOTNULL { return "K_NOTNULL"; }
+    if kind == TK_K_NULL { return "K_NULL"; }
+    if kind == TK_K_OF { return "K_OF"; }
+    if kind == TK_K_OFFSET { return "K_OFFSET"; }
+    if kind == TK_K_ON { return "K_ON"; }
+    if kind == TK_K_OR { return "K_OR"; }
+    if kind == TK_K_ORDER { return "K_ORDER"; }
+    if kind == TK_K_OUTER { return "K_OUTER"; }
+    if kind == TK_K_PLAN { return "K_PLAN"; }
+    if kind == TK_K_PRAGMA { return "K_PRAGMA"; }
+    if kind == TK_K_PRIMARY { return "K_PRIMARY"; }
+    if kind == TK_K_QUERY { return "K_QUERY"; }
+    if kind == TK_K_RAISE { return "K_RAISE"; }
+    if kind == TK_K_RECURSIVE { return "K_RECURSIVE"; }
+    if kind == TK_K_REFERENCES { return "K_REFERENCES"; }
+    if kind == TK_K_REGEXP { return "K_REGEXP"; }
+    if kind == TK_K_REINDEX { return "K_REINDEX"; }
+    if kind == TK_K_RELEASE { return "K_RELEASE"; }
+    if kind == TK_K_RENAME { return "K_RENAME"; }
+    if kind == TK_K_REPLACE { return "K_REPLACE"; }
+    if kind == TK_K_RESTRICT { return "K_RESTRICT"; }
+    if kind == TK_K_RIGHT { return "K_RIGHT"; }
+    if kind == TK_K_ROLLBACK { return "K_ROLLBACK"; }
+    if kind == TK_K_ROW { return "K_ROW"; }
+    if kind == TK_K_SAVEPOINT { return "K_SAVEPOINT"; }
+    if kind == TK_K_SELECT { return "K_SELECT"; }
+    if kind == TK_K_SET { return "K_SET"; }
+    if kind == TK_K_TABLE { return "K_TABLE"; }
+    if kind == TK_K_TEMP { return "K_TEMP"; }
+    if kind == TK_K_TEMPORARY { return "K_TEMPORARY"; }
+    if kind == TK_K_THEN { return "K_THEN"; }
+    if kind == TK_K_TO { return "K_TO"; }
+    if kind == TK_K_TRANSACTION { return "K_TRANSACTION"; }
+    if kind == TK_K_TRIGGER { return "K_TRIGGER"; }
+    if kind == TK_K_UNION { return "K_UNION"; }
+    if kind == TK_K_UNIQUE { return "K_UNIQUE"; }
+    if kind == TK_K_UPDATE { return "K_UPDATE"; }
+    if kind == TK_K_USING { return "K_USING"; }
+    if kind == TK_K_VACUUM { return "K_VACUUM"; }
+    if kind == TK_K_VALUES { return "K_VALUES"; }
+    if kind == TK_K_VIEW { return "K_VIEW"; }
+    if kind == TK_K_VIRTUAL { return "K_VIRTUAL"; }
+    if kind == TK_K_WHEN { return "K_WHEN"; }
+    if kind == TK_K_WHERE { return "K_WHERE"; }
+    if kind == TK_K_WITH { return "K_WITH"; }
+    if kind == TK_K_WITHOUT { return "K_WITHOUT"; }
+    if kind == TK_IDENTIFIER { return "IDENTIFIER"; }
+    if kind == TK_NUMERIC_LITERAL { return "NUMERIC_LITERAL"; }
+    if kind == TK_BIND_PARAMETER { return "BIND_PARAMETER"; }
+    if kind == TK_STRING_LITERAL { return "STRING_LITERAL"; }
+    if kind == TK_BLOB_LITERAL { return "BLOB_LITERAL"; }
+    if kind == TK_SINGLE_LINE_COMMENT { return "SINGLE_LINE_COMMENT"; }
+    if kind == TK_MULTILINE_COMMENT { return "MULTILINE_COMMENT"; }
+    if kind == TK_SPACES { return "SPACES"; }
+    if kind == TK_UNEXPECTED_CHAR { return "UNEXPECTED_CHAR"; }
+    if kind == TK_EOF { return "Eof"; }
+    if kind == TK_ERROR { return "Error"; }
+    if kind == TK_LIT_SEMI { return "TK_LIT_SEMI"; }
+    if kind == TK_LIT_DOT { return "TK_LIT_DOT"; }
+    if kind == TK_LIT_COMMA { return "TK_LIT_COMMA"; }
+    if kind == TK_LIT_LPAREN { return "TK_LIT_LPAREN"; }
+    if kind == TK_LIT_RPAREN { return "TK_LIT_RPAREN"; }
+    if kind == TK_LIT_EQ { return "TK_LIT_EQ"; }
+    if kind == TK_LIT_PIPEPIPE { return "TK_LIT_PIPEPIPE"; }
+    if kind == TK_LIT_STAR { return "TK_LIT_STAR"; }
+    if kind == TK_LIT_SLASH { return "TK_LIT_SLASH"; }
+    if kind == TK_LIT__ { return "TK_LIT__"; }
+    if kind == TK_LIT_PLUS { return "TK_LIT_PLUS"; }
+    if kind == TK_LIT_MINUS { return "TK_LIT_MINUS"; }
+    if kind == TK_LIT_LTLT { return "TK_LIT_LTLT"; }
+    if kind == TK_LIT_GTGT { return "TK_LIT_GTGT"; }
+    if kind == TK_LIT_AMP { return "TK_LIT_AMP"; }
+    if kind == TK_LIT_PIPE { return "TK_LIT_PIPE"; }
+    if kind == TK_LIT_LT { return "TK_LIT_LT"; }
+    if kind == TK_LIT_LTEQ { return "TK_LIT_LTEQ"; }
+    if kind == TK_LIT_GT { return "TK_LIT_GT"; }
+    if kind == TK_LIT_GTEQ { return "TK_LIT_GTEQ"; }
+    if kind == TK_LIT_EQEQ { return "TK_LIT_EQEQ"; }
+    if kind == TK_LIT_BANGEQ { return "TK_LIT_BANGEQ"; }
+    if kind == TK_LIT_LTGT { return "TK_LIT_LTGT"; }
+    if kind == TK_LIT_TILDE { return "TK_LIT_TILDE"; }
+    return "Unknown";
 }
 
 struct Parser {
@@ -10762,5 +11048,1630 @@ pub fn parse(input: &String) -> Result<ParseNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
     return parse_parse(&mut parser);
+}
+
+pub fn walk_parse<V: Visitor>(v: &mut V, node: &ParseNode) {
+    v.enter_rule(&"parse", &node.span);
+    v.visit_token(&node.eof);
+    v.exit_rule(&"parse", &node.span);
+}
+
+pub fn walk_error<V: Visitor>(v: &mut V, node: &ErrorNode) {
+    v.enter_rule(&"error", &node.span);
+    v.visit_token(&node.unexpected_char);
+    v.exit_rule(&"error", &node.span);
+}
+
+pub fn walk_sql_stmt_list<V: Visitor>(v: &mut V, node: &SqlStmtListNode) {
+    v.enter_rule(&"sql_stmt_list", &node.span);
+    for let item of &node.semicolon_list {
+        v.visit_token(item);
+    }
+    walk_sql_stmt(v, &node.sql_stmt);
+    for let item of &node.semicolon_list_2 {
+        v.visit_token(item);
+    }
+    v.exit_rule(&"sql_stmt_list", &node.span);
+}
+
+pub fn walk_sql_stmt<V: Visitor>(v: &mut V, node: &SqlStmtNode) {
+    v.enter_rule(&"sql_stmt", &node.span);
+    v.exit_rule(&"sql_stmt", &node.span);
+}
+
+pub fn walk_alter_table_stmt<V: Visitor>(v: &mut V, node: &AlterTableStmtNode) {
+    v.enter_rule(&"alter_table_stmt", &node.span);
+    v.visit_token(&node.k_alter);
+    v.visit_token(&node.k_table);
+    walk_table_name(v, &node.table_name);
+    v.exit_rule(&"alter_table_stmt", &node.span);
+}
+
+pub fn walk_analyze_stmt<V: Visitor>(v: &mut V, node: &AnalyzeStmtNode) {
+    v.enter_rule(&"analyze_stmt", &node.span);
+    v.visit_token(&node.k_analyze);
+    v.exit_rule(&"analyze_stmt", &node.span);
+}
+
+pub fn walk_attach_stmt<V: Visitor>(v: &mut V, node: &AttachStmtNode) {
+    v.enter_rule(&"attach_stmt", &node.span);
+    v.visit_token(&node.k_attach);
+    if let Some(item) = &node.k_database {
+        v.visit_token(item);
+    }
+    walk_expr(v, &node.expr);
+    v.visit_token(&node.k_as);
+    walk_database_name(v, &node.database_name);
+    v.exit_rule(&"attach_stmt", &node.span);
+}
+
+pub fn walk_begin_stmt<V: Visitor>(v: &mut V, node: &BeginStmtNode) {
+    v.enter_rule(&"begin_stmt", &node.span);
+    v.visit_token(&node.k_begin);
+    v.exit_rule(&"begin_stmt", &node.span);
+}
+
+pub fn walk_commit_stmt<V: Visitor>(v: &mut V, node: &CommitStmtNode) {
+    v.enter_rule(&"commit_stmt", &node.span);
+    v.exit_rule(&"commit_stmt", &node.span);
+}
+
+pub fn walk_compound_select_stmt<V: Visitor>(v: &mut V, node: &CompoundSelectStmtNode) {
+    v.enter_rule(&"compound_select_stmt", &node.span);
+    if let Some(item) = &node.with_clause {
+        walk_with_clause(v, item);
+    }
+    walk_select_core(v, &node.select_core);
+    v.exit_rule(&"compound_select_stmt", &node.span);
+}
+
+pub fn walk_create_index_stmt<V: Visitor>(v: &mut V, node: &CreateIndexStmtNode) {
+    v.enter_rule(&"create_index_stmt", &node.span);
+    v.visit_token(&node.k_create);
+    if let Some(item) = &node.k_unique {
+        v.visit_token(item);
+    }
+    v.visit_token(&node.k_index);
+    walk_index_name(v, &node.index_name);
+    v.visit_token(&node.k_on);
+    walk_table_name(v, &node.table_name);
+    v.visit_token(&node.lparen);
+    walk_indexed_column(v, &node.indexed_column);
+    v.visit_token(&node.rparen);
+    v.exit_rule(&"create_index_stmt", &node.span);
+}
+
+pub fn walk_create_table_stmt<V: Visitor>(v: &mut V, node: &CreateTableStmtNode) {
+    v.enter_rule(&"create_table_stmt", &node.span);
+    v.visit_token(&node.k_create);
+    v.visit_token(&node.k_table);
+    walk_table_name(v, &node.table_name);
+    v.exit_rule(&"create_table_stmt", &node.span);
+}
+
+pub fn walk_create_trigger_stmt<V: Visitor>(v: &mut V, node: &CreateTriggerStmtNode) {
+    v.enter_rule(&"create_trigger_stmt", &node.span);
+    v.visit_token(&node.k_create);
+    v.visit_token(&node.k_trigger);
+    walk_trigger_name(v, &node.trigger_name);
+    v.visit_token(&node.k_on);
+    walk_table_name(v, &node.table_name);
+    v.visit_token(&node.k_begin);
+    v.visit_token(&node.k_end);
+    v.exit_rule(&"create_trigger_stmt", &node.span);
+}
+
+pub fn walk_create_view_stmt<V: Visitor>(v: &mut V, node: &CreateViewStmtNode) {
+    v.enter_rule(&"create_view_stmt", &node.span);
+    v.visit_token(&node.k_create);
+    v.visit_token(&node.k_view);
+    walk_view_name(v, &node.view_name);
+    v.visit_token(&node.k_as);
+    walk_select_stmt(v, &node.select_stmt);
+    v.exit_rule(&"create_view_stmt", &node.span);
+}
+
+pub fn walk_create_virtual_table_stmt<V: Visitor>(v: &mut V, node: &CreateVirtualTableStmtNode) {
+    v.enter_rule(&"create_virtual_table_stmt", &node.span);
+    v.visit_token(&node.k_create);
+    v.visit_token(&node.k_virtual);
+    v.visit_token(&node.k_table);
+    walk_table_name(v, &node.table_name);
+    v.visit_token(&node.k_using);
+    walk_module_name(v, &node.module_name);
+    v.exit_rule(&"create_virtual_table_stmt", &node.span);
+}
+
+pub fn walk_delete_stmt<V: Visitor>(v: &mut V, node: &DeleteStmtNode) {
+    v.enter_rule(&"delete_stmt", &node.span);
+    if let Some(item) = &node.with_clause {
+        walk_with_clause(v, item);
+    }
+    v.visit_token(&node.k_delete);
+    v.visit_token(&node.k_from);
+    walk_qualified_table_name(v, &node.qualified_table_name);
+    v.exit_rule(&"delete_stmt", &node.span);
+}
+
+pub fn walk_delete_stmt_limited<V: Visitor>(v: &mut V, node: &DeleteStmtLimitedNode) {
+    v.enter_rule(&"delete_stmt_limited", &node.span);
+    if let Some(item) = &node.with_clause {
+        walk_with_clause(v, item);
+    }
+    v.visit_token(&node.k_delete);
+    v.visit_token(&node.k_from);
+    walk_qualified_table_name(v, &node.qualified_table_name);
+    v.exit_rule(&"delete_stmt_limited", &node.span);
+}
+
+pub fn walk_detach_stmt<V: Visitor>(v: &mut V, node: &DetachStmtNode) {
+    v.enter_rule(&"detach_stmt", &node.span);
+    v.visit_token(&node.k_detach);
+    if let Some(item) = &node.k_database {
+        v.visit_token(item);
+    }
+    walk_database_name(v, &node.database_name);
+    v.exit_rule(&"detach_stmt", &node.span);
+}
+
+pub fn walk_drop_index_stmt<V: Visitor>(v: &mut V, node: &DropIndexStmtNode) {
+    v.enter_rule(&"drop_index_stmt", &node.span);
+    v.visit_token(&node.k_drop);
+    v.visit_token(&node.k_index);
+    walk_index_name(v, &node.index_name);
+    v.exit_rule(&"drop_index_stmt", &node.span);
+}
+
+pub fn walk_drop_table_stmt<V: Visitor>(v: &mut V, node: &DropTableStmtNode) {
+    v.enter_rule(&"drop_table_stmt", &node.span);
+    v.visit_token(&node.k_drop);
+    v.visit_token(&node.k_table);
+    walk_table_name(v, &node.table_name);
+    v.exit_rule(&"drop_table_stmt", &node.span);
+}
+
+pub fn walk_drop_trigger_stmt<V: Visitor>(v: &mut V, node: &DropTriggerStmtNode) {
+    v.enter_rule(&"drop_trigger_stmt", &node.span);
+    v.visit_token(&node.k_drop);
+    v.visit_token(&node.k_trigger);
+    walk_trigger_name(v, &node.trigger_name);
+    v.exit_rule(&"drop_trigger_stmt", &node.span);
+}
+
+pub fn walk_drop_view_stmt<V: Visitor>(v: &mut V, node: &DropViewStmtNode) {
+    v.enter_rule(&"drop_view_stmt", &node.span);
+    v.visit_token(&node.k_drop);
+    v.visit_token(&node.k_view);
+    walk_view_name(v, &node.view_name);
+    v.exit_rule(&"drop_view_stmt", &node.span);
+}
+
+pub fn walk_factored_select_stmt<V: Visitor>(v: &mut V, node: &FactoredSelectStmtNode) {
+    v.enter_rule(&"factored_select_stmt", &node.span);
+    if let Some(item) = &node.with_clause {
+        walk_with_clause(v, item);
+    }
+    walk_select_core(v, &node.select_core);
+    v.exit_rule(&"factored_select_stmt", &node.span);
+}
+
+pub fn walk_insert_stmt<V: Visitor>(v: &mut V, node: &InsertStmtNode) {
+    v.enter_rule(&"insert_stmt", &node.span);
+    if let Some(item) = &node.with_clause {
+        walk_with_clause(v, item);
+    }
+    v.visit_token(&node.k_into);
+    walk_table_name(v, &node.table_name);
+    v.exit_rule(&"insert_stmt", &node.span);
+}
+
+pub fn walk_pragma_stmt<V: Visitor>(v: &mut V, node: &PragmaStmtNode) {
+    v.enter_rule(&"pragma_stmt", &node.span);
+    v.visit_token(&node.k_pragma);
+    walk_pragma_name(v, &node.pragma_name);
+    v.exit_rule(&"pragma_stmt", &node.span);
+}
+
+pub fn walk_reindex_stmt<V: Visitor>(v: &mut V, node: &ReindexStmtNode) {
+    v.enter_rule(&"reindex_stmt", &node.span);
+    v.visit_token(&node.k_reindex);
+    v.exit_rule(&"reindex_stmt", &node.span);
+}
+
+pub fn walk_release_stmt<V: Visitor>(v: &mut V, node: &ReleaseStmtNode) {
+    v.enter_rule(&"release_stmt", &node.span);
+    v.visit_token(&node.k_release);
+    if let Some(item) = &node.k_savepoint {
+        v.visit_token(item);
+    }
+    walk_savepoint_name(v, &node.savepoint_name);
+    v.exit_rule(&"release_stmt", &node.span);
+}
+
+pub fn walk_rollback_stmt<V: Visitor>(v: &mut V, node: &RollbackStmtNode) {
+    v.enter_rule(&"rollback_stmt", &node.span);
+    v.visit_token(&node.k_rollback);
+    v.exit_rule(&"rollback_stmt", &node.span);
+}
+
+pub fn walk_savepoint_stmt<V: Visitor>(v: &mut V, node: &SavepointStmtNode) {
+    v.enter_rule(&"savepoint_stmt", &node.span);
+    v.visit_token(&node.k_savepoint);
+    walk_savepoint_name(v, &node.savepoint_name);
+    v.exit_rule(&"savepoint_stmt", &node.span);
+}
+
+pub fn walk_simple_select_stmt<V: Visitor>(v: &mut V, node: &SimpleSelectStmtNode) {
+    v.enter_rule(&"simple_select_stmt", &node.span);
+    if let Some(item) = &node.with_clause {
+        walk_with_clause(v, item);
+    }
+    walk_select_core(v, &node.select_core);
+    v.exit_rule(&"simple_select_stmt", &node.span);
+}
+
+pub fn walk_select_stmt<V: Visitor>(v: &mut V, node: &SelectStmtNode) {
+    v.enter_rule(&"select_stmt", &node.span);
+    if let Some(item) = &node.with_clause {
+        walk_with_clause(v, item);
+    }
+    walk_select_or_values(v, &node.select_or_values);
+    v.exit_rule(&"select_stmt", &node.span);
+}
+
+pub fn walk_select_or_values<V: Visitor>(v: &mut V, node: &SelectOrValuesNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"select_or_values", &n.span);
+            v.visit_token(&n.k_select);
+            walk_result_column(v, &n.result_column);
+            v.exit_rule(&"select_or_values", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"select_or_values", &n.span);
+            v.visit_token(&n.k_values);
+            v.visit_token(&n.lparen);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.rparen);
+            v.exit_rule(&"select_or_values", &n.span);
+        }
+    }
+}
+
+pub fn walk_update_stmt<V: Visitor>(v: &mut V, node: &UpdateStmtNode) {
+    v.enter_rule(&"update_stmt", &node.span);
+    if let Some(item) = &node.with_clause {
+        walk_with_clause(v, item);
+    }
+    v.visit_token(&node.k_update);
+    walk_qualified_table_name(v, &node.qualified_table_name);
+    v.visit_token(&node.k_set);
+    walk_column_name(v, &node.column_name);
+    v.visit_token(&node.eq);
+    walk_expr(v, &node.expr);
+    v.exit_rule(&"update_stmt", &node.span);
+}
+
+pub fn walk_update_stmt_limited<V: Visitor>(v: &mut V, node: &UpdateStmtLimitedNode) {
+    v.enter_rule(&"update_stmt_limited", &node.span);
+    if let Some(item) = &node.with_clause {
+        walk_with_clause(v, item);
+    }
+    v.visit_token(&node.k_update);
+    walk_qualified_table_name(v, &node.qualified_table_name);
+    v.visit_token(&node.k_set);
+    walk_column_name(v, &node.column_name);
+    v.visit_token(&node.eq);
+    walk_expr(v, &node.expr);
+    v.exit_rule(&"update_stmt_limited", &node.span);
+}
+
+pub fn walk_vacuum_stmt<V: Visitor>(v: &mut V, node: &VacuumStmtNode) {
+    v.enter_rule(&"vacuum_stmt", &node.span);
+    v.visit_token(&node.k_vacuum);
+    v.exit_rule(&"vacuum_stmt", &node.span);
+}
+
+pub fn walk_column_def<V: Visitor>(v: &mut V, node: &ColumnDefNode) {
+    v.enter_rule(&"column_def", &node.span);
+    walk_column_name(v, &node.column_name);
+    if let Some(item) = &node.type_name {
+        walk_type_name(v, item);
+    }
+    for let item of &node.column_constraint_list {
+        walk_column_constraint(v, item);
+    }
+    v.exit_rule(&"column_def", &node.span);
+}
+
+pub fn walk_type_name<V: Visitor>(v: &mut V, node: &TypeNameNode) {
+    v.enter_rule(&"type_name", &node.span);
+    for let item of &node.name_list {
+        walk_name(v, item);
+    }
+    v.exit_rule(&"type_name", &node.span);
+}
+
+pub fn walk_column_constraint<V: Visitor>(v: &mut V, node: &ColumnConstraintNode) {
+    v.enter_rule(&"column_constraint", &node.span);
+    v.exit_rule(&"column_constraint", &node.span);
+}
+
+pub fn walk_conflict_clause<V: Visitor>(v: &mut V, node: &ConflictClauseNode) {
+    v.enter_rule(&"conflict_clause", &node.span);
+    v.exit_rule(&"conflict_clause", &node.span);
+}
+
+pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_literal_value(v, &n.literal_value);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"expr", &n.span);
+            v.visit_token(&n.bind_parameter);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_column_name(v, &n.column_name);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt3(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_unary_operator(v, &n.unary_operator);
+            walk_expr(v, &n.expr);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt4(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.lit___);
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt5(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt6(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt7(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt8(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt9(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt10(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            if let Some(item) = &n.k_not {
+                v.visit_token(item);
+            }
+            v.visit_token(&n.k_in);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt11(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.k_and);
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt12(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.k_or);
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt13(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_function_name(v, &n.function_name);
+            v.visit_token(&n.lparen);
+            v.visit_token(&n.rparen);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt14(n) => {
+            v.enter_rule(&"expr", &n.span);
+            v.visit_token(&n.lparen);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.rparen);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt15(n) => {
+            v.enter_rule(&"expr", &n.span);
+            v.visit_token(&n.k_cast);
+            v.visit_token(&n.lparen);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.k_as);
+            walk_type_name(v, &n.type_name);
+            v.visit_token(&n.rparen);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt16(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.k_collate);
+            walk_collation_name(v, &n.collation_name);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt17(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            if let Some(item) = &n.k_not {
+                v.visit_token(item);
+            }
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt18(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt19(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.k_is);
+            if let Some(item) = &n.k_not {
+                v.visit_token(item);
+            }
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt20(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_expr(v, &n.expr);
+            if let Some(item) = &n.k_not {
+                v.visit_token(item);
+            }
+            v.visit_token(&n.k_between);
+            walk_expr(v, &n.expr_2);
+            v.visit_token(&n.k_and);
+            walk_expr(v, &n.expr_3);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt21(n) => {
+            v.enter_rule(&"expr", &n.span);
+            v.visit_token(&n.lparen);
+            walk_select_stmt(v, &n.select_stmt);
+            v.visit_token(&n.rparen);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt22(n) => {
+            v.enter_rule(&"expr", &n.span);
+            v.visit_token(&n.k_case);
+            if let Some(item) = &n.expr {
+                walk_expr(v, item);
+            }
+            v.visit_token(&n.k_end);
+            v.exit_rule(&"expr", &n.span);
+        }
+        Alt23(n) => {
+            v.enter_rule(&"expr", &n.span);
+            walk_raise_function(v, &n.raise_function);
+            v.exit_rule(&"expr", &n.span);
+        }
+    }
+}
+
+pub fn walk_foreign_key_clause<V: Visitor>(v: &mut V, node: &ForeignKeyClauseNode) {
+    v.enter_rule(&"foreign_key_clause", &node.span);
+    v.visit_token(&node.k_references);
+    walk_foreign_table(v, &node.foreign_table);
+    v.exit_rule(&"foreign_key_clause", &node.span);
+}
+
+pub fn walk_raise_function<V: Visitor>(v: &mut V, node: &RaiseFunctionNode) {
+    v.enter_rule(&"raise_function", &node.span);
+    v.visit_token(&node.k_raise);
+    v.visit_token(&node.lparen);
+    v.visit_token(&node.rparen);
+    v.exit_rule(&"raise_function", &node.span);
+}
+
+pub fn walk_indexed_column<V: Visitor>(v: &mut V, node: &IndexedColumnNode) {
+    v.enter_rule(&"indexed_column", &node.span);
+    walk_column_name(v, &node.column_name);
+    v.exit_rule(&"indexed_column", &node.span);
+}
+
+pub fn walk_table_constraint<V: Visitor>(v: &mut V, node: &TableConstraintNode) {
+    v.enter_rule(&"table_constraint", &node.span);
+    v.exit_rule(&"table_constraint", &node.span);
+}
+
+pub fn walk_with_clause<V: Visitor>(v: &mut V, node: &WithClauseNode) {
+    v.enter_rule(&"with_clause", &node.span);
+    v.visit_token(&node.k_with);
+    if let Some(item) = &node.k_recursive {
+        v.visit_token(item);
+    }
+    walk_common_table_expression(v, &node.common_table_expression);
+    v.exit_rule(&"with_clause", &node.span);
+}
+
+pub fn walk_qualified_table_name<V: Visitor>(v: &mut V, node: &QualifiedTableNameNode) {
+    v.enter_rule(&"qualified_table_name", &node.span);
+    walk_table_name(v, &node.table_name);
+    v.exit_rule(&"qualified_table_name", &node.span);
+}
+
+pub fn walk_ordering_term<V: Visitor>(v: &mut V, node: &OrderingTermNode) {
+    v.enter_rule(&"ordering_term", &node.span);
+    walk_expr(v, &node.expr);
+    v.exit_rule(&"ordering_term", &node.span);
+}
+
+pub fn walk_pragma_value<V: Visitor>(v: &mut V, node: &PragmaValueNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"pragma_value", &n.span);
+            walk_signed_number(v, &n.signed_number);
+            v.exit_rule(&"pragma_value", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"pragma_value", &n.span);
+            walk_name(v, &n.name);
+            v.exit_rule(&"pragma_value", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"pragma_value", &n.span);
+            v.visit_token(&n.string_literal);
+            v.exit_rule(&"pragma_value", &n.span);
+        }
+    }
+}
+
+pub fn walk_common_table_expression<V: Visitor>(v: &mut V, node: &CommonTableExpressionNode) {
+    v.enter_rule(&"common_table_expression", &node.span);
+    walk_table_name(v, &node.table_name);
+    v.visit_token(&node.k_as);
+    v.visit_token(&node.lparen);
+    walk_select_stmt(v, &node.select_stmt);
+    v.visit_token(&node.rparen);
+    v.exit_rule(&"common_table_expression", &node.span);
+}
+
+pub fn walk_result_column<V: Visitor>(v: &mut V, node: &ResultColumnNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"result_column", &n.span);
+            v.visit_token(&n.star);
+            v.exit_rule(&"result_column", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"result_column", &n.span);
+            walk_table_name(v, &n.table_name);
+            v.visit_token(&n.dot);
+            v.visit_token(&n.star);
+            v.exit_rule(&"result_column", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"result_column", &n.span);
+            walk_expr(v, &n.expr);
+            v.exit_rule(&"result_column", &n.span);
+        }
+    }
+}
+
+pub fn walk_table_or_subquery<V: Visitor>(v: &mut V, node: &TableOrSubqueryNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"table_or_subquery", &n.span);
+            walk_table_name(v, &n.table_name);
+            v.exit_rule(&"table_or_subquery", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"table_or_subquery", &n.span);
+            walk_table_function_name(v, &n.table_function_name);
+            v.visit_token(&n.lparen);
+            v.visit_token(&n.rparen);
+            v.exit_rule(&"table_or_subquery", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"table_or_subquery", &n.span);
+            v.visit_token(&n.lparen);
+            v.visit_token(&n.rparen);
+            v.exit_rule(&"table_or_subquery", &n.span);
+        }
+        Alt3(n) => {
+            v.enter_rule(&"table_or_subquery", &n.span);
+            v.visit_token(&n.lparen);
+            walk_select_stmt(v, &n.select_stmt);
+            v.visit_token(&n.rparen);
+            v.exit_rule(&"table_or_subquery", &n.span);
+        }
+    }
+}
+
+pub fn walk_join_clause<V: Visitor>(v: &mut V, node: &JoinClauseNode) {
+    v.enter_rule(&"join_clause", &node.span);
+    walk_table_or_subquery(v, &node.table_or_subquery);
+    v.exit_rule(&"join_clause", &node.span);
+}
+
+pub fn walk_join_operator<V: Visitor>(v: &mut V, node: &JoinOperatorNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"join_operator", &n.span);
+            v.visit_token(&n.comma);
+            v.exit_rule(&"join_operator", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"join_operator", &n.span);
+            if let Some(item) = &n.k_natural {
+                v.visit_token(item);
+            }
+            v.visit_token(&n.k_join);
+            v.exit_rule(&"join_operator", &n.span);
+        }
+    }
+}
+
+pub fn walk_join_constraint<V: Visitor>(v: &mut V, node: &JoinConstraintNode) {
+    v.enter_rule(&"join_constraint", &node.span);
+    v.exit_rule(&"join_constraint", &node.span);
+}
+
+pub fn walk_select_core<V: Visitor>(v: &mut V, node: &SelectCoreNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"select_core", &n.span);
+            v.visit_token(&n.k_select);
+            walk_result_column(v, &n.result_column);
+            v.exit_rule(&"select_core", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"select_core", &n.span);
+            v.visit_token(&n.k_values);
+            v.visit_token(&n.lparen);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.rparen);
+            v.exit_rule(&"select_core", &n.span);
+        }
+    }
+}
+
+pub fn walk_compound_operator<V: Visitor>(v: &mut V, node: &CompoundOperatorNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"compound_operator", &n.span);
+            v.visit_token(&n.k_union);
+            v.exit_rule(&"compound_operator", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"compound_operator", &n.span);
+            v.visit_token(&n.k_union);
+            v.visit_token(&n.k_all);
+            v.exit_rule(&"compound_operator", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"compound_operator", &n.span);
+            v.visit_token(&n.k_intersect);
+            v.exit_rule(&"compound_operator", &n.span);
+        }
+        Alt3(n) => {
+            v.enter_rule(&"compound_operator", &n.span);
+            v.visit_token(&n.k_except);
+            v.exit_rule(&"compound_operator", &n.span);
+        }
+    }
+}
+
+pub fn walk_signed_number<V: Visitor>(v: &mut V, node: &SignedNumberNode) {
+    v.enter_rule(&"signed_number", &node.span);
+    v.visit_token(&node.numeric_literal);
+    v.exit_rule(&"signed_number", &node.span);
+}
+
+pub fn walk_literal_value<V: Visitor>(v: &mut V, node: &LiteralValueNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"literal_value", &n.span);
+            v.visit_token(&n.numeric_literal);
+            v.exit_rule(&"literal_value", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"literal_value", &n.span);
+            v.visit_token(&n.string_literal);
+            v.exit_rule(&"literal_value", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"literal_value", &n.span);
+            v.visit_token(&n.blob_literal);
+            v.exit_rule(&"literal_value", &n.span);
+        }
+        Alt3(n) => {
+            v.enter_rule(&"literal_value", &n.span);
+            v.visit_token(&n.k_null);
+            v.exit_rule(&"literal_value", &n.span);
+        }
+        Alt4(n) => {
+            v.enter_rule(&"literal_value", &n.span);
+            v.visit_token(&n.k_current_time);
+            v.exit_rule(&"literal_value", &n.span);
+        }
+        Alt5(n) => {
+            v.enter_rule(&"literal_value", &n.span);
+            v.visit_token(&n.k_current_date);
+            v.exit_rule(&"literal_value", &n.span);
+        }
+        Alt6(n) => {
+            v.enter_rule(&"literal_value", &n.span);
+            v.visit_token(&n.k_current_timestamp);
+            v.exit_rule(&"literal_value", &n.span);
+        }
+    }
+}
+
+pub fn walk_unary_operator<V: Visitor>(v: &mut V, node: &UnaryOperatorNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"unary_operator", &n.span);
+            v.visit_token(&n.minus);
+            v.exit_rule(&"unary_operator", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"unary_operator", &n.span);
+            v.visit_token(&n.plus);
+            v.exit_rule(&"unary_operator", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"unary_operator", &n.span);
+            v.visit_token(&n.tilde);
+            v.exit_rule(&"unary_operator", &n.span);
+        }
+        Alt3(n) => {
+            v.enter_rule(&"unary_operator", &n.span);
+            v.visit_token(&n.k_not);
+            v.exit_rule(&"unary_operator", &n.span);
+        }
+    }
+}
+
+pub fn walk_error_message<V: Visitor>(v: &mut V, node: &ErrorMessageNode) {
+    v.enter_rule(&"error_message", &node.span);
+    v.visit_token(&node.string_literal);
+    v.exit_rule(&"error_message", &node.span);
+}
+
+pub fn walk_module_argument<V: Visitor>(v: &mut V, node: &ModuleArgumentNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"module_argument", &n.span);
+            walk_expr(v, &n.expr);
+            v.exit_rule(&"module_argument", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"module_argument", &n.span);
+            walk_column_def(v, &n.column_def);
+            v.exit_rule(&"module_argument", &n.span);
+        }
+    }
+}
+
+pub fn walk_column_alias<V: Visitor>(v: &mut V, node: &ColumnAliasNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"column_alias", &n.span);
+            v.visit_token(&n.identifier);
+            v.exit_rule(&"column_alias", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"column_alias", &n.span);
+            v.visit_token(&n.string_literal);
+            v.exit_rule(&"column_alias", &n.span);
+        }
+    }
+}
+
+pub fn walk_keyword<V: Visitor>(v: &mut V, node: &KeywordNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_abort);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_action);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_add);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt3(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_after);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt4(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_all);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt5(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_alter);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt6(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_analyze);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt7(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_and);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt8(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_as);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt9(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_asc);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt10(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_attach);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt11(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_autoincrement);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt12(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_before);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt13(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_begin);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt14(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_between);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt15(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_by);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt16(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_cascade);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt17(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_case);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt18(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_cast);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt19(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_check);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt20(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_collate);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt21(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_column);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt22(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_commit);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt23(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_conflict);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt24(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_constraint);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt25(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_create);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt26(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_cross);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt27(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_current_date);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt28(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_current_time);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt29(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_current_timestamp);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt30(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_database);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt31(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_default);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt32(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_deferrable);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt33(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_deferred);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt34(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_delete);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt35(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_desc);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt36(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_detach);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt37(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_distinct);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt38(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_drop);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt39(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_each);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt40(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_else);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt41(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_end);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt42(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_escape);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt43(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_except);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt44(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_exclusive);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt45(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_exists);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt46(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_explain);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt47(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_fail);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt48(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_for);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt49(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_foreign);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt50(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_from);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt51(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_full);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt52(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_glob);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt53(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_group);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt54(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_having);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt55(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_if);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt56(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_ignore);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt57(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_immediate);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt58(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_in);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt59(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_index);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt60(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_indexed);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt61(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_initially);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt62(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_inner);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt63(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_insert);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt64(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_instead);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt65(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_intersect);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt66(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_into);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt67(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_is);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt68(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_isnull);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt69(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_join);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt70(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_key);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt71(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_left);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt72(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_like);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt73(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_limit);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt74(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_match);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt75(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_natural);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt76(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_no);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt77(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_not);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt78(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_notnull);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt79(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_null);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt80(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_of);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt81(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_offset);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt82(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_on);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt83(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_or);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt84(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_order);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt85(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_outer);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt86(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_plan);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt87(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_pragma);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt88(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_primary);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt89(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_query);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt90(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_raise);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt91(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_recursive);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt92(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_references);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt93(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_regexp);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt94(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_reindex);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt95(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_release);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt96(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_rename);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt97(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_replace);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt98(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_restrict);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt99(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_right);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt100(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_rollback);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt101(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_row);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt102(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_savepoint);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt103(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_select);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt104(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_set);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt105(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_table);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt106(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_temp);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt107(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_temporary);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt108(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_then);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt109(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_to);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt110(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_transaction);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt111(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_trigger);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt112(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_union);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt113(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_unique);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt114(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_update);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt115(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_using);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt116(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_vacuum);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt117(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_values);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt118(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_view);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt119(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_virtual);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt120(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_when);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt121(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_where);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt122(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_with);
+            v.exit_rule(&"keyword", &n.span);
+        }
+        Alt123(n) => {
+            v.enter_rule(&"keyword", &n.span);
+            v.visit_token(&n.k_without);
+            v.exit_rule(&"keyword", &n.span);
+        }
+    }
+}
+
+pub fn walk_name<V: Visitor>(v: &mut V, node: &NameNode) {
+    v.enter_rule(&"name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"name", &node.span);
+}
+
+pub fn walk_function_name<V: Visitor>(v: &mut V, node: &FunctionNameNode) {
+    v.enter_rule(&"function_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"function_name", &node.span);
+}
+
+pub fn walk_database_name<V: Visitor>(v: &mut V, node: &DatabaseNameNode) {
+    v.enter_rule(&"database_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"database_name", &node.span);
+}
+
+pub fn walk_schema_name<V: Visitor>(v: &mut V, node: &SchemaNameNode) {
+    v.enter_rule(&"schema_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"schema_name", &node.span);
+}
+
+pub fn walk_table_function_name<V: Visitor>(v: &mut V, node: &TableFunctionNameNode) {
+    v.enter_rule(&"table_function_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"table_function_name", &node.span);
+}
+
+pub fn walk_table_name<V: Visitor>(v: &mut V, node: &TableNameNode) {
+    v.enter_rule(&"table_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"table_name", &node.span);
+}
+
+pub fn walk_table_or_index_name<V: Visitor>(v: &mut V, node: &TableOrIndexNameNode) {
+    v.enter_rule(&"table_or_index_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"table_or_index_name", &node.span);
+}
+
+pub fn walk_new_table_name<V: Visitor>(v: &mut V, node: &NewTableNameNode) {
+    v.enter_rule(&"new_table_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"new_table_name", &node.span);
+}
+
+pub fn walk_column_name<V: Visitor>(v: &mut V, node: &ColumnNameNode) {
+    v.enter_rule(&"column_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"column_name", &node.span);
+}
+
+pub fn walk_collation_name<V: Visitor>(v: &mut V, node: &CollationNameNode) {
+    v.enter_rule(&"collation_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"collation_name", &node.span);
+}
+
+pub fn walk_foreign_table<V: Visitor>(v: &mut V, node: &ForeignTableNode) {
+    v.enter_rule(&"foreign_table", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"foreign_table", &node.span);
+}
+
+pub fn walk_index_name<V: Visitor>(v: &mut V, node: &IndexNameNode) {
+    v.enter_rule(&"index_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"index_name", &node.span);
+}
+
+pub fn walk_trigger_name<V: Visitor>(v: &mut V, node: &TriggerNameNode) {
+    v.enter_rule(&"trigger_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"trigger_name", &node.span);
+}
+
+pub fn walk_view_name<V: Visitor>(v: &mut V, node: &ViewNameNode) {
+    v.enter_rule(&"view_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"view_name", &node.span);
+}
+
+pub fn walk_module_name<V: Visitor>(v: &mut V, node: &ModuleNameNode) {
+    v.enter_rule(&"module_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"module_name", &node.span);
+}
+
+pub fn walk_pragma_name<V: Visitor>(v: &mut V, node: &PragmaNameNode) {
+    v.enter_rule(&"pragma_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"pragma_name", &node.span);
+}
+
+pub fn walk_savepoint_name<V: Visitor>(v: &mut V, node: &SavepointNameNode) {
+    v.enter_rule(&"savepoint_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"savepoint_name", &node.span);
+}
+
+pub fn walk_table_alias<V: Visitor>(v: &mut V, node: &TableAliasNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"table_alias", &n.span);
+            v.visit_token(&n.identifier);
+            v.exit_rule(&"table_alias", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"table_alias", &n.span);
+            v.visit_token(&n.string_literal);
+            v.exit_rule(&"table_alias", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"table_alias", &n.span);
+            v.visit_token(&n.lparen);
+            walk_table_alias(v, &n.table_alias);
+            v.visit_token(&n.rparen);
+            v.exit_rule(&"table_alias", &n.span);
+        }
+    }
+}
+
+pub fn walk_transaction_name<V: Visitor>(v: &mut V, node: &TransactionNameNode) {
+    v.enter_rule(&"transaction_name", &node.span);
+    walk_any_name(v, &node.any_name);
+    v.exit_rule(&"transaction_name", &node.span);
+}
+
+pub fn walk_any_name<V: Visitor>(v: &mut V, node: &AnyNameNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(&"any_name", &n.span);
+            v.visit_token(&n.identifier);
+            v.exit_rule(&"any_name", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(&"any_name", &n.span);
+            walk_keyword(v, &n.keyword);
+            v.exit_rule(&"any_name", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(&"any_name", &n.span);
+            v.visit_token(&n.string_literal);
+            v.exit_rule(&"any_name", &n.span);
+        }
+        Alt3(n) => {
+            v.enter_rule(&"any_name", &n.span);
+            v.visit_token(&n.lparen);
+            walk_any_name(v, &n.any_name);
+            v.visit_token(&n.rparen);
+            v.exit_rule(&"any_name", &n.span);
+        }
+    }
+}
+
+pub fn to_tree(node: &ParseNode) -> CstNode {
+    let mut recorder = TreeRecorder::new();
+    walk_parse(&mut recorder, node);
+    return recorder.build();
 }
 

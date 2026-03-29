@@ -107,6 +107,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -165,6 +173,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -227,6 +243,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -285,6 +309,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1145,6 +1177,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -1203,6 +1243,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1265,6 +1313,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -1323,6 +1379,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1717,6 +1781,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -1775,6 +1847,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1837,6 +1917,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -1895,6 +1983,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -2023,6 +2119,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -2081,6 +2185,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -2143,6 +2255,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -2201,6 +2321,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -2317,6 +2445,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -2375,6 +2511,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -2437,6 +2581,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -2495,6 +2647,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -3743,6 +3903,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -3846,6 +4014,14 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -3922,6 +4098,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -3996,6 +4180,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -5074,6 +5266,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -5134,6 +5334,14 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -5192,6 +5400,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^Display::fmt"(self: &Future<Result<(),
 
 pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -5260,6 +5476,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -7895,6 +8119,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -7953,6 +8185,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -8015,6 +8255,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -8073,6 +8321,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -9107,6 +9363,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -9201,6 +9465,14 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -9269,6 +9541,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -9335,6 +9615,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -9577,6 +9865,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -9635,6 +9931,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -9697,6 +10001,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -9755,6 +10067,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -9906,6 +10226,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -9983,6 +10311,14 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -10047,6 +10383,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -10109,6 +10453,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -10957,6 +11309,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -11015,6 +11375,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -11077,6 +11445,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -11135,6 +11511,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -11652,6 +12036,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -11725,6 +12117,14 @@ pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -11793,6 +12193,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -11859,6 +12267,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -12363,6 +12779,14 @@ pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
     f.Formatter::write_str("Stream<u8>");
 }
 
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -12425,6 +12849,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^InspectAlt::inspect_alt"(self: &Future
 
 pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -12491,6 +12923,14 @@ pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -12553,6 +12993,14 @@ pub fn "Future<Result<unit,CliErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Res
 
 pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
     self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {

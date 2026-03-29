@@ -20,7 +20,7 @@ pub fn emit_wasm(project: &Project, wir_module: &WirModule) -> Vec<u8> {
 
     // Step 2: Validate core module (catch errors before component wrapping)
     if !project.skip_validation {
-        validate_core_module(&core_module);
+        validate_core_module(&core_module, &project.entry_module_source);
     }
 
     // Step 3: Wrap in Component Model
@@ -28,14 +28,14 @@ pub fn emit_wasm(project: &Project, wir_module: &WirModule) -> Vec<u8> {
 
     // Step 4: Validate
     if !project.skip_validation {
-        validate_wasm(&wasm);
+        validate_wasm(&wasm, &project.entry_module_source);
     }
 
     wasm
 }
 
 /// Validate core Wasm module (before component wrapping).
-fn validate_core_module(wasm: &[u8]) {
+fn validate_core_module(wasm: &[u8], entry_module: &crate::name::ModuleSource) {
     let features = wasmparser::WasmFeatures::all();
     let mut validator = wasmparser::Validator::new_with_features(features);
     if let Err(e) = validator.validate_all(wasm) {
@@ -43,17 +43,19 @@ fn validate_core_module(wasm: &[u8]) {
         let _ = std::fs::write("/tmp/invalid_core.wasm", wasm);
         panic!(
             "Internal compiler error: WIR pipeline generated invalid core Wasm module\n\
+             Entry module: {entry_module}\n\
              Validation error: {e}"
         );
     }
 }
 
 /// Validate generated Wasm binary using wasmparser.
-fn validate_wasm(wasm: &[u8]) {
+fn validate_wasm(wasm: &[u8], entry_module: &crate::name::ModuleSource) {
     let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
     if let Err(e) = validator.validate_all(wasm) {
         panic!(
             "Internal compiler error: WIR pipeline generated invalid Wasm\n\
+             Entry module: {entry_module}\n\
              This is a bug in the Wado compiler. Please report it.\n\
              Validation error: {e}"
         );

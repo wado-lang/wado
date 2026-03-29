@@ -157,6 +157,7 @@ pub struct Analyzer<'a, H: CompilerHost> {
     logger: &'a Logger<'a, H>,
     /// Modules loaded implicitly by the compiler (not by user imports)
     implicit_modules: crate::hashmap::IndexSet<ModuleSource>,
+    entry_module_source: ModuleSource,
 }
 
 impl<'a, H: CompilerHost> Analyzer<'a, H> {
@@ -166,6 +167,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             symbols: SymbolTable::new(),
             logger,
             implicit_modules: crate::hashmap::IndexSet::default(),
+            entry_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
         }
     }
 
@@ -425,10 +427,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     pub fn analyze_loaded_modules(
         &mut self,
         modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
-        _entry_source: &ModuleSource,
+        entry_source: &ModuleSource,
         implicit_modules: crate::hashmap::IndexSet<ModuleSource>,
     ) -> Result<(), Bail> {
         self.implicit_modules = implicit_modules;
+        self.entry_module_source = entry_source.clone();
 
         // First pass: collect definitions from all modules (excluding pub use)
         for (source, module) in modules {
@@ -544,7 +547,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 // Resolve the import path to ModuleSource
-                let module_source = resolve_import(from_module_source, &use_decl.source);
+                let module_source = crate::name::resolve_import_with_entry(
+                    from_module_source,
+                    &use_decl.source,
+                    Some(&self.entry_module_source),
+                );
 
                 // Check the module exists in pre-loaded modules
                 if !all_modules.contains_key(&module_source) {
