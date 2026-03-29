@@ -1798,11 +1798,12 @@ fn import_http_types_for_service(
 
             let param_refs: Vec<(&str, ComponentValType)> =
                 cm_params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
-            instance_type
-                .ty()
-                .function()
-                .params(param_refs)
-                .result(cm_result);
+            let mut func_encoder = instance_type.ty().function();
+            if func.is_async {
+                func_encoder.async_(true).params(param_refs).result(cm_result);
+            } else {
+                func_encoder.params(param_refs).result(cm_result);
+            }
             let func_type_idx = type_gen.alloc_idx();
 
             instance_type.export(
@@ -1868,11 +1869,12 @@ fn import_http_types_for_service(
 
             let param_refs: Vec<(&str, ComponentValType)> =
                 cm_params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
-            instance_type
-                .ty()
-                .function()
-                .params(param_refs)
-                .result(cm_result);
+            let mut func_encoder = instance_type.ty().function();
+            if func.is_async {
+                func_encoder.async_(true).params(param_refs).result(cm_result);
+            } else {
+                func_encoder.params(param_refs).result(cm_result);
+            }
             let func_type_idx = type_gen.alloc_idx();
 
             instance_type.export(
@@ -2018,17 +2020,26 @@ fn import_http_client(
     ctx: &mut ComponentModelContext,
     project: &Project,
 ) {
-    // Build the instance type for wasi:http/client
-    // It contains a single async function: send(request) -> result<response, error-code>
+    // Build the instance type for wasi:http/client from registry metadata.
+    // The client interface references types defined in wasi:http/types (request, handler-result),
+    // which are aliased from the outer scope.
     let request_type_idx = ctx.type_idx("http-request");
     let handler_result_type_idx = ctx.type_idx("http-handler-result");
+
+    let client_iface = project
+        .wasi_registry
+        .interfaces()
+        .find(|i| i.package == "http" && i.interface == "client")
+        .expect("wasi:http/client interface not found in registry");
+    let client_funcs = client_iface.functions;
 
     let instance_type_idx = ctx.register_type("http-client-instance-type");
     {
         let (_, enc) = builder.ty(Some("http-client-instance-type"));
         let mut instance_type = InstanceType::new();
 
-        // Alias outer types into the instance
+        // Alias outer types needed by client functions.
+        // local index 0 = request (param type), 1 = handler-result (return type)
         instance_type.alias(Alias::Outer {
             kind: ComponentOuterAliasKind::Type,
             count: 1,
@@ -2040,19 +2051,30 @@ fn import_http_client(
             index: handler_result_type_idx,
         });
 
-        // Define: send: async func(request: own<request>) -> result<own<response>, error-code>
-        instance_type
-            .ty()
-            .function()
-            .async_(true)
-            .params([("request", ComponentValType::Type(0))])
-            .result(Some(ComponentValType::Type(1)));
-        let send_func_type_idx = 2; // 0=request alias, 1=result alias, 2=func type
+        // Emit each function from registry metadata.
+        // Client functions use the same param/result types as the HTTP handler
+        // (own<request> → result<own<response>, error-code>).
+        let mut local_type_idx: u32 = 2; // 0=request alias, 1=result alias
+        for func in &client_funcs {
+            let mut func_encoder = instance_type.ty().function();
+            if func.is_async {
+                func_encoder
+                    .async_(true)
+                    .params([("request", ComponentValType::Type(0))])
+                    .result(Some(ComponentValType::Type(1)));
+            } else {
+                func_encoder
+                    .params([("request", ComponentValType::Type(0))])
+                    .result(Some(ComponentValType::Type(1)));
+            }
+            let func_type_idx = local_type_idx;
+            local_type_idx += 1;
 
-        instance_type.export(
-            "send",
-            wasm_encoder::ComponentTypeRef::Func(send_func_type_idx),
-        );
+            instance_type.export(
+                &func.wasi_func_name,
+                wasm_encoder::ComponentTypeRef::Func(func_type_idx),
+            );
+        }
 
         enc.instance(&instance_type);
     }
@@ -2068,13 +2090,20 @@ fn import_http_client(
         wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
     );
 
-    // Alias the send function from the instance
-    ctx.register_comp_func("wasi:http/Client::send");
-    builder.alias_export(
-        ctx.instance_idx("http-client"),
-        "send",
-        ComponentExportKind::Func,
-    );
+    // Alias each function from the instance
+    for func in &client_funcs {
+        let local_name = project
+            .wasi_registry
+            .get_local_name(&client_import_path, &func.wasi_func_name)
+            .cloned()
+            .unwrap_or_else(|| format!("wasi:http/Client::{}", func.method_name));
+        ctx.register_comp_func(&local_name);
+        builder.alias_export(
+            ctx.instance_idx("http-client"),
+            &func.wasi_func_name,
+            ComponentExportKind::Func,
+        );
+    }
 }
 
 fn import_interface_with_resource(
