@@ -170,7 +170,7 @@ To initialize: `git submodule update --init`
 
 Wado has a set of document for significant language features and architecture decisions.
 
-See `docs/` for  existing WEPs.
+See `docs/` for existing WEPs.
 
 ## Project Development
 
