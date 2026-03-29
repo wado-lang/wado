@@ -64,6 +64,18 @@ impl Module {
         self.inner_attributes.iter().any(|a| a.name == "no_prelude")
     }
 
+    /// Returns true if the module has the `#![TODO]` attribute.
+    /// All tests in a TODO module must fail; passing tests become failures.
+    pub fn has_todo(&self) -> bool {
+        self.inner_attributes.iter().any(|a| a.name == "TODO")
+    }
+
+    /// Returns true if the module has the `#![generated]` attribute.
+    /// Indicates machine-generated code (e.g. wado-from-wit, gale).
+    pub fn has_generated(&self) -> bool {
+        self.inner_attributes.iter().any(|a| a.name == "generated")
+    }
+
     /// Returns the `wasm_module` name if `#![wasm_module("name")]` is present.
     pub fn wasm_module(&self) -> Option<&str> {
         self.inner_attributes

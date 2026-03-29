@@ -629,8 +629,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
                 Item::Test(test_decl) => {
                     let test_index = tir_module.tests.len();
+                    let module_is_todo = module.has_todo();
                     if let Some((tir_func, tir_test)) =
-                        self.resolve_test_decl(test_decl, test_index)
+                        self.resolve_test_decl(test_decl, test_index, module_is_todo)
                     {
                         tir_module.add_function(tir_func);
                         tir_module.tests.push(tir_test);
