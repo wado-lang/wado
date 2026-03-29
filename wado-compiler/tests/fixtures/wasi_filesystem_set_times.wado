@@ -7,7 +7,7 @@
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, DescriptorFlags, PathFlags, OpenFlags, NewTimestamp } from "wasi:filesystem";
-use { wait_for_subtask } from "core:internal";
+
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
@@ -33,7 +33,7 @@ export fn run() with Stdout, Stderr, Preopens {
         let data: Array<u8> = [104, 105]; // "hi"
         w_tx.write(data);
         w_tx.drop();
-        wait_for_subtask(sub);
+        sub.drop();
 
         // Test set_times on the open file descriptor
         let times_result = file.set_times(NewTimestamp::Now, NewTimestamp::Now);

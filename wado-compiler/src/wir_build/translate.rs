@@ -4179,7 +4179,71 @@ impl FunctionTranslator<'_, '_> {
                         f.is_async || f.has_streaming_param() || f.return_type_has_future()
                     });
                     if needs_async {
-                        call_args.push(WirInstr::I32Const(2048));
+                        // Allocate outptr for async result (Future handle)
+                        let realloc_id = self.ctx.func_map.get("builtin/realloc").cloned();
+                        if let Some(realloc_id) = realloc_id {
+                            // outptr = realloc(0, 0, 4, 4) — 4 bytes for a single i32 (Future handle)
+                            let outptr = WirInstr::Call {
+                                func_id: realloc_id.clone(),
+                                args: vec![
+                                    WirInstr::I32Const(0),
+                                    WirInstr::I32Const(0),
+                                    WirInstr::I32Const(4),
+                                    WirInstr::I32Const(4),
+                                ],
+                            };
+                            // Store outptr in a local so we can read from it after the call
+                            let outptr_local = format!("__cis_outptr_{}", self.local_counter);
+                            self.local_counter += 1;
+                            let subtask_local = format!("__cis_subtask_{}", self.local_counter);
+                            self.local_counter += 1;
+                            let future_local = format!("__cis_future_{}", self.local_counter);
+                            self.local_counter += 1;
+                            call_args.push(WirInstr::LocalGet {
+                                name: outptr_local.clone(),
+                                result_ty: WirType::I32,
+                            });
+                            return Some(WirInstr::Seq(vec![
+                                WirInstr::DeclareLocal { name: outptr_local.clone(), ty: WirType::I32 },
+                                WirInstr::DeclareLocal { name: subtask_local.clone(), ty: WirType::I32 },
+                                WirInstr::DeclareLocal { name: future_local.clone(), ty: WirType::I32 },
+                                WirInstr::LocalSet {
+                                    name: outptr_local.clone(),
+                                    value: Box::new(outptr),
+                                },
+                                // Call WASI import with outptr
+                                WirInstr::LocalSet {
+                                    name: subtask_local.clone(),
+                                    value: Box::new(WirInstr::Call { func_id, args: call_args }),
+                                },
+                                // Read Future handle from outptr
+                                WirInstr::LocalSet {
+                                    name: future_local.clone(),
+                                    value: Box::new(WirInstr::I32Load {
+                                        offset: 0,
+                                        align: 2,
+                                        addr: Box::new(WirInstr::LocalGet {
+                                            name: outptr_local.clone(),
+                                            result_ty: WirType::I32,
+                                        }),
+                                    }),
+                                },
+                                // Free outptr
+                                WirInstr::Drop(Box::new(WirInstr::Call {
+                                    func_id: realloc_id,
+                                    args: vec![
+                                        WirInstr::LocalGet { name: outptr_local, result_ty: WirType::I32 },
+                                        WirInstr::I32Const(4),
+                                        WirInstr::I32Const(4),
+                                        WirInstr::I32Const(0),
+                                    ],
+                                })),
+                                // Return Future handle (not subtask handle)
+                                WirInstr::LocalGet { name: future_local, result_ty: WirType::I32 },
+                            ]));
+                        }
+                        // Fallback: no realloc available
+                        call_args.push(WirInstr::I32Const(0));
                     }
                     Some(WirInstr::Call {
                         func_id,

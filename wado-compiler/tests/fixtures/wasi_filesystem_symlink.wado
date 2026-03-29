@@ -8,7 +8,7 @@
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, DescriptorType, DescriptorFlags, PathFlags, OpenFlags, ErrorCode } from "wasi:filesystem";
-use { wait_for_subtask } from "core:internal";
+
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
@@ -78,7 +78,7 @@ export fn run() with Stdout, Stderr, Preopens {
         }
         read_stream.drop();
         out_tx.drop();
-        wait_for_subtask(sub);
+        sub.drop();
         read_future.drop();
     } else {
         eprintln("symlink follow: failed to open");

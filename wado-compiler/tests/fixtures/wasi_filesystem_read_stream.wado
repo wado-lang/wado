@@ -12,7 +12,7 @@
 
 use { eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
-use { wait_for_subtask } from "core:internal";
+
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
@@ -40,7 +40,7 @@ export fn run() with Stdout, Stderr, Preopens {
         // Pipe the file's read stream directly to stdout
         // This prints the file contents: "Hello, World!\n"
         let subtask = Stdout::write_via_stream(read_stream);
-        wait_for_subtask(subtask);
+        subtask.drop();
         read_future.drop();
     } else {
         eprintln("read_stream: failed to open hello.txt");

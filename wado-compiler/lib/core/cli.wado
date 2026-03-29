@@ -8,13 +8,12 @@
 //
 // WASI P3 write_via_stream ordering:
 // 1. Create stream pair: Stream::<u8>::new() → [rx, tx]
-// 2. Start write_via_stream(rx) which returns a subtask handle (async canon lower)
+// 2. Start write_via_stream(rx) — returns a Future handle
 // 3. Write data to tx via StreamWritable::write()
 // 4. Drop tx via StreamWritable::drop()
-// 5. Wait for subtask to complete
+// 5. Drop the Future to signal completion
 
 use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
-use { wait_for_subtask } from "core:internal";
 
 // Re-export commonly used effects for convenience
 pub use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
@@ -37,49 +36,50 @@ pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: boo
     }
     tx.drop();
 }
+
 /// Prints a line to stdout (adds newline).
 pub fn println(message: String) with Stdout {
     let [rx, tx] = Stream::<u8>::new();
 
-    let subtask = Stdout::write_via_stream(rx);
+    let future = Stdout::write_via_stream(rx);
     write_to_stream(tx, message, true);
-    wait_for_subtask(subtask);
+    future.drop();
 }
 
 /// Prints a line to stderr (adds newline).
 pub fn eprintln(message: String) with Stderr {
     let [rx, tx] = Stream::<u8>::new();
 
-    let subtask = Stderr::write_via_stream(rx);
+    let future = Stderr::write_via_stream(rx);
     write_to_stream(tx, message, true);
-    wait_for_subtask(subtask);
+    future.drop();
 }
 
 /// Prints to stdout without a trailing newline.
 pub fn print(message: String) with Stdout {
     let [rx, tx] = Stream::<u8>::new();
 
-    let subtask = Stdout::write_via_stream(rx);
+    let future = Stdout::write_via_stream(rx);
     write_to_stream(tx, message, false);
-    wait_for_subtask(subtask);
+    future.drop();
 }
 
 /// Prints to stderr without a trailing newline.
 pub fn eprint(message: String) with Stderr {
     let [rx, tx] = Stream::<u8>::new();
 
-    let subtask = Stderr::write_via_stream(rx);
+    let future = Stderr::write_via_stream(rx);
     write_to_stream(tx, message, false);
-    wait_for_subtask(subtask);
+    future.drop();
 }
 /// Writes raw bytes to stdout.
 pub fn print_bytes(data: Array<u8>) with Stdout {
     let [rx, tx] = Stream::<u8>::new();
 
-    let subtask = Stdout::write_via_stream(rx);
+    let future = Stdout::write_via_stream(rx);
     tx.write(data);
     tx.drop();
-    wait_for_subtask(subtask);
+    future.drop();
 }
 
 /// Returns the value of an environment variable by name.

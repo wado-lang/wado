@@ -7,7 +7,7 @@
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, DescriptorFlags, PathFlags, OpenFlags, Advice } from "wasi:filesystem";
-use { wait_for_subtask } from "core:internal";
+
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
@@ -77,7 +77,7 @@ export fn run() with Stdout, Stderr, Preopens {
         let data: Array<u8> = [116, 101, 115, 116]; // "test"
         w_tx.write(data);
         w_tx.drop();
-        wait_for_subtask(sub);
+        sub.drop();
 
         // Test sync_data
         let sd_result = wfile.sync_data();

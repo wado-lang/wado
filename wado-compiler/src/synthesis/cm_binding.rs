@@ -2689,12 +2689,63 @@ fn synthesize_adapter(
     // tuple from outptr after wait_for_subtask.
     let is_streaming_func = !func_info.is_async && func_info.has_streaming_param();
     if is_streaming_func {
-        // Streaming function (has Stream<T>/Future<T> param or returns Future<T>):
-        // canon lower is called with async option (CM spec requirement for stream/future).
-        // The caller must write to the stream before the subtask completes,
-        // so we cannot wait inside the binding. Return the packed subtask handle
-        // (i32) directly. The caller is responsible for waiting via wait_for_subtask().
-        body_stmts.push(return_stmt(Some(raw_call_expr)));
+        // Streaming function (sync function with stream params, e.g. write_via_stream).
+        // canon lower with async option returns a packed subtask handle, but for sync
+        // functions the subtask completes immediately (Returned status). The actual
+        // return value (Future handle) is written to the outptr by the canon lower.
+        //
+        // We wait for the subtask (no-op for Returned), read the Future handle from
+        // outptr, free outptr, and return the Future handle. The caller writes stream
+        // data and then drops the Future to wait for completion.
+        if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
+            let subtask_local = next_local;
+            local_types.push(TypeTable::I32);
+            next_local += 1;
+            body_stmts.push(let_stmt(
+                "__subtask",
+                subtask_local,
+                TypeTable::I32,
+                raw_call_expr,
+            ));
+            body_stmts.push(expr_stmt(internal_call(
+                "wait_for_subtask",
+                vec![local_ref(subtask_local, "__subtask", TypeTable::I32)],
+                TypeTable::UNIT,
+            )));
+            // Read Future handle from outptr
+            let future_handle_local = next_local;
+            local_types.push(TypeTable::I32);
+            next_local += 1;
+            body_stmts.push(let_stmt(
+                "__future_handle",
+                future_handle_local,
+                TypeTable::I32,
+                builtin_call(
+                    "i32_load",
+                    vec![local_ref(outptr_local, "__async_outptr", TypeTable::I32)],
+                    TypeTable::I32,
+                ),
+            ));
+            // Free outptr
+            body_stmts.push(expr_stmt(builtin_call(
+                "realloc",
+                vec![
+                    local_ref(outptr_local, "__async_outptr", TypeTable::I32),
+                    i32_const(outptr_size as i32),
+                    i32_const(outptr_align as i32),
+                    i32_const(0),
+                ],
+                TypeTable::I32,
+            )));
+            body_stmts.push(return_stmt(Some(local_ref(
+                future_handle_local,
+                "__future_handle",
+                TypeTable::I32,
+            ))));
+        } else {
+            // No outptr (shouldn't happen for streaming functions with return type)
+            body_stmts.push(return_stmt(Some(raw_call_expr)));
+        }
         adapter_return_type = TypeTable::I32;
     } else if needs_async_lower {
         // WASI P3 async calling convention: the lowered function returns a subtask
@@ -6504,10 +6555,16 @@ fn rewrite_calls_in_expr(
             // Fix up binding function types from the call site
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                if is_streaming {
-                    // Streaming adapters return i32 (packed subtask handle).
-                    // Fix the call site's type to match.
+                let returns_future = wasi_registry
+                    .get_function(&qualified)
+                    .is_some_and(|f| f.return_type_has_future());
+                if is_streaming && !returns_future {
+                    // Streaming adapters without Future return: set call site type to i32.
                     expr.type_id = TypeTable::I32;
+                } else if is_streaming {
+                    // Streaming adapters returning Future: keep caller's original type
+                    // so that .drop() resolves via CM method dispatch to the correct
+                    // future-drop-readable canonical with the right payload type.
                 } else if adapter.return_type != expr.type_id {
                     let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;
@@ -6627,10 +6684,16 @@ fn rewrite_calls_in_expr(
             // The binding params include self as the first param
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                if is_streaming {
-                    // Streaming adapters return i32 (packed subtask handle).
-                    // Fix the call site's type to match.
+                let returns_future = wasi_registry
+                    .get_function(&qualified)
+                    .is_some_and(|f| f.return_type_has_future());
+                if is_streaming && !returns_future {
+                    // Streaming adapters without Future return: set call site type to i32.
                     expr.type_id = TypeTable::I32;
+                } else if is_streaming {
+                    // Streaming adapters returning Future: keep caller's original type
+                    // so that .drop() resolves via CM method dispatch to the correct
+                    // future-drop-readable canonical with the right payload type.
                 } else if adapter.return_type != expr.type_id {
                     let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;

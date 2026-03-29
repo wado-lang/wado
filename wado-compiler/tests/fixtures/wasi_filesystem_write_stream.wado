@@ -22,7 +22,7 @@
 
 use { Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
-use { wait_for_subtask } from "core:internal";
+
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
@@ -46,12 +46,12 @@ export fn run() with Stdout, Stderr, Preopens {
         let data: Array<u8> = [72, 101, 108, 108, 111, 44, 32, 83, 116, 114, 101, 97, 109, 33, 10];
         write_tx.write(data);
         write_tx.drop();
-        wait_for_subtask(subtask1);
+        subtask1.drop();
 
         // Read back via stream and pipe to stdout to verify round-trip
         let [read_stream, read_done] = file.read_via_stream(0 as Filesize);
         let subtask2 = Stdout::write_via_stream(read_stream);
-        wait_for_subtask(subtask2);
+        subtask2.drop();
         read_done.drop();
     }
 }
