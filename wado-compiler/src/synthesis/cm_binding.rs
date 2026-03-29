@@ -18,9 +18,9 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::Type;
 use crate::cm_abi;
 use crate::component_model::{CmVariantCase, WasiFunctionInfo, WasiRegistry};
+use crate::name::LocalMethodName;
 use crate::name::ModuleSource;
 use crate::project::Project;
-use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
@@ -5421,7 +5421,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
     Ok(project)
 }
 
-/// Generate binding functions for Stream<T>.read() where T is a non-u8 WASI record type.
+/// Generate binding functions for Stream<T>.`read()` where T is a non-u8 WASI record type.
 ///
 /// For each unique stream element type T found in stream-read calls, generates a
 /// TIR function `__cm_stream_read_<T>` that:
@@ -5574,13 +5574,13 @@ fn find_record_stream_reads_in_expr(
     };
     if cm_name.as_deref() == Some("stream-read") && !is_u8_array_type(expr.type_id, tt) {
         // Extract element type from Array<T>
-        if let Some(type_args) = tt.generic_type_args(expr.type_id) {
-            if let Some(&elem_type_id) = type_args.first() {
-                let elem_name = tt.base_type_name(elem_type_id);
-                results
-                    .entry(elem_name)
-                    .or_insert((elem_type_id, expr.type_id));
-            }
+        if let Some(type_args) = tt.generic_type_args(expr.type_id)
+            && let Some(&elem_type_id) = type_args.first()
+        {
+            let elem_name = tt.base_type_name(elem_type_id);
+            results
+                .entry(elem_name)
+                .or_insert((elem_type_id, expr.type_id));
         }
     }
 }
@@ -5588,8 +5588,8 @@ fn find_record_stream_reads_in_expr(
 /// Generate a TIR function for reading records from a stream.
 ///
 /// Generates `__cm_stream_read_<T>(handle: i32, max: i32) -> Array<T>`:
-/// 1. Call cm_stream_read_raw to get raw buffer [ptr, count]
-/// 2. Loop: lift each record from buffer at ptr + i * elem_size
+/// 1. Call `cm_stream_read_raw` to get raw buffer [ptr, count]
+/// 2. Loop: lift each record from buffer at ptr + i * `elem_size`
 /// 3. Append to result array
 /// 4. Free buffer
 /// 5. Return array
@@ -5603,7 +5603,10 @@ fn synthesize_stream_read_func(
     wasi_registry: &crate::component_model::WasiRegistry,
     type_table: &RefCell<TypeTable>,
 ) -> TirFunction {
-    use crate::synthesis::common::*;
+    use crate::synthesis::common::{
+        assign, binary, break_stmt, builtin_call, cm_raw_call, expr_stmt, i32_const, if_stmt,
+        internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, return_stmt, synth_span,
+    };
 
     let func_name = format!("__cm_stream_read_{elem_name}");
     let _tuple_type_id = type_table
@@ -5639,7 +5642,12 @@ fn synthesize_stream_read_func(
         i32_const(elem_size),
         TypeTable::I32,
     );
-    stmts.push(let_stmt("byte_count", byte_count_idx, TypeTable::I32, byte_count));
+    stmts.push(let_stmt(
+        "byte_count",
+        byte_count_idx,
+        TypeTable::I32,
+        byte_count,
+    ));
 
     // let ptr = realloc(0, 0, elem_align, byte_count)
     let ptr_idx = next_local;
@@ -5670,7 +5678,12 @@ fn synthesize_stream_read_func(
         ],
         TypeTable::I32,
     );
-    stmts.push(let_mut_stmt("result", result_idx, TypeTable::I32, stream_read_call));
+    stmts.push(let_mut_stmt(
+        "result",
+        result_idx,
+        TypeTable::I32,
+        stream_read_call,
+    ));
 
     // if result == -1 { result = wait_for_blocked(handle); }
     let blocked_check = binary(
@@ -5785,10 +5798,7 @@ fn synthesize_stream_read_func(
         i32_const(elem_size),
         TypeTable::I32,
     );
-    let addr = binary_add(
-        local_ref(ptr_idx, "ptr", TypeTable::I32),
-        offset,
-    );
+    let addr = binary_add(local_ref(ptr_idx, "ptr", TypeTable::I32), offset);
     loop_body_stmts.push(let_stmt("addr", addr_idx, TypeTable::I32, addr));
 
     // Lift each field from linear memory at addr + field_offset
@@ -5855,10 +5865,7 @@ fn synthesize_stream_read_func(
     // i += 1
     let increment = assign(
         local_ref(i_idx, "i", TypeTable::I32),
-        binary_add(
-            local_ref(i_idx, "i", TypeTable::I32),
-            i32_const(1),
-        ),
+        binary_add(local_ref(i_idx, "i", TypeTable::I32), i32_const(1)),
     );
     loop_body_stmts.push(expr_stmt(increment));
 
@@ -5883,11 +5890,7 @@ fn synthesize_stream_read_func(
     local_types.push(TypeTable::I32);
 
     // return arr
-    stmts.push(return_stmt(Some(local_ref(
-        arr_idx,
-        "arr",
-        array_type_id,
-    ))));
+    stmts.push(return_stmt(Some(local_ref(arr_idx, "arr", array_type_id))));
 
     TirFunction {
         name: func_name,
@@ -5917,7 +5920,10 @@ fn synthesize_stream_read_func(
         return_type: array_type_id,
         effects: vec![],
         stores: vec![],
-        body: Some(TirBlock { stmts, span: synth_span() }),
+        body: Some(TirBlock {
+            stmts,
+            span: synth_span(),
+        }),
         span: synth_span(),
         local_count: next_local,
         local_types,
@@ -6147,13 +6153,13 @@ fn rewrite_cm_methods_in_expr(expr: &mut TirExpr, tt: &TypeTable) {
     }
     if cm_name == "stream-read" && !is_u8_array_type(expr.type_id, tt) {
         // Non-u8 stream reads use a generated binding function
-        if let Some(type_args) = tt.generic_type_args(expr.type_id) {
-            if let Some(&elem_type_id) = type_args.first() {
-                let elem_name = tt.base_type_name(elem_type_id);
-                let func_name = format!("__cm_stream_read_{elem_name}");
-                rewrite_cm_instance_method(expr, "entry", &func_name);
-                return;
-            }
+        if let Some(type_args) = tt.generic_type_args(expr.type_id)
+            && let Some(&elem_type_id) = type_args.first()
+        {
+            let elem_name = tt.base_type_name(elem_type_id);
+            let func_name = format!("__cm_stream_read_{elem_name}");
+            rewrite_cm_instance_method(expr, "entry", &func_name);
+            return;
         }
         return;
     }
@@ -6267,28 +6273,26 @@ fn parameterize_stream_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) ->
         }
     }
     // Extract element type from Stream<T>
-    if let Some(type_args) = tt.generic_type_args(type_id) {
-        if let Some(&elem) = type_args.first() {
-            let elem_name = tt.base_type_name(elem);
-            if elem_name != "u8" {
-                // Convert PascalCase to kebab-case for the CM name
-                let cm_elem = elem_name
-                    .chars()
-                    .fold(String::new(), |mut s, c| {
-                        if c.is_uppercase() && !s.is_empty() {
-                            s.push('-');
-                        }
-                        s.push(c.to_ascii_lowercase());
-                        s
-                    });
-                return format!("{cm_name}:{cm_elem}");
-            }
+    if let Some(type_args) = tt.generic_type_args(type_id)
+        && let Some(&elem) = type_args.first()
+    {
+        let elem_name = tt.base_type_name(elem);
+        if elem_name != "u8" {
+            // Convert PascalCase to kebab-case for the CM name
+            let cm_elem = elem_name.chars().fold(String::new(), |mut s, c| {
+                if c.is_uppercase() && !s.is_empty() {
+                    s.push('-');
+                }
+                s.push(c.to_ascii_lowercase());
+                s
+            });
+            return format!("{cm_name}:{cm_elem}");
         }
     }
     cm_name.to_string()
 }
 
-/// Check if a TypeId represents `Array<u8>`.
+/// Check if a `TypeId` represents `Array<u8>`.
 fn is_u8_array_type(type_id: TypeId, tt: &TypeTable) -> bool {
     let name = tt.type_name(type_id);
     name == "Array<u8>"

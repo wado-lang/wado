@@ -73,7 +73,6 @@ impl ComponentModelContext {
             .unwrap_or_else(|| panic!("unknown component type: {name}"))
     }
 
-
     /// Check if a component type exists
     pub fn has_type(&self, name: &str) -> bool {
         self.type_names.contains_key(name)

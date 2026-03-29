@@ -85,10 +85,10 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
     let stream_types: IndexMap<CmStreamPayload, u32> = {
         let mut payloads: Vec<CmStreamPayload> = Vec::new();
         for intrinsic in &all_canonical_intrinsics {
-            if let Some(p) = intrinsic.stream_payload() {
-                if !payloads.contains(&p) {
-                    payloads.push(p);
-                }
+            if let Some(p) = intrinsic.stream_payload()
+                && !payloads.contains(&p)
+            {
+                payloads.push(p);
             }
         }
         let mut map = IndexMap::default();
@@ -102,8 +102,9 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
                     // Alias the record type from the WASI interface that defines it.
                     // WASI imports are already generated (generate_wasi_imports runs first),
                     // so we can alias the exported type from the interface instance.
-                    let val = if let Some(interface_name) =
-                        project.wasi_registry.find_interface_for_struct_cm_name(name)
+                    let val = if let Some(interface_name) = project
+                        .wasi_registry
+                        .find_interface_for_struct_cm_name(name)
                     {
                         let inst_idx = ctx.instance_idx(&interface_name);
                         builder.alias_export(inst_idx, name, ComponentExportKind::Type);

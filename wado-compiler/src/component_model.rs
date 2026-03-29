@@ -795,7 +795,7 @@ impl WasiRegistry {
         for (wado_name, (struct_cm_name, source_path, _, _)) in &self.structs {
             if struct_cm_name == cm_name || wado_name == cm_name {
                 let wasi = WasiImport::parse(source_path)?;
-                return Some(wasi.interface.clone());
+                return Some(wasi.interface);
             }
         }
         None
