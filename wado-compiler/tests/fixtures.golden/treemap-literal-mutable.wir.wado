@@ -153,11 +153,11 @@ type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
+type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];
+
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
-
-type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -402,17 +402,28 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
     let handle: i32;
     let subtask: i32;
     let ws: i32;
-    let __local_4: i32;
+    let __local_5: i32;
     handle = packed >> 4;
     if handle != 0 {
         subtask = handle;
         ws = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            __local_4 = subtask;
-            "wasi/waitable-join"(__local_4, ws);
-            break __inline_cm_waitable_join_0: __local_4;
+            __local_5 = subtask;
+            "wasi/waitable-join"(__local_5, ws);
+            break __inline_cm_waitable_join_0: __local_5;
         });
-        "core:internal/cm_waitable_set_wait"(ws);
+        b9: block {
+            l10: loop {
+                let __sroa_event_code: i32;
+                let __sroa_event_handle: i32;
+                let __sroa_event_payload: u32;
+                multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
+                if __sroa_event_payload == 2 {
+                    break b9;
+                };
+                continue l10;
+            };
+        };
         "wasi/subtask-drop"(subtask);
         "wasi/waitable-set-drop"(ws);
     };
@@ -482,10 +493,15 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
 
 fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     let out_ptr: i32;
+    let code: i32;
+    let evt_handle: i32;
+    let payload: i32;
     out_ptr = "mem/realloc"(0, 0, 4, 8);
-    drop("wasi/waitable-set-wait"(ws, out_ptr));
+    code = "wasi/waitable-set-wait"(ws, out_ptr);
+    evt_handle = builtin::load_i32(out_ptr);
+    payload = builtin::load_i32(out_ptr + 4);
     drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return;
+    return code; evt_handle; payload;
 }
 
 fn count_digits_i64(val) {
@@ -498,13 +514,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l12: loop {
+            l15: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l12;
+                continue l15;
             };
         };
     };
@@ -521,14 +537,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l16: loop {
+                l19: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l16;
+                    continue l19;
                 };
             };
         };
@@ -620,7 +636,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l25: loop {
+            l28: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -628,7 +644,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l25;
+                continue l28;
             };
         };
     };
@@ -652,7 +668,7 @@ fn String^Ord::cmp(self, other) {
     __for_2: block {
         i = 0;
         block {
-            l29: loop {
+            l32: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
                 };
@@ -665,7 +681,7 @@ fn String^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l29;
+                continue l32;
             };
         };
     };
@@ -788,8 +804,8 @@ fn TreeMap<String,i32>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b45: block {
-        l46: loop {
+    b48: block {
+        l49: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.is_null(__pattern_temp_0) == 0 {
                 n = ref.as_non_null(__pattern_temp_0);
@@ -813,9 +829,9 @@ fn TreeMap<String,i32>::find_index(self, key) {
                     current = n.right;
                 };
             } else {
-                break b45;
+                break b48;
             };
-            continue l46;
+            continue l49;
         };
     };
     return -1;
@@ -947,13 +963,13 @@ fn Array<TreeMapEntry<String,i32>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l66: loop {
+            l69: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref "core:allocator/TreeMapEntry<String,i32>">(new_repr, i, builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(old_repr, i));
                 i = i + 1;
-                continue l66;
+                continue l69;
             };
         };
     };
@@ -967,13 +983,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l69: loop {
+            l72: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l69;
+                continue l72;
             };
         };
     };
@@ -1076,8 +1092,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b88: block {
-        l89: loop {
+    b91: block {
+        l92: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -1102,9 +1118,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b88;
+                break b91;
             };
-            continue l89;
+            continue l92;
         };
     };
     String::append_char(f.buf, 34);

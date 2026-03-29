@@ -1799,7 +1799,10 @@ fn import_http_types_for_service(
                 cm_params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
             let mut func_encoder = instance_type.ty().function();
             if func.is_async {
-                func_encoder.async_(true).params(param_refs).result(cm_result);
+                func_encoder
+                    .async_(true)
+                    .params(param_refs)
+                    .result(cm_result);
             } else {
                 func_encoder.params(param_refs).result(cm_result);
             }
@@ -1870,7 +1873,10 @@ fn import_http_types_for_service(
                 cm_params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
             let mut func_encoder = instance_type.ty().function();
             if func.is_async {
-                func_encoder.async_(true).params(param_refs).result(cm_result);
+                func_encoder
+                    .async_(true)
+                    .params(param_refs)
+                    .result(cm_result);
             } else {
                 func_encoder.params(param_refs).result(cm_result);
             }
