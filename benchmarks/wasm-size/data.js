@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774790856891,
+  "lastUpdate": 1774794342920,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8618,6 +8618,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 24923,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d35e3cbd307aedf700402d34265ca5833c07f8de",
+          "message": "Merge pull request #729 from wado-lang/claude/wasip3-wasm-support-S75BJ\n\nFix WASI P3 CM binding codegen and enable 6 HTTP streaming tests",
+          "timestamp": "2026-03-29T23:22:44+09:00",
+          "tree_id": "25fe22f8097714de08827d6e1a7d965f085bd201",
+          "url": "https://github.com/wado-lang/wado/commit/d35e3cbd307aedf700402d34265ca5833c07f8de"
+        },
+        "date": 1774794342708,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24674,
             "unit": "bytes"
           }
         ]
