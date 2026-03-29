@@ -5606,7 +5606,7 @@ fn synthesize_stream_read_func(
     use crate::synthesis::common::*;
 
     let func_name = format!("__cm_stream_read_{elem_name}");
-    let tuple_type_id = type_table
+    let _tuple_type_id = type_table
         .borrow_mut()
         .make_tuple(vec![TypeTable::I32, TypeTable::I32]);
 
@@ -5622,49 +5622,89 @@ fn synthesize_stream_read_func(
     next_local += 1;
     local_types.push(TypeTable::I32);
 
-    // let raw_result = cm_stream_read_raw(handle, max, elem_size, elem_align)
-    let raw_result_idx = next_local;
-    next_local += 1;
-    local_types.push(tuple_type_id);
-    let raw_call = internal_call(
-        "cm_stream_read_raw",
-        vec![
-            local_ref(handle_idx, "handle", TypeTable::I32),
-            local_ref(max_idx, "max", TypeTable::I32),
-            i32_const(elem_size),
-            i32_const(elem_align),
-        ],
-        tuple_type_id,
-    );
-    stmts.push(let_stmt("raw_result", raw_result_idx, tuple_type_id, raw_call));
+    // Use the CM kebab-case name for the stream-read intrinsic
+    let cm_record_name = wasi_registry
+        .get_struct_cm_name(elem_name)
+        .unwrap_or(elem_name)
+        .to_string();
+    let stream_read_name = format!("stream-read:{cm_record_name}");
 
-    // let ptr = raw_result.0
+    // let byte_count = max * elem_size
+    let byte_count_idx = next_local;
+    next_local += 1;
+    local_types.push(TypeTable::I32);
+    let byte_count = binary(
+        TirBinaryOp::Mul,
+        local_ref(max_idx, "max", TypeTable::I32),
+        i32_const(elem_size),
+        TypeTable::I32,
+    );
+    stmts.push(let_stmt("byte_count", byte_count_idx, TypeTable::I32, byte_count));
+
+    // let ptr = realloc(0, 0, elem_align, byte_count)
     let ptr_idx = next_local;
     next_local += 1;
     local_types.push(TypeTable::I32);
-    let ptr_expr = TirExpr::new(
-        TirExprKind::FieldAccess {
-            expr: Box::new(local_ref(raw_result_idx, "raw_result", tuple_type_id)),
-            field_name: "0".to_string(),
-            field_index: 0,
-        },
+    let alloc_call = builtin_call(
+        "realloc",
+        vec![
+            i32_const(0),
+            i32_const(0),
+            i32_const(elem_align),
+            local_ref(byte_count_idx, "byte_count", TypeTable::I32),
+        ],
         TypeTable::I32,
-        synth_span(),
     );
-    stmts.push(let_stmt("ptr", ptr_idx, TypeTable::I32, ptr_expr));
+    stmts.push(let_stmt("ptr", ptr_idx, TypeTable::I32, alloc_call));
 
-    // let count = raw_result.1
+    // let mut result = stream-read:directory-entry(handle, ptr, max)
+    let result_idx = next_local;
+    next_local += 1;
+    local_types.push(TypeTable::I32);
+    let stream_read_call = cm_raw_call(
+        &stream_read_name,
+        vec![
+            local_ref(handle_idx, "handle", TypeTable::I32),
+            local_ref(ptr_idx, "ptr", TypeTable::I32),
+            local_ref(max_idx, "max", TypeTable::I32),
+        ],
+        TypeTable::I32,
+    );
+    stmts.push(let_mut_stmt("result", result_idx, TypeTable::I32, stream_read_call));
+
+    // if result == -1 { result = wait_for_blocked(handle); }
+    let blocked_check = binary(
+        TirBinaryOp::Eq,
+        local_ref(result_idx, "result", TypeTable::I32),
+        i32_const(-1),
+        TypeTable::BOOL,
+    );
+    let wait_call = internal_call(
+        "wait_for_blocked",
+        vec![local_ref(handle_idx, "handle", TypeTable::I32)],
+        TypeTable::I32,
+    );
+    stmts.push(if_stmt(
+        blocked_check,
+        TirBlock {
+            stmts: vec![expr_stmt(assign(
+                local_ref(result_idx, "result", TypeTable::I32),
+                wait_call,
+            ))],
+            span: synth_span(),
+        },
+        None,
+    ));
+
+    // let count = result >> 4
     let count_idx = next_local;
     next_local += 1;
     local_types.push(TypeTable::I32);
-    let count_expr = TirExpr::new(
-        TirExprKind::FieldAccess {
-            expr: Box::new(local_ref(raw_result_idx, "raw_result", tuple_type_id)),
-            field_name: "1".to_string(),
-            field_index: 1,
-        },
+    let count_expr = binary(
+        TirBinaryOp::Shr,
+        local_ref(result_idx, "result", TypeTable::I32),
+        i32_const(4),
         TypeTable::I32,
-        synth_span(),
     );
     stmts.push(let_stmt("count", count_idx, TypeTable::I32, count_expr));
 
@@ -5827,23 +5867,20 @@ fn synthesize_stream_read_func(
         span: synth_span(),
     }));
 
-    // Free buffer: cm_stream_read_raw_free(ptr, max * elem_size, elem_align)
-    let byte_count = binary(
-        TirBinaryOp::Mul,
-        local_ref(max_idx, "max", TypeTable::I32),
-        i32_const(elem_size),
-        TypeTable::I32,
-    );
-    let free_call = internal_call(
-        "cm_stream_read_raw_free",
+    // Free buffer: realloc(ptr, byte_count, elem_align, 0)
+    let free_call = builtin_call(
+        "realloc",
         vec![
             local_ref(ptr_idx, "ptr", TypeTable::I32),
-            byte_count,
+            local_ref(byte_count_idx, "byte_count", TypeTable::I32),
             i32_const(elem_align),
+            i32_const(0),
         ],
-        TypeTable::UNIT,
+        TypeTable::I32,
     );
-    stmts.push(expr_stmt(free_call));
+    stmts.push(let_stmt("__freed", next_local, TypeTable::I32, free_call));
+    next_local += 1;
+    local_types.push(TypeTable::I32);
 
     // return arr
     stmts.push(return_stmt(Some(local_ref(
@@ -6121,6 +6158,16 @@ fn rewrite_cm_methods_in_expr(expr: &mut TirExpr, tt: &TypeTable) {
         return;
     }
 
+    // For stream operations on non-u8 types, parameterize the canonical name
+    // and rewrite as CmRawCall directly (since the name is dynamic).
+    if is_stream_cm_method(&cm_name) {
+        let parameterized = parameterize_stream_cm_name(&cm_name, expr, tt);
+        if parameterized != cm_name {
+            rewrite_cm_instance_method(expr, "raw", &parameterized);
+            return;
+        }
+    }
+
     // Look up the binding function
     let Some((kind, func_name)) = cm_binding_function(&cm_name) else {
         // Not handled by synthesis yet — will fall through to WIR translate
@@ -6186,6 +6233,59 @@ fn rewrite_cm_static_method(expr: &mut TirExpr, kind: &str, func_name: &str) {
     };
 
     *expr = new_expr;
+}
+
+/// Check if a CM method name is a stream operation.
+fn is_stream_cm_method(cm_name: &str) -> bool {
+    matches!(
+        cm_name,
+        "stream-drop-readable"
+            | "stream-drop-writable"
+            | "stream-cancel-read"
+            | "stream-cancel-write"
+    )
+}
+
+/// Parameterize a stream CM name based on the receiver type.
+/// For non-u8 streams (e.g., `Stream<DirectoryEntry>`), appends the CM record name
+/// (e.g., "stream-drop-readable:directory-entry").
+fn parameterize_stream_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) -> String {
+    // Get the receiver's type from the method call
+    let receiver_type_id = match &expr.kind {
+        TirExprKind::MethodCall { receiver, .. } => receiver.type_id,
+        _ => return cm_name.to_string(),
+    };
+    // Resolve through references: &Stream<T> → Stream<T>
+    use crate::tir::ResolvedType;
+    let mut type_id = receiver_type_id;
+    loop {
+        match tt.get(type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                type_id = *inner;
+            }
+            _ => break,
+        }
+    }
+    // Extract element type from Stream<T>
+    if let Some(type_args) = tt.generic_type_args(type_id) {
+        if let Some(&elem) = type_args.first() {
+            let elem_name = tt.base_type_name(elem);
+            if elem_name != "u8" {
+                // Convert PascalCase to kebab-case for the CM name
+                let cm_elem = elem_name
+                    .chars()
+                    .fold(String::new(), |mut s, c| {
+                        if c.is_uppercase() && !s.is_empty() {
+                            s.push('-');
+                        }
+                        s.push(c.to_ascii_lowercase());
+                        s
+                    });
+                return format!("{cm_name}:{cm_elem}");
+            }
+        }
+    }
+    cm_name.to_string()
 }
 
 /// Check if a TypeId represents `Array<u8>`.

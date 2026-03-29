@@ -788,6 +788,19 @@ impl WasiRegistry {
             .map(|(_, source, _, _)| source.as_str())
     }
 
+    /// Find the interface name (e.g., "types") for a struct given its CM name
+    /// (e.g., "directory-entry"). Used by the component builder to alias types
+    /// from WASI interface imports.
+    pub fn find_interface_for_struct_cm_name(&self, cm_name: &str) -> Option<String> {
+        for (wado_name, (struct_cm_name, source_path, _, _)) in &self.structs {
+            if struct_cm_name == cm_name || wado_name == cm_name {
+                let wasi = WasiImport::parse(source_path)?;
+                return Some(wasi.interface.clone());
+            }
+        }
+        None
+    }
+
     /// Get the fields with Wado names (`wado_name`, `cm_name`, `field_type`)
     pub fn get_struct_fields_with_wado_names(
         &self,

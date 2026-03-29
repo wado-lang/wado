@@ -1,7 +1,4 @@
-#![TODO]
 // Tests: Descriptor::create_directory_at, read_directory, remove_directory_at
-// TODO: Stream<DirectoryEntry> requires parameterized stream canonical intrinsics
-// (stream-read/stream-new/stream-drop must be registered per stream element type)
 //
 // Verifies that:
 // - create_directory_at creates a new directory
@@ -54,11 +51,8 @@ export fn run() with Stdout, Stderr, Preopens {
     let mut found_newdir = false;
     let mut entry_count = 0;
 
-    loop {
+    scope: {
         let entries = dir_stream.read(100);
-        if entries.len() == 0 {
-            break;
-        }
         for let entry of entries {
             entry_count += 1;
             if entry.name == "hello.txt" {
@@ -84,6 +78,7 @@ export fn run() with Stdout, Stderr, Preopens {
             }
         }
     }
+    _done.drop();
     dir_stream.drop();
 
     if found_hello {

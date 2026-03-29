@@ -292,6 +292,19 @@ impl fmt::Display for CmScalarType {
     }
 }
 
+/// The element type of a CM `stream<T>` canonical intrinsic.
+///
+/// Distinguishes between distinct stream types at the Component Model level:
+/// - `U8` = `stream<u8>` (default for file I/O, stdin/stdout)
+/// - `Record(name)` = `stream<T>` where T is a CM record type (e.g., directory-entry)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CmStreamPayload {
+    /// `stream<u8>` — the default stream type
+    U8,
+    /// `stream<T>` where T is a CM record type, identified by CM kebab-case name
+    Record(String),
+}
+
 /// The element type of a CM `future<T>` canonical intrinsic.
 ///
 /// Distinguishes between distinct future types at the Component Model level:
@@ -318,13 +331,13 @@ pub enum CmFuturePayload {
 /// instead of being encoded in the name string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CanonicalIntrinsic {
-    StreamNew,
-    StreamRead,
-    StreamWrite,
-    StreamDropReadable,
-    StreamDropWritable,
-    StreamCancelRead,
-    StreamCancelWrite,
+    StreamNew(CmStreamPayload),
+    StreamRead(CmStreamPayload),
+    StreamWrite(CmStreamPayload),
+    StreamDropReadable(CmStreamPayload),
+    StreamDropWritable(CmStreamPayload),
+    StreamCancelRead(CmStreamPayload),
+    StreamCancelWrite(CmStreamPayload),
     FutureNew(CmFuturePayload),
     FutureRead(CmFuturePayload),
     FutureWrite(CmFuturePayload),
@@ -353,13 +366,13 @@ impl CanonicalIntrinsic {
     /// the structured enum directly.
     pub fn import_name(&self) -> String {
         match self {
-            Self::StreamNew => "stream-new".to_string(),
-            Self::StreamRead => "stream-read".to_string(),
-            Self::StreamWrite => "stream-write".to_string(),
-            Self::StreamDropReadable => "stream-drop-readable".to_string(),
-            Self::StreamDropWritable => "stream-drop-writable".to_string(),
-            Self::StreamCancelRead => "stream-cancel-read".to_string(),
-            Self::StreamCancelWrite => "stream-cancel-write".to_string(),
+            Self::StreamNew(p) => format_stream_name("stream-new", p),
+            Self::StreamRead(p) => format_stream_name("stream-read", p),
+            Self::StreamWrite(p) => format_stream_name("stream-write", p),
+            Self::StreamDropReadable(p) => format_stream_name("stream-drop-readable", p),
+            Self::StreamDropWritable(p) => format_stream_name("stream-drop-writable", p),
+            Self::StreamCancelRead(p) => format_stream_name("stream-cancel-read", p),
+            Self::StreamCancelWrite(p) => format_stream_name("stream-cancel-write", p),
             Self::FutureNew(p) => format_future_name("future-new", p.clone()),
             Self::FutureRead(p) => format_future_name("future-read", p.clone()),
             Self::FutureWrite(p) => format_future_name("future-write", p.clone()),
@@ -388,13 +401,9 @@ impl CanonicalIntrinsic {
     /// parameterized ones (future with type) are created directly in WIR translation.
     pub fn from_import_name(name: &str) -> Option<Self> {
         Some(match name {
-            "stream-new" => Self::StreamNew,
-            "stream-read" => Self::StreamRead,
-            "stream-write" => Self::StreamWrite,
-            "stream-drop-readable" => Self::StreamDropReadable,
-            "stream-drop-writable" => Self::StreamDropWritable,
-            "stream-cancel-read" => Self::StreamCancelRead,
-            "stream-cancel-write" => Self::StreamCancelWrite,
+            _ if name.starts_with("stream-") => {
+                return parse_stream_intrinsic(name);
+            }
             "future-new" => Self::FutureNew(CmFuturePayload::Trailers),
             "future-read" => Self::FutureRead(CmFuturePayload::Trailers),
             "future-write" => Self::FutureWrite(CmFuturePayload::Trailers),
@@ -429,6 +438,47 @@ impl CanonicalIntrinsic {
             | Self::FutureCancelWrite(p) => Some(p.clone()),
             _ => None,
         }
+    }
+
+    /// Extract the stream payload type, if this is a stream intrinsic.
+    pub fn stream_payload(&self) -> Option<CmStreamPayload> {
+        match self {
+            Self::StreamNew(p)
+            | Self::StreamRead(p)
+            | Self::StreamWrite(p)
+            | Self::StreamDropReadable(p)
+            | Self::StreamDropWritable(p)
+            | Self::StreamCancelRead(p)
+            | Self::StreamCancelWrite(p) => Some(p.clone()),
+            _ => None,
+        }
+    }
+}
+
+fn parse_stream_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
+    // Parse "stream-read:directory-entry" → StreamRead(Record("directory-entry"))
+    // Parse "stream-read" → StreamRead(U8)
+    let (base, payload) = if let Some((b, suffix)) = name.split_once(':') {
+        (b, CmStreamPayload::Record(suffix.to_string()))
+    } else {
+        (name, CmStreamPayload::U8)
+    };
+    Some(match base {
+        "stream-new" => CanonicalIntrinsic::StreamNew(payload),
+        "stream-read" => CanonicalIntrinsic::StreamRead(payload),
+        "stream-write" => CanonicalIntrinsic::StreamWrite(payload),
+        "stream-drop-readable" => CanonicalIntrinsic::StreamDropReadable(payload),
+        "stream-drop-writable" => CanonicalIntrinsic::StreamDropWritable(payload),
+        "stream-cancel-read" => CanonicalIntrinsic::StreamCancelRead(payload),
+        "stream-cancel-write" => CanonicalIntrinsic::StreamCancelWrite(payload),
+        _ => return None,
+    })
+}
+
+fn format_stream_name(base: &str, payload: &CmStreamPayload) -> String {
+    match payload {
+        CmStreamPayload::U8 => base.to_string(),
+        CmStreamPayload::Record(name) => format!("{base}:{name}"),
     }
 }
 

@@ -17,7 +17,7 @@ use crate::bundled::wado_bundled_libm_wasm;
 use crate::component_model::{CmInstanceTypeGen, CmVariantCase, WasiFunctionInfo};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::project::Project;
-use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirModule};
+use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirModule};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
     ComponentValType, ExportKind, InstanceType, ModuleArg, PrimitiveValType, TypeBounds,
@@ -31,14 +31,6 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
 
     // Generate WASI imports dynamically from registry
     generate_wasi_imports(&mut builder, &mut ctx, project);
-
-    // Type: stream<u8> for stream intrinsics
-    let stream_u8_type = ctx.register_type("stream-u8");
-    {
-        let (_, enc) = builder.ty(Some("stream-u8"));
-        enc.defined_type()
-            .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
-    }
 
     // Type: result unit for run function (needed for task.return)
     let result_unit_type = ctx.register_type("result-unit");
@@ -89,6 +81,48 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
     let all_canonical_intrinsics: Vec<CanonicalIntrinsic> =
         wir_module.needed_canonicals.iter().cloned().collect();
 
+    // Build stream types needed by canonical intrinsics.
+    let stream_types: IndexMap<CmStreamPayload, u32> = {
+        let mut payloads: Vec<CmStreamPayload> = Vec::new();
+        for intrinsic in &all_canonical_intrinsics {
+            if let Some(p) = intrinsic.stream_payload() {
+                if !payloads.contains(&p) {
+                    payloads.push(p);
+                }
+            }
+        }
+        let mut map = IndexMap::default();
+        for payload in payloads {
+            let (type_key, val_type) = match &payload {
+                CmStreamPayload::U8 => (
+                    "stream-u8".to_string(),
+                    ComponentValType::Primitive(PrimitiveValType::U8),
+                ),
+                CmStreamPayload::Record(name) => {
+                    // Alias the record type from the WASI interface that defines it.
+                    // WASI imports are already generated (generate_wasi_imports runs first),
+                    // so we can alias the exported type from the interface instance.
+                    let val = if let Some(interface_name) =
+                        project.wasi_registry.find_interface_for_struct_cm_name(name)
+                    {
+                        let inst_idx = ctx.instance_idx(&interface_name);
+                        builder.alias_export(inst_idx, name, ComponentExportKind::Type);
+                        let aliased_idx = ctx.register_type(name);
+                        ComponentValType::Type(aliased_idx)
+                    } else {
+                        ComponentValType::Primitive(PrimitiveValType::U8)
+                    };
+                    (format!("stream-{name}"), val)
+                }
+            };
+            ctx.register_type(&type_key);
+            let (_, enc) = builder.ty(Some(&type_key));
+            enc.defined_type().stream(Some(val_type));
+            map.insert(payload, ctx.type_idx(&type_key));
+        }
+        map
+    };
+
     // HTTP response types for future<T> canonical intrinsics
     let needs_trailers_future = all_canonical_intrinsics
         .iter()
@@ -104,6 +138,19 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
             }
         })
         .collect();
+
+    // stream<u8> type is also needed by HTTP future types
+    let stream_u8_type = stream_types
+        .get(&CmStreamPayload::U8)
+        .copied()
+        .unwrap_or_else(|| {
+            // If no stream<u8> intrinsics are needed, define it anyway for HTTP
+            ctx.register_type("stream-u8");
+            let (_, enc) = builder.ty(Some("stream-u8"));
+            enc.defined_type()
+                .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+            ctx.type_idx("stream-u8")
+        });
 
     let (trailers_future_type, transmission_future_types) = if needs_trailers_future {
         let (t, http_ft) = build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type);
@@ -138,7 +185,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
         &mut builder,
         &mut ctx,
         &all_canonical_intrinsics,
-        stream_u8_type,
+        &stream_types,
         result_unit_type,
         trailers_future_type,
         &transmission_future_types,
@@ -906,7 +953,7 @@ fn emit_canonical_intrinsics(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     canonical_intrinsics: &[CanonicalIntrinsic],
-    stream_u8_type: u32,
+    stream_types: &IndexMap<CmStreamPayload, u32>,
     result_unit_type: u32,
     trailers_future_type: u32,
     transmission_future_types: &IndexMap<String, u32>,
@@ -916,38 +963,41 @@ fn emit_canonical_intrinsics(
         ctx.register_core_func(&intrinsic.import_name());
 
         match intrinsic {
-            CanonicalIntrinsic::StreamNew => {
-                builder.stream_new(stream_u8_type);
+            CanonicalIntrinsic::StreamNew(payload) => {
+                let st = stream_types[payload];
+                builder.stream_new(st);
             }
-            CanonicalIntrinsic::StreamWrite => {
+            CanonicalIntrinsic::StreamWrite(payload) => {
+                let st = stream_types[payload];
                 builder.stream_write(
-                    stream_u8_type,
+                    st,
                     [
                         CanonicalOption::Memory(ctx.memory_idx()),
                         CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
                     ],
                 );
             }
-            CanonicalIntrinsic::StreamRead => {
+            CanonicalIntrinsic::StreamRead(payload) => {
+                let st = stream_types[payload];
                 builder.stream_read(
-                    stream_u8_type,
+                    st,
                     [
                         CanonicalOption::Memory(ctx.memory_idx()),
                         CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
                     ],
                 );
             }
-            CanonicalIntrinsic::StreamDropWritable => {
-                builder.stream_drop_writable(stream_u8_type);
+            CanonicalIntrinsic::StreamDropWritable(payload) => {
+                builder.stream_drop_writable(stream_types[payload]);
             }
-            CanonicalIntrinsic::StreamDropReadable => {
-                builder.stream_drop_readable(stream_u8_type);
+            CanonicalIntrinsic::StreamDropReadable(payload) => {
+                builder.stream_drop_readable(stream_types[payload]);
             }
-            CanonicalIntrinsic::StreamCancelRead => {
-                builder.stream_cancel_read(stream_u8_type, false);
+            CanonicalIntrinsic::StreamCancelRead(payload) => {
+                builder.stream_cancel_read(stream_types[payload], false);
             }
-            CanonicalIntrinsic::StreamCancelWrite => {
-                builder.stream_cancel_write(stream_u8_type, false);
+            CanonicalIntrinsic::StreamCancelWrite(payload) => {
+                builder.stream_cancel_write(stream_types[payload], false);
             }
             CanonicalIntrinsic::FutureNew(payload) => {
                 let ft = resolve_future_type(
