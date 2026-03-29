@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774761376150,
+  "lastUpdate": 1774769618747,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8447,6 +8447,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3a4cffbe3697a67cfe3b2a35ea86082f185720fd"
         },
         "date": 1774761375940,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1999,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9279,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24923,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1f27c95ae49fe55a6b16028cabe337bd2dd04832",
+          "message": "Merge pull request #725 from wado-lang/claude/add-module-scope-attrs-L7XOk\n\nAdd #![TODO] and #![generated] module-scope attributes",
+          "timestamp": "2026-03-29T16:30:40+09:00",
+          "tree_id": "577b84cd58e153c6ecd3303da3b32857e360d9b3",
+          "url": "https://github.com/wado-lang/wado/commit/1f27c95ae49fe55a6b16028cabe337bd2dd04832"
+        },
+        "date": 1774769618528,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
