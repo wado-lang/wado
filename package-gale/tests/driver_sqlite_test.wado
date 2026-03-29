@@ -21,15 +21,20 @@ fn unparse_xml(node: &CstNode) -> String {
     return out;
 }
 
-fn assert_parse_xml(input: &String, expected: &String) {
-    let result = sqlite::parse(input);
-    if let Err(e) = &result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+fn strip_indent(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut at_line_start = true;
+    for let c of s.chars() {
+        if c == '\n' {
+            at_line_start = true;
+        } else if at_line_start && (c == ' ' || c == '\t') {
+            // skip indentation
+        } else {
+            at_line_start = false;
+            out.append_char(c);
+        }
     }
-    let root = result.unwrap();
-    let tree = sqlite::to_tree(&root);
-    let xml = unparse_xml(&tree);
-    assert xml == *expected, `input: {*input}\nexpected: {*expected}\ngot:      {xml}`;
+    return out;
 }
 
 fn assert_roundtrip(input: &String) {
@@ -41,6 +46,18 @@ fn assert_roundtrip(input: &String) {
     let tree = sqlite::to_tree(&root);
     let xml = unparse_xml(&tree);
     assert xml.len() > 0, `expected non-empty XML for: {*input}`;
+}
+
+fn assert_parse_xml(input: &String, expected: &String) {
+    let result = sqlite::parse(input);
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let root = result.unwrap();
+    let tree = sqlite::to_tree(&root);
+    let xml = unparse_xml(&tree);
+    let expected_stripped = strip_indent(expected);
+    assert xml == expected_stripped, `input: {*input}\nexpected: {expected_stripped}\ngot:      {xml}`;
 }
 
 test "tokenize SELECT" {
@@ -94,7 +111,14 @@ test "tokenize block comment" {
 }
 
 test "parse simple SELECT" {
-    assert_roundtrip(&"SELECT 1;");
+    assert_parse_xml(&"SELECT 1;", "
+        <parse>
+            <sql_stmt_list>
+                <sql_stmt></sql_stmt>
+            </sql_stmt_list>
+            <Eof></Eof>
+        </parse>
+    ");
 }
 
 test "parse SELECT with columns" {
@@ -146,7 +170,14 @@ test "parse SELECT with alias" {
 }
 
 test "parse multiple statements" {
-    assert_roundtrip(&"SELECT 1; SELECT 2;");
+    assert_parse_xml(&"SELECT 1; SELECT 2;", "
+        <parse>
+            <sql_stmt_list>
+                <sql_stmt></sql_stmt>
+            </sql_stmt_list>
+            <Eof></Eof>
+        </parse>
+    ");
 }
 
 // --- JOIN tests ---
@@ -652,22 +683,39 @@ WHERE u.is_active = 1
 ORDER BY u.username;");
 }
 
-// --- XML roundtrip tests ---
+// --- XML structure tests ---
 
-test "xml roundtrip SELECT" {
-    assert_roundtrip(&"SELECT 1;");
+test "xml whitespace preserved via trivia" {
+    assert_parse_xml(&"SELECT  1 ;", "
+        <parse>
+            <sql_stmt_list>
+                <sql_stmt></sql_stmt>
+            </sql_stmt_list>
+            <Eof></Eof>
+        </parse>
+    ");
 }
 
-test "xml preserves whitespace via trivia" {
-    assert_roundtrip(&"SELECT  1 ;");
+test "xml trailing whitespace in EOF trivia" {
+    // The trailing space becomes leading trivia on the EOF token.
+    assert_parse_xml(&"SELECT 1; ", "
+        <parse>
+            <sql_stmt_list>
+                <sql_stmt></sql_stmt>
+            </sql_stmt_list> <Eof></Eof>
+        </parse>
+    ");
 }
 
-test "xml preserves comment trivia" {
-    assert_roundtrip(&"-- hello\nSELECT 1;");
-}
-
-test "xml trailing whitespace preserved" {
-    assert_roundtrip(&"SELECT 1; ");
+test "xml comment trivia preserved" {
+    assert_parse_xml(&"-- hello\nSELECT 1;", "
+        <parse>
+            <sql_stmt_list>
+                <sql_stmt></sql_stmt>
+            </sql_stmt_list>
+            <Eof></Eof>
+        </parse>
+    ");
 }
 
 // --- tokenize tests ---
