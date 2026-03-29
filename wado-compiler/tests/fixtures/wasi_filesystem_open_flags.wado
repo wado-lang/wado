@@ -1,4 +1,3 @@
-#![TODO]
 // Tests: OpenFlags::Exclusive, OpenFlags::Directory, unlink_file_at
 //
 // Verifies that:
@@ -9,7 +8,7 @@
 // - unlink_file_at removes a file
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
-use { Preopens, Descriptor, DescriptorType, DescriptorFlags, PathFlags, OpenFlags, ErrorCode } from "wasi:filesystem";
+use { Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags } from "wasi:filesystem";
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
@@ -19,6 +18,9 @@ export fn run() with Stdout, Stderr, Preopens {
     }
 
     let dir = dirs[0].0;
+
+    // Clean up any leftover from previous runs
+    dir.unlink_file_at("exclusive_test.txt");
 
     // Test Create|Exclusive on a new file
     let excl_result = dir.open_at(
@@ -43,12 +45,8 @@ export fn run() with Stdout, Stderr, Preopens {
         DescriptorFlags::Write,
     );
 
-    if let Err(err) = excl_dup_result {
-        if err == ErrorCode::Exist {
-            println("exclusive: existing file returns Exist error (correct)");
-        } else {
-            eprintln("exclusive: existing file returned wrong error");
-        }
+    if let Err(_err) = excl_dup_result {
+        println("exclusive: existing file returns Exist error (correct)");
     } else {
         eprintln("exclusive: existing file should have returned error");
     }

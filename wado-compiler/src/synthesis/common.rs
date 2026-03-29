@@ -60,6 +60,27 @@ pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> Tir
     )
 }
 
+/// Create a call to a synthesized function in the entry module.
+pub fn entry_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: ModuleSource::EntryPoint {
+                    filename: String::new(),
+                },
+                name: name.to_string(),
+                monomorph_info: None,
+                method_info: None,
+                is_cm_binding: false,
+            },
+            type_args: vec![],
+            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+        },
+        return_type,
+        synth_span(),
+    )
+}
+
 /// Create an i32 literal expression.
 pub fn i32_const(value: i32) -> TirExpr {
     TirExpr::new(

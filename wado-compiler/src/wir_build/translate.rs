@@ -11,8 +11,8 @@ use crate::tir::{
     TypeId, TypeTable,
 };
 use crate::wir::{
-    CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirFuncId, WirInstr, WirName, WirType,
-    WirTypeDef, WirTypeId,
+    CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirFuncId, WirInstr,
+    WirName, WirType, WirTypeDef, WirTypeId,
 };
 
 use super::context::WirContext;
@@ -4501,7 +4501,7 @@ impl FunctionTranslator<'_, '_> {
         let intrinsic = if is_future {
             CanonicalIntrinsic::FutureNew(payload)
         } else {
-            CanonicalIntrinsic::StreamNew
+            CanonicalIntrinsic::StreamNew(CmStreamPayload::U8)
         };
         let func_id = self
             .ctx

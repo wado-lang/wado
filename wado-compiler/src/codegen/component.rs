@@ -17,7 +17,7 @@ use crate::bundled::wado_bundled_libm_wasm;
 use crate::component_model::{CmInstanceTypeGen, CmVariantCase, WasiFunctionInfo};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::project::Project;
-use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirModule};
+use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirModule};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
     ComponentValType, ExportKind, InstanceType, ModuleArg, PrimitiveValType, TypeBounds,
@@ -31,14 +31,6 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
 
     // Generate WASI imports dynamically from registry
     generate_wasi_imports(&mut builder, &mut ctx, project);
-
-    // Type: stream<u8> for stream intrinsics
-    let stream_u8_type = ctx.register_type("stream-u8");
-    {
-        let (_, enc) = builder.ty(Some("stream-u8"));
-        enc.defined_type()
-            .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
-    }
 
     // Type: result unit for run function (needed for task.return)
     let result_unit_type = ctx.register_type("result-unit");
@@ -89,6 +81,49 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
     let all_canonical_intrinsics: Vec<CanonicalIntrinsic> =
         wir_module.needed_canonicals.iter().cloned().collect();
 
+    // Build stream types needed by canonical intrinsics.
+    let stream_types: IndexMap<CmStreamPayload, u32> = {
+        let mut payloads: Vec<CmStreamPayload> = Vec::new();
+        for intrinsic in &all_canonical_intrinsics {
+            if let Some(p) = intrinsic.stream_payload()
+                && !payloads.contains(&p)
+            {
+                payloads.push(p);
+            }
+        }
+        let mut map = IndexMap::default();
+        for payload in payloads {
+            let (type_key, val_type) = match &payload {
+                CmStreamPayload::U8 => (
+                    "stream-u8".to_string(),
+                    ComponentValType::Primitive(PrimitiveValType::U8),
+                ),
+                CmStreamPayload::Record(name) => {
+                    // Alias the record type from the WASI interface that defines it.
+                    // WASI imports are already generated (generate_wasi_imports runs first),
+                    // so we can alias the exported type from the interface instance.
+                    let val = if let Some(interface_name) = project
+                        .wasi_registry
+                        .find_interface_for_struct_cm_name(name)
+                    {
+                        let inst_idx = ctx.instance_idx(&interface_name);
+                        builder.alias_export(inst_idx, name, ComponentExportKind::Type);
+                        let aliased_idx = ctx.register_type(name);
+                        ComponentValType::Type(aliased_idx)
+                    } else {
+                        ComponentValType::Primitive(PrimitiveValType::U8)
+                    };
+                    (format!("stream-{name}"), val)
+                }
+            };
+            ctx.register_type(&type_key);
+            let (_, enc) = builder.ty(Some(&type_key));
+            enc.defined_type().stream(Some(val_type));
+            map.insert(payload, ctx.type_idx(&type_key));
+        }
+        map
+    };
+
     // HTTP response types for future<T> canonical intrinsics
     let needs_trailers_future = all_canonical_intrinsics
         .iter()
@@ -104,6 +139,19 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
             }
         })
         .collect();
+
+    // stream<u8> type is also needed by HTTP future types
+    let stream_u8_type = stream_types
+        .get(&CmStreamPayload::U8)
+        .copied()
+        .unwrap_or_else(|| {
+            // If no stream<u8> intrinsics are needed, define it anyway for HTTP
+            ctx.register_type("stream-u8");
+            let (_, enc) = builder.ty(Some("stream-u8"));
+            enc.defined_type()
+                .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+            ctx.type_idx("stream-u8")
+        });
 
     let (trailers_future_type, transmission_future_types) = if needs_trailers_future {
         let (t, http_ft) = build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type);
@@ -138,7 +186,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
         &mut builder,
         &mut ctx,
         &all_canonical_intrinsics,
-        stream_u8_type,
+        &stream_types,
         result_unit_type,
         trailers_future_type,
         &transmission_future_types,
@@ -342,11 +390,21 @@ fn emit_cm_val_type(
 ) -> ComponentValType {
     match ty {
         Type::Generic(g) if g.name == "Stream" => {
-            // Only u8 streams are supported in WASI P3
-            instance_type
-                .ty()
-                .defined_type()
-                .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+            let element = g.args.first().map(|inner| {
+                emit_cm_val_type(
+                    inner,
+                    instance_type,
+                    local_type_idx,
+                    error_code_idx,
+                    has_local_error_code,
+                    enum_export_indices,
+                    own_resource_type_indices,
+                    shared_type_gen.as_deref_mut(),
+                    project,
+                    ctx,
+                )
+            });
+            instance_type.ty().defined_type().stream(element);
             let idx = *local_type_idx;
             *local_type_idx += 1;
             ComponentValType::Type(idx)
@@ -443,8 +501,18 @@ fn emit_cm_val_type(
             ComponentValType::Type(idx)
         }
         Type::Generic(g) if g.name == "Option" && !g.args.is_empty() => {
-            let element_val_type =
-                type_to_cm_primitive_with_resources(&g.args[0], own_resource_type_indices);
+            let element_val_type = emit_cm_val_type(
+                &g.args[0],
+                instance_type,
+                local_type_idx,
+                error_code_idx,
+                has_local_error_code,
+                enum_export_indices,
+                own_resource_type_indices,
+                shared_type_gen,
+                project,
+                ctx,
+            );
             instance_type.ty().defined_type().option(element_val_type);
             let idx = *local_type_idx;
             *local_type_idx += 1;
@@ -459,6 +527,8 @@ fn emit_cm_val_type(
                 has_local_error_code,
                 enum_export_indices,
                 own_resource_type_indices,
+                shared_type_gen.as_deref_mut(),
+                project,
                 ctx,
             );
             instance_type.ty().defined_type().tuple(tuple_types);
@@ -475,6 +545,8 @@ fn emit_cm_val_type(
                 has_local_error_code,
                 enum_export_indices,
                 own_resource_type_indices,
+                shared_type_gen.as_deref_mut(),
+                project,
                 ctx,
             );
             instance_type.ty().defined_type().tuple(tuple_types);
@@ -488,6 +560,22 @@ fn emit_cm_val_type(
                 && let Some(&idx) = enum_export_indices.get(&named.name)
             {
                 return ComponentValType::Type(idx);
+            }
+            // Complex types (e.g. WASI records like Instant) use shared type gen
+            if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
+                type_gen.set_next_idx(*local_type_idx);
+                let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
+                    .iter()
+                    .map(|(k, &v)| (k.as_str(), v))
+                    .collect();
+                let val = type_gen.ast_type_to_cm(
+                    ty,
+                    instance_type,
+                    proj.wasi_registry,
+                    &resource_exports,
+                );
+                *local_type_idx = type_gen.next_idx();
+                return val;
             }
             type_to_cm_primitive_with_resources(ty, own_resource_type_indices)
         }
@@ -528,6 +616,8 @@ fn build_cm_tuple_types(
     has_local_error_code: bool,
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
+    mut shared_type_gen: Option<&mut CmInstanceTypeGen>,
+    project: Option<&Project>,
     ctx: &mut ComponentModelContext,
 ) -> Vec<ComponentValType> {
     elems
@@ -541,8 +631,8 @@ fn build_cm_tuple_types(
                 has_local_error_code,
                 enum_export_indices,
                 own_resource_type_indices,
-                None,
-                None,
+                shared_type_gen.as_deref_mut(),
+                project,
                 ctx,
             )
         })
@@ -864,7 +954,7 @@ fn emit_canonical_intrinsics(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     canonical_intrinsics: &[CanonicalIntrinsic],
-    stream_u8_type: u32,
+    stream_types: &IndexMap<CmStreamPayload, u32>,
     result_unit_type: u32,
     trailers_future_type: u32,
     transmission_future_types: &IndexMap<String, u32>,
@@ -874,38 +964,41 @@ fn emit_canonical_intrinsics(
         ctx.register_core_func(&intrinsic.import_name());
 
         match intrinsic {
-            CanonicalIntrinsic::StreamNew => {
-                builder.stream_new(stream_u8_type);
+            CanonicalIntrinsic::StreamNew(payload) => {
+                let st = stream_types[payload];
+                builder.stream_new(st);
             }
-            CanonicalIntrinsic::StreamWrite => {
+            CanonicalIntrinsic::StreamWrite(payload) => {
+                let st = stream_types[payload];
                 builder.stream_write(
-                    stream_u8_type,
+                    st,
                     [
                         CanonicalOption::Memory(ctx.memory_idx()),
                         CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
                     ],
                 );
             }
-            CanonicalIntrinsic::StreamRead => {
+            CanonicalIntrinsic::StreamRead(payload) => {
+                let st = stream_types[payload];
                 builder.stream_read(
-                    stream_u8_type,
+                    st,
                     [
                         CanonicalOption::Memory(ctx.memory_idx()),
                         CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
                     ],
                 );
             }
-            CanonicalIntrinsic::StreamDropWritable => {
-                builder.stream_drop_writable(stream_u8_type);
+            CanonicalIntrinsic::StreamDropWritable(payload) => {
+                builder.stream_drop_writable(stream_types[payload]);
             }
-            CanonicalIntrinsic::StreamDropReadable => {
-                builder.stream_drop_readable(stream_u8_type);
+            CanonicalIntrinsic::StreamDropReadable(payload) => {
+                builder.stream_drop_readable(stream_types[payload]);
             }
-            CanonicalIntrinsic::StreamCancelRead => {
-                builder.stream_cancel_read(stream_u8_type, false);
+            CanonicalIntrinsic::StreamCancelRead(payload) => {
+                builder.stream_cancel_read(stream_types[payload], false);
             }
-            CanonicalIntrinsic::StreamCancelWrite => {
-                builder.stream_cancel_write(stream_u8_type, false);
+            CanonicalIntrinsic::StreamCancelWrite(payload) => {
+                builder.stream_cancel_write(stream_types[payload], false);
             }
             CanonicalIntrinsic::FutureNew(payload) => {
                 let ft = resolve_future_type(
@@ -1407,6 +1500,13 @@ fn generate_wasi_imports(
                     (wado_name.to_string(), (cm_name.to_string(), cases.to_vec()))
                 })
                 .collect();
+            // Shared CmInstanceTypeGen for complex types across variant payloads and functions.
+            // Created early so variant payload types (e.g. Instant in NewTimestamp) are cached
+            // and reused when the same types appear in function signatures.
+            let mut shared_type_gen = CmInstanceTypeGen::new(local_type_idx);
+            for (name, &idx) in &enum_export_indices {
+                shared_type_gen.register_existing(&format!("enum:{name}"), idx);
+            }
             for variant_name in &needed_variants {
                 if let Some((_, cases)) = interface_variants.get(variant_name) {
                     // Build CM variant cases: (kebab-name, optional payload type)
@@ -1414,7 +1514,8 @@ fn generate_wasi_imports(
                         .iter()
                         .map(|c| {
                             let payload = c.payload.as_ref().map(|ty| {
-                                emit_cm_val_type(
+                                shared_type_gen.set_next_idx(local_type_idx);
+                                let val = emit_cm_val_type(
                                     ty,
                                     &mut instance_type,
                                     &mut local_type_idx,
@@ -1422,10 +1523,12 @@ fn generate_wasi_imports(
                                     has_local_error_code,
                                     &enum_export_indices,
                                     &own_resource_type_indices,
-                                    None,
-                                    None,
+                                    Some(&mut shared_type_gen),
+                                    Some(project),
                                     ctx,
-                                )
+                                );
+                                local_type_idx = shared_type_gen.next_idx().max(local_type_idx);
+                                val
                             });
                             (c.cm_name.as_str(), payload)
                         })
@@ -1476,17 +1579,11 @@ fn generate_wasi_imports(
 
             let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
 
-            // Shared CmInstanceTypeGen for complex ok types across all functions.
-            // Reusing one instance avoids duplicate type definitions and exports.
-            let mut shared_type_gen = CmInstanceTypeGen::new(local_type_idx);
-            for (name, &idx) in &enum_export_indices {
-                shared_type_gen.register_existing(&format!("enum:{name}"), idx);
-            }
+            // Register flags and variant export indices into shared_type_gen
             for (name, &idx) in &flags_export_indices {
                 shared_type_gen.register_existing(&format!("flags:{name}"), idx);
             }
             for (name, &idx) in &variant_export_indices {
-                // shared_type_gen uses CM kebab-case names for cache keys
                 if let Some((variant_cm_name, _)) = interface_variants.get(name) {
                     shared_type_gen.register_existing(&format!("variant:{variant_cm_name}"), idx);
                 }

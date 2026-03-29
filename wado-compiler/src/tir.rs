@@ -1556,7 +1556,8 @@ impl TypeTable {
     #[must_use]
     pub fn generic_type_args(&self, id: TypeId) -> Option<Vec<TypeId>> {
         match self.get(id) {
-            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
             ResolvedType::Struct {
                 name,
                 is_monomorphized: true,

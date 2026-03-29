@@ -1,4 +1,3 @@
-#![TODO]
 // Tests: Descriptor::append_via_stream
 //
 // Verifies that:
@@ -43,9 +42,19 @@ export fn run() with Stdout, Stderr, Preopens {
         a_tx.drop();
         sub2.drop();
 
-        // Read back and pipe to stdout
-        let [read_stream, read_future] = file.read_via_stream(0 as Filesize);
-        let sub3 = Stdout::write_via_stream(read_stream);
+        // Read back and pipe to stdout via manual pump
+        let [file_rx, read_future] = file.read_via_stream(0 as Filesize);
+        let [out_rx, out_tx] = Stream::<u8>::new();
+        let sub3 = Stdout::write_via_stream(out_rx);
+        loop {
+            let chunk = file_rx.read(4096);
+            if chunk.len() == 0 {
+                break;
+            }
+            out_tx.write(chunk);
+        }
+        file_rx.drop();
+        out_tx.drop();
         sub3.drop();
         read_future.drop();
 

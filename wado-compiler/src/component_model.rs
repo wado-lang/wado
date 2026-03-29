@@ -788,6 +788,19 @@ impl WasiRegistry {
             .map(|(_, source, _, _)| source.as_str())
     }
 
+    /// Find the interface name (e.g., "types") for a struct given its CM name
+    /// (e.g., "directory-entry"). Used by the component builder to alias types
+    /// from WASI interface imports.
+    pub fn find_interface_for_struct_cm_name(&self, cm_name: &str) -> Option<String> {
+        for (wado_name, (struct_cm_name, source_path, _, _)) in &self.structs {
+            if struct_cm_name == cm_name || wado_name == cm_name {
+                let wasi = WasiImport::parse(source_path)?;
+                return Some(wasi.interface);
+            }
+        }
+        None
+    }
+
     /// Get the fields with Wado names (`wado_name`, `cm_name`, `field_type`)
     pub fn get_struct_fields_with_wado_names(
         &self,
@@ -1798,6 +1811,30 @@ pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &Was
                 let fields = registry.get_struct_fields(name).unwrap();
                 for (_, field_ty) in fields {
                     flatten_wasi_param_type(field_ty, out, registry);
+                }
+            }
+            // Variant types flatten to: discriminant i32 + union(max payload)
+            name if registry.is_variant(name) => {
+                out.push(ValType::I32); // discriminant
+                if let Some(cases) = registry.get_variant_cases(name) {
+                    let mut max_flat: Vec<ValType> = Vec::new();
+                    for case in cases {
+                        if let Some(payload_ty) = &case.payload {
+                            let mut case_flat = Vec::new();
+                            flatten_wasi_param_type(payload_ty, &mut case_flat, registry);
+                            let len = case_flat.len().max(max_flat.len());
+                            for i in 0..len {
+                                let old = max_flat.get(i).copied();
+                                let new = case_flat.get(i).copied();
+                                if i < max_flat.len() {
+                                    max_flat[i] = join_val_types(old, new);
+                                } else {
+                                    max_flat.push(join_val_types(old, new));
+                                }
+                            }
+                        }
+                    }
+                    out.extend(max_flat);
                 }
             }
             // Resource handles, enums, etc.

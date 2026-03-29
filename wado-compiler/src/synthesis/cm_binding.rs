@@ -18,18 +18,19 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::Type;
 use crate::cm_abi;
 use crate::component_model::{CmVariantCase, WasiFunctionInfo, WasiRegistry};
+use crate::name::LocalMethodName;
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
-    CallArg, FunctionRef, InlineHint, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam,
-    TirStmt, TirStmtKind, TypeId, TypeTable,
+    CallArg, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 
 use super::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_raw_call, expr_stmt,
-    generic_method_call, generic_static_call, i32_const, i64_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, return_stmt,
-    synth_span,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_raw_call, entry_call,
+    expr_stmt, generic_method_call, generic_static_call, i32_const, i64_const, if_stmt,
+    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, option_none,
+    option_some, return_stmt, synth_span,
 };
 
 /// Context for lifting CM values to GC types, providing access to
@@ -5406,6 +5407,11 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
         }
     }
 
+    // ---- Record Stream Read Adapters ----
+    // Generate binding functions for Stream<T>.read() where T is a WASI record type.
+    // Must run before rewrite_cm_resource_methods so the generated functions are available.
+    synthesize_record_stream_reads(&mut project);
+
     // ---- CM Resource Method Adapters ----
     // Rewrite #[cm("...")] resource method calls to target internal/builtin binding functions.
     // This replaces the inline WIR emission in wir_build/translate.rs with pre-monomorphization
@@ -5413,6 +5419,522 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
     rewrite_cm_resource_methods(&mut project);
 
     Ok(project)
+}
+
+/// Generate binding functions for Stream<T>.`read()` where T is a non-u8 WASI record type.
+///
+/// For each unique stream element type T found in stream-read calls, generates a
+/// TIR function `__cm_stream_read_<T>` that:
+/// 1. Calls `cm_stream_read_raw(handle, max, elem_size, elem_align)` to get raw buffer
+/// 2. Loops through the buffer, lifting each record from linear memory
+/// 3. Constructs `Array<T>` and returns it
+///
+/// The generated functions are added to the entry module so they can be called
+/// by the CM resource method rewriter.
+fn synthesize_record_stream_reads(project: &mut Project) {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let wasi_registry = project.wasi_registry;
+    // Find all non-u8 stream-read element types
+    let mut needed_element_types: IndexMap<String, (TypeId, TypeId)> = IndexMap::default();
+    for module in project.tir_modules.values() {
+        let tt = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if let Some(body) = &func.body {
+                find_record_stream_reads(body, &tt, &mut needed_element_types);
+            }
+        }
+    }
+    if needed_element_types.is_empty() {
+        return;
+    }
+
+    // Generate binding functions for each element type
+    let entry_module = project.tir_modules.values().next().unwrap();
+    let type_table = entry_module.type_table.clone();
+    let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
+
+    for (elem_name, (elem_type_id, array_type_id)) in &needed_element_types {
+        // Look up the WASI struct fields and compute CM ABI size/align
+        let Some(fields) = wasi_registry.get_struct_fields(elem_name) else {
+            continue;
+        };
+        let ast_type = crate::ast::Type::Named(crate::ast::NamedType {
+            name: elem_name.clone(),
+            span: synth_span(),
+        });
+        let elem_size =
+            crate::component_model::cm_size_with_registry(&ast_type, wasi_registry) as i32;
+        let elem_align =
+            crate::component_model::cm_align_with_registry(&ast_type, wasi_registry) as i32;
+
+        let func = synthesize_stream_read_func(
+            elem_name,
+            *elem_type_id,
+            *array_type_id,
+            fields,
+            elem_size,
+            elem_align,
+            wasi_registry,
+            &type_table,
+        );
+        new_functions.push(Rc::new(RefCell::new(func)));
+    }
+
+    // Add generated functions to the entry module
+    let entry_module = project.tir_modules.values_mut().next().unwrap();
+    for func in new_functions {
+        entry_module.functions.push(func);
+    }
+}
+
+/// Find all stream-read method calls that return Array<T> where T is not u8.
+fn find_record_stream_reads(
+    block: &TirBlock,
+    tt: &TypeTable,
+    results: &mut IndexMap<String, (TypeId, TypeId)>,
+) {
+    for stmt in &block.stmts {
+        find_record_stream_reads_in_stmt(stmt, tt, results);
+    }
+}
+
+fn find_record_stream_reads_in_stmt(
+    stmt: &TirStmt,
+    tt: &TypeTable,
+    results: &mut IndexMap<String, (TypeId, TypeId)>,
+) {
+    match &stmt.kind {
+        TirStmtKind::Let { value, .. } => find_record_stream_reads_in_expr(value, tt, results),
+        TirStmtKind::Expr(value) => find_record_stream_reads_in_expr(value, tt, results),
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                find_record_stream_reads_in_expr(v, tt, results);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            find_record_stream_reads_in_expr(condition, tt, results);
+            find_record_stream_reads(then_block, tt, results);
+            if let Some(blk) = else_block {
+                find_record_stream_reads(blk, tt, results);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            find_record_stream_reads(body, tt, results);
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            find_record_stream_reads_in_expr(scrutinee, tt, results);
+            find_record_stream_reads(then_block, tt, results);
+            if let Some(blk) = else_block {
+                find_record_stream_reads(blk, tt, results);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn find_record_stream_reads_in_expr(
+    expr: &TirExpr,
+    tt: &TypeTable,
+    results: &mut IndexMap<String, (TypeId, TypeId)>,
+) {
+    // Recurse into sub-expressions
+    match &expr.kind {
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            find_record_stream_reads_in_expr(receiver, tt, results);
+            for arg in args {
+                find_record_stream_reads_in_expr(&arg.expr, tt, results);
+            }
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                find_record_stream_reads_in_expr(&arg.expr, tt, results);
+            }
+        }
+        _ => {}
+    }
+
+    // Check if this is a stream-read call with non-u8 element type
+    let cm_name = match &expr.kind {
+        TirExprKind::MethodCall { func, .. } => {
+            func.method_info.as_ref().and_then(|m| m.cm_name.clone())
+        }
+        _ => None,
+    };
+    if cm_name.as_deref() == Some("stream-read") && !is_u8_array_type(expr.type_id, tt) {
+        // Extract element type from Array<T>
+        if let Some(type_args) = tt.generic_type_args(expr.type_id)
+            && let Some(&elem_type_id) = type_args.first()
+        {
+            let elem_name = tt.base_type_name(elem_type_id);
+            results
+                .entry(elem_name)
+                .or_insert((elem_type_id, expr.type_id));
+        }
+    }
+}
+
+/// Generate a TIR function for reading records from a stream.
+///
+/// Generates `__cm_stream_read_<T>(handle: i32, max: i32) -> Array<T>`:
+/// 1. Call `cm_stream_read_raw` to get raw buffer [ptr, count]
+/// 2. Loop: lift each record from buffer at ptr + i * `elem_size`
+/// 3. Append to result array
+/// 4. Free buffer
+/// 5. Return array
+fn synthesize_stream_read_func(
+    elem_name: &str,
+    elem_type_id: TypeId,
+    array_type_id: TypeId,
+    _fields: &[(String, crate::ast::Type)],
+    elem_size: i32,
+    elem_align: i32,
+    wasi_registry: &crate::component_model::WasiRegistry,
+    type_table: &RefCell<TypeTable>,
+) -> TirFunction {
+    use crate::synthesis::common::{
+        assign, binary, break_stmt, builtin_call, cm_raw_call, expr_stmt, i32_const, if_stmt,
+        internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, return_stmt, synth_span,
+    };
+
+    let func_name = format!("__cm_stream_read_{elem_name}");
+    let _tuple_type_id = type_table
+        .borrow_mut()
+        .make_tuple(vec![TypeTable::I32, TypeTable::I32]);
+
+    let mut next_local: u32 = 0;
+    let mut local_types: Vec<TypeId> = Vec::new();
+    let mut stmts: Vec<TirStmt> = Vec::new();
+
+    // Params: handle (i32), max (i32)
+    let handle_idx = next_local;
+    next_local += 1;
+    local_types.push(TypeTable::I32);
+    let max_idx = next_local;
+    next_local += 1;
+    local_types.push(TypeTable::I32);
+
+    // Use the CM kebab-case name for the stream-read intrinsic
+    let cm_record_name = wasi_registry
+        .get_struct_cm_name(elem_name)
+        .unwrap_or(elem_name)
+        .to_string();
+    let stream_read_name = format!("stream-read:{cm_record_name}");
+
+    // let byte_count = max * elem_size
+    let byte_count_idx = next_local;
+    next_local += 1;
+    local_types.push(TypeTable::I32);
+    let byte_count = binary(
+        TirBinaryOp::Mul,
+        local_ref(max_idx, "max", TypeTable::I32),
+        i32_const(elem_size),
+        TypeTable::I32,
+    );
+    stmts.push(let_stmt(
+        "byte_count",
+        byte_count_idx,
+        TypeTable::I32,
+        byte_count,
+    ));
+
+    // let ptr = realloc(0, 0, elem_align, byte_count)
+    let ptr_idx = next_local;
+    next_local += 1;
+    local_types.push(TypeTable::I32);
+    let alloc_call = builtin_call(
+        "realloc",
+        vec![
+            i32_const(0),
+            i32_const(0),
+            i32_const(elem_align),
+            local_ref(byte_count_idx, "byte_count", TypeTable::I32),
+        ],
+        TypeTable::I32,
+    );
+    stmts.push(let_stmt("ptr", ptr_idx, TypeTable::I32, alloc_call));
+
+    // let mut result = stream-read:directory-entry(handle, ptr, max)
+    let result_idx = next_local;
+    next_local += 1;
+    local_types.push(TypeTable::I32);
+    let stream_read_call = cm_raw_call(
+        &stream_read_name,
+        vec![
+            local_ref(handle_idx, "handle", TypeTable::I32),
+            local_ref(ptr_idx, "ptr", TypeTable::I32),
+            local_ref(max_idx, "max", TypeTable::I32),
+        ],
+        TypeTable::I32,
+    );
+    stmts.push(let_mut_stmt(
+        "result",
+        result_idx,
+        TypeTable::I32,
+        stream_read_call,
+    ));
+
+    // if result == -1 { result = wait_for_blocked(handle); }
+    let blocked_check = binary(
+        TirBinaryOp::Eq,
+        local_ref(result_idx, "result", TypeTable::I32),
+        i32_const(-1),
+        TypeTable::BOOL,
+    );
+    let wait_call = internal_call(
+        "wait_for_blocked",
+        vec![local_ref(handle_idx, "handle", TypeTable::I32)],
+        TypeTable::I32,
+    );
+    stmts.push(if_stmt(
+        blocked_check,
+        TirBlock {
+            stmts: vec![expr_stmt(assign(
+                local_ref(result_idx, "result", TypeTable::I32),
+                wait_call,
+            ))],
+            span: synth_span(),
+        },
+        None,
+    ));
+
+    // let count = result >> 4
+    let count_idx = next_local;
+    next_local += 1;
+    local_types.push(TypeTable::I32);
+    let count_expr = binary(
+        TirBinaryOp::Shr,
+        local_ref(result_idx, "result", TypeTable::I32),
+        i32_const(4),
+        TypeTable::I32,
+    );
+    stmts.push(let_stmt("count", count_idx, TypeTable::I32, count_expr));
+
+    // let mut arr = Array::<T>::with_capacity(count)
+    // Use internal_from_raw with a new GC array
+    // Actually, build the array by appending elements one by one
+    let arr_idx = next_local;
+    next_local += 1;
+    local_types.push(array_type_id);
+
+    // Create empty array via Array<T>::with_capacity(count)
+    let empty_arr = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: ModuleSource::prelude(),
+                name: format!("Array<{elem_name}>::with_capacity"),
+                monomorph_info: Some(MonomorphInfo {
+                    generic_name: "Array::with_capacity".to_string(),
+                    impl_type_args: vec![elem_type_id],
+                    method_type_args: vec![],
+                    is_blanket: false,
+                }),
+                method_info: Some(LocalMethodName {
+                    struct_name: format!("Array<{elem_name}>"),
+                    base_struct_name: "Array".to_string(),
+                    trait_name: None,
+                    method_name: "with_capacity".to_string(),
+                    method_type_args: vec![],
+                    is_type_param_receiver: false,
+                    is_ref_impl: false,
+                    cm_name: None,
+                }),
+                is_cm_binding: false,
+            },
+            type_args: vec![],
+            args: vec![CallArg::new(
+                local_ref(count_idx, "count", TypeTable::I32),
+                false,
+            )],
+        },
+        array_type_id,
+        synth_span(),
+    );
+    stmts.push(let_mut_stmt("arr", arr_idx, array_type_id, empty_arr));
+
+    // let mut i = 0
+    let i_idx = next_local;
+    next_local += 1;
+    local_types.push(TypeTable::I32);
+    stmts.push(let_mut_stmt("i", i_idx, TypeTable::I32, i32_const(0)));
+
+    // Loop body: while i < count
+    let mut loop_body_stmts = Vec::new();
+
+    // if i >= count { break; }
+    let break_cond = binary(
+        TirBinaryOp::GtEq,
+        local_ref(i_idx, "i", TypeTable::I32),
+        local_ref(count_idx, "count", TypeTable::I32),
+        TypeTable::BOOL,
+    );
+    loop_body_stmts.push(if_stmt(
+        break_cond,
+        TirBlock {
+            stmts: vec![break_stmt()],
+            span: synth_span(),
+        },
+        None,
+    ));
+
+    // let addr = ptr + i * elem_size
+    let addr_idx = next_local;
+    next_local += 1;
+    local_types.push(TypeTable::I32);
+    let offset = binary(
+        TirBinaryOp::Mul,
+        local_ref(i_idx, "i", TypeTable::I32),
+        i32_const(elem_size),
+        TypeTable::I32,
+    );
+    let addr = binary_add(local_ref(ptr_idx, "ptr", TypeTable::I32), offset);
+    loop_body_stmts.push(let_stmt("addr", addr_idx, TypeTable::I32, addr));
+
+    // Lift each field from linear memory at addr + field_offset
+    let lift_ctx = LiftContext {
+        wasi_registry,
+        type_table,
+        wasi_package: Some("filesystem"),
+    };
+    let ast_type = crate::ast::Type::Named(crate::ast::NamedType {
+        name: elem_name.to_string(),
+        span: synth_span(),
+    });
+    let lifted_elem = synthesize_lift_with_context(
+        &ast_type,
+        local_ref(addr_idx, "addr", TypeTable::I32),
+        &mut next_local,
+        &mut loop_body_stmts,
+        &mut local_types,
+        &lift_ctx,
+    );
+
+    // Append to array - use Array::append method pattern
+    // arr.append(elem) → internal call
+    let elem_idx = next_local;
+    next_local += 1;
+    local_types.push(elem_type_id);
+    loop_body_stmts.push(let_stmt("elem", elem_idx, elem_type_id, lifted_elem));
+
+    let append_call = TirExpr::new(
+        TirExprKind::MethodCall {
+            receiver: Box::new(local_ref(arr_idx, "arr", array_type_id)),
+            func: FunctionRef {
+                module_source: ModuleSource::prelude(),
+                name: format!("Array<{elem_name}>::append"),
+                monomorph_info: Some(MonomorphInfo {
+                    generic_name: "Array::append".to_string(),
+                    impl_type_args: vec![elem_type_id],
+                    method_type_args: vec![],
+                    is_blanket: false,
+                }),
+                method_info: Some(LocalMethodName {
+                    struct_name: format!("Array<{elem_name}>"),
+                    base_struct_name: "Array".to_string(),
+                    trait_name: None,
+                    method_name: "append".to_string(),
+                    method_type_args: vec![],
+                    is_type_param_receiver: false,
+                    is_ref_impl: false,
+                    cm_name: None,
+                }),
+                is_cm_binding: false,
+            },
+            type_args: vec![],
+            args: vec![CallArg::new(
+                local_ref(elem_idx, "elem", elem_type_id),
+                false,
+            )],
+        },
+        TypeTable::UNIT,
+        synth_span(),
+    );
+    loop_body_stmts.push(expr_stmt(append_call));
+
+    // i += 1
+    let increment = assign(
+        local_ref(i_idx, "i", TypeTable::I32),
+        binary_add(local_ref(i_idx, "i", TypeTable::I32), i32_const(1)),
+    );
+    loop_body_stmts.push(expr_stmt(increment));
+
+    stmts.push(loop_stmt(TirBlock {
+        stmts: loop_body_stmts,
+        span: synth_span(),
+    }));
+
+    // Free buffer: realloc(ptr, byte_count, elem_align, 0)
+    let free_call = builtin_call(
+        "realloc",
+        vec![
+            local_ref(ptr_idx, "ptr", TypeTable::I32),
+            local_ref(byte_count_idx, "byte_count", TypeTable::I32),
+            i32_const(elem_align),
+            i32_const(0),
+        ],
+        TypeTable::I32,
+    );
+    stmts.push(let_stmt("__freed", next_local, TypeTable::I32, free_call));
+    next_local += 1;
+    local_types.push(TypeTable::I32);
+
+    // return arr
+    stmts.push(return_stmt(Some(local_ref(arr_idx, "arr", array_type_id))));
+
+    TirFunction {
+        name: func_name,
+        is_pub: false,
+        is_export: false,
+        is_async: false,
+        type_params: vec![],
+        impl_type_params: vec![],
+        monomorph_info: None,
+        method_info: None,
+        params: vec![
+            TirParam {
+                name: "handle".to_string(),
+                local_index: handle_idx,
+                type_id: TypeTable::I32,
+                is_mut: false,
+                span: synth_span(),
+            },
+            TirParam {
+                name: "max".to_string(),
+                local_index: max_idx,
+                type_id: TypeTable::I32,
+                is_mut: false,
+                span: synth_span(),
+            },
+        ],
+        return_type: array_type_id,
+        effects: vec![],
+        stores: vec![],
+        body: Some(TirBlock {
+            stmts,
+            span: synth_span(),
+        }),
+        span: synth_span(),
+        local_count: next_local,
+        local_types,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: true,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+        export_name: None,
+        allocator_tag: None,
+    }
 }
 
 /// Determine the internal binding function name for a CM resource method.
@@ -5624,8 +6146,32 @@ fn rewrite_cm_methods_in_expr(expr: &mut TirExpr, tt: &TypeTable) {
 
     // stream-new / future-new remain handled by WIR translate for now,
     // because they require i64→tuple splitting with proper GC type casting.
+    // stream-read for non-u8 element types also stays for WIR translate,
+    // which generates proper record lifting from linear memory.
     if matches!(cm_name.as_str(), "stream-new" | "future-new") {
         return;
+    }
+    if cm_name == "stream-read" && !is_u8_array_type(expr.type_id, tt) {
+        // Non-u8 stream reads use a generated binding function
+        if let Some(type_args) = tt.generic_type_args(expr.type_id)
+            && let Some(&elem_type_id) = type_args.first()
+        {
+            let elem_name = tt.base_type_name(elem_type_id);
+            let func_name = format!("__cm_stream_read_{elem_name}");
+            rewrite_cm_instance_method(expr, "entry", &func_name);
+            return;
+        }
+        return;
+    }
+
+    // For stream operations on non-u8 types, parameterize the canonical name
+    // and rewrite as CmRawCall directly (since the name is dynamic).
+    if is_stream_cm_method(&cm_name) {
+        let parameterized = parameterize_stream_cm_name(&cm_name, expr, tt);
+        if parameterized != cm_name {
+            rewrite_cm_instance_method(expr, "raw", &parameterized);
+            return;
+        }
     }
 
     // Look up the binding function
@@ -5670,6 +6216,8 @@ fn rewrite_cm_instance_method(expr: &mut TirExpr, kind: &str, func_name: &str) {
     let new_expr = match kind {
         "raw" => cm_raw_call(func_name, all_args, expr.type_id),
         "internal" => internal_call(func_name, all_args, expr.type_id),
+        // "entry": call to a synthesized function in the entry module
+        "entry" => entry_call(func_name, all_args, expr.type_id),
         _ => unreachable!(),
     };
 
@@ -5691,6 +6239,63 @@ fn rewrite_cm_static_method(expr: &mut TirExpr, kind: &str, func_name: &str) {
     };
 
     *expr = new_expr;
+}
+
+/// Check if a CM method name is a stream operation.
+fn is_stream_cm_method(cm_name: &str) -> bool {
+    matches!(
+        cm_name,
+        "stream-drop-readable"
+            | "stream-drop-writable"
+            | "stream-cancel-read"
+            | "stream-cancel-write"
+    )
+}
+
+/// Parameterize a stream CM name based on the receiver type.
+/// For non-u8 streams (e.g., `Stream<DirectoryEntry>`), appends the CM record name
+/// (e.g., "stream-drop-readable:directory-entry").
+fn parameterize_stream_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) -> String {
+    // Get the receiver's type from the method call
+    let receiver_type_id = match &expr.kind {
+        TirExprKind::MethodCall { receiver, .. } => receiver.type_id,
+        _ => return cm_name.to_string(),
+    };
+    // Resolve through references: &Stream<T> → Stream<T>
+    use crate::tir::ResolvedType;
+    let mut type_id = receiver_type_id;
+    loop {
+        match tt.get(type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                type_id = *inner;
+            }
+            _ => break,
+        }
+    }
+    // Extract element type from Stream<T>
+    if let Some(type_args) = tt.generic_type_args(type_id)
+        && let Some(&elem) = type_args.first()
+    {
+        let elem_name = tt.base_type_name(elem);
+        if elem_name != "u8" {
+            // Convert PascalCase to kebab-case for the CM name
+            let cm_elem = elem_name.chars().fold(String::new(), |mut s, c| {
+                if c.is_uppercase() && !s.is_empty() {
+                    s.push('-');
+                }
+                s.push(c.to_ascii_lowercase());
+                s
+            });
+            return format!("{cm_name}:{cm_elem}");
+        }
+    }
+    cm_name.to_string()
+}
+
+/// Check if a `TypeId` represents `Array<u8>`.
+fn is_u8_array_type(type_id: TypeId, tt: &TypeTable) -> bool {
+    let name = tt.type_name(type_id);
+    name == "Array<u8>"
 }
 
 /// Recursively replace WASI-derived types with user types in the binding.
