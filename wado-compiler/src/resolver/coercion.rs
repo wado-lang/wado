@@ -1047,4 +1047,74 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
     }
+
+    /// Check that a return value's type is compatible with the declared return type.
+    /// Catches cases like `fn foo() -> i32 { return "hello"; }`.
+    pub(super) fn check_return_type_mismatch(
+        &mut self,
+        actual: TypeId,
+        expected: TypeId,
+        span: Span,
+    ) {
+        if actual == expected
+            || actual == TypeTable::UNKNOWN
+            || expected == TypeTable::UNKNOWN
+            || actual == TypeTable::NEVER
+            || expected == TypeTable::UNIT
+        {
+            return;
+        }
+
+        let type_table = self.type_table.borrow();
+
+        // Skip type param receivers (generic functions)
+        if matches!(
+            type_table.get(actual),
+            ResolvedType::TypeParam { .. }
+        ) || matches!(
+            type_table.get(expected),
+            ResolvedType::TypeParam { .. }
+        ) {
+            return;
+        }
+
+        // Unwrap references for comparison
+        let actual_inner = match type_table.get(actual) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => actual,
+        };
+        let expected_inner = match type_table.get(expected) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => expected,
+        };
+
+        if actual_inner == expected_inner {
+            return;
+        }
+
+        // Compare base type names (handles cross-module same-name types)
+        let actual_name = type_table.base_type_name(actual_inner);
+        let expected_name = type_table.base_type_name(expected_inner);
+
+        if actual_name == expected_name {
+            return;
+        }
+
+        // Allow Option/variant coercions (null → None already handled by resolve_expr)
+        if matches!(type_table.get(expected_inner), ResolvedType::Variant { .. })
+            && matches!(type_table.get(actual_inner), ResolvedType::Variant { .. })
+        {
+            return;
+        }
+
+        let expected_display = type_table.type_name(expected);
+        let actual_display = type_table.type_name(actual);
+        drop(type_table);
+
+        let _ = self.logger.error(TypeError::TypeMismatch {
+            expected: expected_display,
+            found: actual_display,
+            span,
+        });
+    }
 }
