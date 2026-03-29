@@ -1,7 +1,7 @@
 #![TODO]
 // Tests: Descriptor::create_directory_at, read_directory, remove_directory_at
-// PARTIAL: Stream<DirectoryEntry>.read() binding is synthesized but component builder
-// fails to link wasi:filesystem/types as a separate import at O0/O2.
+// TODO: Stream<DirectoryEntry> requires parameterized stream canonical intrinsics
+// (stream-read/stream-new/stream-drop must be registered per stream element type)
 //
 // Verifies that:
 // - create_directory_at creates a new directory
@@ -21,6 +21,9 @@ export fn run() with Stdout, Stderr, Preopens {
     }
 
     let dir = dirs[0].0;
+
+    // Clean up any leftover from previous runs
+    dir.remove_directory_at("test_newdir");
 
     // Create a new directory
     let mkdir_result = dir.create_directory_at("test_newdir");

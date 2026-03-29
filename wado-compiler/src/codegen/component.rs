@@ -342,11 +342,21 @@ fn emit_cm_val_type(
 ) -> ComponentValType {
     match ty {
         Type::Generic(g) if g.name == "Stream" => {
-            // Only u8 streams are supported in WASI P3
-            instance_type
-                .ty()
-                .defined_type()
-                .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+            let element = g.args.first().map(|inner| {
+                emit_cm_val_type(
+                    inner,
+                    instance_type,
+                    local_type_idx,
+                    error_code_idx,
+                    has_local_error_code,
+                    enum_export_indices,
+                    own_resource_type_indices,
+                    shared_type_gen.as_deref_mut(),
+                    project,
+                    ctx,
+                )
+            });
+            instance_type.ty().defined_type().stream(element);
             let idx = *local_type_idx;
             *local_type_idx += 1;
             ComponentValType::Type(idx)
@@ -469,6 +479,8 @@ fn emit_cm_val_type(
                 has_local_error_code,
                 enum_export_indices,
                 own_resource_type_indices,
+                shared_type_gen.as_deref_mut(),
+                project,
                 ctx,
             );
             instance_type.ty().defined_type().tuple(tuple_types);
@@ -485,6 +497,8 @@ fn emit_cm_val_type(
                 has_local_error_code,
                 enum_export_indices,
                 own_resource_type_indices,
+                shared_type_gen.as_deref_mut(),
+                project,
                 ctx,
             );
             instance_type.ty().defined_type().tuple(tuple_types);
@@ -554,6 +568,8 @@ fn build_cm_tuple_types(
     has_local_error_code: bool,
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
+    mut shared_type_gen: Option<&mut CmInstanceTypeGen>,
+    project: Option<&Project>,
     ctx: &mut ComponentModelContext,
 ) -> Vec<ComponentValType> {
     elems
@@ -567,8 +583,8 @@ fn build_cm_tuple_types(
                 has_local_error_code,
                 enum_export_indices,
                 own_resource_type_indices,
-                None,
-                None,
+                shared_type_gen.as_deref_mut(),
+                project,
                 ctx,
             )
         })
