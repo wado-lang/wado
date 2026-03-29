@@ -5797,10 +5797,16 @@ fn fixup_wasi_derived_types_in_adapter(
         let resolved = wasi_registry.resolve_type(param_type);
         replace_wasi_derived_type_recursive(adapter, &resolved, new_type, type_table);
     }
-    // Also fix up return type's WASI-derived sub-types
-    if let Some(return_type) = &func_info.return_type {
-        let resolved = wasi_registry.resolve_type(return_type);
-        replace_wasi_derived_type_recursive(adapter, &resolved, user_return_type, type_table);
+    // Also fix up return type's WASI-derived sub-types — but skip for CM bindings
+    // that return non-flat types (tuples, variants). Their return TypeId was set
+    // precisely by synthesis and should not be modified by the recursive type
+    // replacement, which can produce different TypeIds for the same logical type
+    // through different wasi_type_to_type_id resolution paths.
+    if !adapter.is_cm_binding {
+        if let Some(return_type) = &func_info.return_type {
+            let resolved = wasi_registry.resolve_type(return_type);
+            replace_wasi_derived_type_recursive(adapter, &resolved, user_return_type, type_table);
+        }
     }
 }
 
@@ -5820,8 +5826,12 @@ fn replace_type_in_adapter(adapter: &mut TirFunction, old_type: TypeId, new_type
     if old_type == new_type {
         return;
     }
-    // Fix return type
-    if adapter.return_type == old_type {
+    // Don't replace the return type of CM binding adapters.
+    // The return type was set by synthesis with precise TypeIds from the entry
+    // module's TypeTable. Replacing it with a TypeId computed by wasi_type_to_type_id
+    // (which may produce different TypeIds for Stream/Future/Result composition)
+    // corrupts the type and causes WIR build failures.
+    if !adapter.is_cm_binding && adapter.return_type == old_type {
         adapter.return_type = new_type;
     }
     // Fix params
@@ -5856,8 +5866,8 @@ fn replace_type_in_adapter_with_names(
     if old_type == new_type {
         return;
     }
-    // Fix return type
-    if adapter.return_type == old_type {
+    // Don't replace return type of CM binding adapters (same as replace_type_in_adapter)
+    if !adapter.is_cm_binding && adapter.return_type == old_type {
         adapter.return_type = new_type;
     }
     // Fix params
@@ -6489,7 +6499,7 @@ fn rewrite_calls_in_expr(
             // Check if this is a streaming async function
             let is_streaming = wasi_registry
                 .get_function(&qualified)
-                .is_some_and(|f| f.has_streaming_param() || f.return_type_has_future());
+                .is_some_and(|f| !f.is_async && f.has_streaming_param());
 
             // Fix up binding function types from the call site
             {
@@ -6597,7 +6607,7 @@ fn rewrite_calls_in_expr(
             // Check if this is a streaming async function
             let is_streaming = wasi_registry
                 .get_function(&qualified)
-                .is_some_and(|f| f.has_streaming_param() || f.return_type_has_future());
+                .is_some_and(|f| !f.is_async && f.has_streaming_param());
 
             // Extract receiver and args before replacing
             let (taken_receiver, mut taken_args) =
@@ -6664,9 +6674,12 @@ fn rewrite_calls_in_expr(
                         }
                     }
                 }
-                // Replace WASI-derived types in the body (including function names)
-                if let Some(func_info) = wasi_registry.get_function(&qualified) {
-                    // For method calls, call_args excludes self (self is handled above)
+                // Replace WASI-derived types in the body (including function names).
+                // Skip for CM bindings — their types were set precisely by synthesis
+                // and the recursive replacement can produce TypeId mismatches for
+                // complex return types like [Stream<T>, Future<Result<_, E>>].
+                if !adapter.is_cm_binding {
+                  if let Some(func_info) = wasi_registry.get_function(&qualified) {
                     let call_args: Vec<TirExpr> =
                         taken_args.iter().map(|a| a.expr.clone()).collect();
                     fixup_wasi_derived_types_in_adapter(
@@ -6678,6 +6691,7 @@ fn rewrite_calls_in_expr(
                         wasi_registry,
                         true, // skip_self: call_args excludes self
                     );
+                  }
                 }
             }
 
@@ -6790,19 +6804,19 @@ fn rewrite_calls_in_expr(
                     }
                 }
                 // Replace WASI-derived types in the body with the user's types.
-                // For each param that uses Array<T>/etc, the binding body may have
-                // created method calls using the WASI-derived TypeId which differs
-                // from the user's newtype-aliased TypeId.
-                if let Some(func_info) = &wasi_func_info {
-                    fixup_wasi_derived_types_in_adapter(
-                        &mut adapter,
-                        func_info,
-                        &taken_args,
-                        expr.type_id,
-                        type_table,
-                        wasi_registry,
-                        false, // skip_self: static calls have no self
-                    );
+                // Skip for CM bindings (same reason as above).
+                if !adapter.is_cm_binding {
+                    if let Some(func_info) = &wasi_func_info {
+                        fixup_wasi_derived_types_in_adapter(
+                            &mut adapter,
+                            func_info,
+                            &taken_args,
+                            expr.type_id,
+                            type_table,
+                            wasi_registry,
+                            false, // skip_self: static calls have no self
+                        );
+                    }
                 }
             }
 
