@@ -146,7 +146,7 @@ Wado is designed on the following Wasm features:
 
 There are reference repositories in `vendor/` for the specification of Wasm & Component Model, and also runtimes such as wasmtime.
 
-To initialize: `git submodule update --init`
+To initialize: `git submodule update --init --recommend-shallow`
 
 ## General Rules
 

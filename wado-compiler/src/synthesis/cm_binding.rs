@@ -2676,71 +2676,13 @@ fn synthesize_adapter(
     // The binding's return type to the Wado caller:
     let adapter_return_type;
 
-    // Streaming path: functions with Stream params that callers must write to
-    // before the subtask completes. For functions returning tuples with Future
-    // (like read_via_stream -> [Stream, Future]), the async path lifts the full
-    // tuple from outptr after wait_for_subtask.
-    let is_streaming_func = !func_info.is_async && func_info.has_streaming_param();
-    if is_streaming_func {
-        // Streaming function (sync function with stream params, e.g. write_via_stream).
-        // canon lower with async option returns a packed subtask handle, but for sync
-        // functions the subtask completes immediately (Returned status). The actual
-        // return value (Future handle) is written to the outptr by the canon lower.
-        //
-        // We wait for the subtask (no-op for Returned), read the Future handle from
-        // outptr, free outptr, and return the Future handle. The caller writes stream
-        // data and then drops the Future to wait for completion.
-        if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
-            let subtask_local = next_local;
-            local_types.push(TypeTable::I32);
-            next_local += 1;
-            body_stmts.push(let_stmt(
-                "__subtask",
-                subtask_local,
-                TypeTable::I32,
-                raw_call_expr,
-            ));
-            body_stmts.push(expr_stmt(internal_call(
-                "wait_for_subtask",
-                vec![local_ref(subtask_local, "__subtask", TypeTable::I32)],
-                TypeTable::UNIT,
-            )));
-            // Read Future handle from outptr
-            let future_handle_local = next_local;
-            local_types.push(TypeTable::I32);
-            next_local += 1;
-            body_stmts.push(let_stmt(
-                "__future_handle",
-                future_handle_local,
-                TypeTable::I32,
-                builtin_call(
-                    "i32_load",
-                    vec![local_ref(outptr_local, "__async_outptr", TypeTable::I32)],
-                    TypeTable::I32,
-                ),
-            ));
-            // Free outptr
-            body_stmts.push(expr_stmt(builtin_call(
-                "realloc",
-                vec![
-                    local_ref(outptr_local, "__async_outptr", TypeTable::I32),
-                    i32_const(outptr_size as i32),
-                    i32_const(outptr_align as i32),
-                    i32_const(0),
-                ],
-                TypeTable::I32,
-            )));
-            body_stmts.push(return_stmt(Some(local_ref(
-                future_handle_local,
-                "__future_handle",
-                TypeTable::I32,
-            ))));
-        } else {
-            // No outptr (shouldn't happen for streaming functions with return type)
-            body_stmts.push(return_stmt(Some(raw_call_expr)));
-        }
-        adapter_return_type = TypeTable::I32;
-    } else if needs_async_lower {
+    // Async/streaming path: functions lowered with `async` canon option.
+    // This covers both truly async functions (func_info.is_async) and sync
+    // functions with streaming params (Stream/Future) that require async lowering.
+    // Non-async functions with streaming params complete synchronously (RETURNED
+    // status), so wait_for_subtask is a no-op. The result is always written to the
+    // outptr and lifted via synthesize_lift based on the return type metadata.
+    if needs_async_lower {
         // WASI P3 async calling convention: the lowered function returns a subtask
         // handle (i32). 0 = completed synchronously; non-zero = async task in-flight.
         // In both cases, the result is written to the async results buffer in linear memory.
