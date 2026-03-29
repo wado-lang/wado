@@ -462,9 +462,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         test_decl: &ast::TestDecl,
         test_index: usize,
+        module_is_todo: bool,
     ) -> Option<(TirFunction, TirTest)> {
         let expect_trap = test_decl.attributes.iter().any(|a| a.name == "expect_trap");
-        let is_todo = test_decl.attributes.iter().any(|a| a.name == "TODO");
+        let is_todo = module_is_todo || test_decl.attributes.iter().any(|a| a.name == "TODO");
         let timeout_ms = test_decl.attributes.iter().find_map(|a| {
             if a.name == "timeout_ms" {
                 a.args

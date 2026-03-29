@@ -143,13 +143,6 @@ struct TestSpec {
     #[serde(default)]
     compile_error: Option<String>,
 
-    /// Whether this is a TODO test (not yet implemented feature).
-    /// TODO tests MUST fail (compile error, runtime error, or wrong output).
-    /// If a TODO test passes, the test will fail to remind you to remove the TODO flag.
-    #[serde(default)]
-    #[serde(rename = "TODO")]
-    todo: bool,
-
     /// Preopened directories for WASI filesystem tests.
     /// Each entry is `[host_path, guest_path]`.
     /// Paths are relative to the workspace root (cargo test working directory).
@@ -656,33 +649,37 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
         }
     }
 
-    // Handle TODO tests - they must fail
-    if spec.todo {
-        eprintln!("[{test_id}] TODO test - expecting failure");
+    // Check if source has #![TODO] to determine panic recovery strategy.
+    // For test world: individual tests are already marked #[TODO] by the resolver,
+    // so no special handling is needed here.
+    // For CLI/HTTP worlds: runtime failures in #![TODO] modules need catch_unwind.
+    let is_todo_module = wado_compiler::parse(source)
+        .map(|r| r.ast.has_todo())
+        .unwrap_or(false);
 
-        // Use catch_unwind to recover from panics
+    if is_todo_module {
+        eprintln!("[{test_id}] #![TODO] module — expecting failure");
         let test_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             run_normal_test(fixture_path, source, opt_level, &spec, &test_id);
         }));
-
         match test_result {
+            Ok(()) if spec.test_world.is_some() => {
+                // Test world: individual tests are already marked #[TODO] by the resolver.
+                // Success here means all TODO tests trapped as expected — this is correct.
+            }
             Ok(()) => {
-                // Test passed, but it's a TODO test, so it should have failed!
                 panic!(
-                    "[{test_id}] TODO test PASSED! This means the feature is now implemented.\n\
-                     Please remove 'TODO: true' from the __DATA__ section."
+                    "[{test_id}] #![TODO] module PASSED! The feature may be implemented.\n\
+                     Remove the #![TODO] attribute from the source file."
                 );
             }
             Err(err) => {
-                // Test failed as expected for a TODO test
                 let msg = err
                     .downcast_ref::<String>()
                     .map(String::as_str)
                     .or_else(|| err.downcast_ref::<&str>().copied())
                     .unwrap_or("(unknown panic)");
-
-                eprintln!("[{test_id}] TODO test failed as expected (feature not yet implemented)");
-                eprintln!("[{test_id}] Error: {msg}");
+                eprintln!("[{test_id}] #![TODO] module failed as expected: {msg}");
                 return;
             }
         }
