@@ -717,7 +717,12 @@ fn build_transmission_future_type_for(
     } else {
         format!("{source}-error-code")
     };
-    let error_code_idx = ctx.type_idx(&error_code_key);
+    let error_code_idx = if ctx.has_type(&error_code_key) {
+        ctx.type_idx(&error_code_key)
+    } else {
+        // Fallback to CLI error-code if package-specific one is not available
+        ctx.type_idx("error-code")
+    };
 
     let result_key = format!("{source}-transmission-result");
     ctx.register_type(&result_key);
@@ -2208,8 +2213,19 @@ fn import_interfaces_with_resources(
             continue;
         };
 
+        // Check if this source interface defines ErrorCode
+        let source_has_error_code = project
+            .wasi_registry
+            .variants_for_interface(source_path)
+            .any(|(name, _, _)| name == "ErrorCode")
+            || project
+                .wasi_registry
+                .has_enum_in_interface(source_path, "ErrorCode");
+
         let instance_type_name = format!("{}-instance-type", wasi_import.interface);
         let instance_type_idx = ctx.register_type(&instance_type_name);
+        #[allow(unused_assignments)]
+        let mut local_type_idx = 0u32;
         {
             let (_, enc) = builder.ty(Some(&instance_type_name));
             let mut instance_type = InstanceType::new();
@@ -2217,6 +2233,41 @@ fn import_interfaces_with_resources(
                 resource_cm_name,
                 wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
             );
+            local_type_idx += 1; // resource export
+
+            // Include error-code export so it can be aliased at outer scope
+            // for Transmission future types.
+            if source_has_error_code {
+                let interface_variants: Vec<_> = project
+                    .wasi_registry
+                    .variants_for_interface(source_path)
+                    .filter(|(name, _, _)| *name == "ErrorCode")
+                    .collect();
+                if let Some((_, cm_name, cases)) = interface_variants.first() {
+                    // Build variant cases inline
+                    let cm_cases: Vec<(&str, Option<ComponentValType>)> = cases
+                        .iter()
+                        .map(|c| {
+                            let payload = c.payload.as_ref().map(|_ty| {
+                                // For simplicity, all payloads are option<string>
+                                instance_type.ty().defined_type().option(
+                                    ComponentValType::Primitive(PrimitiveValType::String),
+                                );
+                                let option_idx = local_type_idx;
+                                local_type_idx += 1;
+                                ComponentValType::Type(option_idx)
+                            });
+                            (c.cm_name.as_str(), payload)
+                        })
+                        .collect();
+                    instance_type.ty().defined_type().variant(cm_cases);
+                    let variant_idx = local_type_idx;
+                    instance_type.export(
+                        cm_name,
+                        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(variant_idx)),
+                    );
+                }
+            }
             enc.instance(&instance_type);
         }
 
@@ -2233,6 +2284,20 @@ fn import_interfaces_with_resources(
             resource_cm_name,
             ComponentExportKind::Type,
         );
+
+        // Alias error-code at outer scope
+        if source_has_error_code {
+            let package = &wasi_import.package;
+            let error_code_key = format!("{package}-error-code");
+            if !ctx.has_type(&error_code_key) {
+                ctx.register_type(&error_code_key);
+                builder.alias_export(
+                    ctx.instance_idx(&wasi_import.interface),
+                    "error-code",
+                    ComponentExportKind::Type,
+                );
+            }
+        }
     }
 
     // Phase 2: Import function interfaces that use those resources

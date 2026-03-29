@@ -6549,9 +6549,10 @@ fn rewrite_calls_in_expr(
             {
                 let mut adapter = adapter_rc.borrow_mut();
                 if is_streaming {
-                    // Streaming adapters return i32 (Future handle).
-                    // Caller must cast to the correct Future type before .drop().
-                    expr.type_id = TypeTable::I32;
+                    // Streaming adapters return i32 (Future handle) at WIR level.
+                    // Keep the caller's original Future type for Wado-level type
+                    // checking and CM method dispatch (.drop(), .read()).
+                    // WIR flattens Future<T> (GenericResource) to i32 automatically.
                 } else if adapter.return_type != expr.type_id {
                     let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;
@@ -6672,9 +6673,10 @@ fn rewrite_calls_in_expr(
             {
                 let mut adapter = adapter_rc.borrow_mut();
                 if is_streaming {
-                    // Streaming adapters return i32 (Future handle).
-                    // Caller must cast to the correct Future type before .drop().
-                    expr.type_id = TypeTable::I32;
+                    // Streaming adapters return i32 (Future handle) at WIR level.
+                    // Keep the caller's original Future type for Wado-level type
+                    // checking and CM method dispatch (.drop(), .read()).
+                    // WIR flattens Future<T> (GenericResource) to i32 automatically.
                 } else if adapter.return_type != expr.type_id {
                     let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;

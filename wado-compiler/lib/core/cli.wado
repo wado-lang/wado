@@ -14,11 +14,10 @@
 // 5. Cast handle to Future and drop to signal completion
 
 use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
-use { ErrorCode } from "wasi:cli/types.wado";
-
 // Re-export commonly used effects for convenience
 pub use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
 pub use { log_stdout, log_stderr } from "core:internal";
+use { drop_cli_write_future } from "core:internal";
 /// Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
 pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
     let bytes = message.internal_raw_bytes();
@@ -34,18 +33,12 @@ pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: boo
     tx.drop();
 }
 
-/// Drop a CLI write_via_stream Future handle.
-fn drop_write_future(handle: i32) {
-    let future = handle as Future<Result<(), ErrorCode>>;
-    future.drop();
-}
-
 /// Prints a line to stdout (adds newline).
 pub fn println(message: String) with Stdout {
     let [rx, tx] = Stream::<u8>::new();
     let handle = Stdout::write_via_stream(rx);
     write_to_stream(tx, message, true);
-    drop_write_future(handle);
+    drop_cli_write_future(handle);
 }
 
 /// Prints a line to stderr (adds newline).
@@ -53,7 +46,7 @@ pub fn eprintln(message: String) with Stderr {
     let [rx, tx] = Stream::<u8>::new();
     let handle = Stderr::write_via_stream(rx);
     write_to_stream(tx, message, true);
-    drop_write_future(handle);
+    drop_cli_write_future(handle);
 }
 
 /// Prints to stdout without a trailing newline.
@@ -61,7 +54,7 @@ pub fn print(message: String) with Stdout {
     let [rx, tx] = Stream::<u8>::new();
     let handle = Stdout::write_via_stream(rx);
     write_to_stream(tx, message, false);
-    drop_write_future(handle);
+    drop_cli_write_future(handle);
 }
 
 /// Prints to stderr without a trailing newline.
@@ -69,7 +62,7 @@ pub fn eprint(message: String) with Stderr {
     let [rx, tx] = Stream::<u8>::new();
     let handle = Stderr::write_via_stream(rx);
     write_to_stream(tx, message, false);
-    drop_write_future(handle);
+    drop_cli_write_future(handle);
 }
 
 /// Writes raw bytes to stdout.
@@ -78,7 +71,7 @@ pub fn print_bytes(data: Array<u8>) with Stdout {
     let handle = Stdout::write_via_stream(rx);
     tx.write(data);
     tx.drop();
-    drop_write_future(handle);
+    drop_cli_write_future(handle);
 }
 
 /// Returns the value of an environment variable by name.

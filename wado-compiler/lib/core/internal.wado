@@ -72,7 +72,7 @@ pub fn wait_for_subtask(packed: i32) {
 /// Drop a write_via_stream Future handle to signal completion.
 /// Uses CLI ErrorCode type for the Future parameterization.
 use { ErrorCode as CliErrorCode } from "wasi:cli/types.wado";
-fn drop_cli_write_future(handle: i32) {
+pub fn drop_cli_write_future(handle: i32) {
     let future = handle as Future<Result<(), CliErrorCode>>;
     future.drop();
 }
