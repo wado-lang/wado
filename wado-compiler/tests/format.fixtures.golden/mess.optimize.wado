@@ -23,6 +23,94 @@ export fn run() {
     };
 }
 
+fn __cm_binding__Stdout_write_via_stream(data: i32) -> i32 {
+    let __async_outptr: i32 = core::builtin::realloc(0, 0, 4, 4);
+    let __subtask: i32 = cm_raw_call wasi:cli/Stdout::write_via_stream(data, __async_outptr);
+    core::internal::wait_for_subtask(__subtask);
+    let __future_handle: i32 = core::builtin::i32_load(__async_outptr);
+    core::builtin::realloc(__async_outptr, 4, 4, 0);
+    return __future_handle;
+}
+
+fn __cm_binding__Stderr_write_via_stream(data: i32) -> i32 {
+    let __async_outptr: i32 = core::builtin::realloc(0, 0, 4, 4);
+    let __subtask: i32 = cm_raw_call wasi:cli/Stderr::write_via_stream(data, __async_outptr);
+    core::internal::wait_for_subtask(__subtask);
+    let __future_handle: i32 = core::builtin::i32_load(__async_outptr);
+    core::builtin::realloc(__async_outptr, 4, 4, 0);
+    return __future_handle;
+}
+
+fn __cm_binding__Environment_get_environment() -> Array<[String, String]> {
+    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    cm_raw_call wasi:cli/Environment::get_environment(__outptr);
+    let __base: i32 = core::builtin::i32_load(__outptr);
+    let __count: i32 = core::builtin::i32_load((__outptr + 4));
+    let mut __result: Array<[String, String]> = "Array<Tuple<String,String>>::with_capacity"(__count);
+    let mut __i: i32 = 0;
+    loop {
+        if (__i >= __count) {
+            break;
+        }
+        let __elem_addr: i32 = (__base + (__i * 16));
+        let __lifted_result_6: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)));
+        let __lifted_result_7: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)));
+        __result."Array<Tuple<String,String>>::append"([__lifted_result_6, __lifted_result_7]);
+        core::builtin::realloc(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)), 1, 0);
+        core::builtin::realloc(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)), 1, 0);
+        __i = (__i + 1);
+    }
+    if (__count > 0) {
+        core::builtin::realloc(__base, (__count * 16), 4, 0);
+    }
+    core::builtin::realloc(__outptr, 8, 4, 0);
+    return __result;
+}
+
+fn __cm_binding__Environment_get_arguments() -> Array<String> {
+    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    cm_raw_call wasi:cli/Environment::get_arguments(__outptr);
+    let __base: i32 = core::builtin::i32_load(__outptr);
+    let __count: i32 = core::builtin::i32_load((__outptr + 4));
+    let mut __result: Array<String> = "Array<String>::with_capacity"(__count);
+    let mut __i: i32 = 0;
+    loop {
+        if (__i >= __count) {
+            break;
+        }
+        let __elem_addr: i32 = (__base + (__i * 8));
+        __result."Array<String>::append"(core::internal::memory_to_gc_string(core::builtin::i32_load(__elem_addr), core::builtin::i32_load((__elem_addr + 4))));
+        core::builtin::realloc(core::builtin::i32_load(__elem_addr), core::builtin::i32_load((__elem_addr + 4)), 1, 0);
+        __i = (__i + 1);
+    }
+    if (__count > 0) {
+        core::builtin::realloc(__base, (__count * 8), 4, 0);
+    }
+    core::builtin::realloc(__outptr, 8, 4, 0);
+    return __result;
+}
+
+fn __cm_binding__Environment_get_initial_cwd() -> Option<String> {
+    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 12);
+    cm_raw_call wasi:cli/Environment::get_initial_cwd(__outptr);
+    let __disc: i32 = core::builtin::i32_load8_u(__outptr);
+    let mut __option_result: Option<String> = Option<String>::None;
+    if (__disc != 0) {
+        __option_result = Option<String>::Some(core::internal::memory_to_gc_string(core::builtin::i32_load((__outptr + 4)), core::builtin::i32_load(((__outptr + 4) + 4))));
+        core::builtin::realloc(core::builtin::i32_load((__outptr + 4)), core::builtin::i32_load(((__outptr + 4) + 4)), 1, 0);
+    }
+    core::builtin::realloc(__outptr, 12, 4, 0);
+    return __option_result;
+}
+
+fn __cm_binding__Exit_exit(status: i32) {
+    cm_raw_call wasi:cli/Exit::exit(status);
+}
+
+fn __cm_binding__Exit_exit_with_code(status_code: i32) {
+    cm_raw_call wasi:cli/Exit::exit_with_code(status_code);
+}
+
 export fn __cm_export__run() {
     __inline___initialize_modules_1: {
         if __modules_initialized {

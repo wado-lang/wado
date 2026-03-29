@@ -181,11 +181,9 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
-type "functype/wasi/future-drop-readable:transmission-filesystem" = fn(i32);
+type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -206,9 +204,8 @@ import fn wasi:filesystem/Descriptor::metadata_hash_at from "wasi/wasi:filesyste
 import memory (1) from "mem/memory";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
-import fn future-drop-readable:transmission-filesystem from "wasi/future-drop-readable:transmission-filesystem";
-import fn subtask-drop from "wasi/subtask-drop";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout, Stderr, Preopens {
     let dirs: ref Array<Tuple<Descriptor,String>>;
@@ -587,7 +584,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     handle = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     future = handle;
-    "wasi/future-drop-readable:transmission-filesystem"(future);
+    "wasi/future-drop-readable:transmission-cli"(future);
 }
 
 fn "core:cli/eprintln"(message) with Stderr {  // from core:cli
@@ -602,7 +599,7 @@ fn "core:cli/eprintln"(message) with Stderr {  // from core:cli
     handle = __cm_binding__Stderr_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     future = handle;
-    "wasi/future-drop-readable:transmission-filesystem"(future);
+    "wasi/future-drop-readable:transmission-cli"(future);
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal

@@ -91,6 +91,16 @@ struct [Descriptor, String] {
 
 array array<Tuple<Descriptor,String>> (mut ref "tuple/[Descriptor, String]");
 
+variant Result<unit,ErrorCode> {
+    Ok,
+    Err(i32),
+}
+
+struct Result<unit,ErrorCode>::Err {
+    discriminant: i32,
+    payload_0: i32,
+}
+
 variant Result<Descriptor,ErrorCode> {
     Ok(i32),
     Err(ref "wasi:filesystem/types.wado/ErrorCode"),
@@ -177,15 +187,15 @@ type "functype/__cm_binding__Descriptor_open_at" = fn(i32, i32, ref String, i32,
 
 type "functype/__cm_binding__Descriptor_stat" = fn(i32) -> ref Result<DescriptorStat,ErrorCode>;
 
-type "functype/__cm_binding__Descriptor_advise" = fn(i32, i64, i64, i32) -> ref null "wasi:filesystem/types.wado/ErrorCode";
+type "functype/__cm_binding__Descriptor_advise" = fn(i32, i64, i64, i32) -> ref Result<unit,ErrorCode>;
 
 type "functype/__cm_binding__Descriptor_write_via_stream" = fn(i32, i32, i64) -> i32;
 
-type "functype/__cm_binding__Descriptor_sync_data" = fn(i32) -> ref null "wasi:filesystem/types.wado/ErrorCode";
+type "functype/__cm_binding__Descriptor_sync_data" = fn(i32) -> ref Result<unit,ErrorCode>;
 
-type "functype/__cm_binding__Descriptor_sync" = fn(i32) -> ref null "wasi:filesystem/types.wado/ErrorCode";
+type "functype/__cm_binding__Descriptor_sync" = fn(i32) -> ref Result<unit,ErrorCode>;
 
-type "functype/__cm_binding__Descriptor_unlink_file_at" = fn(i32, ref String) -> ref null "wasi:filesystem/types.wado/ErrorCode";
+type "functype/__cm_binding__Descriptor_unlink_file_at" = fn(i32, ref String) -> ref Result<unit,ErrorCode>;
 
 type "functype/__cm_export__run" = fn();
 
@@ -231,9 +241,9 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/future-drop-readable:transmission-filesystem" = fn(i32);
 
-type "functype/wasi/subtask-drop" = fn(i32);
-
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
+
+type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
 
@@ -258,8 +268,8 @@ import memory (1) from "mem/memory";
 import fn stream-new from "wasi/stream-new";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn future-drop-readable:transmission-filesystem from "wasi/future-drop-readable:transmission-filesystem";
-import fn subtask-drop from "wasi/subtask-drop";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout, Stderr, Preopens {
     let dirs: ref Array<Tuple<Descriptor,String>>;
@@ -269,9 +279,9 @@ fn run() with Stdout, Stderr, Preopens {
     let stat_result: ref Result<DescriptorStat,ErrorCode>;
     let __local_5: ref "wasi:filesystem/types.wado/DescriptorStat";
     let file_size: u64;
-    let adv1: ref null "wasi:filesystem/types.wado/ErrorCode";
-    let adv2: ref null "wasi:filesystem/types.wado/ErrorCode";
-    let adv3: ref null "wasi:filesystem/types.wado/ErrorCode";
+    let adv1: ref Result<unit,ErrorCode>;
+    let adv2: ref Result<unit,ErrorCode>;
+    let adv3: ref Result<unit,ErrorCode>;
     let write_result: ref Result<Descriptor,ErrorCode>;
     let wfile: i32;
     let w_rx: i32;
@@ -279,8 +289,8 @@ fn run() with Stdout, Stderr, Preopens {
     let sub: i32;
     let __local_15: ref Array<u8>;
     let data: ref Array<u8>;
-    let sd_result: ref null "wasi:filesystem/types.wado/ErrorCode";
-    let sync_result: ref null "wasi:filesystem/types.wado/ErrorCode";
+    let sd_result: ref Result<unit,ErrorCode>;
+    let sync_result: ref Result<unit,ErrorCode>;
     dirs = __cm_binding__Preopens_get_directories();
     if dirs.used == 0 {
         "core:cli/eprintln"(String { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -304,19 +314,19 @@ fn run() with Stdout, Stderr, Preopens {
             14_i64;
         };
         adv1 = __cm_binding__Descriptor_advise(file, 0_i64, file_size, 1);
-        if ref.is_null(adv1) {
+        if adv1.discriminant == 0 {
             "core:cli/println"(String { repr: array.new_data<u8>("advise: Sequential succeeded"), used: 28 });
         } else {
             "core:cli/eprintln"(String { repr: array.new_data<u8>("advise: Sequential failed"), used: 25 });
         };
         adv2 = __cm_binding__Descriptor_advise(file, 0_i64, file_size, 2);
-        if ref.is_null(adv2) {
+        if adv2.discriminant == 0 {
             "core:cli/println"(String { repr: array.new_data<u8>("advise: Random succeeded"), used: 24 });
         } else {
             "core:cli/eprintln"(String { repr: array.new_data<u8>("advise: Random failed"), used: 21 });
         };
         adv3 = __cm_binding__Descriptor_advise(file, 0_i64, file_size, 0);
-        if ref.is_null(adv3) {
+        if adv3.discriminant == 0 {
             "core:cli/println"(String { repr: array.new_data<u8>("advise: Normal succeeded"), used: 24 });
         } else {
             "core:cli/eprintln"(String { repr: array.new_data<u8>("advise: Normal failed"), used: 21 });
@@ -340,13 +350,13 @@ fn run() with Stdout, Stderr, Preopens {
         "wasi/stream-drop-writable"(w_tx);
         "wasi/future-drop-readable:transmission-filesystem"(sub);
         sd_result = __cm_binding__Descriptor_sync_data(wfile);
-        if ref.is_null(sd_result) {
+        if sd_result.discriminant == 0 {
             "core:cli/println"(String { repr: array.new_data<u8>("sync_data: succeeded"), used: 20 });
         } else {
             "core:cli/eprintln"(String { repr: array.new_data<u8>("sync_data: failed"), used: 17 });
         };
         sync_result = __cm_binding__Descriptor_sync(wfile);
-        if ref.is_null(sync_result) {
+        if sync_result.discriminant == 0 {
             "core:cli/println"(String { repr: array.new_data<u8>("sync: succeeded"), used: 15 });
         } else {
             "core:cli/eprintln"(String { repr: array.new_data<u8>("sync: failed"), used: 12 });
@@ -626,7 +636,7 @@ fn __cm_binding__Descriptor_advise(self, offset, length, advice) {
     let __async_outptr: i32;
     let __subtask: i32;
     let __disc_6: i32;
-    let __result_val: ref null "wasi:filesystem/types.wado/ErrorCode";
+    let __result_val: ref Result<unit,ErrorCode>;
     let __vdisc: i32;
     let __vresult: ref "wasi:filesystem/types.wado/ErrorCode";
     let __disc_10: i32;
@@ -640,7 +650,7 @@ fn __cm_binding__Descriptor_advise(self, offset, length, advice) {
     __disc_6 = builtin::load_u8(__async_outptr);
     __result_val = ref.null none;
     if __disc_6 == 0 {
-        __result_val = ref.null none;
+        __result_val = Result<unit,ErrorCode> { 0 };
     } else {
         __vdisc = builtin::load_u8(__async_outptr + 4);
         __vresult = ref.null none;
@@ -668,7 +678,7 @@ fn __cm_binding__Descriptor_advise(self, offset, length, advice) {
             };
             __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
         };
-        __result_val = __vresult;
+        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
     drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
@@ -690,7 +700,7 @@ fn __cm_binding__Descriptor_sync_data(self) {
     let __async_outptr: i32;
     let __subtask: i32;
     let __disc_3: i32;
-    let __result_val: ref null "wasi:filesystem/types.wado/ErrorCode";
+    let __result_val: ref Result<unit,ErrorCode>;
     let __vdisc: i32;
     let __vresult: ref "wasi:filesystem/types.wado/ErrorCode";
     let __disc_7: i32;
@@ -704,7 +714,7 @@ fn __cm_binding__Descriptor_sync_data(self) {
     __disc_3 = builtin::load_u8(__async_outptr);
     __result_val = ref.null none;
     if __disc_3 == 0 {
-        __result_val = ref.null none;
+        __result_val = Result<unit,ErrorCode> { 0 };
     } else {
         __vdisc = builtin::load_u8(__async_outptr + 4);
         __vresult = ref.null none;
@@ -732,7 +742,7 @@ fn __cm_binding__Descriptor_sync_data(self) {
             };
             __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
         };
-        __result_val = __vresult;
+        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
     drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
@@ -742,7 +752,7 @@ fn __cm_binding__Descriptor_sync(self) {
     let __async_outptr: i32;
     let __subtask: i32;
     let __disc_3: i32;
-    let __result_val: ref null "wasi:filesystem/types.wado/ErrorCode";
+    let __result_val: ref Result<unit,ErrorCode>;
     let __vdisc: i32;
     let __vresult: ref "wasi:filesystem/types.wado/ErrorCode";
     let __disc_7: i32;
@@ -756,7 +766,7 @@ fn __cm_binding__Descriptor_sync(self) {
     __disc_3 = builtin::load_u8(__async_outptr);
     __result_val = ref.null none;
     if __disc_3 == 0 {
-        __result_val = ref.null none;
+        __result_val = Result<unit,ErrorCode> { 0 };
     } else {
         __vdisc = builtin::load_u8(__async_outptr + 4);
         __vresult = ref.null none;
@@ -784,7 +794,7 @@ fn __cm_binding__Descriptor_sync(self) {
             };
             __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
         };
-        __result_val = __vresult;
+        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
     drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
@@ -795,7 +805,7 @@ fn __cm_binding__Descriptor_unlink_file_at(self, path) {
     let __async_outptr: i32;
     let __subtask: i32;
     let __disc_5: i32;
-    let __result_val: ref null "wasi:filesystem/types.wado/ErrorCode";
+    let __result_val: ref Result<unit,ErrorCode>;
     let __vdisc: i32;
     let __vresult: ref "wasi:filesystem/types.wado/ErrorCode";
     let __disc_9: i32;
@@ -810,7 +820,7 @@ fn __cm_binding__Descriptor_unlink_file_at(self, path) {
     __disc_5 = builtin::load_u8(__async_outptr);
     __result_val = ref.null none;
     if __disc_5 == 0 {
-        __result_val = ref.null none;
+        __result_val = Result<unit,ErrorCode> { 0 };
     } else {
         __vdisc = builtin::load_u8(__async_outptr + 4);
         __vresult = ref.null none;
@@ -838,7 +848,7 @@ fn __cm_binding__Descriptor_unlink_file_at(self, path) {
             };
             __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 5, payload_0: __option_result };
         };
-        __result_val = __vresult;
+        __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
     };
     drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
@@ -878,7 +888,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     handle = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     future = handle;
-    "wasi/future-drop-readable:transmission-filesystem"(future);
+    "wasi/future-drop-readable:transmission-cli"(future);
 }
 
 fn "core:cli/eprintln"(message) with Stderr {  // from core:cli
@@ -893,7 +903,7 @@ fn "core:cli/eprintln"(message) with Stderr {  // from core:cli
     handle = __cm_binding__Stderr_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     future = handle;
-    "wasi/future-drop-readable:transmission-filesystem"(future);
+    "wasi/future-drop-readable:transmission-cli"(future);
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal

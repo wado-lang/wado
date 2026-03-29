@@ -141,6 +141,11 @@ struct ErrorCode::InternalError {
     payload_0: ref null String,
 }
 
+struct [Stream<u8>, Future<Result<Option<Fields>,ErrorCode>>] {
+    mut 0: i32,
+    mut 1: i32,
+}
+
 struct [Response, Future<Result<unit,ErrorCode>>] {
     mut 0: i32,
     mut 1: i32,
@@ -467,14 +472,14 @@ fn handle(request) {
     let __packed_165: i64;
     let __ptr_166: i32;
     let __len_167: i32;
+    let __pattern_temp_1: ref "tuple/[Stream<u8>, Future<Result<Option<Fields>,ErrorCode>>]";
     let __pattern_temp_4: ref "tuple/[Response, Future<Result<unit,ErrorCode>>]";
     let __pattern_temp_5: ref null Array<u8>;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new:transmission-http"();
     res_future = builtin::i32_wrap_i64(__pair_temp_1);
-    drop(__cm_binding__Request_consume_body(request, res_future));
-    body_stream = unreachable;
-    drop(unreachable);
+    __pattern_temp_1 = __cm_binding__Request_consume_body(request, res_future);
+    body_stream = __pattern_temp_1.0;
     chunks = __seq_lit: block -> ref Array<Array<u8>> {
         __local_5 = Array<Array<u8>> { repr: builtin::array_new<ref Array<u8>>(0), used: 0 };
         break __seq_lit: __local_5;

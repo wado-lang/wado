@@ -2250,9 +2250,10 @@ fn import_interfaces_with_resources(
                         .map(|c| {
                             let payload = c.payload.as_ref().map(|_ty| {
                                 // For simplicity, all payloads are option<string>
-                                instance_type.ty().defined_type().option(
-                                    ComponentValType::Primitive(PrimitiveValType::String),
-                                );
+                                instance_type
+                                    .ty()
+                                    .defined_type()
+                                    .option(ComponentValType::Primitive(PrimitiveValType::String));
                                 let option_idx = local_type_idx;
                                 local_type_idx += 1;
                                 ComponentValType::Type(option_idx)

@@ -3260,10 +3260,6 @@ CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc.
 #### `pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool)`
 
 Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
-Called AFTER the consumer (write_via_stream) has been started.
-
-Uses write_raw to pass String's internal GC array directly to the stream,
-avoiding the intermediate String → Array<u8> byte-by-byte copy.
 
 #### `pub fn println(message: String) with Stdout`
 
