@@ -19,7 +19,9 @@ use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, W
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpHooks, WasiHttpView};
 
-use wado_compiler::{CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError};
+use wado_compiler::{
+    CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError,
+};
 
 /// A filesystem-based CompilerHost for tests that need to load files
 pub struct FilesystemHost {

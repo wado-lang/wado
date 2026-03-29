@@ -650,19 +650,23 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
     }
 
     // Check if source has #![TODO] to determine panic recovery strategy.
-    // This uses AST parsing (lightweight) — the result is NOT used for compilation;
-    // the compile pipeline reads the same flag from its own parse pass.
+    // For test world: individual tests are already marked #[TODO] by the resolver,
+    // so no special handling is needed here.
+    // For CLI/HTTP worlds: runtime failures in #![TODO] modules need catch_unwind.
     let is_todo_module = wado_compiler::parse(source)
         .map(|r| r.ast.has_todo())
         .unwrap_or(false);
 
     if is_todo_module {
-        // #![TODO] modules: both compile and runtime failures are expected
         eprintln!("[{test_id}] #![TODO] module — expecting failure");
         let test_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             run_normal_test(fixture_path, source, opt_level, &spec, &test_id);
         }));
         match test_result {
+            Ok(()) if spec.test_world.is_some() => {
+                // Test world: individual tests are already marked #[TODO] by the resolver.
+                // Success here means all TODO tests trapped as expected — this is correct.
+            }
             Ok(()) => {
                 panic!(
                     "[{test_id}] #![TODO] module PASSED! The feature may be implemented.\n\
