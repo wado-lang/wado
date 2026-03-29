@@ -354,7 +354,11 @@ impl<T> IntoIterator for &mut Array<T> {
 
 impl Array<T> {
     pub fn iter(&self) -> ArrayIter<T> {
-        return self.into_iter();
+        return ArrayIter {
+            repr: self.repr,
+            used: self.used,
+            index: 0,
+        };
     }
 
     /// In-place sort with comparator. Stable, O(n log n) worst case.
