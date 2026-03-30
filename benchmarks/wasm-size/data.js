@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774826826705,
+  "lastUpdate": 1774864389898,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8759,6 +8759,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5b8974c10e5153d03a4607bb395255238df20f52"
         },
         "date": 1774826826492,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24674,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2a7152e183444cfb3001157d7b482babe1a6d0e9",
+          "message": "Merge pull request #735 from wado-lang/claude/align-api-design-jD1QI\n\nRedesign String and Array APIs aligned with Rust",
+          "timestamp": "2026-03-30T18:50:12+09:00",
+          "tree_id": "e74b593b1ca30c6fd5f45b446e32a01b93ae9f1f",
+          "url": "https://github.com/wado-lang/wado/commit/2a7152e183444cfb3001157d7b482babe1a6d0e9"
+        },
+        "date": 1774864389684,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
