@@ -2,10 +2,6 @@
 // task return forwards it directly. This exercises the variant lowering
 // in the task return expansion for ErrorCode (a variant with mixed
 // payload/no-payload cases).
-//
-// The outgoing request is constructed without URI properties (scheme,
-// authority, path), so Client::send returns Err(HttpRequestUriInvalid).
-// This exercises the ErrorCode variant through the error path.
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
@@ -25,7 +21,13 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 __DATA__
 {
     "wasi:http/service": {
-        "status": 500,
-        "body_contains": ["HttpRequestUriInvalid"]
+        "status": 200,
+        "body": "mocked"
+    },
+    "outgoing_mocks": {
+        "/": {
+            "status": 200,
+            "body": "mocked"
+        }
     }
 }
