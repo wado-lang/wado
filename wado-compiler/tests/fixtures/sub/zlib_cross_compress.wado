@@ -51,7 +51,7 @@ fn read_all_stdin() -> Array<u8> with Stdin {
             break;
         }
         for let mut i = 0; i < chunk.len(); i += 1 {
-            buf.append(chunk[i]);
+            buf.push(chunk[i]);
         }
     }
     stdin_stream.drop();
@@ -90,7 +90,7 @@ export fn run() with Stdout, Stdin {
         let level = input[1] as i32;
         let mut data: Array<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
-            data.append(input[i]);
+            data.push(input[i]);
         }
         let result = compress2(&data, level);
         print_bytes(&result);
@@ -99,7 +99,7 @@ export fn run() with Stdout, Stdin {
         let level = input[1] as i32;
         let mut data: Array<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
-            data.append(input[i]);
+            data.push(input[i]);
         }
         let result = deflate_raw2(&data, level);
         print_bytes(&result);
@@ -108,7 +108,7 @@ export fn run() with Stdout, Stdin {
         let level = input[1] as i32;
         let mut data: Array<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
-            data.append(input[i]);
+            data.push(input[i]);
         }
         let result = gzip_compress2(&data, level);
         print_bytes(&result);
@@ -116,7 +116,7 @@ export fn run() with Stdout, Stdin {
         // zlib_compress_stored: data=input[1..]
         let mut data: Array<u8> = [];
         for let mut i = 1; i < input.len(); i += 1 {
-            data.append(input[i]);
+            data.push(input[i]);
         }
         let result = zlib_compress_stored(&data);
         print_bytes(&result);
@@ -126,7 +126,7 @@ export fn run() with Stdout, Stdin {
         let strategy = input[2] as i32;
         let mut data: Array<u8> = [];
         for let mut i = 3; i < input.len(); i += 1 {
-            data.append(input[i]);
+            data.push(input[i]);
         }
         let result = compress_with_strategy(&data, level, strategy);
         print_bytes(&result);
@@ -134,7 +134,7 @@ export fn run() with Stdout, Stdin {
         // checksums: data=input[1..]
         let mut data: Array<u8> = [];
         for let mut i = 1; i < input.len(); i += 1 {
-            data.append(input[i]);
+            data.push(input[i]);
         }
         let len = data.len();
         let a = adler32(adler32_init(), &data, 0, len);
@@ -166,7 +166,7 @@ export fn run() with Stdout, Stdin {
         let split = read_be_i32(&input, 1);
         let mut data: Array<u8> = [];
         for let mut i = 5; i < input.len(); i += 1 {
-            data.append(input[i]);
+            data.push(input[i]);
         }
         let total_len = data.len();
         let a1 = adler32(adler32_init(), &data, 0, split);
@@ -177,7 +177,7 @@ export fn run() with Stdout, Stdin {
         let split = read_be_i32(&input, 1);
         let mut data: Array<u8> = [];
         for let mut i = 5; i < input.len(); i += 1 {
-            data.append(input[i]);
+            data.push(input[i]);
         }
         let total_len = data.len();
         let c1 = crc32(crc32_init(), &data, 0, split);
@@ -188,7 +188,7 @@ export fn run() with Stdout, Stdin {
         let level = input[1] as i32;
         let mut data: Array<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
-            data.append(input[i]);
+            data.push(input[i]);
         }
         let mut ds = DeflateStream::new(level);
         let result = ds.compress(&data);
@@ -198,7 +198,7 @@ export fn run() with Stdout, Stdin {
         let level = input[1] as i32;
         let mut data: Array<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
-            data.append(input[i]);
+            data.push(input[i]);
         }
         let mut ds = DeflateStream::new_with_format(level, RAW_FORMAT);
         let result = ds.compress(&data);
@@ -208,7 +208,7 @@ export fn run() with Stdout, Stdin {
         let level = input[1] as i32;
         let mut data: Array<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
-            data.append(input[i]);
+            data.push(input[i]);
         }
         let mut ds = DeflateStream::new_with_format(level, GZIP_FORMAT);
         let result = ds.compress(&data);

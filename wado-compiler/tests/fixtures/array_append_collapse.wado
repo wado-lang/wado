@@ -59,7 +59,7 @@ impl SequenceLiteralBuilder for SeqVec<T> {
     }
 
     fn push_literal(&mut self, value: Self::Element) {
-        self.items.append(value);
+        self.items.push(value);
     }
 
     fn build(&self) -> SeqVec<T> {
@@ -71,5 +71,5 @@ __DATA__
 {
     "stdout": "ok\n",
     "wir_expect:O2": ["array.new_fixed<i32>(10, 20, 30)", "array.new_fixed<ref String>("],
-    "wir_not_expect:O2": ["Array<i32>^SequenceLiteralBuilder::push_literal(", "Array<String>::append(__local_"]
+    "wir_not_expect:O2": ["Array<i32>^SequenceLiteralBuilder::push_literal(", "Array<String>::push(__local_"]
 }

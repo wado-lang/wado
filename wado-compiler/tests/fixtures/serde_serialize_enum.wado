@@ -20,12 +20,12 @@ struct JsonSerializer {
 
 impl Serializer for JsonSerializer {
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        self.buf.append(`"{*v}"`);
+        self.buf.push_str(`"{*v}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
-        self.buf.append(`"{*variant_name}"`);
+        self.buf.push_str(`"{*variant_name}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 }

@@ -53,17 +53,17 @@ impl Serializer for TextSerializer {
     type StructSerializer = TextStructSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.append(`{v}`);
+        self.buf.push_str(`{v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        self.buf.append(`"{*v}"`);
+        self.buf.push_str(`"{*v}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<TextSeqSerializer, SerializeError> {
-        self.buf.append("[");
+        self.buf.push_str("[");
         return Result::<TextSeqSerializer, SerializeError>::Ok(TextSeqSerializer {
             parent: *self,
             count: 0,
@@ -71,7 +71,7 @@ impl Serializer for TextSerializer {
     }
 
     fn begin_struct(&mut self, name: &String, fields: i32) -> Result<TextStructSerializer, SerializeError> {
-        self.buf.append("{");
+        self.buf.push_str("{");
         return Result::<TextStructSerializer, SerializeError>::Ok(TextStructSerializer {
             parent: *self,
             count: 0,
@@ -82,7 +82,7 @@ impl Serializer for TextSerializer {
 impl SerializeSeq for TextSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.parent.buf.append(",");
+            self.parent.buf.push_str(",");
         }
         value.serialize::<TextSerializer>(&mut self.parent);
         self.count += 1;
@@ -90,7 +90,7 @@ impl SerializeSeq for TextSeqSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.parent.buf.append("]");
+        self.parent.buf.push_str("]");
         return Result::<(), SerializeError>::Ok(());
     }
 }
@@ -98,16 +98,16 @@ impl SerializeSeq for TextSeqSerializer {
 impl SerializeStruct for TextStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.parent.buf.append(",");
+            self.parent.buf.push_str(",");
         }
-        self.parent.buf.append(`"{*name}":`);
+        self.parent.buf.push_str(`"{*name}":`);
         value.serialize::<TextSerializer>(&mut self.parent);
         self.count += 1;
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.parent.buf.append("}");
+        self.parent.buf.push_str("}");
         return Result::<(), SerializeError>::Ok(());
     }
 }

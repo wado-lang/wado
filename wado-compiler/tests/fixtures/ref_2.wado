@@ -2,8 +2,8 @@ use { println, Stdout } from "core:cli";
 
 // ref_mut
 fn append_elements(arr: &mut Array<i32>) {
-    arr.append(4);
-    arr.append(5);
+    arr.push(4);
+    arr.push(5);
 }
 
 fn double_all(arr: &mut Array<i32>) {
@@ -13,12 +13,12 @@ fn double_all(arr: &mut Array<i32>) {
 }
 
 fn append_world(s: &mut String) {
-    s.append(", World!");
+    s.push_str(", World!");
 }
 
 fn append_twice(s: &mut String, suffix: String) {
-    s.append(suffix);
-    s.append(suffix);
+    s.push_str(suffix);
+    s.push_str(suffix);
 }
 
 // ref_loop_mut
@@ -75,12 +75,12 @@ fn process(arr: &mut Array<u8>, input: &Array<u8>, count: i32) {
     while i < count {
         let val = input[i];
         if val < 128 {
-            arr.append(val);
+            arr.push(val);
         } else {
             let dist = (val - 128) as i32;
             let src = arr.len() - dist;
-            arr.append(arr[src]);
-            arr.append(arr[src + 1]);
+            arr.push(arr[src]);
+            arr.push(arr[src + 1]);
         }
         i += 1;
     }
