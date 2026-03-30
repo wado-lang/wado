@@ -45,7 +45,7 @@ Wado intentionally omits Rust concepts tied to ownership and lifetimes (`as_str(
 | `sort_by(cmp)`           | `sort_by(cmp)`                            | OK                                   |
 | `sort_by_key(f)`         | —                                         | use `sort_by`                        |
 | `sort_unstable()`        | —                                         | `sort()` is stable; unstable not needed |
-| `binary_search(&x)`      | `binary_search(&x)`                       | NEW                                  |
+| `binary_search(&x)`      | —                                         | use `TreeMap` / `TreeSet` instead    |
 | `reverse()`              | `reverse()`                               | NEW                                  |
 | `dedup()`                | `dedup()`                                 | NEW                                  |
 | `dedup_by(f)`            | —                                         | niche                                |
@@ -111,10 +111,6 @@ impl<T> Array<T> {
 impl<T: Eq> Array<T> {
     pub fn contains(&self, value: &T) -> bool;
     pub fn dedup(&mut self);
-}
-
-impl<T: Ord> Array<T> {
-    pub fn binary_search(&self, target: &T) -> Result<i32, i32>;
 }
 
 impl<T: Display> Array<T> {
@@ -298,7 +294,7 @@ These have no direct Rust counterpart but are useful in Wado:
 2. **Medium**:
    - `insert`, `remove`, `reverse`, `extend`, `retain`
    - `String::lines`, `String::split_whitespace`, `String::repeat`
-   - `Array::first`, `Array::repeat`, `Array::binary_search`
+   - `Array::first`, `Array::repeat`
 3. **Lower**:
    - `swap`, `dedup`, `windows`, `chunks`
    - `String::rfind`, `String::splitn`, `String::replacen`, `String::char_indices`
