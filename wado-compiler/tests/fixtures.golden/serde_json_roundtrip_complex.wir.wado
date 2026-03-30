@@ -10154,7 +10154,6 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
                 if __sroa___iter_3_index >= _licm_used_19 {
                     self.pos = _hfs_pos_27;
                     break b859;
-                    self.pos = _hfs_pos_27;
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
                 };
                 byte = builtin::array_get_u8(_licm_repr_20, __sroa___iter_3_index);
@@ -10163,11 +10162,13 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
                     self.pos = _hfs_pos_27;
                     return ref.as_non_null(__inline_DeserializeError__eof_4: block -> ref "core:serde/DeserializeError" {
                         __local_12 = builtin::i64_extend_i32_s(_hfs_pos_27);
+                        self.pos = _hfs_pos_27;
                         break __inline_DeserializeError__eof_4: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_12 };
                     });
                 };
                 if __inline_String__get_byte_5: block -> u8 {
                     __local_14 = _hfs_pos_27;
+                    self.pos = _hfs_pos_27;
                     break __inline_String__get_byte_5: builtin::array_get_u8(_licm_repr_23, __local_14);
                 } != byte {
                     self.pos = _hfs_pos_27;
@@ -10181,11 +10182,11 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
                             break __tmpl: __local_5;
                         };
                         __local_17 = builtin::i64_extend_i32_s(start);
+                        self.pos = _hfs_pos_27;
                         break __inline_DeserializeError__malformed_7: "core:serde/DeserializeError" { kind: 6, message: __local_16, offset: __local_17 };
                     });
                 };
                 _hfs_pos_27 = _hfs_pos_27 + 1;
-                self.pos = _hfs_pos_27;
                 break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
             };
             continue l860;
@@ -10397,6 +10398,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
         l880: loop {
             if (_hfs_pos_98 < __inline_String__len_14: block -> i32 {
                 __local_63 = self.input;
+                self.pos = _hfs_pos_98;
                 break __inline_String__len_14: __local_63.used;
             }) == 0 {
                 self.pos = _hfs_pos_98;
@@ -10416,11 +10418,13 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                 _hfs_pos_98 = _hfs_pos_98 + 1;
                 if _hfs_pos_98 >= __inline_String__len_16: block -> i32 {
                     __local_66 = self.input;
+                    self.pos = _hfs_pos_98;
                     break __inline_String__len_16: __local_66.used;
                 } {
                     self.pos = _hfs_pos_98;
                     return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_17: block -> ref "core:serde/DeserializeError" {
                         __local_67 = builtin::i64_extend_i32_s(_hfs_pos_98);
+                        self.pos = _hfs_pos_98;
                         break __inline_DeserializeError__eof_17: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_67 };
                     }) };
                 };
@@ -10474,6 +10478,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                             break __tmpl: __local_32;
                         };
                         __local_73 = builtin::i64_extend_i32_s(_hfs_pos_98);
+                        self.pos = _hfs_pos_98;
                         break __inline_DeserializeError__malformed_21: "core:serde/DeserializeError" { kind: 6, message: __local_72, offset: __local_73 };
                     }) };
                 };
@@ -10482,11 +10487,13 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                 seq_len = "core:json/utf8_sequence_length"(b);
                 if (_hfs_pos_98 + seq_len) > __inline_String__len_22: block -> i32 {
                     __local_74 = self.input;
+                    self.pos = _hfs_pos_98;
                     break __inline_String__len_22: __local_74.used;
                 } {
                     self.pos = _hfs_pos_98;
                     return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_23: block -> ref "core:serde/DeserializeError" {
                         __local_75 = builtin::i64_extend_i32_s(_hfs_pos_98);
+                        self.pos = _hfs_pos_98;
                         break __inline_DeserializeError__eof_23: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_75 };
                     }) };
                 };
@@ -11048,6 +11055,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                     self.pos = _hfs_pos_51;
                     return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_18: block -> ref "core:serde/DeserializeError" {
                         __local_42 = String { repr: array.new_data<u8>("expected integer, got float"), used: 27 };
+                        self.pos = _hfs_pos_51;
                         break __inline_DeserializeError__unexpected_type_18: "core:serde/DeserializeError" { kind: 0, message: __local_42, offset: start };
                     }) };
                 };
@@ -11059,6 +11067,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                     self.pos = _hfs_pos_51;
                     return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__overflow_19: block -> ref "core:serde/DeserializeError" {
                         __local_44 = String { repr: array.new_data<u8>("value out of range for i32"), used: 26 };
+                        self.pos = _hfs_pos_51;
                         break __inline_DeserializeError__overflow_19: "core:serde/DeserializeError" { kind: 5, message: __local_44, offset: start };
                     }) };
                 };
@@ -11385,6 +11394,7 @@ fn "core:json/JsonDeserializer::skip_string"(self) {  // from core:json
                     self.pos = _hfs_pos_14;
                     return ref.as_non_null(__inline_DeserializeError__eof_3: block -> ref "core:serde/DeserializeError" {
                         __local_7 = builtin::i64_extend_i32_s(_hfs_pos_14);
+                        self.pos = _hfs_pos_14;
                         break __inline_DeserializeError__eof_3: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_7 };
                     });
                 };
@@ -11513,11 +11523,13 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
                 _hfs_pos_49 = self.pos;
                 if _hfs_pos_49 >= __inline_String__len_5: block -> i32 {
                     __local_25 = self.input;
+                    self.pos = _hfs_pos_49;
                     break __inline_String__len_5: __local_25.used;
                 } {
                     self.pos = _hfs_pos_49;
                     return ref.as_non_null(__inline_DeserializeError__eof_6: block -> ref "core:serde/DeserializeError" {
                         __local_26 = builtin::i64_extend_i32_s(_hfs_pos_49);
+                        self.pos = _hfs_pos_49;
                         break __inline_DeserializeError__eof_6: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_26 };
                     });
                 };
@@ -11538,6 +11550,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
                     return ref.as_non_null(__inline_DeserializeError__malformed_8: block -> ref "core:serde/DeserializeError" {
                         __local_29 = String { repr: array.new_data<u8>("expected ',' or ']'"), used: 19 };
                         __local_30 = builtin::i64_extend_i32_s(_hfs_pos_49);
+                        self.pos = _hfs_pos_49;
                         break __inline_DeserializeError__malformed_8: "core:serde/DeserializeError" { kind: 6, message: __local_29, offset: __local_30 };
                     });
                 };
@@ -11572,6 +11585,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
                 _hfs_pos_50 = self.pos;
                 if if _hfs_pos_50 >= __inline_String__len_11: block -> i32 {
                     __local_34 = self.input;
+                    self.pos = _hfs_pos_50;
                     break __inline_String__len_11: __local_34.used;
                 } -> i32 {
                     1;
@@ -11579,6 +11593,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
                     __inline_String__get_byte_12: block -> u8 {
                         __local_35 = self.input;
                         __local_36 = _hfs_pos_50;
+                        self.pos = _hfs_pos_50;
                         break __inline_String__get_byte_12: builtin::array_get_u8(__local_35.repr, __local_36);
                     } != 34;
                 } {
@@ -11586,6 +11601,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
                     return ref.as_non_null(__inline_DeserializeError__malformed_13: block -> ref "core:serde/DeserializeError" {
                         __local_37 = String { repr: array.new_data<u8>("expected string key"), used: 19 };
                         __local_38 = builtin::i64_extend_i32_s(_hfs_pos_50);
+                        self.pos = _hfs_pos_50;
                         break __inline_DeserializeError__malformed_13: "core:serde/DeserializeError" { kind: 6, message: __local_37, offset: __local_38 };
                     });
                 };
@@ -11618,11 +11634,13 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
                 _hfs_pos_50 = self.pos;
                 if _hfs_pos_50 >= __inline_String__len_14: block -> i32 {
                     __local_39 = self.input;
+                    self.pos = _hfs_pos_50;
                     break __inline_String__len_14: __local_39.used;
                 } {
                     self.pos = _hfs_pos_50;
                     return ref.as_non_null(__inline_DeserializeError__eof_15: block -> ref "core:serde/DeserializeError" {
                         __local_40 = builtin::i64_extend_i32_s(_hfs_pos_50);
+                        self.pos = _hfs_pos_50;
                         break __inline_DeserializeError__eof_15: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_40 };
                     });
                 };
@@ -11643,6 +11661,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
                     return ref.as_non_null(__inline_DeserializeError__malformed_17: block -> ref "core:serde/DeserializeError" {
                         __local_43 = String { repr: array.new_data<u8>("expected ',' or '}'"), used: 19 };
                         __local_44 = builtin::i64_extend_i32_s(_hfs_pos_50);
+                        self.pos = _hfs_pos_50;
                         break __inline_DeserializeError__malformed_17: "core:serde/DeserializeError" { kind: 6, message: __local_43, offset: __local_44 };
                     });
                 };
