@@ -114,7 +114,7 @@ Global variables map directly to WebAssembly globals. Constant expressions are e
 
 See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
-Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
+Wado uses GC-based memory management (Wasm GC). There is no borrow checker or lifetime annotations. Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
 ## Types
 
@@ -389,7 +389,7 @@ fn read(r: &i32) { ... }
 read(&mut y);         // OK: &mut i32 coerced to &i32
 ```
 
-Key differences from Rust (GC-based memory model):
+Key differences from Rust (see Value Semantics):
 
 - No borrow checker: multiple mutable references allowed
 - Can return references to local variables (GC keeps them alive)
