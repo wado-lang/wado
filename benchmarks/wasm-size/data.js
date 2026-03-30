@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774882382837,
+  "lastUpdate": 1774911911598,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8954,6 +8954,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ffd2800339b002bdcf938ec033af6f877bef9923"
         },
         "date": 1774882382609,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "529cefcf03a7bed5c6012a502a4350febe74a77a",
+          "message": "Merge pull request #739 from wado-lang/claude/review-agents-fg-bg-AyENY\n\nFix AGENTS.md: clarify bug priority, fix typo, remove fg instruction",
+          "timestamp": "2026-03-31T08:02:13+09:00",
+          "tree_id": "5660370ae05da8e0c8eb301b8f5a9a3fa9a6a362",
+          "url": "https://github.com/wado-lang/wado/commit/529cefcf03a7bed5c6012a502a4350febe74a77a"
+        },
+        "date": 1774911911368,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
