@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774868870145,
+  "lastUpdate": 1774872242762,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8837,6 +8837,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ec4527aba2252ef7e188fc31fde12ba9ed00d866"
         },
         "date": 1774868869925,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5694b9528ce00095bdecdcc252af69431f877cc7",
+          "message": "Merge pull request #733 from wado-lang/claude/fix-wasi-cm-fixtures-py3z9\n\nFix WASI CM bindings: ErrorCode collision, future.read, Option/variant flat lowering",
+          "timestamp": "2026-03-30T21:01:04+09:00",
+          "tree_id": "90c33c58f81f379372ac5d720f2127520c3e7b32",
+          "url": "https://github.com/wado-lang/wado/commit/5694b9528ce00095bdecdcc252af69431f877cc7"
+        },
+        "date": 1774872242551,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
