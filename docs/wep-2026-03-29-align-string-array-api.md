@@ -60,9 +60,9 @@ Wado intentionally omits Rust concepts tied to ownership and lifetimes (`as_str(
 | `rotate_left(n)`         | —                                         | niche                                |
 | `rotate_right(n)`        | —                                         | niche                                |
 | `resize(n, val)`         | —                                         | use `truncate` + `extend`            |
-| `capacity()`             | —                                         | GC-managed, not useful to expose     |
-| `reserve(n)`             | —                                         | use `with_capacity` at construction  |
-| `shrink_to_fit()`        | —                                         | GC handles this                      |
+| `capacity()`             | `capacity()`                              | NEW                                  |
+| `reserve(n)`             | `reserve(n)`                              | NEW                                  |
+| `shrink_to_fit()`        | `shrink_to_fit()`                         | NEW                                  |
 | `as_slice()`             | —                                         | no borrowing distinction             |
 | `as_mut_slice()`         | —                                         | no borrowing distinction             |
 | `into_boxed_slice()`     | —                                         | no ownership transfer                |
@@ -100,6 +100,9 @@ impl<T> Array<T> {
     pub fn remove(&mut self, index: i32) -> T;
     pub fn swap(&mut self, a: i32, b: i32);
     pub fn clear(&mut self);
+    pub fn capacity(&self) -> i32;
+    pub fn reserve(&mut self, additional: i32);
+    pub fn shrink_to_fit(&mut self);
     pub fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I);
     pub fn reverse(&mut self);
     pub fn repeat(&self, n: i32) -> Array<T>;
@@ -172,9 +175,9 @@ impl<T: Display> Array<T> {
 | `as_bytes()`                         | `as_bytes()`                          | NEW (returns `Array<u8>`)               |
 | `as_str()`                           | —                                     | no borrowing distinction                |
 | `into_bytes()`                       | —                                     | no ownership transfer, use `as_bytes()` |
-| `capacity()`                         | —                                     | GC-managed                              |
-| `reserve(n)`                         | —                                     | use `with_capacity`                     |
-| `shrink_to_fit()`                    | —                                     | GC handles this                         |
+| `capacity()`                         | `capacity()`                          | NEW                                     |
+| `reserve(n)`                         | `reserve(n)`                          | NEW                                     |
+| `shrink_to_fit()`                    | `shrink_to_fit()`                     | NEW                                     |
 | `drain(..)`                          | —                                     | complex                                 |
 | `retain(pred)`                       | `retain(pred)`                        | NEW                                     |
 | `split_off(i)`                       | —                                     | niche                                   |
@@ -221,6 +224,9 @@ impl String {
     pub fn remove(&mut self, byte_index: i32) -> char;
     pub fn truncate(&mut self, byte_len: i32);               // rename from truncate_bytes
     pub fn clear(&mut self);
+    pub fn capacity(&self) -> i32;
+    pub fn reserve(&mut self, additional: i32);
+    pub fn shrink_to_fit(&mut self);
     pub fn as_bytes(&self) -> Array<u8>;
     pub fn contains(&self, pat: String) -> bool;
     pub fn starts_with(&self, pat: String) -> bool;
