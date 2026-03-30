@@ -50,6 +50,11 @@ libc = { version = "0.2" }
 [profile.dev.package.wado-compiler]
 opt-level = 1
 
+# Optimize Cranelift in dev/test builds for faster E2E tests.
+# Cranelift compiles Wasm→native for every test; without this it runs in debug mode.
+[profile.dev.package.cranelift-codegen]
+opt-level = 2
+
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 disallowed_types = "warn"
