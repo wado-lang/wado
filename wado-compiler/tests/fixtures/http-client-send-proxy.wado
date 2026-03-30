@@ -1,0 +1,49 @@
+// Test: HTTP reverse-proxy pattern using Client::send
+// Sends an outgoing request to a specific path, inspects the upstream
+// response status code, and forwards it as-is.
+// Unlike http-client-send-simple which forwards blindly, this test
+// verifies the upstream status before returning.
+use { Request, Response, ErrorCode, Fields, Trailers, Scheme } from "wasi:http";
+use { Client } from "wasi:http/client.wado";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Build an outgoing request to a specific upstream path
+    let headers = Fields::new();
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [out_req, _req_future] = Request::new(headers, null, trailers_future, null);
+
+    out_req.set_scheme(Option::<Scheme>::Some(Scheme::Http));
+    out_req.set_authority(Option::<String>::Some("localhost"));
+    out_req.set_path_with_query(Option::<String>::Some("/upstream"));
+
+    // Send outgoing request via Client effect
+    let upstream_result = Client::send(out_req);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+
+    // Unwrap the upstream response
+    let upstream = match upstream_result {
+        Ok(r) => r,
+        Err(_) => panic("upstream request failed"),
+    };
+
+    // Verify upstream returned 200
+    let status = upstream.get_status_code();
+    assert status == 200, "expected upstream status 200";
+
+    // Forward the upstream response as-is
+    task return Result::<Response, ErrorCode>::Ok(upstream);
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200,
+        "body": "from upstream"
+    },
+    "outgoing_mocks": {
+        "/upstream": {
+            "status": 200,
+            "body": "from upstream"
+        }
+    }
+}

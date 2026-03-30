@@ -2046,7 +2046,7 @@ fn import_http_types_for_service(
     );
     ctx.alias_comp_func("http-fields-constructor", "wasi:http/Fields::new");
 
-    // Alias resource method/static functions for HTTP resources
+    // Alias resource constructor/method/static functions for HTTP resources
     {
         let http_resource_names: IndexSet<&str> = http_resources
             .iter()
@@ -2064,18 +2064,17 @@ fn import_http_types_for_service(
                         if !http_resource_names.contains(f.effect_name.as_str()) {
                             return false;
                         }
-                        // Skip constructors (handled above)
-                        if f.wasi_func_name.starts_with("[constructor]") {
+                        // Skip Fields constructor and Response::new (handled above)
+                        if f.wasi_func_name == constructor_fields
+                            || f.wasi_func_name == static_response_new
+                        {
                             return false;
                         }
-                        // Skip [static]response.new (handled above as http-response-new)
-                        if f.wasi_func_name == static_response_new {
-                            return false;
-                        }
-                        // Only include method/static functions that are actually used
-                        let is_method_or_static = f.wasi_func_name.starts_with("[method]")
+                        // Only include constructor/method/static functions that are actually used
+                        let is_resource_func = f.wasi_func_name.starts_with("[constructor]")
+                            || f.wasi_func_name.starts_with("[method]")
                             || f.wasi_func_name.starts_with("[static]");
-                        is_method_or_static
+                        is_resource_func
                             && project
                                 .used_wasi_functions
                                 .contains(&format!("{}::{}", f.effect_name, f.method_name))
