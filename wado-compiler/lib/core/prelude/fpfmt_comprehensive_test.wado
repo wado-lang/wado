@@ -20,7 +20,7 @@ fn format_exp_padded(d: u64, p: i32, nd: i32) -> String {
     let mut val = d;
     let mut digit_chars: Array<u8> = [];
     for let mut i = 0; i < nd; i += 1 {
-        digit_chars.append(0 as u8);
+        digit_chars.push(0 as u8);
     }
     let mut idx = nd - 1;
     while idx >= 0 {
@@ -29,32 +29,32 @@ fn format_exp_padded(d: u64, p: i32, nd: i32) -> String {
         idx -= 1;
     }
 
-    buf.append_char(digit_chars[0] as char);
+    buf.push(digit_chars[0] as char);
     if nd > 1 {
-        buf.append_char('.');
+        buf.push('.');
         for let mut i = 1; i < nd; i += 1 {
-            buf.append_char(digit_chars[i] as char);
+            buf.push(digit_chars[i] as char);
         }
     }
 
-    buf.append_char('e');
+    buf.push('e');
     if exp < 0 {
-        buf.append_char('-');
+        buf.push('-');
     } else {
-        buf.append_char('+');
+        buf.push('+');
     }
 
     let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {
-        buf.append_char('0');
-        buf.append_char(char::from_u32_unchecked('0' as u32 + abs_exp as u32));
+        buf.push('0');
+        buf.push(char::from_u32_unchecked('0' as u32 + abs_exp as u32));
     } else if abs_exp < 100 {
-        buf.append_char(char::from_u32_unchecked('0' as u32 + (abs_exp / 10) as u32));
-        buf.append_char(char::from_u32_unchecked('0' as u32 + (abs_exp % 10) as u32));
+        buf.push(char::from_u32_unchecked('0' as u32 + (abs_exp / 10) as u32));
+        buf.push(char::from_u32_unchecked('0' as u32 + (abs_exp % 10) as u32));
     } else {
-        buf.append_char(char::from_u32_unchecked('0' as u32 + (abs_exp / 100) as u32));
-        buf.append_char(char::from_u32_unchecked('0' as u32 + (abs_exp / 10 % 10) as u32));
-        buf.append_char(char::from_u32_unchecked('0' as u32 + (abs_exp % 10) as u32));
+        buf.push(char::from_u32_unchecked('0' as u32 + (abs_exp / 100) as u32));
+        buf.push(char::from_u32_unchecked('0' as u32 + (abs_exp / 10 % 10) as u32));
+        buf.push(char::from_u32_unchecked('0' as u32 + (abs_exp % 10) as u32));
     }
 
     return buf;

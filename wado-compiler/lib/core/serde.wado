@@ -524,12 +524,12 @@ impl<T: Deserialize> Deserialize for Array<T> {
             if let Ok(first_opt) = first {
                 if let Some(first_elem) = first_opt {
                     let mut items = Array::<T>::with_capacity(2);
-                    items.append(first_elem);
+                    items.push(first_elem);
                     loop {
                         let next = seq.next_element::<T>();
                         if let Ok(next_opt) = next {
                             if let Some(item) = next_opt {
-                                items.append(item);
+                                items.push(item);
                             } else {
                                 let end_result = seq.end();
                                 if let Err(e) = end_result {

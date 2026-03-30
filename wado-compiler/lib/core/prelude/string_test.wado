@@ -175,43 +175,43 @@ test "collect multibyte chars" {
 
 test "truncate_bytes ASCII" {
     let mut s = "hello world";
-    s.truncate_bytes(5);
+    s.truncate(5);
     assert s == "hello";
 }
 
 test "truncate_bytes no-op when len >= current" {
     let mut s = "hi";
-    s.truncate_bytes(10);
+    s.truncate(10);
     assert s == "hi";
 }
 
 test "truncate_bytes to zero" {
     let mut s = "abc";
-    s.truncate_bytes(0);
+    s.truncate(0);
     assert s == "";
 }
 
 test "truncate_bytes UTF-8 3-byte boundary" {
     let mut s = "日本語";
-    s.truncate_bytes(6);
+    s.truncate(6);
     assert s == "日本";
 }
 
 test "truncate_bytes exact length" {
     let mut s = "hello";
-    s.truncate_bytes(5);
+    s.truncate(5);
     assert s == "hello";
 }
 
 test "truncate_bytes UTF-8 2-byte boundary" {
     let mut s = "ñé";
-    s.truncate_bytes(2);
+    s.truncate(2);
     assert s == "ñ";
 }
 
 test "truncate_bytes UTF-8 4-byte boundary" {
     let mut s = "😀😃";
-    s.truncate_bytes(4);
+    s.truncate(4);
     assert s == "😀";
 }
 
@@ -468,9 +468,9 @@ test "String::concat" {
 
 test "String::append" {
     let mut builder = String::with_capacity(20);
-    builder.append("Hello");
-    builder.append(", ");
-    builder.append("World!");
+    builder.push_str("Hello");
+    builder.push_str(", ");
+    builder.push_str("World!");
     assert builder == "Hello, World!";
 }
 
@@ -483,7 +483,7 @@ test "String::with_capacity starts empty" {
 test "append updates len" {
     let mut s = String::with_capacity(10);
     assert s.len() == 0;
-    s.append("Hi");
+    s.push_str("Hi");
     assert s.len() == 2;
 }
 
@@ -706,4 +706,271 @@ test "String::from_utf8_unchecked roundtrip" {
 
 test "String::from_utf8_unchecked from bytes iter" {
     assert String::from_utf8_unchecked("日本語".bytes()) == "日本語";
+}
+
+// --- New API tests ---
+
+test "push_str" {
+    let mut s = String::with_capacity(20);
+    s.push_str("Hello");
+    s.push_str(", ");
+    s.push_str("World!");
+    assert s == "Hello, World!";
+}
+
+test "push" {
+    let mut s = String::with_capacity(10);
+    s.push('H');
+    s.push('i');
+    s.push('!');
+    assert s == "Hi!";
+}
+
+test "push multibyte" {
+    let mut s = String::with_capacity(20);
+    s.push('日');
+    s.push('本');
+    assert s == "日本";
+}
+
+test "pop ASCII" {
+    let mut s = "hello";
+    let c = s.pop();
+    assert c matches { Some(ch) && ch == 'o' };
+    assert s == "hell";
+}
+
+test "pop multibyte" {
+    let mut s = "日本";
+    let c = s.pop();
+    assert c matches { Some(ch) && ch as i32 == 0x672C };
+    assert s == "日";
+}
+
+test "pop empty" {
+    let mut s = "";
+    assert s.pop() matches { None };
+}
+
+test "clear" {
+    let mut s = "hello";
+    s.clear();
+    assert s == "";
+    assert s.is_empty();
+}
+
+test "capacity and reserve" {
+    let mut s = String::with_capacity(10);
+    assert s.capacity() >= 10;
+    s.push_str("hi");
+    s.reserve(100);
+    assert s.capacity() >= 102;
+    assert s == "hi";
+}
+
+test "shrink_to_fit" {
+    let mut s = String::with_capacity(1000);
+    s.push_str("hi");
+    s.shrink_to_fit();
+    assert s.capacity() == 2;
+    assert s == "hi";
+}
+
+test "as_bytes" {
+    let bytes = "Hello".as_bytes();
+    assert bytes.len() == 5;
+    assert bytes[0] == 72;
+    assert bytes[4] == 111;
+}
+
+test "as_bytes multibyte" {
+    let bytes = "日".as_bytes();
+    assert bytes.len() == 3;
+    assert bytes[0] == 0xE6;
+    assert bytes[1] == 0x97;
+    assert bytes[2] == 0xA5;
+}
+
+test "contains" {
+    assert "hello world".contains("world");
+    assert "hello world".contains("hello");
+    assert "hello world".contains(" ");
+    assert !"hello world".contains("xyz");
+    assert "hello".contains("");
+}
+
+test "starts_with" {
+    assert "hello world".starts_with("hello");
+    assert !"hello world".starts_with("world");
+    assert "hello".starts_with("");
+    assert "hello".starts_with("hello");
+}
+
+test "ends_with" {
+    assert "hello world".ends_with("world");
+    assert !"hello world".ends_with("hello");
+    assert "hello".ends_with("");
+    assert "hello".ends_with("hello");
+}
+
+test "find" {
+    assert "hello world".find("world") matches { Some(idx) && idx == 6 };
+    assert "hello world".find("hello") matches { Some(idx) && idx == 0 };
+    assert "hello world".find("xyz") matches { None };
+    assert "abcabc".find("bc") matches { Some(idx) && idx == 1 };
+}
+
+test "rfind" {
+    assert "abcabc".rfind("bc") matches { Some(idx) && idx == 4 };
+    assert "hello".rfind("xyz") matches { None };
+    assert "hello".rfind("hello") matches { Some(idx) && idx == 0 };
+}
+
+test "contains_char" {
+    assert "hello".contains_char('h');
+    assert "hello".contains_char('o');
+    assert !"hello".contains_char('x');
+}
+
+test "find_char" {
+    assert "hello".find_char(|c: char| c == 'l') matches { Some(idx) && idx == 2 };
+    assert "hello".find_char(|c: char| c == 'x') matches { None };
+}
+
+test "truncate" {
+    let mut s = "hello world";
+    s.truncate(5);
+    assert s == "hello";
+}
+
+test "truncate no-op" {
+    let mut s = "hi";
+    s.truncate(10);
+    assert s == "hi";
+}
+
+test "insert char" {
+    let mut s = "hllo";
+    s.insert(1, 'e');
+    assert s == "hello";
+}
+
+test "insert char at start" {
+    let mut s = "ello";
+    s.insert(0, 'h');
+    assert s == "hello";
+}
+
+test "insert char at end" {
+    let mut s = "hell";
+    s.insert(4, 'o');
+    assert s == "hello";
+}
+
+test "insert_str" {
+    let mut s = "hd";
+    s.insert_str(1, "ello worl");
+    assert s == "hello world";
+}
+
+test "remove" {
+    let mut s = "hello";
+    let c = s.remove(0);
+    assert c == 'h';
+    assert s == "ello";
+}
+
+test "remove middle" {
+    let mut s = "hello";
+    let c = s.remove(2);
+    assert c == 'l';
+    assert s == "helo";
+}
+
+test "repeat" {
+    assert "ab".repeat(3) == "ababab";
+    assert "x".repeat(0) == "";
+    assert "hi".repeat(1) == "hi";
+}
+
+test "replace" {
+    assert "hello world".replace("world", "earth") == "hello earth";
+    assert "aaa".replace("a", "bb") == "bbbbbb";
+    assert "hello".replace("xyz", "abc") == "hello";
+}
+
+test "replacen" {
+    assert "aaa".replacen("a", "bb", 2) == "bbbba";
+    assert "aaa".replacen("a", "bb", 0) == "aaa";
+}
+
+test "split" {
+    let parts: Array<String> = "a,b,c".split(",").collect();
+    assert parts.len() == 3;
+    assert parts[0] == "a";
+    assert parts[1] == "b";
+    assert parts[2] == "c";
+}
+
+test "split no match" {
+    let parts: Array<String> = "hello".split(",").collect();
+    assert parts.len() == 1;
+    assert parts[0] == "hello";
+}
+
+test "splitn" {
+    let parts: Array<String> = "a,b,c,d".splitn(3, ",").collect();
+    assert parts.len() == 3;
+    assert parts[0] == "a";
+    assert parts[1] == "b";
+    assert parts[2] == "c,d";
+}
+
+test "split_whitespace" {
+    let parts: Array<String> = "  hello   world  ".split_whitespace().collect();
+    assert parts.len() == 2;
+    assert parts[0] == "hello";
+    assert parts[1] == "world";
+}
+
+test "split_whitespace empty" {
+    let parts: Array<String> = "   ".split_whitespace().collect();
+    assert parts.len() == 0;
+}
+
+test "lines" {
+    let ls: Array<String> = "hello\nworld\n".lines().collect();
+    assert ls.len() == 2;
+    assert ls[0] == "hello";
+    assert ls[1] == "world";
+}
+
+test "lines CRLF" {
+    let ls: Array<String> = "a\r\nb\r\n".lines().collect();
+    assert ls.len() == 2;
+    assert ls[0] == "a";
+    assert ls[1] == "b";
+}
+
+test "lines no trailing newline" {
+    let ls: Array<String> = "a\nb".lines().collect();
+    assert ls.len() == 2;
+    assert ls[0] == "a";
+    assert ls[1] == "b";
+}
+
+test "char_indices" {
+    let indices: Array<[i32, char]> = "Aé".char_indices().collect();
+    assert indices.len() == 2;
+    assert indices[0].0 == 0;
+    assert indices[0].1 == 'A';
+    assert indices[1].0 == 1;
+    assert indices[1].1 as i32 == 0xE9;
+}
+
+test "char_indices multibyte" {
+    let indices: Array<[i32, char]> = "日本".char_indices().collect();
+    assert indices.len() == 2;
+    assert indices[0].0 == 0;
+    assert indices[1].0 == 3;
 }

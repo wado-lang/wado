@@ -63,7 +63,7 @@ pub struct NsdSerializer {
 impl SerializeSeq for NsdSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.append(",");
+            self.buf.push_str(",");
         }
         let mut ser = NsdSerializer { buf: self.buf };
         let r = value.serialize::<NsdSerializer>(&mut ser);
@@ -73,7 +73,7 @@ impl SerializeSeq for NsdSeqSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.append("]");
+        self.buf.push_str("]");
         return Result::<(), SerializeError>::Ok(());
     }
 }
@@ -81,12 +81,12 @@ impl SerializeSeq for NsdSeqSerializer {
 impl SerializeMap for NsdMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.append(",");
+            self.buf.push_str(",");
         }
         let mut ser = NsdSerializer { buf: self.buf };
         let r = key.serialize::<NsdSerializer>(&mut ser);
         self.buf = ser.buf;
-        self.buf.append(":");
+        self.buf.push_str(":");
         self.need_value = true;
         return r;
     }
@@ -101,7 +101,7 @@ impl SerializeMap for NsdMapSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.append("}");
+        self.buf.push_str("}");
         return Result::<(), SerializeError>::Ok(());
     }
 }
@@ -109,7 +109,7 @@ impl SerializeMap for NsdMapSerializer {
 impl SerializeStruct for NsdStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.append(",");
+            self.buf.push_str(",");
         }
         // NSD: omit field name, write value only
         let mut ser = NsdSerializer { buf: self.buf };
@@ -120,14 +120,14 @@ impl SerializeStruct for NsdStructSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.append("]");
+        self.buf.push_str("]");
         return Result::<(), SerializeError>::Ok(());
     }
 }
 
 impl SerializeVariant for NsdVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        self.buf.append(",");
+        self.buf.push_str(",");
         let mut ser = NsdSerializer { buf: self.buf };
         let r = value.serialize::<NsdSerializer>(&mut ser);
         self.buf = ser.buf;
@@ -135,7 +135,7 @@ impl SerializeVariant for NsdVariantSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.append("]");
+        self.buf.push_str("]");
         return Result::<(), SerializeError>::Ok(());
     }
 }
@@ -147,40 +147,40 @@ impl Serializer for NsdSerializer {
     type VariantSerializer = NsdVariantSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.append(`{v}`);
+        self.buf.push_str(`{v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
         if v > 9007199254740991 || v < -9007199254740991 {
-            self.buf.append(`"{v}"`);
+            self.buf.push_str(`"{v}"`);
         } else {
-            self.buf.append(`{v}`);
+            self.buf.push_str(`{v}`);
         }
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        self.buf.append(`{v}`);
+        self.buf.push_str(`{v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
         if v > 9007199254740991 {
-            self.buf.append(`"{v}"`);
+            self.buf.push_str(`"{v}"`);
         } else {
-            self.buf.append(`{v}`);
+            self.buf.push_str(`{v}`);
         }
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
-        self.buf.append(`"{v}"`);
+        self.buf.push_str(`"{v}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
-        self.buf.append(`"{v}"`);
+        self.buf.push_str(`"{v}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 
@@ -197,7 +197,7 @@ impl Serializer for NsdSerializer {
                 message: "Infinity is not allowed in JSON",
             });
         }
-        self.buf.append(`{v as f64}`);
+        self.buf.push_str(`{v as f64}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
@@ -214,15 +214,15 @@ impl Serializer for NsdSerializer {
                 message: "Infinity is not allowed in JSON",
             });
         }
-        self.buf.append(`{v}`);
+        self.buf.push_str(`{v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
         if v {
-            self.buf.append("true");
+            self.buf.push_str("true");
         } else {
-            self.buf.append("false");
+            self.buf.push_str("false");
         }
         return Result::<(), SerializeError>::Ok(());
     }
@@ -239,12 +239,12 @@ impl Serializer for NsdSerializer {
     }
 
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
-        self.buf.append("null");
+        self.buf.push_str("null");
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<NsdSeqSerializer, SerializeError> {
-        self.buf.append("[");
+        self.buf.push_str("[");
         return Result::<NsdSeqSerializer, SerializeError>::Ok(NsdSeqSerializer {
             buf: self.buf,
             count: 0,
@@ -252,7 +252,7 @@ impl Serializer for NsdSerializer {
     }
 
     fn begin_map(&mut self, len: i32) -> Result<NsdMapSerializer, SerializeError> {
-        self.buf.append("{");
+        self.buf.push_str("{");
         return Result::<NsdMapSerializer, SerializeError>::Ok(NsdMapSerializer {
             buf: self.buf,
             count: 0,
@@ -262,7 +262,7 @@ impl Serializer for NsdSerializer {
 
     fn begin_struct(&mut self, name: &String, fields: i32) -> Result<NsdStructSerializer, SerializeError> {
         // NSD: struct as array
-        self.buf.append("[");
+        self.buf.push_str("[");
         return Result::<NsdStructSerializer, SerializeError>::Ok(NsdStructSerializer {
             buf: self.buf,
             count: 0,
@@ -271,13 +271,13 @@ impl Serializer for NsdSerializer {
 
     fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
         // NSD: discriminant integer
-        self.buf.append(`{disc}`);
+        self.buf.push_str(`{disc}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<NsdVariantSerializer, SerializeError> {
         // NSD: [disc, payload]
-        self.buf.append(`[{disc}`);
+        self.buf.push_str(`[{disc}`);
         return Result::<NsdVariantSerializer, SerializeError>::Ok(NsdVariantSerializer {
             buf: self.buf,
         });

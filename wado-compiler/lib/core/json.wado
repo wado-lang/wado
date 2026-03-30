@@ -52,30 +52,30 @@ pub fn utf8_sequence_length(leading_byte: i32) -> i32 {
 
 /// Writes a JSON-escaped string (with surrounding quotes) into buf.
 pub fn write_escaped_string(buf: &mut String, s: &String) {
-    buf.append_char('"');
+    buf.push('"');
     for let c of s.chars() {
         if c == '"' {
-            buf.append("\\\"");
+            buf.push_str("\\\"");
         } else if c == '\\' {
-            buf.append("\\\\");
+            buf.push_str("\\\\");
         } else if c == '\n' {
-            buf.append("\\n");
+            buf.push_str("\\n");
         } else if c == '\r' {
-            buf.append("\\r");
+            buf.push_str("\\r");
         } else if c == '\t' {
-            buf.append("\\t");
+            buf.push_str("\\t");
         } else if (c as u32) < 0x20 {
-            buf.append("\\u00");
+            buf.push_str("\\u00");
             let code = c as i32;
             let hi = code >> 4 & 0xF;
             let lo = code & 0xF;
-            buf.append_char(hex_digit(hi));
-            buf.append_char(hex_digit(lo));
+            buf.push(hex_digit(hi));
+            buf.push(hex_digit(lo));
         } else {
-            buf.append_char(c);
+            buf.push(c);
         }
     }
-    buf.append_char('"');
+    buf.push('"');
 }
 
 struct JsonSeqSerializer {
@@ -105,7 +105,7 @@ pub struct JsonSerializer {
 impl SerializeSeq for JsonSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.append(",");
+            self.buf.push_str(",");
         }
         let mut ser = JsonSerializer { buf: self.buf };
         let r = value.serialize::<JsonSerializer>(&mut ser);
@@ -115,7 +115,7 @@ impl SerializeSeq for JsonSeqSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.append("]");
+        self.buf.push_str("]");
         return Result::<(), SerializeError>::Ok(());
     }
 }
@@ -123,12 +123,12 @@ impl SerializeSeq for JsonSeqSerializer {
 impl SerializeMap for JsonMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.append(",");
+            self.buf.push_str(",");
         }
         let mut ser = JsonSerializer { buf: self.buf };
         let r = key.serialize::<JsonSerializer>(&mut ser);
         self.buf = ser.buf;
-        self.buf.append(":");
+        self.buf.push_str(":");
         self.need_value = true;
         return r;
     }
@@ -143,7 +143,7 @@ impl SerializeMap for JsonMapSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.append("}");
+        self.buf.push_str("}");
         return Result::<(), SerializeError>::Ok(());
     }
 }
@@ -151,10 +151,10 @@ impl SerializeMap for JsonMapSerializer {
 impl SerializeStruct for JsonStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.buf.append(",");
+            self.buf.push_str(",");
         }
         write_escaped_string(&mut self.buf, name);
-        self.buf.append(":");
+        self.buf.push_str(":");
         let mut ser = JsonSerializer { buf: self.buf };
         let r = value.serialize::<JsonSerializer>(&mut ser);
         self.buf = ser.buf;
@@ -163,7 +163,7 @@ impl SerializeStruct for JsonStructSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.append("}");
+        self.buf.push_str("}");
         return Result::<(), SerializeError>::Ok(());
     }
 }
@@ -177,7 +177,7 @@ impl SerializeVariant for JsonVariantSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.buf.append("}");
+        self.buf.push_str("}");
         return Result::<(), SerializeError>::Ok(());
     }
 }
@@ -189,44 +189,44 @@ impl Serializer for JsonSerializer {
     type VariantSerializer = JsonVariantSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.append(`{v}`);
+        self.buf.push_str(`{v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
         // Values outside ±2^53-1 are serialized as strings for JS safety
         if v > 9007199254740991 || v < -9007199254740991 {
-            self.buf.append(`"{v}"`);
+            self.buf.push_str(`"{v}"`);
         } else {
-            self.buf.append(`{v}`);
+            self.buf.push_str(`{v}`);
         }
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        self.buf.append(`{v}`);
+        self.buf.push_str(`{v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
         // Values above 2^53-1 are serialized as strings for JS safety
         if v > 9007199254740991 {
-            self.buf.append(`"{v}"`);
+            self.buf.push_str(`"{v}"`);
         } else {
-            self.buf.append(`{v}`);
+            self.buf.push_str(`{v}`);
         }
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
         // i128 always serialized as string (always exceeds JS safe integer range)
-        self.buf.append(`"{v}"`);
+        self.buf.push_str(`"{v}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
         // u128 always serialized as string (always exceeds JS safe integer range)
-        self.buf.append(`"{v}"`);
+        self.buf.push_str(`"{v}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 
@@ -243,7 +243,7 @@ impl Serializer for JsonSerializer {
                 message: "Infinity is not allowed in JSON",
             });
         }
-        self.buf.append(`{v as f64}`);
+        self.buf.push_str(`{v as f64}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
@@ -260,15 +260,15 @@ impl Serializer for JsonSerializer {
                 message: "Infinity is not allowed in JSON",
             });
         }
-        self.buf.append(`{v}`);
+        self.buf.push_str(`{v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
         if v {
-            self.buf.append("true");
+            self.buf.push_str("true");
         } else {
-            self.buf.append("false");
+            self.buf.push_str("false");
         }
         return Result::<(), SerializeError>::Ok(());
     }
@@ -285,12 +285,12 @@ impl Serializer for JsonSerializer {
     }
 
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
-        self.buf.append("null");
+        self.buf.push_str("null");
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> {
-        self.buf.append("[");
+        self.buf.push_str("[");
         return Result::<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer {
             buf: self.buf,
             count: 0,
@@ -298,7 +298,7 @@ impl Serializer for JsonSerializer {
     }
 
     fn begin_map(&mut self, len: i32) -> Result<JsonMapSerializer, SerializeError> {
-        self.buf.append("{");
+        self.buf.push_str("{");
         return Result::<JsonMapSerializer, SerializeError>::Ok(JsonMapSerializer {
             buf: self.buf,
             count: 0,
@@ -307,7 +307,7 @@ impl Serializer for JsonSerializer {
     }
 
     fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> {
-        self.buf.append("{");
+        self.buf.push_str("{");
         return Result::<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer {
             buf: self.buf,
             count: 0,
@@ -320,9 +320,9 @@ impl Serializer for JsonSerializer {
     }
 
     fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> {
-        self.buf.append("{");
+        self.buf.push_str("{");
         write_escaped_string(&mut self.buf, variant_name);
-        self.buf.append(":");
+        self.buf.push_str(":");
         return Result::<JsonVariantSerializer, SerializeError>::Ok(JsonVariantSerializer {
             buf: self.buf,
         });
@@ -449,25 +449,25 @@ impl JsonDeserializer {
                 }
                 let esc = self.input.get_byte(self.pos) as i32;
                 if esc == '"' as i32 {
-                    result.append_char('"');
+                    result.push('"');
                 } else if esc == '\\' as i32 {
-                    result.append_char('\\');
+                    result.push('\\');
                 } else if esc == '/' as i32 {
-                    result.append_char('/');
+                    result.push('/');
                 } else if esc == 'n' as i32 {
-                    result.append_char('\n');
+                    result.push('\n');
                 } else if esc == 'r' as i32 {
-                    result.append_char('\r');
+                    result.push('\r');
                 } else if esc == 't' as i32 {
-                    result.append_char('\t');
+                    result.push('\t');
                 } else if esc == 'b' as i32 {
-                    result.append_char(8 as u8 as char);
+                    result.push(8 as u8 as char);
                 } else if esc == 'f' as i32 {
-                    result.append_char(12 as u8 as char);
+                    result.push(12 as u8 as char);
                 } else if esc == 'u' as i32 {
                     let r = self.read_unicode_escape();
                     if let Ok(c) = r {
-                        result.append_char(c);
+                        result.push(c);
                     }
                     if let Err(e) = r {
                         return Result::<String, DeserializeError>::Err(e);
@@ -488,13 +488,13 @@ impl JsonDeserializer {
                     return Result::<String, DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
                 }
                 if seq_len == 1 {
-                    result.append_char(b as u8 as char);
+                    result.push(b as u8 as char);
                 } else if seq_len == 2 {
                     let b0 = b as u32;
                     let b1 = self.input.get_byte(self.pos + 1) as u32;
                     let code = (b0 & 0x1F) << 6 | b1 & 0x3F;
                     if let Some(c) = char::from_u32(code) {
-                        result.append_char(c);
+                        result.push(c);
                     }
                 } else if seq_len == 3 {
                     let b0 = b as u32;
@@ -502,7 +502,7 @@ impl JsonDeserializer {
                     let b2 = self.input.get_byte(self.pos + 2) as u32;
                     let code = (b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F;
                     if let Some(c) = char::from_u32(code) {
-                        result.append_char(c);
+                        result.push(c);
                     }
                 } else {
                     let b0 = b as u32;
@@ -511,7 +511,7 @@ impl JsonDeserializer {
                     let b3 = self.input.get_byte(self.pos + 3) as u32;
                     let code = (b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F;
                     if let Some(c) = char::from_u32(code) {
-                        result.append_char(c);
+                        result.push(c);
                     }
                 }
                 self.pos += seq_len;
@@ -613,7 +613,7 @@ impl JsonDeserializer {
         }
         let mut raw = String::with_capacity(self.pos - start);
         for let mut i = start; i < self.pos; i += 1 {
-            raw.append_char(self.input.get_byte(i) as char);
+            raw.push(self.input.get_byte(i) as char);
         }
         return Result::<String, DeserializeError>::Ok(raw);
     }
