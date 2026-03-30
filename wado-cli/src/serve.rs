@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use bytes::Bytes;
 use futures::try_join;
+use http_body_util::combinators::UnsyncBoxBody;
 use http_body_util::{BodyExt, Full};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -19,7 +20,11 @@ use wasmtime::{Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::bindings::Service;
-use wasmtime_wasi_http::p3::{Request as WasiRequest, WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
+use wasmtime_wasi_http::p3::{
+    HttpResult, Request as WasiRequest, RequestOptions, WasiHttpCtxView, WasiHttpHooks,
+    WasiHttpView,
+};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, OptLevel};
@@ -158,10 +163,31 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     })
 }
 
+struct ServeHttpHooks;
+
+impl WasiHttpHooks for ServeHttpHooks {
+    fn send_request(
+        &mut self,
+        _request: http::Request<UnsyncBoxBody<Bytes, ErrorCode>>,
+        _options: Option<RequestOptions>,
+        _fut: Box<dyn std::future::Future<Output = Result<(), ErrorCode>> + Send>,
+    ) -> Box<
+        dyn std::future::Future<
+                Output = HttpResult<(
+                    http::Response<UnsyncBoxBody<Bytes, ErrorCode>>,
+                    Box<dyn std::future::Future<Output = Result<(), ErrorCode>> + Send>,
+                )>,
+            > + Send,
+    > {
+        panic!("outgoing HTTP requests are not supported in `wado serve`");
+    }
+}
+
 struct HttpWasiState {
     table: ResourceTable,
     wasi: WasiCtx,
     http: WasiHttpCtx,
+    http_hooks: ServeHttpHooks,
 }
 
 impl WasiView for HttpWasiState {
@@ -178,7 +204,7 @@ impl WasiHttpView for HttpWasiState {
         WasiHttpCtxView {
             ctx: &mut self.http,
             table: &mut self.table,
-            hooks: Default::default(),
+            hooks: &mut self.http_hooks,
         }
     }
 }
@@ -195,6 +221,7 @@ fn create_http_state() -> HttpWasiState {
         table: ResourceTable::new(),
         wasi: WasiCtxBuilder::new().inherit_stdio().build(),
         http: WasiHttpCtx::new(),
+        http_hooks: ServeHttpHooks,
     }
 }
 

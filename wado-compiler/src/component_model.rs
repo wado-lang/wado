@@ -2381,8 +2381,10 @@ pub fn cm_size_with_registry_scoped(
                 let ok_size = cm_size_with_registry_scoped(&g.args[0], registry, wasi_package);
                 let err_size = cm_size_with_registry_scoped(&g.args[1], registry, wasi_package);
                 let payload_size = ok_size.max(err_size);
-                let payload_align = cm_align_with_registry_scoped(&g.args[0], registry, wasi_package)
-                    .max(cm_align_with_registry_scoped(&g.args[1], registry, wasi_package));
+                let payload_align =
+                    cm_align_with_registry_scoped(&g.args[0], registry, wasi_package).max(
+                        cm_align_with_registry_scoped(&g.args[1], registry, wasi_package),
+                    );
                 let payload_offset = crate::cm_abi::align_to(1, payload_align);
                 let overall_align = 1u32.max(payload_align);
                 crate::cm_abi::align_to(payload_offset + payload_size, overall_align)
@@ -2408,13 +2410,15 @@ pub fn cm_align_with_registry_scoped(
                 let mut max_align = 1u32;
                 for (_, field_ty) in fields {
                     let resolved = registry.resolve_type(field_ty);
-                    max_align =
-                        max_align.max(cm_align_with_registry_scoped(&resolved, registry, wasi_package));
+                    max_align = max_align.max(cm_align_with_registry_scoped(
+                        &resolved,
+                        registry,
+                        wasi_package,
+                    ));
                 }
                 return max_align;
             }
-            if let Some(sa) =
-                wasi_variant_cm_size_align_scoped(&named.name, registry, wasi_package)
+            if let Some(sa) = wasi_variant_cm_size_align_scoped(&named.name, registry, wasi_package)
             {
                 return sa.1;
             }
@@ -2427,12 +2431,22 @@ pub fn cm_align_with_registry_scoped(
             crate::cm_abi::cm_align(ty)
         }
         Type::Generic(g) => match g.name.as_str() {
-            "Option" if g.args.len() == 1 => {
-                1u32.max(cm_align_with_registry_scoped(&g.args[0], registry, wasi_package))
-            }
+            "Option" if g.args.len() == 1 => 1u32.max(cm_align_with_registry_scoped(
+                &g.args[0],
+                registry,
+                wasi_package,
+            )),
             "Result" if g.args.len() == 2 => 1u32
-                .max(cm_align_with_registry_scoped(&g.args[0], registry, wasi_package))
-                .max(cm_align_with_registry_scoped(&g.args[1], registry, wasi_package)),
+                .max(cm_align_with_registry_scoped(
+                    &g.args[0],
+                    registry,
+                    wasi_package,
+                ))
+                .max(cm_align_with_registry_scoped(
+                    &g.args[1],
+                    registry,
+                    wasi_package,
+                )),
             _ => crate::cm_abi::cm_align(ty),
         },
         _ => crate::cm_abi::cm_align(ty),

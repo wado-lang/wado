@@ -4642,7 +4642,7 @@ impl FunctionTranslator<'_, '_> {
         instrs.push(WirInstr::LocalSet {
             name: result_name.clone(),
             value: Box::new(WirInstr::Call {
-                func_id: future_read_id.clone(),
+                func_id: future_read_id,
                 args: vec![
                     WirInstr::LocalGet {
                         name: handle_name.clone(),
@@ -4694,7 +4694,7 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::LocalSet {
                         name: ws_name.clone(),
                         value: Box::new(WirInstr::Call {
-                            func_id: ws_new_id.clone(),
+                            func_id: ws_new_id,
                             args: vec![],
                         }),
                     },
@@ -4727,7 +4727,7 @@ impl FunctionTranslator<'_, '_> {
                     },
                     // waitable_set_wait(ws, evt_ptr)
                     WirInstr::Drop(Box::new(WirInstr::Call {
-                        func_id: ws_wait_id.clone(),
+                        func_id: ws_wait_id,
                         args: vec![
                             WirInstr::LocalGet {
                                 name: ws_name.clone(),
@@ -4755,10 +4755,10 @@ impl FunctionTranslator<'_, '_> {
                     // Unjoin future handle from waitable set before dropping it.
                     // waitable.join(handle, 0) removes the child relationship.
                     WirInstr::Call {
-                        func_id: w_join_id.clone(),
+                        func_id: w_join_id,
                         args: vec![
                             WirInstr::LocalGet {
-                                name: handle_name.clone(),
+                                name: handle_name,
                                 result_ty: WirType::I32,
                             },
                             WirInstr::I32Const(0),
@@ -4766,7 +4766,7 @@ impl FunctionTranslator<'_, '_> {
                     },
                     // Drop waitable set
                     WirInstr::Call {
-                        func_id: ws_drop_id.clone(),
+                        func_id: ws_drop_id,
                         args: vec![WirInstr::LocalGet {
                             name: ws_name,
                             result_ty: WirType::I32,
