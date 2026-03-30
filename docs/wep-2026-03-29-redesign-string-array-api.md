@@ -47,8 +47,8 @@ Wado intentionally omits Rust concepts tied to ownership and lifetimes (`as_str(
 | `sort_unstable()`        | —                                         | `sort()` is stable; unstable not needed |
 | `binary_search(&x)`      | —                                         | use `TreeMap` / `TreeSet` instead    |
 | `reverse()`              | `reverse()`                               | NEW                                  |
-| `dedup()`                | `dedup()`                                 | NEW                                  |
-| `dedup_by(f)`            | —                                         | niche                                |
+| `dedup()`                | —                                         | use `TreeSet`                        |
+| `dedup_by(f)`            | —                                         | use `TreeSet`                        |
 | `retain(pred)`           | `retain(pred)`                            | NEW                                  |
 | `windows(n)`             | `windows(n)`                              | NEW                                  |
 | `chunks(n)`              | `chunks(n)`                               | NEW                                  |
@@ -113,7 +113,6 @@ impl<T> Array<T> {
 
 impl<T: Eq> Array<T> {
     pub fn contains(&self, value: &T) -> bool;
-    pub fn dedup(&mut self);
 }
 
 impl<T: Display> Array<T> {
@@ -302,7 +301,7 @@ These have no direct Rust counterpart but are useful in Wado:
    - `String::lines`, `String::split_whitespace`, `String::repeat`
    - `Array::first`, `Array::repeat`
 3. **Lower**:
-   - `swap`, `dedup`, `windows`, `chunks`
+   - `swap`, `windows`, `chunks`
    - `String::rfind`, `String::splitn`, `String::replacen`, `String::char_indices`
    - `String::to_lowercase`, `String::to_uppercase`
 
