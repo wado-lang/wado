@@ -9,6 +9,17 @@ struct String {
     mut used: i32,
 }
 
+variant Scheme {  // from wasi:http/types.wado
+    Http,
+    Https,
+    Other(ref String),
+}
+
+struct Scheme::Other {
+    discriminant: i32,
+    payload_0: ref String,
+}
+
 struct FieldSizePayload {  // from wasi:http/types.wado
     mut field_name: ref null String,
     mut field_size: ref Option<u32>,
@@ -191,6 +202,16 @@ variant Option<FieldSizePayload> {
     None,
 }
 
+variant Option<i32> {
+    Some(i32),
+    None,
+}
+
+struct Option<i32>::Some {
+    discriminant: i32,
+    payload_0: i32,
+}
+
 variant Result<Response,ErrorCode> {
     Ok(i32),
     Err(ref "wasi:http/types.wado/ErrorCode"),
@@ -204,6 +225,21 @@ struct Result<Response,ErrorCode>::Ok {
 struct Result<Response,ErrorCode>::Err {
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado/ErrorCode",
+}
+
+variant Result<unit,unit> {
+    Ok,
+    Err,
+}
+
+variant Option<Stream<u8>> {
+    Some(i32),
+    None,
+}
+
+struct Option<Stream<u8>>::Some {
+    discriminant: i32,
+    payload_0: i32,
 }
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -220,9 +256,21 @@ type "functype/wasi/wasi:http/Fields::new" = fn() -> i32;
 
 type "functype/wasi/wasi:http/Request::new" = fn(i32, i32, i32, i32, i32, i32, i32);
 
+type "functype/wasi/wasi:http/Request::set_path_with_query" = fn(i32, i32, i32, i32) -> i32;
+
+type "functype/wasi/wasi:http/Request::set_scheme" = fn(i32, i32, i32, i32, i32) -> i32;
+
+type "functype/wasi/wasi:http/Request::set_authority" = fn(i32, i32, i32, i32) -> i32;
+
 type "functype/handle" = fn(i32);
 
 type "functype/__cm_binding__Fields_new" = fn() -> i32;
+
+type "functype/__cm_binding__Request_set_scheme" = fn(i32, ref null "wasi:http/types.wado/Scheme") -> ref Result<unit,unit>;
+
+type "functype/__cm_binding__Request_set_authority" = fn(i32, ref null String) -> ref Result<unit,unit>;
+
+type "functype/__cm_binding__Request_set_path_with_query" = fn(i32, ref null String) -> ref Result<unit,unit>;
 
 type "functype/__cm_binding__Client_send" = fn(i32) -> ref Result<Response,ErrorCode>;
 
@@ -246,7 +294,7 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/wasi/waitable-set-drop" = fn(i32);
 
-type "functype/__cm_binding__Request_new" = fn(i32, i32, i32, i32, i32, i32) -> [i32, i32];
+type "functype/__cm_binding__Request_new" = fn(i32, ref Option<Stream<u8>>, i32, ref Option<i32>) -> [i32, i32];
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];
 
@@ -257,6 +305,9 @@ import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi:http/Client::send from "wasi/wasi:http/Client::send";
 import fn wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi:http/Request::new from "wasi/wasi:http/Request::new";
+import fn wasi:http/Request::set_path_with_query from "wasi/wasi:http/Request::set_path_with_query";
+import fn wasi:http/Request::set_scheme from "wasi/wasi:http/Request::set_scheme";
+import fn wasi:http/Request::set_authority from "wasi/wasi:http/Request::set_authority";
 import memory (1) from "mem/memory";
 import fn future-new from "wasi/future-new";
 import fn future-write from "wasi/future-write";
@@ -410,8 +461,11 @@ fn handle(request) {
     trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     let __sroa___pattern_temp_1_0: i32;
     let __sroa___pattern_temp_1_1: i32;
-    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_binding__Request_new(headers, 0, 0, trailers_future, 0, 0);
+    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_binding__Request_new(headers, Option<Stream<u8>> { 1 }, trailers_future, Option<i32> { 1 });
     out_req = __sroa___pattern_temp_1_0;
+    drop(__cm_binding__Request_set_scheme(out_req, "wasi:http/types.wado/Scheme" { 0 }));
+    drop(__cm_binding__Request_set_authority(out_req, String { repr: array.new_data<u8>("localhost"), used: 9 }));
+    drop(__cm_binding__Request_set_path_with_query(out_req, String { repr: array.new_data<u8>("/"), used: 1 }));
     upstream = __cm_binding__Client_send(out_req);
     __tv_1 = 0;
     __tv_2 = 0;
@@ -740,16 +794,118 @@ fn __cm_binding__Fields_new() {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn __cm_binding__Request_new(headers, contents_flat0, contents_flat1, trailers, options_flat0, options_flat1) {
+fn __cm_binding__Request_new(headers, contents, trailers, options) {
+    let __contents_disc: i32;
+    let __contents_inner0: i32;
+    let __options_disc: i32;
+    let __options_inner0: i32;
     let __outptr: i32;
-    let __lifted_result_7: i32;
-    let __lifted_result_8: i32;
+    let __lifted_result_11: i32;
+    let __lifted_result_12: i32;
+    __contents_disc = ref.test Option<Stream<u8>>::Some(contents);
+    __contents_inner0 = 0;
+    if ref.test Option<Stream<u8>>::Some(contents) {
+        __contents_inner0 = ref.cast Option<Stream<u8>>::Some(contents).payload_0;
+    };
+    __options_disc = ref.test Option<i32>::Some(options);
+    __options_inner0 = 0;
+    if ref.test Option<i32>::Some(options) {
+        __options_inner0 = ref.cast Option<i32>::Some(options).payload_0;
+    };
     __outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:http/Request::new"(headers, contents_flat0, contents_flat1, trailers, options_flat0, options_flat1, __outptr);
-    __lifted_result_7 = builtin::load_i32(__outptr + 0);
-    __lifted_result_8 = builtin::load_i32(__outptr + 4);
+    "wasi/wasi:http/Request::new"(headers, __contents_disc, __contents_inner0, trailers, __options_disc, __options_inner0, __outptr);
+    __lifted_result_11 = builtin::load_i32(__outptr + 0);
+    __lifted_result_12 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_7; __lifted_result_8;
+    return __lifted_result_11; __lifted_result_12;
+}
+
+fn __cm_binding__Request_set_scheme(self, scheme) {
+    let __scheme_disc: i32;
+    let __scheme_inner0: i32;
+    let __scheme_inner1: i32;
+    let __scheme_inner2: i32;
+    let __scheme_s_val: ref "wasi:http/types.wado/Scheme";
+    let __scheme_s_p0: i32;
+    let __scheme_s_p1: i32;
+    let __scheme_s_c2_packed: i64;
+    let __disc: i32;
+    let __result_val: ref Result<unit,unit>;
+    __scheme_disc = ref.is_null(scheme) == 0;
+    __scheme_inner0 = 0;
+    __scheme_inner1 = 0;
+    __scheme_inner2 = 0;
+    if ref.is_null(scheme) == 0 {
+        __scheme_s_val = value_copy "wasi:http/types.wado/Scheme"(ref.as_non_null(scheme));
+        __scheme_s_p0 = 0;
+        __scheme_s_p1 = 0;
+        if ref.test "wasi:http/types.wado/Scheme::Other"(__scheme_s_val) {
+            __scheme_s_c2_packed = "core:internal/cm_lower_string"(ref.cast "wasi:http/types.wado/Scheme::Other"(__scheme_s_val).payload_0);
+            __scheme_s_p0 = builtin::i32_wrap_i64(__scheme_s_c2_packed);
+            __scheme_s_p1 = builtin::i32_wrap_i64(__scheme_s_c2_packed >> 32_i64);
+        };
+        __scheme_inner0 = __scheme_s_val.discriminant;
+        __scheme_inner1 = __scheme_s_p0;
+        __scheme_inner2 = __scheme_s_p1;
+    };
+    __disc = "wasi/wasi:http/Request::set_scheme"(self, __scheme_disc, __scheme_inner0, __scheme_inner1, __scheme_inner2);
+    __result_val = ref.null none;
+    if __disc == 0 {
+        __result_val = Result<unit,unit> { 0 };
+    } else {
+        __result_val = Result<unit,unit> { 1 };
+    };
+    return __result_val;
+}
+
+fn __cm_binding__Request_set_authority(self, authority) {
+    let __authority_disc: i32;
+    let __authority_inner0: i32;
+    let __authority_inner1: i32;
+    let __authority_s_packed: i64;
+    let __disc: i32;
+    let __result_val: ref Result<unit,unit>;
+    __authority_disc = ref.is_null(authority) == 0;
+    __authority_inner0 = 0;
+    __authority_inner1 = 0;
+    if ref.is_null(authority) == 0 {
+        __authority_s_packed = "core:internal/cm_lower_string"(ref.as_non_null(authority));
+        __authority_inner0 = builtin::i32_wrap_i64(__authority_s_packed);
+        __authority_inner1 = builtin::i32_wrap_i64(__authority_s_packed >> 32_i64);
+    };
+    __disc = "wasi/wasi:http/Request::set_authority"(self, __authority_disc, __authority_inner0, __authority_inner1);
+    __result_val = ref.null none;
+    if __disc == 0 {
+        __result_val = Result<unit,unit> { 0 };
+    } else {
+        __result_val = Result<unit,unit> { 1 };
+    };
+    return __result_val;
+}
+
+fn __cm_binding__Request_set_path_with_query(self, path_with_query) {
+    let __path_with_query_disc: i32;
+    let __path_with_query_inner0: i32;
+    let __path_with_query_inner1: i32;
+    let __path_with_query_s_packed: i64;
+    let __disc: i32;
+    let __result_val: ref Result<unit,unit>;
+    __path_with_query_disc = ref.is_null(path_with_query) == 0;
+    __path_with_query_inner0 = 0;
+    __path_with_query_inner1 = 0;
+    if ref.is_null(path_with_query) == 0 {
+        __path_with_query_s_packed = "core:internal/cm_lower_string"(ref.as_non_null(path_with_query));
+        __path_with_query_inner0 = builtin::i32_wrap_i64(__path_with_query_s_packed);
+        __path_with_query_inner1 = builtin::i32_wrap_i64(__path_with_query_s_packed >> 32_i64);
+    };
+    __disc = "wasi/wasi:http/Request::set_path_with_query"(self, __path_with_query_disc, __path_with_query_inner0, __path_with_query_inner1);
+    __result_val = ref.null none;
+    if __disc == 0 {
+        __result_val = Result<unit,unit> { 0 };
+    } else {
+        __result_val = Result<unit,unit> { 1 };
+    };
+    return __result_val;
 }
 
 fn __cm_binding__Client_send(request) {
@@ -1112,13 +1268,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
     __for_0: block {
         i = 0;
         block {
-            l101: loop {
+            l110: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l101;
+                continue l110;
             };
         };
     };
@@ -1130,13 +1286,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l104: loop {
+            l113: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l104;
+                continue l113;
             };
         };
     };
@@ -1156,16 +1312,16 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             "wasi/waitable-join"(__local_5, ws);
             break __inline_cm_waitable_join_0: __local_5;
         });
-        b107: block {
-            l108: loop {
+        b116: block {
+            l117: loop {
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
                 if __sroa_event_payload == 2 {
-                    break b107;
+                    break b116;
                 };
-                continue l108;
+                continue l117;
             };
         };
         "wasi/subtask-drop"(subtask);
