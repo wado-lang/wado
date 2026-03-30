@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774872242762,
+  "lastUpdate": 1774877098013,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8876,6 +8876,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5694b9528ce00095bdecdcc252af69431f877cc7"
         },
         "date": 1774872242551,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "89206bc17ad97a34034f8de58d8a366031f798d5",
+          "message": "Merge pull request #736 from wado-lang/claude/optimize-e2e-tests-X6251\n\nOptimize cranelift-codegen in dev profile for faster E2E tests",
+          "timestamp": "2026-03-30T22:21:30+09:00",
+          "tree_id": "7b63253ebaccfc19b9477c73f48a74d24c14b1b8",
+          "url": "https://github.com/wado-lang/wado/commit/89206bc17ad97a34034f8de58d8a366031f798d5"
+        },
+        "date": 1774877097814,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
