@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774864389898,
+  "lastUpdate": 1774868870145,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8813,6 +8813,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 24674,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ec4527aba2252ef7e188fc31fde12ba9ed00d866",
+          "message": "Merge pull request #734 from wado-lang/claude/optimize-json-twitter-WBQFl\n\nSkip HFS write-back before inlined labeled block breaks",
+          "timestamp": "2026-03-30T20:04:47+09:00",
+          "tree_id": "9d3382fa7ab6d2e63a85ba8ec6eefa070e9556d1",
+          "url": "https://github.com/wado-lang/wado/commit/ec4527aba2252ef7e188fc31fde12ba9ed00d866"
+        },
+        "date": 1774868869925,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
             "unit": "bytes"
           }
         ]
