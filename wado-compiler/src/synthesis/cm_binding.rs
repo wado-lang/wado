@@ -593,10 +593,21 @@ fn synthesize_lift_wasi_variant(
     ));
 
     // Compute max payload alignment for payload offset calculation
+    let wasi_package = ctx.and_then(|c| c.wasi_package);
     let max_payload_align = cases
         .iter()
         .filter_map(|case| case.payload.as_ref())
-        .map(cm_abi::cm_align)
+        .map(|ty| {
+            if let Some(c) = ctx {
+                crate::component_model::cm_align_with_registry_scoped(
+                    ty,
+                    c.wasi_registry,
+                    wasi_package,
+                )
+            } else {
+                cm_abi::cm_align(ty)
+            }
+        })
         .max()
         .unwrap_or(1);
     let payload_offset = cm_abi::align_to(1, max_payload_align); // after 1-byte disc
@@ -935,7 +946,7 @@ fn synthesize_lift_option_inner(
     ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
     let layout = if let Some(c) = ctx {
-        cm_abi::layout_option_with_registry(inner_ty, c.wasi_registry)
+        cm_abi::layout_option_with_registry_scoped(inner_ty, c.wasi_registry, c.wasi_package)
     } else {
         cm_abi::layout_option(inner_ty)
     };
@@ -1012,7 +1023,7 @@ fn synthesize_lift_result_inner(
     ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
     let layout = if let Some(c) = ctx {
-        cm_abi::layout_result_with_registry(ok_ty, err_ty, c.wasi_registry)
+        cm_abi::layout_result_with_registry_scoped(ok_ty, err_ty, c.wasi_registry, c.wasi_package)
     } else {
         cm_abi::layout_result(ok_ty, err_ty)
     };
@@ -1461,9 +1472,17 @@ fn synthesize_lower_tuple(
     stmts
 }
 
-fn is_gc_passthrough_param(ty: &Type) -> bool {
-    matches!(ty, Type::Named(n) if n.name == "String")
-        || matches!(ty, Type::Generic(g) if g.name == "Array" && g.args.len() == 1)
+/// Check if a type is a "GC passthrough" parameter — one that the binding
+/// accepts as a GC reference and lowers internally, rather than requiring
+/// the call site to flatten into CM ABI i32 args.
+fn is_gc_passthrough_param(ty: &Type, wasi_registry: &WasiRegistry) -> bool {
+    match ty {
+        Type::Named(n) if n.name == "String" => true,
+        Type::Named(n) if wasi_registry.is_variant(&n.name) => true,
+        Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => true,
+        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => true,
+        _ => false,
+    }
 }
 
 fn is_wasm_flat_type(type_id: TypeId) -> bool {
@@ -1478,6 +1497,15 @@ pub fn flatten_param_type(
     ty: &Type,
     wasi_registry: &crate::component_model::WasiRegistry,
 ) -> Vec<TypeId> {
+    fn cm_val_to_type_id(v: &cm_abi::CmValType) -> TypeId {
+        match v {
+            cm_abi::CmValType::I32 => TypeTable::I32,
+            cm_abi::CmValType::I64 => TypeTable::I64,
+            cm_abi::CmValType::F32 => TypeTable::F32,
+            cm_abi::CmValType::F64 => TypeTable::F64,
+        }
+    }
+
     let resolved = wasi_registry.resolve_type(ty);
     match &resolved {
         Type::Named(named) => match named.name.as_str() {
@@ -1488,21 +1516,49 @@ pub fn flatten_param_type(
             "f32" => vec![TypeTable::F32],
             "f64" => vec![TypeTable::F64],
             "String" => vec![TypeTable::I32, TypeTable::I32],
-            _ => vec![TypeTable::I32],
+            name => {
+                // WASI variant: discriminant + join of all case payload flat types
+                if let Some(cases) = wasi_registry.get_variant_cases(name) {
+                    let mut result = vec![TypeTable::I32]; // discriminant
+                    let case_flats: Vec<Vec<TypeId>> = cases
+                        .iter()
+                        .map(|c| {
+                            c.payload
+                                .as_ref()
+                                .map(|t| flatten_param_type(t, wasi_registry))
+                                .unwrap_or_default()
+                        })
+                        .collect();
+                    let max_len = case_flats.iter().map(Vec::len).max().unwrap_or(0);
+                    for i in 0..max_len {
+                        // Join: if all non-empty cases at position i agree on a type,
+                        // use that type; otherwise use i32 (per CM spec join).
+                        let joined = case_flats
+                            .iter()
+                            .filter_map(|f| f.get(i).copied())
+                            .reduce(|a, b| if a == b { a } else { TypeTable::I32 })
+                            .unwrap_or(TypeTable::I32);
+                        result.push(joined);
+                    }
+                    return result;
+                }
+                // WASI struct (record): concatenation of all field flat types
+                if let Some(fields) = wasi_registry.get_struct_fields_with_wado_names(name) {
+                    return fields
+                        .iter()
+                        .flat_map(|(_, _, ft)| flatten_param_type(ft, wasi_registry))
+                        .collect();
+                }
+                // Resource handles, enums, flags, etc.: single i32
+                vec![TypeTable::I32]
+            }
         },
         Type::Generic(g) if g.name == "Stream" => vec![TypeTable::I32],
         Type::Reference(_) | Type::MutReference(_) => vec![TypeTable::I32],
         Type::Tuple(elems) if elems.is_empty() => vec![],
         _ => {
             let flat = cm_abi::cm_flat_types(&resolved);
-            flat.iter()
-                .map(|t| match t {
-                    cm_abi::CmValType::I32 => TypeTable::I32,
-                    cm_abi::CmValType::I64 => TypeTable::I64,
-                    cm_abi::CmValType::F32 => TypeTable::F32,
-                    cm_abi::CmValType::F64 => TypeTable::F64,
-                })
-                .collect()
+            flat.iter().map(cm_val_to_type_id).collect()
         }
     }
 }
@@ -1652,6 +1708,345 @@ fn synthesize_lower_wasi_variant_to_memory(
                 None,
             ));
         }
+    }
+}
+
+/// Lower an `Option<T>` value to linear memory at the given address.
+///
+/// Memory layout (Canonical ABI for `option<T>`):
+/// - discriminant byte at offset 0 (0=None, 1=Some)
+/// - payload at `align_to(1, payload_align)`, lowered using `synthesize_lower_wasi_type_to_memory`
+fn synthesize_lower_option_to_memory(
+    inner_type: &Type,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    local_types: &mut Vec<TypeId>,
+    wasi_registry: &crate::component_model::WasiRegistry,
+    type_table: &RefCell<TypeTable>,
+) {
+    let value_type_id = value.type_id;
+
+    // Materialize value into a local so we can reference it multiple times
+    let value_local = alloc_local(next_local, local_types, value_type_id);
+    stmts.push(let_stmt("__opt_val", value_local, value_type_id, value));
+
+    // Store discriminant byte: variant_test(Some) → 1 = Some, 0 = None.
+    // Use variant_test (ref.test) rather than variant_tag (struct.get)
+    // because variant_tag traps on null refs.
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store8",
+        vec![
+            addr.clone(),
+            variant_test(
+                local_ref(value_local, "__opt_val", value_type_id),
+                0,
+                "Some",
+            ),
+        ],
+        TypeTable::UNIT,
+    )));
+
+    // Compute payload offset (aligned to payload alignment)
+    let payload_align = crate::component_model::cm_align_with_registry(inner_type, wasi_registry);
+    let payload_offset = crate::cm_abi::align_to(1, payload_align);
+
+    let payload_addr = if payload_offset == 0 {
+        addr
+    } else {
+        binary_add(addr, i32_const(payload_offset as i32))
+    };
+
+    // If Some: lower payload to memory
+    let inner_type_id = {
+        let mut tt = type_table.borrow_mut();
+        wasi_type_to_type_id_with_registry(inner_type, &mut tt, Some(wasi_registry))
+    };
+    let payload_expr = variant_payload(
+        local_ref(value_local, "__opt_val", value_type_id),
+        0,
+        inner_type_id,
+    );
+
+    let case_stmts = synthesize_lower_wasi_type_to_memory(
+        inner_type,
+        payload_expr,
+        payload_addr,
+        next_local,
+        local_types,
+        wasi_registry,
+        type_table,
+    );
+
+    stmts.push(if_stmt(
+        variant_test(
+            local_ref(value_local, "__opt_val", value_type_id),
+            0,
+            "Some",
+        ),
+        block(case_stmts),
+        None,
+    ));
+}
+
+/// Flatten a WASI type value (GC ref) to flat CM ABI args (i32/i64/f32/f64).
+///
+/// Used for sync function params where the binding receives a GC value
+/// but needs to pass flat values to the WASI import.
+/// Appends lowering statements to `stmts` and flat value expressions to `flat_args`.
+fn synthesize_flatten_value_to_flat_args(
+    ty: &Type,
+    value: TirExpr,
+    prefix: &str,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    local_types: &mut Vec<TypeId>,
+    flat_args: &mut Vec<TirExpr>,
+    wasi_registry: &crate::component_model::WasiRegistry,
+    type_table: &RefCell<TypeTable>,
+) {
+    let resolved = wasi_registry.resolve_type(ty);
+    match &resolved {
+        // String → cm_lower_string → packed i64 → (ptr, len)
+        Type::Named(n) if n.name == "String" => {
+            let packed_local = alloc_local(next_local, local_types, TypeTable::I64);
+            stmts.push(let_stmt(
+                &format!("{prefix}_packed"),
+                packed_local,
+                TypeTable::I64,
+                internal_call("cm_lower_string", vec![value], TypeTable::I64),
+            ));
+            // ptr = packed as i32 (low 32 bits)
+            flat_args.push(cast(
+                local_ref(packed_local, &format!("{prefix}_packed"), TypeTable::I64),
+                TypeTable::I32,
+            ));
+            // len = (packed >> 32) as i32 (high 32 bits)
+            flat_args.push(cast(
+                binary(
+                    crate::tir::TirBinaryOp::Shr,
+                    local_ref(packed_local, &format!("{prefix}_packed"), TypeTable::I64),
+                    i64_const(32),
+                    TypeTable::I64,
+                ),
+                TypeTable::I32,
+            ));
+        }
+        // Enum → variant_tag (single i32)
+        Type::Named(n) if wasi_registry.is_enum(&n.name) => {
+            flat_args.push(variant_tag(value));
+        }
+        // Variant → disc + join of all case payload flats
+        Type::Named(n) if wasi_registry.is_variant(&n.name) => {
+            let vt = value.type_id;
+            let val_local = alloc_local(next_local, local_types, vt);
+            stmts.push(let_stmt(&format!("{prefix}_val"), val_local, vt, value));
+
+            // Push discriminant
+            flat_args.push(variant_tag(local_ref(
+                val_local,
+                &format!("{prefix}_val"),
+                vt,
+            )));
+
+            // Compute max flat payload count across all cases (the "join")
+            let cases = wasi_registry.get_variant_cases(&n.name).unwrap_or(&[]);
+            let max_flat_count: usize = cases
+                .iter()
+                .map(|c| {
+                    c.payload
+                        .as_ref()
+                        .map(|t| flatten_param_type(t, wasi_registry).len())
+                        .unwrap_or(0)
+                })
+                .max()
+                .unwrap_or(0);
+
+            if max_flat_count > 0 {
+                // Allocate mutable locals for each payload flat slot, initialized to 0
+                let mut payload_locals: Vec<(u32, TypeId)> = Vec::new();
+                for i in 0..max_flat_count {
+                    let local = alloc_local(next_local, local_types, TypeTable::I32);
+                    stmts.push(let_mut_stmt(
+                        &format!("{prefix}_p{i}"),
+                        local,
+                        TypeTable::I32,
+                        i32_const(0),
+                    ));
+                    payload_locals.push((local, TypeTable::I32));
+                }
+
+                // For each case with a payload, generate conditional flattening
+                for (case_idx, case) in cases.iter().enumerate() {
+                    if let Some(payload_ty) = &case.payload {
+                        let payload_type_id = {
+                            let mut tt = type_table.borrow_mut();
+                            wasi_type_to_type_id_with_registry(
+                                payload_ty,
+                                &mut tt,
+                                Some(wasi_registry),
+                            )
+                        };
+                        let payload_expr = variant_payload(
+                            local_ref(val_local, &format!("{prefix}_val"), vt),
+                            case_idx as u32,
+                            payload_type_id,
+                        );
+
+                        let mut case_stmts = Vec::new();
+                        let mut case_flat = Vec::new();
+                        synthesize_flatten_value_to_flat_args(
+                            payload_ty,
+                            payload_expr,
+                            &format!("{prefix}_c{case_idx}"),
+                            next_local,
+                            &mut case_stmts,
+                            local_types,
+                            &mut case_flat,
+                            wasi_registry,
+                            type_table,
+                        );
+                        // Assign case flat values to shared payload locals
+                        for (i, flat_val) in case_flat.into_iter().enumerate() {
+                            if i < payload_locals.len() {
+                                let (pl, pt) = payload_locals[i];
+                                case_stmts.push(expr_stmt(assign(
+                                    local_ref(pl, &format!("{prefix}_p{i}"), pt),
+                                    flat_val,
+                                )));
+                            }
+                        }
+                        stmts.push(if_stmt(
+                            variant_test(
+                                local_ref(val_local, &format!("{prefix}_val"), vt),
+                                case_idx as u32,
+                                &case.wado_name,
+                            ),
+                            block(case_stmts),
+                            None,
+                        ));
+                    }
+                }
+
+                // Push all payload locals as flat args
+                for (i, (pl, pt)) in payload_locals.iter().enumerate() {
+                    flat_args.push(local_ref(*pl, &format!("{prefix}_p{i}"), *pt));
+                }
+            }
+        }
+        // Simple primitives / handles → pass through directly
+        _ => {
+            flat_args.push(value);
+        }
+    }
+}
+
+/// Flatten an `Option<T>` GC value to flat CM ABI args for sync function calls.
+///
+/// Produces: [discriminant (0=None, 1=Some), ...flatten(T)]
+/// The discriminant and payload locals are mutable, initialized to 0,
+/// and populated conditionally when the option is `Some`.
+fn synthesize_flatten_option_to_flat_args(
+    inner_type: &Type,
+    value: TirExpr,
+    prefix: &str,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    local_types: &mut Vec<TypeId>,
+    flat_args: &mut Vec<TirExpr>,
+    wasi_registry: &crate::component_model::WasiRegistry,
+    type_table: &RefCell<TypeTable>,
+) {
+    let vt = value.type_id;
+    let val_local = alloc_local(next_local, local_types, vt);
+    stmts.push(let_stmt(&format!("{prefix}_optval"), val_local, vt, value));
+
+    // CM ABI option discriminant: 0 = None, 1 = Some.
+    // Use variant_test (ref.test) instead of variant_tag (struct.get)
+    // because variant_tag traps on null refs.
+    let disc_local = alloc_local(next_local, local_types, TypeTable::I32);
+    stmts.push(let_stmt(
+        &format!("{prefix}_disc"),
+        disc_local,
+        TypeTable::I32,
+        variant_test(
+            local_ref(val_local, &format!("{prefix}_optval"), vt),
+            0,
+            "Some",
+        ),
+    ));
+    flat_args.push(local_ref(
+        disc_local,
+        &format!("{prefix}_disc"),
+        TypeTable::I32,
+    ));
+
+    // Compute inner flat types
+    let inner_flat_types = flatten_param_type(inner_type, wasi_registry);
+    if inner_flat_types.is_empty() {
+        return;
+    }
+
+    // Allocate mutable locals for inner flats, initialized to 0
+    let mut inner_locals: Vec<(u32, TypeId)> = Vec::new();
+    for (i, &ft) in inner_flat_types.iter().enumerate() {
+        let local = alloc_local(next_local, local_types, ft);
+        let zero = match ft {
+            TypeTable::I64 => i64_const(0),
+            _ => i32_const(0),
+        };
+        stmts.push(let_mut_stmt(&format!("{prefix}_inner{i}"), local, ft, zero));
+        inner_locals.push((local, ft));
+    }
+
+    // If Some: extract payload and flatten it
+    let inner_type_id = {
+        let mut tt = type_table.borrow_mut();
+        wasi_type_to_type_id_with_registry(inner_type, &mut tt, Some(wasi_registry))
+    };
+    let payload_expr = variant_payload(
+        local_ref(val_local, &format!("{prefix}_optval"), vt),
+        0, // case_index 0 = Some
+        inner_type_id,
+    );
+
+    let mut some_stmts = Vec::new();
+    let mut some_flat = Vec::new();
+    synthesize_flatten_value_to_flat_args(
+        inner_type,
+        payload_expr,
+        &format!("{prefix}_s"),
+        next_local,
+        &mut some_stmts,
+        local_types,
+        &mut some_flat,
+        wasi_registry,
+        type_table,
+    );
+    // Assign flattened values to the mutable locals
+    for (i, flat_val) in some_flat.into_iter().enumerate() {
+        if i < inner_locals.len() {
+            let (il, it) = inner_locals[i];
+            some_stmts.push(expr_stmt(assign(
+                local_ref(il, &format!("{prefix}_inner{i}"), it),
+                flat_val,
+            )));
+        }
+    }
+    stmts.push(if_stmt(
+        variant_test(
+            local_ref(val_local, &format!("{prefix}_optval"), vt),
+            0,
+            "Some",
+        ),
+        block(some_stmts),
+        None,
+    ));
+
+    // Push inner locals as flat args
+    for (i, (il, it)) in inner_locals.iter().enumerate() {
+        flat_args.push(local_ref(*il, &format!("{prefix}_inner{i}"), *it));
     }
 }
 
@@ -2036,19 +2431,23 @@ fn synthesize_adapter(
         crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
             || crate::component_model::wasi_named_type_return_needs_outptr(rt, wasi_registry)
     });
+    let pkg = Some(func_info.package.as_str());
     let outptr_alloc = if needs_outptr {
         func_info.return_type.as_ref().map(|rt| {
             // WASI variants need their registry-computed size/align, not the generic cm_size
             if let crate::ast::Type::Named(named) = rt
-                && let Some(sa) =
-                    crate::component_model::wasi_variant_cm_size_align(&named.name, wasi_registry)
+                && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
+                    &named.name,
+                    wasi_registry,
+                    pkg,
+                )
             {
                 return sa;
             }
             // Use registry-aware size/align for WASI structs and other complex types
             (
-                crate::component_model::cm_size_with_registry(rt, wasi_registry),
-                crate::component_model::cm_align_with_registry(rt, wasi_registry),
+                crate::component_model::cm_size_with_registry_scoped(rt, wasi_registry, pkg),
+                crate::component_model::cm_align_with_registry_scoped(rt, wasi_registry, pkg),
             )
         })
     } else {
@@ -2153,6 +2552,23 @@ fn synthesize_adapter(
                     span: synth_span(),
                 });
                 local_types.push(variant_type_id);
+                next_local += 1;
+                param_mapping.push((start, 1));
+            }
+            // Option<T>: single GC ref param (binding body lowers to discriminant + payload)
+            Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
+                let option_type_id = {
+                    let mut tt = type_table.borrow_mut();
+                    wasi_type_to_type_id_with_registry(param_type, &mut tt, Some(wasi_registry))
+                };
+                params.push(TirParam {
+                    name: param_name.clone(),
+                    type_id: option_type_id,
+                    local_index: next_local,
+                    is_mut: false,
+                    span: synth_span(),
+                });
+                local_types.push(option_type_id);
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
@@ -2479,12 +2895,47 @@ fn synthesize_adapter(
                     });
                 }
             }
-            // Variant param: pass GC ref, lowered in Step 3 (indirect params)
+            // Variant param: for async, pass GC ref (lowered in Step 3 indirect params);
+            // for sync, flatten directly to flat i32 args.
             Type::Named(n) if wasi_registry.is_variant(&n.name) => {
-                let variant_type_id = params[start_idx].type_id;
-                flat_args.push(local_ref(param_local, param_name, variant_type_id));
+                if func_info.is_async {
+                    let variant_type_id = params[start_idx].type_id;
+                    flat_args.push(local_ref(param_local, param_name, variant_type_id));
+                } else {
+                    synthesize_flatten_value_to_flat_args(
+                        param_type,
+                        local_ref(param_local, param_name, params[start_idx].type_id),
+                        &format!("__{param_name}"),
+                        &mut next_local,
+                        &mut body_stmts,
+                        &mut local_types,
+                        &mut flat_args,
+                        wasi_registry,
+                        type_table,
+                    );
+                }
             }
-            // All other types (including Option<T>): flat params passed through directly
+            // Option<T>: for async, pass GC ref (lowered in Step 3 indirect params);
+            // for sync, flatten directly to flat args.
+            Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
+                if func_info.is_async {
+                    let option_type_id = params[start_idx].type_id;
+                    flat_args.push(local_ref(param_local, param_name, option_type_id));
+                } else {
+                    synthesize_flatten_option_to_flat_args(
+                        &g.args[0],
+                        local_ref(param_local, param_name, params[start_idx].type_id),
+                        &format!("__{param_name}"),
+                        &mut next_local,
+                        &mut body_stmts,
+                        &mut local_types,
+                        &mut flat_args,
+                        wasi_registry,
+                        type_table,
+                    );
+                }
+            }
+            // All other types: flat params passed through directly
             _ => {
                 for j in 0..count {
                     let p = &params[start_idx + j];
@@ -2514,25 +2965,34 @@ fn synthesize_adapter(
 
         // Allocate the async results buffer via realloc (only when there are results).
         if has_results {
-            let (async_result_size, async_result_align) = if let Some(return_type) =
-                &func_info.return_type
-            {
-                if let crate::ast::Type::Named(named) = return_type
-                    && let Some(sa) = crate::component_model::wasi_variant_cm_size_align(
-                        &named.name,
-                        wasi_registry,
-                    )
-                {
-                    sa
+            let pkg = Some(func_info.package.as_str());
+            let (async_result_size, async_result_align) =
+                if let Some(return_type) = &func_info.return_type {
+                    if let crate::ast::Type::Named(named) = return_type
+                        && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
+                            &named.name,
+                            wasi_registry,
+                            pkg,
+                        )
+                    {
+                        sa
+                    } else {
+                        (
+                            crate::component_model::cm_size_with_registry_scoped(
+                                return_type,
+                                wasi_registry,
+                                pkg,
+                            ),
+                            crate::component_model::cm_align_with_registry_scoped(
+                                return_type,
+                                wasi_registry,
+                                pkg,
+                            ),
+                        )
+                    }
                 } else {
-                    (
-                        crate::component_model::cm_size_with_registry(return_type, wasi_registry),
-                        crate::component_model::cm_align_with_registry(return_type, wasi_registry),
-                    )
-                }
-            } else {
-                unreachable!()
-            };
+                    unreachable!()
+                };
             let async_outptr_local = next_local;
             body_stmts.push(let_stmt(
                 "__async_outptr",
@@ -2554,12 +3014,12 @@ fn synthesize_adapter(
             async_outptr_info = Some((async_outptr_local, async_result_size, async_result_align));
         }
 
-        // Force indirect path when variant params are present (they need
-        // memory lowering, not direct flat passing).
-        let has_variant_params = func_info
-            .params
-            .iter()
-            .any(|(_, _, ty)| matches!(ty, Type::Named(n) if wasi_registry.is_variant(&n.name)));
+        // Force indirect path when variant or Option params are present
+        // (they need memory lowering, not direct flat passing).
+        let has_variant_params = func_info.params.iter().any(|(_, _, ty)| {
+            matches!(ty, Type::Named(n) if wasi_registry.is_variant(&n.name))
+                || matches!(ty, Type::Generic(g) if g.name == "Option" && g.args.len() == 1)
+        });
 
         if flat_args.len() > MAX_FLAT_ASYNC_PARAMS || has_variant_params {
             // Indirect calling: write all params to a memory buffer using CM layout.
@@ -2623,6 +3083,33 @@ fn synthesize_adapter(
                     synthesize_lower_wasi_variant_to_memory(
                         &n.name,
                         variant_value,
+                        buf_addr,
+                        &mut next_local,
+                        &mut body_stmts,
+                        &mut local_types,
+                        wasi_registry,
+                        type_table,
+                    );
+                    continue;
+                }
+                // Option<T>: lower directly to the buffer
+                if let Type::Generic(g) = ty
+                    && g.name == "Option"
+                    && g.args.len() == 1
+                {
+                    let buf_addr = if base_offset == 0 {
+                        local_ref(params_buf_local, "__params_buf", TypeTable::I32)
+                    } else {
+                        binary_add(
+                            local_ref(params_buf_local, "__params_buf", TypeTable::I32),
+                            i32_const(base_offset as i32),
+                        )
+                    };
+                    let option_value = flat_args[flat_idx].clone();
+                    flat_idx += 1;
+                    synthesize_lower_option_to_memory(
+                        &g.args[0],
+                        option_value,
                         buf_addr,
                         &mut next_local,
                         &mut body_stmts,
@@ -6264,13 +6751,8 @@ fn parameterize_stream_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) ->
     // Resolve through references: &Stream<T> → Stream<T>
     use crate::tir::ResolvedType;
     let mut type_id = receiver_type_id;
-    loop {
-        match tt.get(type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                type_id = *inner;
-            }
-            _ => break,
-        }
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
+        type_id = *inner;
     }
     // Extract element type from Stream<T>
     if let Some(type_args) = tt.generic_type_args(type_id)
@@ -6905,7 +7387,12 @@ fn fixup_expr_type(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
 /// For multi-flat types like `Option<T>`, the Wado-level arg (e.g., `null`)
 /// is expanded into multiple i32 args (discriminant + payload).
 fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut Vec<TirExpr>) {
-    match &arg.kind {
+    // Unwrap Cast nodes transparently
+    let inner = match &arg.kind {
+        TirExprKind::Cast { expr, .. } => expr.as_ref(),
+        _ => arg,
+    };
+    match &inner.kind {
         // null literal → discriminant=0, payload=0 for each flat type
         TirExprKind::Null => {
             for _ in flat_tys {
@@ -6929,12 +7416,15 @@ fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut
             ..
         } if case_name == "Some" => {
             flat_args.push(i32_const(1));
-            // Multi-value inner: would need further flattening
-            // For now, handle the common single-value case
-            for j in 1..flat_tys.len() {
-                if j == 1 {
-                    flat_args.push((**value).clone());
-                } else {
+            let remaining = &flat_tys[1..];
+            if remaining.len() == 1 {
+                // Single-value payload: pass through (e.g., enum discriminant)
+                flatten_arg_for_call_site(value, remaining, flat_args);
+            } else {
+                // Multi-value payload (e.g., String → ptr+len): pass through as-is
+                // The binding will lower it internally
+                flat_args.push((**value).clone());
+                for _ in 2..flat_tys.len() {
                     flat_args.push(i32_const(0));
                 }
             }
@@ -6945,7 +7435,7 @@ fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut
             panic!(
                 "StaticCall adapter: cannot flatten arg of kind {:?} into {} flat types at call site; \
                  only null and VariantConstruct literals are supported",
-                arg.kind,
+                inner.kind,
                 flat_tys.len()
             );
         }
@@ -7131,7 +7621,8 @@ fn rewrite_calls_in_expr(
                 for (i, arg) in args.iter().enumerate() {
                     if i < adapter.params.len() && adapter.params[i].type_id != arg.expr.type_id {
                         let is_gc_passthrough = wasi_func.is_some_and(|f| {
-                            i < f.params.len() && is_gc_passthrough_param(&f.params[i].2)
+                            i < f.params.len()
+                                && is_gc_passthrough_param(&f.params[i].2, wasi_registry)
                         });
                         if is_streaming && adapter.params[i].type_id == TypeTable::I32 {
                             // Streaming: keep adapter param as i32, cast the arg instead
@@ -7272,7 +7763,10 @@ fn rewrite_calls_in_expr(
                         let wasi_param_idx = i + 1;
                         let is_gc_passthrough = method_func.is_some_and(|f| {
                             wasi_param_idx < f.params.len()
-                                && is_gc_passthrough_param(&f.params[wasi_param_idx].2)
+                                && is_gc_passthrough_param(
+                                    &f.params[wasi_param_idx].2,
+                                    wasi_registry,
+                                )
                         });
                         if is_streaming && adapter.params[param_idx].type_id == TypeTable::I32 {
                             // Streaming: keep adapter param as i32, cast the arg instead
@@ -7329,10 +7823,52 @@ fn rewrite_calls_in_expr(
                 }
             }
 
+            // Flatten call site args to match the binding's flat CM params.
+            // For method calls, self is the first param; remaining args may need flattening.
+            let method_func = wasi_registry.get_function(&qualified);
+            let flat_taken_args = if let Some(func_info) = method_func {
+                let mut flat = Vec::new();
+                for (i, arg) in taken_args.iter().enumerate() {
+                    // WASI param index: i+1 to skip self
+                    let wasi_param_idx = i + 1;
+                    if wasi_param_idx >= func_info.params.len() {
+                        flat.push(arg.expr.clone());
+                        continue;
+                    }
+                    let param_type = &func_info.params[wasi_param_idx].2;
+                    let flat_tys = flatten_param_type(param_type, wasi_registry);
+                    if flat_tys.is_empty() {
+                        continue;
+                    }
+                    if is_gc_passthrough_param(param_type, wasi_registry) {
+                        if matches!(arg.expr.kind, TirExprKind::Null) {
+                            let option_type_id = {
+                                let mut tt = type_table.borrow_mut();
+                                wasi_type_to_type_id_with_registry(
+                                    param_type,
+                                    &mut tt,
+                                    Some(wasi_registry),
+                                )
+                            };
+                            flat.push(option_none(option_type_id));
+                        } else {
+                            flat.push(arg.expr.clone());
+                        }
+                    } else if flat_tys.len() == 1 {
+                        flat.push(arg.expr.clone());
+                    } else {
+                        flatten_arg_for_call_site(&arg.expr, &flat_tys, &mut flat);
+                    }
+                }
+                flat
+            } else {
+                taken_args.into_iter().map(|a| a.expr).collect()
+            };
+
             // Replace MethodCall with Call targeting the binding
             // Prepend receiver to args
             let mut all_args = vec![taken_receiver];
-            all_args.extend(taken_args.into_iter().map(|a| a.expr));
+            all_args.extend(flat_taken_args);
 
             expr.kind = TirExprKind::Call {
                 func: FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone()),
@@ -7436,9 +7972,9 @@ fn rewrite_calls_in_expr(
             }
 
             // Flatten call site args to match the binding's flat CM params.
-            // Types that the binding lowers internally (String, Array<u8>) are
-            // passed through. Option<T> and other multi-flat types are flattened
-            // here into individual i32 args.
+            // GC passthrough types (String, Array<u8>, Option<T>) are passed
+            // through as GC refs — the binding body handles lowering.
+            // Other multi-flat types are flattened here into individual i32 args.
             let flat_call_args = if let Some(func_info) = &wasi_func_info {
                 let mut flat = Vec::new();
                 for (i, (_param_name, _, param_type)) in func_info.params.iter().enumerate() {
@@ -7446,23 +7982,29 @@ fn rewrite_calls_in_expr(
                     if flat_tys.is_empty() || i >= taken_args.len() {
                         continue;
                     }
-                    match param_type {
-                        // String/Array<u8>: pass through (binding body lowers)
-                        Type::Named(n) if n.name == "String" => {
-                            flat.push(taken_args[i].clone());
+                    if is_gc_passthrough_param(param_type, wasi_registry) {
+                        let arg = &taken_args[i];
+                        // Convert bare Null to VariantConstruct None.
+                        // Use the binding's param type (from the WASI registry)
+                        // to get a properly-resolved type_id, since the
+                        // source null's type_id may have unknown inner type.
+                        if matches!(arg.kind, TirExprKind::Null) {
+                            let option_type_id = {
+                                let mut tt = type_table.borrow_mut();
+                                wasi_type_to_type_id_with_registry(
+                                    param_type,
+                                    &mut tt,
+                                    Some(wasi_registry),
+                                )
+                            };
+                            flat.push(option_none(option_type_id));
+                        } else {
+                            flat.push(arg.clone());
                         }
-                        Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
-                            flat.push(taken_args[i].clone());
-                        }
-                        _ => {
-                            if flat_tys.len() == 1 {
-                                // Single flat type: pass through
-                                flat.push(taken_args[i].clone());
-                            } else {
-                                // Multi-flat type: flatten at call site
-                                flatten_arg_for_call_site(&taken_args[i], &flat_tys, &mut flat);
-                            }
-                        }
+                    } else if flat_tys.len() == 1 {
+                        flat.push(taken_args[i].clone());
+                    } else {
+                        flatten_arg_for_call_site(&taken_args[i], &flat_tys, &mut flat);
                     }
                 }
                 flat

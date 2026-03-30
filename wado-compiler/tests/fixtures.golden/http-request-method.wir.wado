@@ -235,6 +235,16 @@ struct Result<Response,ErrorCode>::Err {
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
 
+variant Option<Stream<u8>> {
+    Some(i32),
+    None,
+}
+
+struct Option<Stream<u8>>::Some {
+    discriminant: i32,
+    payload_0: i32,
+}
+
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -311,7 +321,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/__cm_binding__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+type "functype/__cm_binding__Response_new" = fn(i32, ref Option<Stream<u8>>, i32) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -516,7 +526,7 @@ condition: method matches { Post }
     headers = __cm_binding__Fields_new();
     let __sroa___pattern_temp_1_0: i32;
     let __sroa___pattern_temp_1_1: i32;
-    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_binding__Response_new(headers, 0, 0, trailers_future);
+    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_binding__Response_new(headers, Option<Stream<u8>> { 1 }, trailers_future);
     response = __sroa___pattern_temp_1_0;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -887,16 +897,23 @@ fn __cm_binding__Fields_new() {
     return "wasi/wasi:http/Fields::new"();
 }
 
-fn __cm_binding__Response_new(headers, contents_flat0, contents_flat1, trailers) {
+fn __cm_binding__Response_new(headers, contents, trailers) {
+    let __contents_disc: i32;
+    let __contents_inner0: i32;
     let __outptr: i32;
-    let __lifted_result_5: i32;
-    let __lifted_result_6: i32;
+    let __lifted_result_7: i32;
+    let __lifted_result_8: i32;
+    __contents_disc = ref.test Option<Stream<u8>>::Some(contents);
+    __contents_inner0 = 0;
+    if ref.test Option<Stream<u8>>::Some(contents) {
+        __contents_inner0 = ref.cast Option<Stream<u8>>::Some(contents).payload_0;
+    };
     __outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:http/Response::new"(headers, contents_flat0, contents_flat1, trailers, __outptr);
-    __lifted_result_5 = builtin::load_i32(__outptr + 0);
-    __lifted_result_6 = builtin::load_i32(__outptr + 4);
+    "wasi/wasi:http/Response::new"(headers, __contents_disc, __contents_inner0, trailers, __outptr);
+    __lifted_result_7 = builtin::load_i32(__outptr + 0);
+    __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_5; __lifted_result_6;
+    return __lifted_result_7; __lifted_result_8;
 }
 
 fn __cm_export__handle(request) {
@@ -910,13 +927,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
     __for_0: block {
         i = 0;
         block {
-            l51: loop {
+            l52: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l51;
+                continue l52;
             };
         };
     };
@@ -928,13 +945,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l54: loop {
+            l55: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l54;
+                continue l55;
             };
         };
     };
@@ -1034,13 +1051,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l60: loop {
+            l61: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l60;
+                continue l61;
             };
         };
     };
@@ -1057,14 +1074,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l64: loop {
+                l65: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l64;
+                    continue l65;
                 };
             };
         };
@@ -1174,13 +1191,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l76: loop {
+            l77: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::push(_licm_buf_4, c);
                 i = i + 1;
-                continue l76;
+                continue l77;
             };
         };
     };

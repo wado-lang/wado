@@ -230,8 +230,19 @@ pub fn layout_option_with_registry(
     inner: &Type,
     registry: &crate::component_model::WasiRegistry,
 ) -> CmLayout {
-    let payload_align = crate::component_model::cm_align_with_registry(inner, registry);
-    let payload_size = crate::component_model::cm_size_with_registry(inner, registry);
+    layout_option_with_registry_scoped(inner, registry, None)
+}
+
+/// Package-scoped registry-aware layout for option<T>.
+pub fn layout_option_with_registry_scoped(
+    inner: &Type,
+    registry: &crate::component_model::WasiRegistry,
+    wasi_package: Option<&str>,
+) -> CmLayout {
+    let payload_align =
+        crate::component_model::cm_align_with_registry_scoped(inner, registry, wasi_package);
+    let payload_size =
+        crate::component_model::cm_size_with_registry_scoped(inner, registry, wasi_package);
     let overall_align = 1u32.max(payload_align);
     let payload_offset = align_to(1, payload_align);
     let size = align_to(payload_offset + payload_size, overall_align);
@@ -248,11 +259,24 @@ pub fn layout_result_with_registry(
     err: &Type,
     registry: &crate::component_model::WasiRegistry,
 ) -> CmLayout {
-    let payload_align = crate::component_model::cm_align_with_registry(ok, registry).max(
-        crate::component_model::cm_align_with_registry(err, registry),
-    );
-    let payload_size = crate::component_model::cm_size_with_registry(ok, registry)
-        .max(crate::component_model::cm_size_with_registry(err, registry));
+    layout_result_with_registry_scoped(ok, err, registry, None)
+}
+
+/// Package-scoped registry-aware layout for result<T, E>.
+pub fn layout_result_with_registry_scoped(
+    ok: &Type,
+    err: &Type,
+    registry: &crate::component_model::WasiRegistry,
+    wasi_package: Option<&str>,
+) -> CmLayout {
+    let payload_align =
+        crate::component_model::cm_align_with_registry_scoped(ok, registry, wasi_package).max(
+            crate::component_model::cm_align_with_registry_scoped(err, registry, wasi_package),
+        );
+    let payload_size =
+        crate::component_model::cm_size_with_registry_scoped(ok, registry, wasi_package).max(
+            crate::component_model::cm_size_with_registry_scoped(err, registry, wasi_package),
+        );
     let overall_align = 1u32.max(payload_align);
     let disc_size = 1u32;
     let payload_offset = align_to(disc_size, payload_align);
