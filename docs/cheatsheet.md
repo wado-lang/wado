@@ -19,14 +19,29 @@ Quick reference for Wado syntax.
 /// Doc comment
 ```
 
+## Imports
+
+```wado
+use { println, eprintln } from "core:cli";
+use { Stdout, Stdout::{write_via_stream} } from "wasi:cli";
+use utils from "./utils.wado";                // namespace import
+use { foo as bar } from "./mod.wado";         // rename
+pub use { foo, bar } from "./internal.wado";  // re-export
+```
+
+Namespace imports make all pub symbols from the source module directly available:
+
+```wado
+use geo from "./geo.wado";
+let p = geo::Point::new(1, 2);  // access via namespace
+```
+
 ## Literals
 
 ```wado
 // Numbers
 42              // integer literal (defaults to i32 without type context)
-42 as i64       // i64 via cast
 3.14            // float literal (defaults to f64 without type context)
-3.14 as f32     // f32 via cast
 1_000_000       // underscores for readability
 0xFF            // hex
 0b1010          // binary
@@ -42,7 +57,7 @@ foo(100);                      // integer literal coerced to i64
 
 // Strings
 "Hello"         // String
-`Hello, {name}` // Template string
+`Hello, {name}` // Template string (see Strings for details)
 `\{"key"\}`     // Escaped braces in template string → {"key"}
 "Hello,
 world!"         // Multi-line string
@@ -94,6 +109,12 @@ fn example() {
 ```
 
 Global variables map directly to WebAssembly globals. Constant expressions are evaluated at instantiation; non-constant expressions use lazy initialization.
+
+## Value Semantics
+
+See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+
+Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
 ## Types
 
@@ -183,8 +204,6 @@ nums.sort_by(|a: &i32, b: &i32| { ... });  // sort with custom Ordering comparat
 `String` is a prelude struct with a literal syntax.
 
 ```wado
-let s = "hello";                         // String literal
-
 // Template strings (interpolation)
 let name = "Alice";
 let greeting = `Hello, {name}!`;         // "Hello, Alice!"
@@ -294,8 +313,6 @@ let name = match c {
     Green => "green",
     Blue => "blue",
 };
-
-if c matches { Red } { println("it's red"); }
 ```
 
 ### Variants
@@ -328,17 +345,9 @@ let err_val: Result<i32, String> = Result::Err("fail");
 // Explicit turbofish (required when inference is insufficient)
 let opt = Option::<i32>::Some(42);
 let res = Result::<i32, String>::Ok(42);
-
-// Pattern matching
-match ome_val {
-    Some(x) => println(`Got value: {x}`);
-    None    => println(`Got null`);
-}
-
-if let Number(n) = parse_result {
-    println(`Got: {n}`);
-}
 ```
+
+See Control Flow for pattern matching with `match`, `if let`, and `matches`.
 
 ### Flags
 
@@ -361,310 +370,58 @@ let all  = Perms::all();   // 7 (all bits set)
 assert rw as u32 == 3;     // cast to/from u32
 ```
 
-## Function, Methods, and Closures
-
-### Functions
+## References
 
 ```wado
-fn add(a: i32, b: i32) -> i32 {
-    return a + b;
-}
+let x = 42;
+let r = &x;           // immutable reference
+let v = *r;           // dereference
 
-// With effects
-fn greet(name: String) with Stdout {
-    println(`Hello, {name}!`);
-}
+let mut y = 0;
+let mr = &mut y;      // mutable reference
+*mr = 10;             // assign through reference
 
-// Module public (accessible from other Wado modules)
-pub fn api_function() -> i32 {
-    return 42;
-}
+let rr = &r;          // &&i32
+let val = **rr;       // double dereference
 
-// Component export (public API at CM boundary)
-export fn run() { ... }
+// &mut to & coercion (automatic)
+fn read(r: &i32) { ... }
+read(&mut y);         // OK: &mut i32 coerced to &i32
 ```
 
-A function must have `return` if it returns a value.
+Key differences from Rust (GC-based memory model):
 
-### Methods
+- No borrow checker: multiple mutable references allowed
+- Can return references to local variables (GC keeps them alive)
+- No lifetime annotations needed
 
-```wado
-impl Point {
-    fn sum(&self) -> i32 {
-        return self.x + self.y;
-    }
+## Operators
 
-    fn reset(&mut self) {
-        self.x = 0;
-        self.y = 0;
-    }
-
-    // Static method (no self parameter)
-    fn origin() -> Point {
-        return Point { x: 0, y: 0 };
-    }
-}
-
-let mut p = Point { x: 1, y: 2 };
-let s = p.sum();
-p.reset();
-let origin = Point::origin();
-let arr = Array::<i32>::with_capacity(10);  // turbofish for generic statics
-```
-
-Note: bare `self` (by value) is not allowed. Use `&self` or `&mut self`.
-
-### Closures
-
-See [WEP: Closure Implementation](./wep-2026-01-16-closure-implementation.md).
+See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-precedence.md) and [WEP: Operator Overloading](./wep-2026-01-18-operator-overloading.md).
 
 ```wado
-// Expression body
-let add_one = |x: i32| x + 1;
+// Arithmetic
++ - * / %
 
-// Block body (requires explicit return)
-let compute = |x: i32| {
-    let doubled = x * 2;
-    return doubled + x * 3;
-};
+// Comparison (can be chained: a < b < c → a < b && b < c)
+== != < <= > >=
 
-// Struct literal return
-let make_point = |x: i32, y: i32| Point { x, y };
+// Logical
+&& || !
 
-// Capturing outer variables (value semantics - copy)
-let multiplier = 10;
-let scale = |x: i32| x * multiplier;
+// Bitwise
+& | ^ ~ << >>
 
-// Mutable capture: use &mut || to mutate captured variables
-let mut count = 0;
-let inc = &mut || { count += 1; };
-inc();
-inc();
-println(`{count}`);  // 2
-```
+// Assignment
+= += -= *= /= %= &= |= ^= <<= >>=
 
-### Mut Parameters
+// Type cast
+42 as f64
+'A' as i32              // char -> i32: 65
+// 65 as char           // compile error: use char::from_u32()
 
-```wado
-// mut allows reassigning the parameter inside the function
-fn increment(mut n: i32) -> i32 {
-    n += 1;
-    return n;
-}
-
-// Caller's variable is unchanged for primitives (value type)
-let x = 5;
-let y = increment(x);
-// x == 5, y == 6
-
-// Closures also support mut parameters
-let double = |mut n: i32| { n *= 2; return n; };
-
-// Without mut, assignment is a compile error
-// fn bad(n: i32) { n = 0; }  // Error: cannot assign to immutable variable 'n'
-```
-
-### Reference Storage
-
-See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
-
-Functions that store reference parameters must declare `stores[...]`:
-
-```wado
-struct Container {
-    data: &Data,
-}
-
-// Function that stores a reference parameter — must declare stores
-fn store_data(data: &Data) -> Container with stores[data] {
-    return Container { data };
-}
-
-// Function that uses but does NOT store a reference — no stores needed
-fn use_data(data: &Data) -> i32 {
-    return data.value;
-}
-
-// Combined with effects
-fn store_and_log(data: &Data) -> Container with Stdout, stores[data] {
-    println(`Storing: {data.value}`);
-    return Container { data };
-}
-```
-
-Rules:
-
-- `stores[param]` declares that the function may store the reference parameter
-- Only reference parameters (`&T` or `&mut T`) can appear in `stores[...]`
-- Without `stores[param]`, a function cannot return, store in struct fields, or assign to globals the reference parameter
-- In function type position, use positional indices: `fn(&Data) with stores[0]`
-
-## Visibility
-
-Wado has three levels of visibility:
-
-| Keyword  | Term             | Scope                                 |
-| -------- | ---------------- | ------------------------------------- |
-| (none)   | private          | Within the module                     |
-| `pub`    | module public    | Other modules within the same project |
-| `export` | component export | CM boundary (package's public API)    |
-
-```wado
-fn private_fn() { }           // module-private (default)
-pub fn public_fn() { }        // project-internal
-export fn run() { }           // component export
-pub export fn both() { }      // both
-```
-
-All entity definitions can have `pub` visibility, including struct fields.
-
-## Traits
-
-```wado
-// Trait declaration
-trait Greet {
-    fn greet(&self) -> String;
-}
-
-// Trait implementation
-impl Greet for Person {
-    fn greet(&self) -> String {
-        return `Hello, {self.name}!`;
-    }
-}
-
-// Default method
-trait Summary {
-    fn title(&self) -> String;
-
-    fn summary(&self) -> String {
-        return `Title: {self.title()}`;
-    }
-}
-
-// Associated type
-trait Container {
-    type Item;
-
-    fn get(&self) -> Self::Item;
-}
-
-impl Container for IntBox {
-    type Item = i32;
-    fn get(&self) -> Self::Item { return self.value; }
-}
-```
-
-Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
-
-### Prelude Traits
-
-```wado
-// Ordering enum
-enum Ordering { Less, Equal, Greater }
-
-// For == and != operators
-trait Eq { fn eq(&self, other: &Self) -> bool; }
-
-// For <, <=, >, >= operators
-trait Ord { fn cmp(&self, other: &Self) -> Ordering; }
-
-// For default value
-trait Default { fn default() -> Self; }
-
-// For [] operators
-trait IndexValue<I> { type Output; fn index_value(&self, index: I) -> Self::Output; }
-trait IndexAssign<I> { type Input; fn index_assign(&mut self, index: I, value: Self::Input); }
-trait Index<I> { type Output; fn index(&self, index: I) -> &Self::Output; }
-```
-
-Custom `Eq`/`Ord` example:
-
-```wado
-impl Eq for Point {
-    fn eq(&self, other: &Self) -> bool {
-        return self.x == other.x && self.y == other.y;
-    }
-}
-
-impl Ord for Point {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let d1 = self.x * self.x + self.y * self.y;
-        let d2 = other.x * other.x + other.y * other.y;
-        if d1 < d2 { return Ordering::Less; }
-        if d1 > d2 { return Ordering::Greater; }
-        return Ordering::Equal;
-    }
-}
-```
-
-`IndexValue` returns by value (copy) and panics if not found. Use `.get()` for `Option<T>`. `Index` is for reference-type elements.
-
-### Trait Bounds
-
-See [WEP: Trait Bounds Enforcement](./wep-2026-02-07-trait-bounds.md).
-
-```wado
-// On structs
-struct SortedPair<T: Ord> { first: T, second: T }
-struct PrintableOrd<T: Ord + Printable> { value: T }
-
-// On functions
-fn max<T: Ord>(a: T, b: T) -> T {
-    if a > b { return a; }
-    return b;
-}
-
-// Bounded impl blocks — methods only available when bound is satisfied
-impl<T: Ord> Array<T> {
-    pub fn sort(&mut self) { ... }
-}
-
-// Bounded trait impl — Pair<T> implements Eq only when T: Eq
-impl<T: Eq> Eq for Pair<T> {
-    fn eq(&self, other: &Self) -> bool {
-        return self.first == other.first && self.second == other.second;
-    }
-}
-```
-
-All primitives implement `Eq` and `Ord`. Structs auto-derive `Eq` and `Ord` when all fields implement the trait. Variants auto-derive `Eq` when all payload types implement `Eq`. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `Array<T: Eq>` implement `Eq`. `Array<T: Ord>` implements `Ord`.
-
-## Associated Constants
-
-```wado
-impl f64 {
-    pub const PI: f64 = 3.14159265358979323846;
-}
-
-let pi = f64::PI;    // Type::CONST syntax
-let max = i32::MAX;
-```
-
-Primitives provide built-in constants: `f64::PI`, `f64::INFINITY`, `f64::NAN`, `i32::MAX`, `i32::MIN`, etc. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md#primitive-types).
-
-## Primitive Type Methods
-
-See [Core Standard Library Reference](./cheatsheet-stdlib-core.md#primitive-types) for the full API.
-
-```wado
-f64::sin(x)    f64::cos(x)    f64::sqrt(x)
-f64::abs(x)    f64::ceil(x)   f64::floor(x)
-f64::pow(x, y) f64::ln(x)     f64::exp(x)
-
-x.is_nan()     x.is_finite()    // where x is f64 or f32
-f64::parse("3.14")              // Option<f64>
-
-i32::min(a, b)  i32::max(a, b)
-
-// char classification and conversion
-let code = 'A' as i32;                // 65
-let c = char::from_u32(65);           // Option::<char>::Some('A')
-let d = char::from_u32_unchecked(65); // if you already validates the u32 value
-'A'.is_ascii_uppercase()              // true
-'a'.is_ascii_lowercase()              // true
-'A'.to_ascii_lowercase()              // 'a'
-'a'.to_ascii_uppercase()              // 'A'
+// Pattern testing (returns bool)
+opt matches { Some(_) }
 ```
 
 ## Control Flow
@@ -790,82 +547,129 @@ match [x, y] {
 if let { x: 0, y: 0 } = point { println("origin") }
 ```
 
-## Semicolons
-
-Semicolons does not have particular semantics; they are just separators to statements.
-
-Convention in `wado format`: single-line block does not use semicolon.
+Semicolons do not have particular semantics; they are just separators to statements. Convention in `wado format`: single-line block does not use semicolon.
 
 ```wado
 let a = if true { 1 } else { 2 };   // either 1 or 2
 let b = if true { 1; } else { 2; }; // ditto
 
-lf y = if true {
+let y = if true {
     1; // ok - semicolon doesn't have particular semantics
 } else {
     2;
+};
+```
+
+## Assert
+
+```wado
+assert x > 0;
+assert x > 0, "x must be positive";
+```
+
+## Functions, Methods, and Closures
+
+### Functions
+
+```wado
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
 }
+
+// With effects
+fn greet(name: String) with Stdout {
+    println(`Hello, {name}!`);
+}
+
+// Module public (accessible from other Wado modules)
+pub fn api_function() -> i32 {
+    return 42;
+}
+
+// Component export (public API at CM boundary)
+export fn run() { ... }
 ```
 
-## Operators
+A function must have `return` if it returns a value. See Visibility for `pub` and `export` details.
 
-See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-precedence.md) and [WEP: Operator Overloading](./wep-2026-01-18-operator-overloading.md).
+### Methods
 
 ```wado
-// Arithmetic
-+ - * / %
+impl Point {
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
 
-// Comparison (can be chained: a < b < c → a < b && b < c)
-== != < <= > >=
+    fn reset(&mut self) {
+        self.x = 0;
+        self.y = 0;
+    }
 
-// Logical
-&& || !
+    // Static method (no self parameter)
+    fn origin() -> Point {
+        return Point { x: 0, y: 0 };
+    }
+}
 
-// Bitwise
-& | ^ ~ << >>
-
-// Assignment
-= += -= *= /= %= &= |= ^= <<= >>=
-
-// Type cast
-42 as f64
-'A' as i32              // char -> i32: 65
-// 65 as char           // compile error: use char::from_u32()
-
-// Pattern testing (returns bool)
-opt matches { Some(_) }
-
-// Reference and Dereference
-&x              // create reference
-*ref            // dereference
+let mut p = Point { x: 1, y: 2 };
+let s = p.sum();
+p.reset();
+let origin = Point::origin();
 ```
 
-## References
+Note: bare `self` (by value) is not allowed. Use `&self` or `&mut self`.
+
+### Closures
+
+See [WEP: Closure Implementation](./wep-2026-01-16-closure-implementation.md).
 
 ```wado
-let x = 42;
-let r = &x;           // immutable reference
-let v = *r;           // dereference
+// Expression body
+let add_one = |x: i32| x + 1;
 
-let mut y = 0;
-let mr = &mut y;      // mutable reference
-*mr = 10;             // assign through reference
+// Block body (requires explicit return)
+let compute = |x: i32| {
+    let doubled = x * 2;
+    return doubled + x * 3;
+};
 
-let rr = &r;          // &&i32
-let val = **rr;       // double dereference
+// Struct literal return
+let make_point = |x: i32, y: i32| Point { x, y };
 
-// &mut to & coercion (automatic)
-fn read(r: &i32) { ... }
-read(&mut y);         // OK: &mut i32 coerced to &i32
+// Capturing outer variables (value semantics - copy)
+let multiplier = 10;
+let scale = |x: i32| x * multiplier;
+
+// Mutable capture: use &mut || to mutate captured variables
+let mut count = 0;
+let inc = &mut || { count += 1; };
+inc();
+inc();
+println(`{count}`);  // 2
 ```
 
-Key differences from Rust (GC-based memory model):
+### Mut Parameters
 
-- No borrow checker: multiple mutable references allowed
-- Can return references to local variables (GC keeps them alive)
-- No lifetime annotations needed
+```wado
+// mut allows reassigning the parameter inside the function
+fn increment(mut n: i32) -> i32 {
+    n += 1;
+    return n;
+}
 
-## Generic Functions and Methods
+// Caller's variable is unchanged for primitives (value type)
+let x = 5;
+let y = increment(x);
+// x == 5, y == 6
+
+// Closures also support mut parameters
+let double = |mut n: i32| { n *= 2; return n; };
+
+// Without mut, assignment is a compile error
+// fn bad(n: i32) { n = 0; }  // Error: cannot assign to immutable variable 'n'
+```
+
+### Generics
 
 ```wado
 fn identity<T>(x: T) -> T {
@@ -881,6 +685,7 @@ impl Container {
 // Turbofish syntax (explicit type arguments)
 let x = identity::<i32>(42);
 let y = container.transform::<i32, i64>(10, 20 as i64);
+let arr = Array::<i32>::with_capacity(10);  // turbofish for generic statics
 
 // Variadic type packs: operate on tuples of any arity
 fn variadic_identity<..T>(x: [..T]) -> [..T] {
@@ -903,69 +708,237 @@ fn make_defaults<..T: Default>() -> [..T] {
 }
 ```
 
-## Assert
-
-```wado
-assert x > 0;
-assert x > 0, "x must be positive";
-```
-
-## Imports
-
-```wado
-use { println, eprintln } from "core:cli";
-use { Stdout, Stdout::{write_via_stream} } from "wasi:cli";
-use utils from "./utils.wado";                // namespace import
-use { foo as bar } from "./mod.wado";         // rename
-pub use { foo, bar } from "./internal.wado";  // re-export
-```
-
-Namespace imports make all pub symbols from the source module directly available:
-
-```wado
-use geo from "./geo.wado";
-let p = geo::Point::new(1, 2);  // access via namespace
-```
-
-## Value Semantics
+### Reference Storage
 
 See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
-Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
-
-## Test Blocks
-
-Test blocks compile to the `test` world. Files with test blocks are discovered and executed by `wado test`:
-
-```sh
-wado test                            # discover and run *_test.wado files
-wado test file.wado                  # run specific file
-wado test --filter pattern           # filter tests by name
-wado compile --world test file.wado  # compile with test world
-```
+Functions that store reference parameters must declare `stores[...]`:
 
 ```wado
-test {
-    assert fib(10) == 55;
+struct Container {
+    data: &Data,
 }
 
-test "addition works" {
-    assert 1 + 1 == 2;
+// Function that stores a reference parameter — must declare stores
+fn store_data(data: &Data) -> Container with stores[data] {
+    return Container { data };
 }
 
-// Expect-trap test: passes when the body traps
-#[expect_trap]
-test "panics on invalid input" {
-    panic("bad input");
+// Function that uses but does NOT store a reference — no stores needed
+fn use_data(data: &Data) -> i32 {
+    return data.value;
 }
 
-// TODO test: reported on a separate axis from pass/fail.
-// Pending (traps) = expected. Resolved (passes) = must remove #[TODO].
-#[TODO]
-test "not yet implemented" {
-    panic("TODO: implement this");
+// Combined with effects
+fn store_and_log(data: &Data) -> Container with Stdout, stores[data] {
+    println(`Storing: {data.value}`);
+    return Container { data };
 }
 ```
+
+Rules:
+
+- `stores[param]` declares that the function may store the reference parameter
+- Only reference parameters (`&T` or `&mut T`) can appear in `stores[...]`
+- Without `stores[param]`, a function cannot return, store in struct fields, or assign to globals the reference parameter
+- In function type position, use positional indices: `fn(&Data) with stores[0]`
+
+## Visibility
+
+Wado has three levels of visibility:
+
+| Keyword  | Term             | Scope                                 |
+| -------- | ---------------- | ------------------------------------- |
+| (none)   | private          | Within the module                     |
+| `pub`    | module public    | Other modules within the same project |
+| `export` | component export | CM boundary (package's public API)    |
+
+```wado
+fn private_fn() { }           // module-private (default)
+pub fn public_fn() { }        // project-internal
+export fn run() { }           // component export
+pub export fn both() { }      // both
+```
+
+All entity definitions can have `pub` visibility, including struct fields.
+
+## Traits
+
+```wado
+// Trait declaration
+trait Greet {
+    fn greet(&self) -> String;
+}
+
+// Trait implementation
+impl Greet for Person {
+    fn greet(&self) -> String {
+        return `Hello, {self.name}!`;
+    }
+}
+
+// Default method
+trait Summary {
+    fn title(&self) -> String;
+
+    fn summary(&self) -> String {
+        return `Title: {self.title()}`;
+    }
+}
+
+// Associated type
+trait Container {
+    type Item;
+
+    fn get(&self) -> Self::Item;
+}
+
+impl Container for IntBox {
+    type Item = i32;
+    fn get(&self) -> Self::Item { return self.value; }
+}
+```
+
+Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
+
+### Prelude Traits
+
+```wado
+// For == and != operators
+trait Eq { fn eq(&self, other: &Self) -> bool; }
+
+// For <, <=, >, >= operators
+trait Ord { fn cmp(&self, other: &Self) -> Ordering; }
+
+// For default value
+trait Default { fn default() -> Self; }
+
+// For [] operators
+trait IndexValue<I> { type Output; fn index_value(&self, index: I) -> Self::Output; }
+trait IndexAssign<I> { type Input; fn index_assign(&mut self, index: I, value: Self::Input); }
+trait Index<I> { type Output; fn index(&self, index: I) -> &Self::Output; }
+```
+
+Custom `Eq`/`Ord` example:
+
+```wado
+impl Eq for Point {
+    fn eq(&self, other: &Self) -> bool {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+
+impl Ord for Point {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let d1 = self.x * self.x + self.y * self.y;
+        let d2 = other.x * other.x + other.y * other.y;
+        if d1 < d2 { return Ordering::Less; }
+        if d1 > d2 { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+```
+
+`IndexValue` returns by value (copy) and panics if not found. Use `.get()` for `Option<T>`. `Index` is for reference-type elements.
+
+### Trait Bounds
+
+See [WEP: Trait Bounds Enforcement](./wep-2026-02-07-trait-bounds.md).
+
+```wado
+// On structs
+struct SortedPair<T: Ord> { first: T, second: T }
+struct PrintableOrd<T: Ord + Printable> { value: T }
+
+// On functions
+fn max<T: Ord>(a: T, b: T) -> T {
+    if a > b { return a; }
+    return b;
+}
+
+// Bounded impl blocks — methods only available when bound is satisfied
+impl<T: Ord> Array<T> {
+    pub fn sort(&mut self) { ... }
+}
+
+// Bounded trait impl — Pair<T> implements Eq only when T: Eq
+impl<T: Eq> Eq for Pair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.first == other.first && self.second == other.second;
+    }
+}
+```
+
+All primitives implement `Eq` and `Ord`. Structs auto-derive `Eq` and `Ord` when all fields implement the trait. Variants auto-derive `Eq` when all payload types implement `Eq`. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `Array<T: Eq>` implement `Eq`. `Array<T: Ord>` implements `Ord`.
+
+## Associated Constants
+
+```wado
+impl f64 {
+    pub const PI: f64 = 3.14159265358979323846;
+}
+
+let pi = f64::PI;    // Type::CONST syntax
+let max = i32::MAX;
+```
+
+Primitives provide built-in constants: `f64::PI`, `f64::INFINITY`, `f64::NAN`, `i32::MAX`, `i32::MIN`, etc. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md#primitive-types).
+
+## Primitive Type Methods
+
+See [Core Standard Library Reference](./cheatsheet-stdlib-core.md#primitive-types) for the full API.
+
+```wado
+f64::sin(x)    f64::cos(x)    f64::sqrt(x)
+f64::abs(x)    f64::ceil(x)   f64::floor(x)
+f64::pow(x, y) f64::ln(x)     f64::exp(x)
+
+x.is_nan()     x.is_finite()    // where x is f64 or f32
+f64::parse("3.14")              // Option<f64>
+
+i32::min(a, b)  i32::max(a, b)
+
+// char classification and conversion
+let code = 'A' as i32;                // 65
+let c = char::from_u32(65);           // Option::<char>::Some('A')
+let d = char::from_u32_unchecked(65); // if you have already validated the u32 value
+'A'.is_ascii_uppercase()              // true
+'a'.is_ascii_lowercase()              // true
+'A'.to_ascii_lowercase()              // 'a'
+'a'.to_ascii_uppercase()              // 'A'
+```
+
+## Iterators
+
+See [WEP: Iterator Traits Design](./wep-2026-01-24-iterator-traits.md).
+
+`Iterator` provides `next()`. `IntoIterator` converts a collection into an iterator. Every `Iterator` automatically implements `IntoIterator` via a blanket impl, so all iterators work with `for-of`.
+
+```wado
+// Array iteration
+let arr: Array<i32> = [1, 2, 3, 4, 5];
+for let x of arr { println(`{x}`); }
+
+// Explicit iterator
+let mut iter = arr.iter();
+iter.next();                              // Option<i32>
+let rest = iter.collect();                // Array<i32>
+
+// Combinators
+let doubled = arr.iter().map(|x: i32| x * 2).collect();       // [2, 4, 6, 8, 10]
+let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect(); // [2, 4]
+let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);     // 15
+
+// Chaining
+let result = arr.iter()
+    .filter(|x: i32| x > 2)
+    .map(|x: i32| x * 10)
+    .collect();  // [30, 40, 50]
+```
+
+### Custom Iterables
+
+Implement `IntoIterator` to make custom types work with `for-of`. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md) for trait definitions.
 
 ## Effects
 
@@ -1041,6 +1014,40 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 `task return expr;` delivers the function's result to the CM runtime without terminating the function. Valid only inside `export async fn`. Regular `return` is forbidden in `async fn` bodies.
 
+## Test Blocks
+
+Test blocks compile to the `test` world. Files with test blocks are discovered and executed by `wado test`:
+
+```sh
+wado test                            # discover and run *_test.wado files
+wado test file.wado                  # run specific file
+wado test --filter pattern           # filter tests by name
+wado compile --world test file.wado  # compile with test world
+```
+
+```wado
+test {
+    assert fib(10) == 55;
+}
+
+test "addition works" {
+    assert 1 + 1 == 2;
+}
+
+// Expect-trap test: passes when the body traps
+#[expect_trap]
+test "panics on invalid input" {
+    panic("bad input");
+}
+
+// TODO test: reported on a separate axis from pass/fail.
+// Pending (traps) = expected. Resolved (passes) = must remove #[TODO].
+#[TODO]
+test "not yet implemented" {
+    panic("TODO: implement this");
+}
+```
+
 ## Standard Library
 
 For full API reference, see:
@@ -1067,42 +1074,6 @@ let opt = map.get("key"); // fallible access returns Option<V>
 let set = ["foo", "bar", "baz"] as TreeSet<String>;
 assert set.contains("foo");
 ```
-
-## Iterators
-
-See [WEP: Iterator Traits Design](./wep-2026-01-24-iterator-traits.md).
-
-`Iterator` provides `next()`. `IntoIterator` converts a collection into an iterator. Every `Iterator` automatically implements `IntoIterator` via a blanket impl, so all iterators work with `for-of`.
-
-```wado
-// Array iteration
-let arr: Array<i32> = [1, 2, 3, 4, 5];
-for let x of arr { println(`{x}`); }
-
-// Explicit iterator
-let mut iter = arr.iter();
-iter.next();                              // Option<i32>
-let rest = iter.collect();                // Array<i32>
-
-// Combinators
-let doubled = arr.iter().map(|x: i32| x * 2).collect();       // [2, 4, 6, 8, 10]
-let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect(); // [2, 4]
-let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);     // 15
-
-// Chaining
-let result = arr.iter()
-    .filter(|x: i32| x > 2)
-    .map(|x: i32| x * 10)
-    .collect();  // [30, 40, 50]
-```
-
-### Custom Iterables
-
-Implement `IntoIterator` to make custom types work with `for-of`. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md) for trait definitions.
-
-## Serialization and Deserialization
-
-See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
 ## Compile-Time Literals
 
@@ -1135,13 +1106,13 @@ struct Foo {
 #[inline(never)]           // never inline
 ```
 
-## Macros
+## Serialization and Deserialization
 
-Wado intentionally does not support macros.
+Wado supports automatic serialization/deserialization via `core:serde`. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
 ## SIMD
 
-See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for design and rationale. Includes Relaxed SIMD.
+Wado supports 128-bit SIMD operations including Relaxed SIMD. See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md).
 
 ## See Also
 
@@ -1149,3 +1120,5 @@ See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for design and rationale. In
 - [Core Standard Library Reference](./cheatsheet-stdlib-core.md) - Core stdlib quick reference
 - [WASI Standard Library Reference](./cheatsheet-stdlib-wasi.md) - WASI stdlib quick reference
 - [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures) - E2E test fixtures
+
+Note: Wado intentionally does not support macros.
