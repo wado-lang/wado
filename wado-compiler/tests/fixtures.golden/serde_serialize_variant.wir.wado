@@ -128,7 +128,7 @@ type "functype/__initialize_module" = fn();
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
+type "functype/Array<u64>::push" = fn(ref Array<u64>, u64);
 
 type "functype/Array<u64>::grow" = fn(ref Array<u64>);
 
@@ -136,7 +136,7 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::concat" = fn(ref String, ref String) -> ref String;
 
@@ -973,7 +973,7 @@ fn write_decimal(buf, d, p, nd) {
     let index: i32;
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
-        String::append(buf, String { repr: array.new_data<u8>("0."), used: 2 });
+        String::push_str(buf, String { repr: array.new_data<u8>("0."), used: 2 });
         n_10 = 0 - decimal_pos;
         String::append_byte_filled(buf, 48, n_10);
         digit_offset = buf.used;
@@ -1028,7 +1028,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
         leading_zeros = 0 - decimal_pos;
-        String::append(buf, String { repr: array.new_data<u8>("0."), used: 2 });
+        String::push_str(buf, String { repr: array.new_data<u8>("0."), used: 2 });
         if precision <= leading_zeros {
             String::append_byte_filled(buf, 48, precision);
             return;
@@ -1060,7 +1060,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         n_37 = decimal_pos - nd;
         String::append_byte_filled(buf, 48, n_37);
         if precision > 0 {
-            String::append(buf, String { repr: array.new_data<u8>("."), used: 1 });
+            String::push_str(buf, String { repr: array.new_data<u8>("."), used: 1 });
             String::append_byte_filled(buf, 48, precision);
         };
     } else {
@@ -1142,25 +1142,25 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
         break __inline_String__len_1: __local_6.used;
     };
     if kind == 3 {
-        String::append(f.buf, String { repr: array.new_data<u8>("NaN"), used: 3 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("NaN"), used: 3 });
     } else if kind == 2 {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
         });
     } else {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
         });
-        String::append(f.buf, zero_repr);
+        String::push_str(f.buf, zero_repr);
     };
     Formatter::apply_padding(f, mark);
 }
 
-fn Array<u64>::append(self, value) {
+fn Array<u64>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1261,9 +1261,9 @@ fn f64::fmt_into(self, f) {
         break __inline_String__len_5: __local_19.used;
     };
     if is_neg {
-        String::append(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
     } else if f.sign_plus {
-        String::append(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
     };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
@@ -1317,13 +1317,13 @@ fn f64::fmt_fixed(self, precision, f) {
             break __inline_String__len_1: __local_16.used;
         };
         if is_neg {
-            String::append(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
+            String::push_str(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
         } else if f.sign_plus {
-            String::append(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
+            String::push_str(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
         };
-        String::append(f.buf, String { repr: array.new_data<u8>("0"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("0"), used: 1 });
         if precision > 0 {
-            String::append(f.buf, String { repr: array.new_data<u8>("."), used: 1 });
+            String::push_str(f.buf, String { repr: array.new_data<u8>("."), used: 1 });
             String::append_byte_filled(f.buf, 48, precision);
         };
         Formatter::apply_padding(f, mark_7);
@@ -1358,9 +1358,9 @@ fn f64::fmt_fixed(self, precision, f) {
         break __inline_String__len_8: __local_25.used;
     };
     if is_neg {
-        String::append(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
     } else if f.sign_plus {
-        String::append(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
     };
     write_decimal_prec(f.buf, d, p, nd, precision);
     Formatter::apply_padding(f, mark_13);
@@ -1401,7 +1401,7 @@ fn String::append_byte_filled(self, byte, n) {
     self.used = new_used;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -1433,7 +1433,7 @@ fn String::concat(a, b) {
 fn JsonSerializer^Serializer::serialize_f64(self, v) {
     let __local_2: ref String;
     let __local_3: ref Formatter;
-    String::append(self, __tmpl: block -> ref String {
+    String::push_str(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         f64::fmt_into(v, __local_3);
@@ -1444,18 +1444,18 @@ fn JsonSerializer^Serializer::serialize_f64(self, v) {
 
 fn JsonSerializer^Serializer::serialize_unit_variant(self, type_name, variant_name, disc) {
     let __local_4: ref String;
-    String::append(self, __tmpl: block -> ref String {
+    String::push_str(self, __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
-        String::append(__local_4, variant_name);
-        String::append(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
+        String::push_str(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
+        String::push_str(__local_4, variant_name);
+        String::push_str(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
         break __tmpl: __local_4;
     });
     return ref.null none;
 }
 
 fn JsonSerializer^Serializer::begin_variant(self, type_name, variant_name, disc) {
-    String::append(self.buf, String::concat(String::concat(String::concat(String { repr: array.new_data<u8>("{\""), used: 2 }, variant_name), String { repr: array.new_data<u8>("\""), used: 1 }), String { repr: array.new_data<u8>(":"), used: 1 }));
+    String::push_str(self.buf, String::concat(String::concat(String::concat(String { repr: array.new_data<u8>("{\""), used: 2 }, variant_name), String { repr: array.new_data<u8>("\""), used: 1 }), String { repr: array.new_data<u8>(":"), used: 1 }));
     return Result<JsonVariantSerializer,SerializeError>::Ok { discriminant: 0, payload_0: JsonVariantSerializer { ser: self } };
 }
 
@@ -1474,7 +1474,7 @@ fn Shape^Serialize::serialize<JsonSerializer>(self, s) {
                 break __inline_f64_Serialize__serialize_JsonSerializer__1: JsonSerializer^Serializer::serialize_f64(__local_9.buf, __cast_1.payload_0);
             });
             return __inline_JsonVariantSerializer_SerializeVariant__end_2: block -> ref null SerializeError {
-                String::append(__local_4.ser.buf, String { repr: array.new_data<u8>("}"), used: 1 });
+                String::push_str(__local_4.ser.buf, String { repr: array.new_data<u8>("}"), used: 1 });
                 break __inline_JsonVariantSerializer_SerializeVariant__end_2: ref.null none;
             };
         };

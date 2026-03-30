@@ -293,9 +293,9 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -487,22 +487,22 @@ fn handle(request) {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_8 = String { repr: builtin::array_new<u8>(108), used: 0 };
-            String::append(__local_8, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_8, 104);
-            String::append_char(__local_8, 97);
-            String::append_char(__local_8, 110);
-            String::append_char(__local_8, 100);
-            String::append_char(__local_8, 108);
-            String::append_char(__local_8, 101);
-            String::append_char(__local_8, 32);
-            String::append_char(__local_8, 97);
-            String::append_char(__local_8, 116);
-            String::append_char(__local_8, 32);
-            String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-request-method-put.wado"), used: 57 });
-            String::append_char(__local_8, 58);
+            String::push_str(__local_8, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_8, 104);
+            String::push(__local_8, 97);
+            String::push(__local_8, 110);
+            String::push(__local_8, 100);
+            String::push(__local_8, 108);
+            String::push(__local_8, 101);
+            String::push(__local_8, 32);
+            String::push(__local_8, 97);
+            String::push(__local_8, 116);
+            String::push(__local_8, 32);
+            String::push_str(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-request-method-put.wado"), used: 57 });
+            String::push(__local_8, 58);
             __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
             i32::fmt_decimal(8, __local_9);
-            String::append(__local_8, String { repr: array.new_data<u8>("
+            String::push_str(__local_8, String { repr: array.new_data<u8>("
 condition: method matches { Put }
 "), used: 35 });
             break __tmpl: __local_8;
@@ -1125,7 +1125,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -1140,7 +1140,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -1178,7 +1178,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l76;
             };
@@ -1212,20 +1212,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -1235,10 +1235,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -1248,10 +1248,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -1259,10 +1259,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

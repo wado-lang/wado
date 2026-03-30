@@ -91,13 +91,13 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
 type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> bool;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/Container^Eq::eq" = fn(ref Container, ref Container) -> bool;
 
@@ -153,34 +153,34 @@ fn __test_0_struct_eq_with_same_ref_field() {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(136), used: 0 };
-            String::append(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_6, String { repr: array.new_data<u8>("__test_0_struct_eq_with_same_ref_field"), used: 38 });
-            String::append_char(__local_6, 32);
-            String::append_char(__local_6, 97);
-            String::append_char(__local_6, 116);
-            String::append_char(__local_6, 32);
-            String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
-            String::append_char(__local_6, 58);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_6, String { repr: array.new_data<u8>("__test_0_struct_eq_with_same_ref_field"), used: 38 });
+            String::push(__local_6, 32);
+            String::push(__local_6, 97);
+            String::push(__local_6, 116);
+            String::push(__local_6, 32);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
+            String::push(__local_6, 58);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_12 = __local_7;
             i32::fmt_decimal(15, __local_12);
-            String::append(__local_6, String { repr: array.new_data<u8>("
+            String::push_str(__local_6, String { repr: array.new_data<u8>("
 condition: c1 == c2
 "), used: 21 });
-            String::append_char(__local_6, 99);
-            String::append_char(__local_6, 49);
-            String::append_char(__local_6, 58);
-            String::append_char(__local_6, 32);
+            String::push(__local_6, 99);
+            String::push(__local_6, 49);
+            String::push(__local_6, 58);
+            String::push(__local_6, 32);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             Container^Inspect::inspect(__v0, __local_7);
-            String::append_char(__local_6, 10);
-            String::append_char(__local_6, 99);
-            String::append_char(__local_6, 50);
-            String::append_char(__local_6, 58);
-            String::append_char(__local_6, 32);
+            String::push(__local_6, 10);
+            String::push(__local_6, 99);
+            String::push(__local_6, 50);
+            String::push(__local_6, 58);
+            String::push(__local_6, 32);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             Container^Inspect::inspect(__v1, __local_7);
-            String::append_char(__local_6, 10);
+            String::push(__local_6, 10);
             break __tmpl: __local_6;
         });
         unreachable;
@@ -208,34 +208,34 @@ fn __test_1_struct_neq_with_different_ref_field() {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_7 = String { repr: builtin::array_new<u8>(136), used: 0 };
-            String::append(__local_7, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_7, String { repr: array.new_data<u8>("__test_1_struct_neq_with_different_ref_field"), used: 44 });
-            String::append_char(__local_7, 32);
-            String::append_char(__local_7, 97);
-            String::append_char(__local_7, 116);
-            String::append_char(__local_7, 32);
-            String::append(__local_7, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
-            String::append_char(__local_7, 58);
+            String::push_str(__local_7, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_7, String { repr: array.new_data<u8>("__test_1_struct_neq_with_different_ref_field"), used: 44 });
+            String::push(__local_7, 32);
+            String::push(__local_7, 97);
+            String::push(__local_7, 116);
+            String::push(__local_7, 32);
+            String::push_str(__local_7, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
+            String::push(__local_7, 58);
             __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
             __local_13 = __local_8;
             i32::fmt_decimal(24, __local_13);
-            String::append(__local_7, String { repr: array.new_data<u8>("
+            String::push_str(__local_7, String { repr: array.new_data<u8>("
 condition: c1 != c2
 "), used: 21 });
-            String::append_char(__local_7, 99);
-            String::append_char(__local_7, 49);
-            String::append_char(__local_7, 58);
-            String::append_char(__local_7, 32);
+            String::push(__local_7, 99);
+            String::push(__local_7, 49);
+            String::push(__local_7, 58);
+            String::push(__local_7, 32);
             __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
             Container^Inspect::inspect(__v0, __local_8);
-            String::append_char(__local_7, 10);
-            String::append_char(__local_7, 99);
-            String::append_char(__local_7, 50);
-            String::append_char(__local_7, 58);
-            String::append_char(__local_7, 32);
+            String::push(__local_7, 10);
+            String::push(__local_7, 99);
+            String::push(__local_7, 50);
+            String::push(__local_7, 58);
+            String::push(__local_7, 32);
             __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
             Container^Inspect::inspect(__v1, __local_8);
-            String::append_char(__local_7, 10);
+            String::push(__local_7, 10);
             break __tmpl: __local_7;
         });
         unreachable;
@@ -261,34 +261,34 @@ fn __test_2_struct_neq_with_different_name_same_ref() {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(136), used: 0 };
-            String::append(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_6, String { repr: array.new_data<u8>("__test_2_struct_neq_with_different_name_same_ref"), used: 48 });
-            String::append_char(__local_6, 32);
-            String::append_char(__local_6, 97);
-            String::append_char(__local_6, 116);
-            String::append_char(__local_6, 32);
-            String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
-            String::append_char(__local_6, 58);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_6, String { repr: array.new_data<u8>("__test_2_struct_neq_with_different_name_same_ref"), used: 48 });
+            String::push(__local_6, 32);
+            String::push(__local_6, 97);
+            String::push(__local_6, 116);
+            String::push(__local_6, 32);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
+            String::push(__local_6, 58);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_12 = __local_7;
             i32::fmt_decimal(31, __local_12);
-            String::append(__local_6, String { repr: array.new_data<u8>("
+            String::push_str(__local_6, String { repr: array.new_data<u8>("
 condition: c1 != c2
 "), used: 21 });
-            String::append_char(__local_6, 99);
-            String::append_char(__local_6, 49);
-            String::append_char(__local_6, 58);
-            String::append_char(__local_6, 32);
+            String::push(__local_6, 99);
+            String::push(__local_6, 49);
+            String::push(__local_6, 58);
+            String::push(__local_6, 32);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             Container^Inspect::inspect(__v0, __local_7);
-            String::append_char(__local_6, 10);
-            String::append_char(__local_6, 99);
-            String::append_char(__local_6, 50);
-            String::append_char(__local_6, 58);
-            String::append_char(__local_6, 32);
+            String::push(__local_6, 10);
+            String::push(__local_6, 99);
+            String::push(__local_6, 50);
+            String::push(__local_6, 58);
+            String::push(__local_6, 32);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             Container^Inspect::inspect(__v1, __local_7);
-            String::append_char(__local_6, 10);
+            String::push(__local_6, 10);
             break __tmpl: __local_6;
         });
         unreachable;
@@ -314,34 +314,34 @@ fn __test_3_struct_with_mut_ref_field() {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(136), used: 0 };
-            String::append(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_6, String { repr: array.new_data<u8>("__test_3_struct_with_mut_ref_field"), used: 34 });
-            String::append_char(__local_6, 32);
-            String::append_char(__local_6, 97);
-            String::append_char(__local_6, 116);
-            String::append_char(__local_6, 32);
-            String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
-            String::append_char(__local_6, 58);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_6, String { repr: array.new_data<u8>("__test_3_struct_with_mut_ref_field"), used: 34 });
+            String::push(__local_6, 32);
+            String::push(__local_6, 97);
+            String::push(__local_6, 116);
+            String::push(__local_6, 32);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
+            String::push(__local_6, 58);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_12 = __local_7;
             i32::fmt_decimal(38, __local_12);
-            String::append(__local_6, String { repr: array.new_data<u8>("
+            String::push_str(__local_6, String { repr: array.new_data<u8>("
 condition: c1 == c2
 "), used: 21 });
-            String::append_char(__local_6, 99);
-            String::append_char(__local_6, 49);
-            String::append_char(__local_6, 58);
-            String::append_char(__local_6, 32);
+            String::push(__local_6, 99);
+            String::push(__local_6, 49);
+            String::push(__local_6, 58);
+            String::push(__local_6, 32);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             Container^Inspect::inspect(__v0, __local_7);
-            String::append_char(__local_6, 10);
-            String::append_char(__local_6, 99);
-            String::append_char(__local_6, 50);
-            String::append_char(__local_6, 58);
-            String::append_char(__local_6, 32);
+            String::push(__local_6, 10);
+            String::push(__local_6, 99);
+            String::push(__local_6, 50);
+            String::push(__local_6, 58);
+            String::push(__local_6, 32);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             Container^Inspect::inspect(__v1, __local_7);
-            String::append_char(__local_6, 10);
+            String::push(__local_6, 10);
             break __tmpl: __local_6;
         });
         unreachable;
@@ -559,7 +559,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -647,7 +647,7 @@ fn StrCharIter^Iterator::next(self) {
     return 0; code_10;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -693,12 +693,12 @@ fn Inner^Inspect::inspect(self, f) {
     let s_5: ref String;
     let s_11: ref String;
     s_3 = String { repr: array.new_data<u8>("Inner { "), used: 8 };
-    String::append(f.buf, s_3);
+    String::push_str(f.buf, s_3);
     s_5 = String { repr: array.new_data<u8>("value: "), used: 7 };
-    String::append(f.buf, s_5);
+    String::push_str(f.buf, s_5);
     i32::fmt_decimal(self, f);
     s_11 = String { repr: array.new_data<u8>(" }"), used: 2 };
-    String::append(f.buf, s_11);
+    String::push_str(f.buf, s_11);
 }
 
 fn Container^Inspect::inspect(self, f) {
@@ -711,21 +711,21 @@ fn Container^Inspect::inspect(self, f) {
     let s_14: ref String;
     let s_16: ref String;
     s_3 = String { repr: array.new_data<u8>("Container { "), used: 12 };
-    String::append(f.buf, s_3);
+    String::push_str(f.buf, s_3);
     s_5 = String { repr: array.new_data<u8>("name: "), used: 6 };
-    String::append(f.buf, s_5);
+    String::push_str(f.buf, s_5);
     String^Inspect::inspect(self.name, f);
     s_7 = String { repr: array.new_data<u8>(", "), used: 2 };
-    String::append(f.buf, s_7);
+    String::push_str(f.buf, s_7);
     s_9 = String { repr: array.new_data<u8>("data: "), used: 6 };
-    String::append(f.buf, s_9);
+    String::push_str(f.buf, s_9);
     self_10 = self.data;
     s_14 = String { repr: array.new_data<u8>("&"), used: 1 };
-    String::append(f.buf, s_14);
+    String::push_str(f.buf, s_14);
     inner = self_10;
     Inner^Inspect::inspect(inner.value, f);
     s_16 = String { repr: array.new_data<u8>(" }"), used: 2 };
-    String::append(f.buf, s_16);
+    String::push_str(f.buf, s_16);
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -739,7 +739,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l37;
             };
@@ -773,20 +773,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -796,10 +796,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -809,10 +809,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -820,10 +820,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
@@ -835,7 +835,7 @@ fn String^Inspect::inspect(self, f) {
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
     let _licm_buf_33: ref String;
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
@@ -852,22 +852,22 @@ fn String^Inspect::inspect(self, f) {
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 34);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 110);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 114);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 116);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 116);
                 } else {
-                    String::append_char(_licm_buf_33, c);
+                    String::push(_licm_buf_33, c);
                 };
             } else {
                 break b56;
@@ -875,7 +875,7 @@ fn String^Inspect::inspect(self, f) {
             continue l57;
         };
     };
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
 }
 
 export fn __cm_export____test_0_struct_eq_with_same_ref_field as "__test_0_struct_eq_with_same_ref_field"

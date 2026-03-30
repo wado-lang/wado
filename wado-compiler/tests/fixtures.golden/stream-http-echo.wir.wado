@@ -268,7 +268,7 @@ type "functype/core:internal/cm_stream_write_u8" = fn(i32, ref Array<u8>);
 
 type "functype/ArrayIter<Array<u8>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Array<u8>>") -> ref null Array<u8>;
 
-type "functype/Array<Array<u8>>::append" = fn(ref Array<Array<u8>>, ref Array<u8>);
+type "functype/Array<Array<u8>>::push" = fn(ref Array<Array<u8>>, ref Array<u8>);
 
 type "functype/Array<Array<u8>>::grow" = fn(ref Array<Array<u8>>);
 
@@ -473,7 +473,7 @@ fn handle(request) {
             if chunk_7.used == 0 {
                 break b0;
             };
-            Array<Array<u8>>::append(chunks, chunk_7);
+            Array<Array<u8>>::push(chunks, chunk_7);
             continue l1;
         };
     };
@@ -977,7 +977,7 @@ fn ArrayIter<Array<u8>>^Iterator::next(self) {
     return item;
 }
 
-fn Array<Array<u8>>::append(self, value) {
+fn Array<Array<u8>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {

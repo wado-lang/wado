@@ -79,11 +79,11 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
@@ -145,8 +145,8 @@ fn run() with Stdout {
             __local_10 = String { repr: array.new_data<u8>("should not print (&&)"), used: 21 };
             "core:cli/println"(__tmpl: block -> ref String {
                 __local_12 = String { repr: builtin::array_new<u8>(36), used: 0 };
-                String::append(__local_12, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
-                String::append(__local_12, __local_10);
+                String::push_str(__local_12, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                String::push_str(__local_12, __local_10);
                 break __tmpl: __local_12;
             });
             break __inline_side_effect_2: 1;
@@ -163,8 +163,8 @@ fn run() with Stdout {
             __local_13 = String { repr: array.new_data<u8>("should print (&&)"), used: 17 };
             "core:cli/println"(__tmpl: block -> ref String {
                 __local_15 = String { repr: builtin::array_new<u8>(36), used: 0 };
-                String::append(__local_15, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
-                String::append(__local_15, __local_13);
+                String::push_str(__local_15, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                String::push_str(__local_15, __local_13);
                 break __tmpl: __local_15;
             });
             break __inline_side_effect_3: 1;
@@ -183,8 +183,8 @@ fn run() with Stdout {
             __local_16 = String { repr: array.new_data<u8>("should not print (||)"), used: 21 };
             "core:cli/println"(__tmpl: block -> ref String {
                 __local_18 = String { repr: builtin::array_new<u8>(36), used: 0 };
-                String::append(__local_18, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
-                String::append(__local_18, __local_16);
+                String::push_str(__local_18, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                String::push_str(__local_18, __local_16);
                 break __tmpl: __local_18;
             });
             break __inline_side_effect_4: 0;
@@ -199,8 +199,8 @@ fn run() with Stdout {
             __local_19 = String { repr: array.new_data<u8>("should print (||)"), used: 17 };
             "core:cli/println"(__tmpl: block -> ref String {
                 __local_21 = String { repr: builtin::array_new<u8>(36), used: 0 };
-                String::append(__local_21, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
-                String::append(__local_21, __local_19);
+                String::push_str(__local_21, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                String::push_str(__local_21, __local_19);
                 break __tmpl: __local_21;
             });
             break __inline_side_effect_5: 1;
@@ -235,17 +235,17 @@ fn run() with Stdout {
             };
             "core:cli/println"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(40), used: 0 };
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 114);
-                String::append_char(__local_5, 114);
-                String::append_char(__local_5, 91);
+                String::push(__local_5, 97);
+                String::push(__local_5, 114);
+                String::push(__local_5, 114);
+                String::push(__local_5, 91);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_37 = __local_6;
                 i32::fmt_decimal(i, __local_37);
-                String::append_char(__local_5, 93);
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 61);
-                String::append_char(__local_5, 32);
+                String::push(__local_5, 93);
+                String::push(__local_5, 32);
+                String::push(__local_5, 61);
+                String::push(__local_5, 32);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_42 = __local_6;
                 i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_20: block -> i32 {
@@ -264,7 +264,7 @@ fn run() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(34), used: 0 };
-        String::append(__local_7, String { repr: array.new_data<u8>("Loop ended at i = "), used: 18 });
+        String::push_str(__local_7, String { repr: array.new_data<u8>("Loop ended at i = "), used: 18 });
         __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         i32::fmt_decimal(i, __local_8);
         break __tmpl: __local_7;
@@ -278,8 +278,8 @@ fn run() with Stdout {
             __local_53 = String { repr: array.new_data<u8>("nested: should print"), used: 20 };
             "core:cli/println"(__tmpl: block -> ref String {
                 __local_55 = String { repr: builtin::array_new<u8>(36), used: 0 };
-                String::append(__local_55, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
-                String::append(__local_55, __local_53);
+                String::push_str(__local_55, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                String::push_str(__local_55, __local_53);
                 break __tmpl: __local_55;
             });
             break __inline_side_effect_26: 1;
@@ -295,8 +295,8 @@ fn run() with Stdout {
                 __local_56 = String { repr: array.new_data<u8>("nested: should not print"), used: 24 };
                 "core:cli/println"(__tmpl: block -> ref String {
                     __local_58 = String { repr: builtin::array_new<u8>(36), used: 0 };
-                    String::append(__local_58, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
-                    String::append(__local_58, __local_56);
+                    String::push_str(__local_58, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
+                    String::push_str(__local_58, __local_56);
                     break __tmpl: __local_58;
                 });
                 break __inline_side_effect_27: 1;
@@ -543,7 +543,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -558,7 +558,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -585,7 +585,7 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Array<i32>::append(self, value) {
+fn Array<i32>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -638,7 +638,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l47;
             };
@@ -672,20 +672,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -695,10 +695,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -708,10 +708,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -719,10 +719,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

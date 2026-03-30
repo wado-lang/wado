@@ -1171,9 +1171,9 @@ The `append` method provides efficient O(1) amortized string building:
 
 ```wado
 let mut builder = String::with_capacity(20);
-builder.append("Hello");
-builder.append(", ");
-builder.append("World!");
+builder.push_str("Hello");
+builder.push_str(", ");
+builder.push_str("World!");
 // builder is now "Hello, World!"
 
 // Static method for two-string concatenation
@@ -1679,7 +1679,7 @@ arr[0] = 100;        // Requires mutable array
 arr[1] = 200;
 
 // Array methods
-arr.append(4);       // Add element to end
+arr.push(4);         // Add element to end
 let len = arr.len(); // Get length
 ```
 
@@ -3968,7 +3968,7 @@ The `stores[...]` keyword declares that a function stores reference parameters b
 ```wado
 // Function that stores a reference parameter
 fn register(data: &Data) -> Handle with stores[data] {
-    registry.append(data);  // Stores the reference
+    registry.push(data);    // Stores the reference
     return new_handle();
 }
 
@@ -4067,7 +4067,7 @@ fn collect_all() -> Array<i32> {
 
     with handler Generator<i32> {
         yield(value) => |resume| {
-            result.append(value);
+            result.push(value);
             resume();
         },
     } {

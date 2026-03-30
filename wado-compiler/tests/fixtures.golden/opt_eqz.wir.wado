@@ -58,9 +58,9 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -104,13 +104,13 @@ fn run() with Stdout {
     let __local_57: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_0 = String { repr: builtin::array_new<u8>(42), used: 0 };
-        String::append(__local_0, String { repr: array.new_data<u8>("i32 eqz: "), used: 9 });
+        String::push_str(__local_0, String { repr: array.new_data<u8>("i32 eqz: "), used: 9 });
         __local_1 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
         __local_12 = __local_1;
         Formatter::pad(__local_12, block -> ref String {
             String { repr: array.new_data<u8>("true"), used: 4 };
         });
-        String::append_char(__local_0, 32);
+        String::push(__local_0, 32);
         __local_1 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
         __local_18 = __local_1;
         Formatter::pad(__local_18, block -> ref String {
@@ -120,13 +120,13 @@ fn run() with Stdout {
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(43), used: 0 };
-        String::append(__local_2, String { repr: array.new_data<u8>("i32 neqz: "), used: 10 });
+        String::push_str(__local_2, String { repr: array.new_data<u8>("i32 neqz: "), used: 10 });
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         __local_25 = __local_3;
         Formatter::pad(__local_25, block -> ref String {
             String { repr: array.new_data<u8>("false"), used: 5 };
         });
-        String::append_char(__local_2, 32);
+        String::push(__local_2, 32);
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         __local_31 = __local_3;
         Formatter::pad(__local_31, block -> ref String {
@@ -136,13 +136,13 @@ fn run() with Stdout {
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(42), used: 0 };
-        String::append(__local_4, String { repr: array.new_data<u8>("i64 eqz: "), used: 9 });
+        String::push_str(__local_4, String { repr: array.new_data<u8>("i64 eqz: "), used: 9 });
         __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
         __local_38 = __local_5;
         Formatter::pad(__local_38, block -> ref String {
             String { repr: array.new_data<u8>("true"), used: 4 };
         });
-        String::append_char(__local_4, 32);
+        String::push(__local_4, 32);
         __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
         __local_44 = __local_5;
         Formatter::pad(__local_44, block -> ref String {
@@ -152,13 +152,13 @@ fn run() with Stdout {
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(43), used: 0 };
-        String::append(__local_6, String { repr: array.new_data<u8>("i64 neqz: "), used: 10 });
+        String::push_str(__local_6, String { repr: array.new_data<u8>("i64 neqz: "), used: 10 });
         __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         __local_51 = __local_7;
         Formatter::pad(__local_51, block -> ref String {
             String { repr: array.new_data<u8>("false"), used: 5 };
         });
-        String::append_char(__local_6, 32);
+        String::push(__local_6, 32);
         __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         __local_57 = __local_7;
         Formatter::pad(__local_57, block -> ref String {
@@ -284,7 +284,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -299,7 +299,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -337,7 +337,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l21;
             };
@@ -357,7 +357,7 @@ fn Formatter::pad(self, content) {
     } else {
         content_len >= self.width;
     } {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         return;
     };
     padding = self.width - content_len;
@@ -365,17 +365,17 @@ fn Formatter::pad(self, content) {
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, padding);
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, right_pad);
     } else {
         Formatter::write_char_n(self, self.fill, padding);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
     };
 }
 

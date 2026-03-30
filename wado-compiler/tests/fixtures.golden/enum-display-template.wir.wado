@@ -60,7 +60,7 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/Fruit^Inspect::inspect" = fn(enum:Fruit, ref Formatter);
 
@@ -93,7 +93,7 @@ fn describe(f) {
     return let __match_scrut_0: enum:Fruit; __match_scrut_0 = f; if __match_scrut_0 == 0 -> ref String {
         __tmpl: block -> ref String {
             __local_1 = String { repr: builtin::array_new<u8>(23), used: 0 };
-            String::append(__local_1, String { repr: array.new_data<u8>("I like "), used: 7 });
+            String::push_str(__local_1, String { repr: array.new_data<u8>("I like "), used: 7 });
             __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
             Fruit^Inspect::inspect(f, __local_2);
             break __tmpl: __local_1;
@@ -103,7 +103,7 @@ fn describe(f) {
             __local_3 = String { repr: builtin::array_new<u8>(26), used: 0 };
             __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
             Fruit^Inspect::inspect(f, __local_4);
-            String::append(__local_3, String { repr: array.new_data<u8>(" is yellow"), used: 10 });
+            String::push_str(__local_3, String { repr: array.new_data<u8>(" is yellow"), used: 10 });
             break __tmpl: __local_3;
         };
     } else if __match_scrut_0 == 2 -> ref String {
@@ -111,7 +111,7 @@ fn describe(f) {
             __local_5 = String { repr: builtin::array_new<u8>(25), used: 0 };
             __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
             Fruit^Inspect::inspect(f, __local_6);
-            String::append(__local_5, String { repr: array.new_data<u8>(" is small"), used: 9 });
+            String::push_str(__local_5, String { repr: array.new_data<u8>(" is small"), used: 9 });
             break __tmpl: __local_5;
         };
     } else {
@@ -126,7 +126,7 @@ fn run() with Stdout {
     f = 0;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(23), used: 0 };
-        String::append(__local_1, String { repr: array.new_data<u8>("fruit: "), used: 7 });
+        String::push_str(__local_1, String { repr: array.new_data<u8>("fruit: "), used: 7 });
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         Fruit^Inspect::inspect(f, __local_2);
         break __tmpl: __local_1;
@@ -252,7 +252,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -273,13 +273,13 @@ fn Fruit^Inspect::inspect(self, f) {
     let __local_7: ref String;
     if self == 0 {
         __local_3 = String { repr: array.new_data<u8>("Fruit::Apple"), used: 12 };
-        String::append(f.buf, __local_3);
+        String::push_str(f.buf, __local_3);
     } else if self == 1 {
         __local_5 = String { repr: array.new_data<u8>("Fruit::Banana"), used: 13 };
-        String::append(f.buf, __local_5);
+        String::push_str(f.buf, __local_5);
     } else if self == 2 {
         __local_7 = String { repr: array.new_data<u8>("Fruit::Cherry"), used: 13 };
-        String::append(f.buf, __local_7);
+        String::push_str(f.buf, __local_7);
     };
 }
 

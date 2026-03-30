@@ -91,7 +91,7 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/core:base64/Array<u8>::append" = fn(ref Array<u8>, u8);
+type "functype/core:base64/Array<u8>::push" = fn(ref Array<u8>, u8);
 
 type "functype/core:base64/Array<u8>::grow" = fn(ref Array<u8>);
 
@@ -99,7 +99,7 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
@@ -107,9 +107,9 @@ type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> b
 
 type "functype/StrUtf8ByteIter^Iterator::collect" = fn(ref StrUtf8ByteIter) -> ref Array<u8>;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
-type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
+type "functype/Array<u8>::push" = fn(ref Array<u8>, u8);
 
 type "functype/Array<u8>::grow" = fn(ref Array<u8>);
 
@@ -223,26 +223,26 @@ fn run() with Stdout {
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_22 = String { repr: builtin::array_new<u8>(139), used: 0 };
-            String::append(__local_22, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_22, 114);
-            String::append_char(__local_22, 117);
-            String::append_char(__local_22, 110);
-            String::append_char(__local_22, 32);
-            String::append_char(__local_22, 97);
-            String::append_char(__local_22, 116);
-            String::append_char(__local_22, 32);
-            String::append(__local_22, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
-            String::append_char(__local_22, 58);
+            String::push_str(__local_22, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_22, 114);
+            String::push(__local_22, 117);
+            String::push(__local_22, 110);
+            String::push(__local_22, 32);
+            String::push(__local_22, 97);
+            String::push(__local_22, 116);
+            String::push(__local_22, 32);
+            String::push_str(__local_22, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
+            String::push(__local_22, 58);
             __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
             __local_50 = __local_23;
             i32::fmt_decimal(8, __local_50);
-            String::append(__local_22, String { repr: array.new_data<u8>("
+            String::push_str(__local_22, String { repr: array.new_data<u8>("
 condition: encode(&empty) == \"\"
 "), used: 33 });
-            String::append(__local_22, String { repr: array.new_data<u8>("encode(&empty): "), used: 16 });
+            String::push_str(__local_22, String { repr: array.new_data<u8>("encode(&empty): "), used: 16 });
             __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
             String^Inspect::inspect(__v0_2, __local_23);
-            String::append_char(__local_22, 10);
+            String::push(__local_22, 10);
             break __tmpl: __local_22;
         });
         unreachable;
@@ -257,26 +257,26 @@ condition: encode(&empty) == \"\"
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_24 = String { repr: builtin::array_new<u8>(175), used: 0 };
-            String::append(__local_24, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_24, 114);
-            String::append_char(__local_24, 117);
-            String::append_char(__local_24, 110);
-            String::append_char(__local_24, 32);
-            String::append_char(__local_24, 97);
-            String::append_char(__local_24, 116);
-            String::append_char(__local_24, 32);
-            String::append(__local_24, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
-            String::append_char(__local_24, 58);
+            String::push_str(__local_24, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_24, 114);
+            String::push(__local_24, 117);
+            String::push(__local_24, 110);
+            String::push(__local_24, 32);
+            String::push(__local_24, 97);
+            String::push(__local_24, 116);
+            String::push(__local_24, 32);
+            String::push_str(__local_24, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
+            String::push(__local_24, 58);
             __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
             __local_59 = __local_25;
             i32::fmt_decimal(10, __local_59);
-            String::append(__local_24, String { repr: array.new_data<u8>("
+            String::push_str(__local_24, String { repr: array.new_data<u8>("
 condition: encode(&\"f\".bytes().collect()) == \"Zg==\"
 "), used: 53 });
-            String::append(__local_24, String { repr: array.new_data<u8>("encode(&\"f\".bytes().collect()): "), used: 32 });
+            String::push_str(__local_24, String { repr: array.new_data<u8>("encode(&\"f\".bytes().collect()): "), used: 32 });
             __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
             String^Inspect::inspect(__v0_4, __local_25);
-            String::append_char(__local_24, 10);
+            String::push(__local_24, 10);
             break __tmpl: __local_24;
         });
         unreachable;
@@ -291,26 +291,26 @@ condition: encode(&\"f\".bytes().collect()) == \"Zg==\"
     if __cond_7 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_26 = String { repr: builtin::array_new<u8>(177), used: 0 };
-            String::append(__local_26, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_26, 114);
-            String::append_char(__local_26, 117);
-            String::append_char(__local_26, 110);
-            String::append_char(__local_26, 32);
-            String::append_char(__local_26, 97);
-            String::append_char(__local_26, 116);
-            String::append_char(__local_26, 32);
-            String::append(__local_26, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
-            String::append_char(__local_26, 58);
+            String::push_str(__local_26, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_26, 114);
+            String::push(__local_26, 117);
+            String::push(__local_26, 110);
+            String::push(__local_26, 32);
+            String::push(__local_26, 97);
+            String::push(__local_26, 116);
+            String::push(__local_26, 32);
+            String::push_str(__local_26, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
+            String::push(__local_26, 58);
             __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_26 };
             __local_68 = __local_27;
             i32::fmt_decimal(11, __local_68);
-            String::append(__local_26, String { repr: array.new_data<u8>("
+            String::push_str(__local_26, String { repr: array.new_data<u8>("
 condition: encode(&\"fo\".bytes().collect()) == \"Zm8=\"
 "), used: 54 });
-            String::append(__local_26, String { repr: array.new_data<u8>("encode(&\"fo\".bytes().collect()): "), used: 33 });
+            String::push_str(__local_26, String { repr: array.new_data<u8>("encode(&\"fo\".bytes().collect()): "), used: 33 });
             __local_27 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_26 };
             String^Inspect::inspect(__v0_6, __local_27);
-            String::append_char(__local_26, 10);
+            String::push(__local_26, 10);
             break __tmpl: __local_26;
         });
         unreachable;
@@ -325,26 +325,26 @@ condition: encode(&\"fo\".bytes().collect()) == \"Zm8=\"
     if __cond_9 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_28 = String { repr: builtin::array_new<u8>(179), used: 0 };
-            String::append(__local_28, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_28, 114);
-            String::append_char(__local_28, 117);
-            String::append_char(__local_28, 110);
-            String::append_char(__local_28, 32);
-            String::append_char(__local_28, 97);
-            String::append_char(__local_28, 116);
-            String::append_char(__local_28, 32);
-            String::append(__local_28, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
-            String::append_char(__local_28, 58);
+            String::push_str(__local_28, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_28, 114);
+            String::push(__local_28, 117);
+            String::push(__local_28, 110);
+            String::push(__local_28, 32);
+            String::push(__local_28, 97);
+            String::push(__local_28, 116);
+            String::push(__local_28, 32);
+            String::push_str(__local_28, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
+            String::push(__local_28, 58);
             __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_28 };
             __local_77 = __local_29;
             i32::fmt_decimal(12, __local_77);
-            String::append(__local_28, String { repr: array.new_data<u8>("
+            String::push_str(__local_28, String { repr: array.new_data<u8>("
 condition: encode(&\"foo\".bytes().collect()) == \"Zm9v\"
 "), used: 55 });
-            String::append(__local_28, String { repr: array.new_data<u8>("encode(&\"foo\".bytes().collect()): "), used: 34 });
+            String::push_str(__local_28, String { repr: array.new_data<u8>("encode(&\"foo\".bytes().collect()): "), used: 34 });
             __local_29 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_28 };
             String^Inspect::inspect(__v0_8, __local_29);
-            String::append_char(__local_28, 10);
+            String::push(__local_28, 10);
             break __tmpl: __local_28;
         });
         unreachable;
@@ -359,26 +359,26 @@ condition: encode(&\"foo\".bytes().collect()) == \"Zm9v\"
     if __cond_11 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_30 = String { repr: builtin::array_new<u8>(185), used: 0 };
-            String::append(__local_30, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_30, 114);
-            String::append_char(__local_30, 117);
-            String::append_char(__local_30, 110);
-            String::append_char(__local_30, 32);
-            String::append_char(__local_30, 97);
-            String::append_char(__local_30, 116);
-            String::append_char(__local_30, 32);
-            String::append(__local_30, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
-            String::append_char(__local_30, 58);
+            String::push_str(__local_30, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_30, 114);
+            String::push(__local_30, 117);
+            String::push(__local_30, 110);
+            String::push(__local_30, 32);
+            String::push(__local_30, 97);
+            String::push(__local_30, 116);
+            String::push(__local_30, 32);
+            String::push_str(__local_30, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
+            String::push(__local_30, 58);
             __local_31 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_30 };
             __local_86 = __local_31;
             i32::fmt_decimal(13, __local_86);
-            String::append(__local_30, String { repr: array.new_data<u8>("
+            String::push_str(__local_30, String { repr: array.new_data<u8>("
 condition: encode(&\"foob\".bytes().collect()) == \"Zm9vYg==\"
 "), used: 60 });
-            String::append(__local_30, String { repr: array.new_data<u8>("encode(&\"foob\".bytes().collect()): "), used: 35 });
+            String::push_str(__local_30, String { repr: array.new_data<u8>("encode(&\"foob\".bytes().collect()): "), used: 35 });
             __local_31 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_30 };
             String^Inspect::inspect(__v0_10, __local_31);
-            String::append_char(__local_30, 10);
+            String::push(__local_30, 10);
             break __tmpl: __local_30;
         });
         unreachable;
@@ -393,26 +393,26 @@ condition: encode(&\"foob\".bytes().collect()) == \"Zm9vYg==\"
     if __cond_13 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_32 = String { repr: builtin::array_new<u8>(187), used: 0 };
-            String::append(__local_32, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_32, 114);
-            String::append_char(__local_32, 117);
-            String::append_char(__local_32, 110);
-            String::append_char(__local_32, 32);
-            String::append_char(__local_32, 97);
-            String::append_char(__local_32, 116);
-            String::append_char(__local_32, 32);
-            String::append(__local_32, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
-            String::append_char(__local_32, 58);
+            String::push_str(__local_32, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_32, 114);
+            String::push(__local_32, 117);
+            String::push(__local_32, 110);
+            String::push(__local_32, 32);
+            String::push(__local_32, 97);
+            String::push(__local_32, 116);
+            String::push(__local_32, 32);
+            String::push_str(__local_32, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
+            String::push(__local_32, 58);
             __local_33 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_32 };
             __local_95 = __local_33;
             i32::fmt_decimal(14, __local_95);
-            String::append(__local_32, String { repr: array.new_data<u8>("
+            String::push_str(__local_32, String { repr: array.new_data<u8>("
 condition: encode(&\"fooba\".bytes().collect()) == \"Zm9vYmE=\"
 "), used: 61 });
-            String::append(__local_32, String { repr: array.new_data<u8>("encode(&\"fooba\".bytes().collect()): "), used: 36 });
+            String::push_str(__local_32, String { repr: array.new_data<u8>("encode(&\"fooba\".bytes().collect()): "), used: 36 });
             __local_33 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_32 };
             String^Inspect::inspect(__v0_12, __local_33);
-            String::append_char(__local_32, 10);
+            String::push(__local_32, 10);
             break __tmpl: __local_32;
         });
         unreachable;
@@ -427,26 +427,26 @@ condition: encode(&\"fooba\".bytes().collect()) == \"Zm9vYmE=\"
     if __cond_15 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_34 = String { repr: builtin::array_new<u8>(189), used: 0 };
-            String::append(__local_34, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_34, 114);
-            String::append_char(__local_34, 117);
-            String::append_char(__local_34, 110);
-            String::append_char(__local_34, 32);
-            String::append_char(__local_34, 97);
-            String::append_char(__local_34, 116);
-            String::append_char(__local_34, 32);
-            String::append(__local_34, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
-            String::append_char(__local_34, 58);
+            String::push_str(__local_34, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_34, 114);
+            String::push(__local_34, 117);
+            String::push(__local_34, 110);
+            String::push(__local_34, 32);
+            String::push(__local_34, 97);
+            String::push(__local_34, 116);
+            String::push(__local_34, 32);
+            String::push_str(__local_34, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
+            String::push(__local_34, 58);
             __local_35 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_34 };
             __local_104 = __local_35;
             i32::fmt_decimal(15, __local_104);
-            String::append(__local_34, String { repr: array.new_data<u8>("
+            String::push_str(__local_34, String { repr: array.new_data<u8>("
 condition: encode(&\"foobar\".bytes().collect()) == \"Zm9vYmFy\"
 "), used: 62 });
-            String::append(__local_34, String { repr: array.new_data<u8>("encode(&\"foobar\".bytes().collect()): "), used: 37 });
+            String::push_str(__local_34, String { repr: array.new_data<u8>("encode(&\"foobar\".bytes().collect()): "), used: 37 });
             __local_35 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_34 };
             String^Inspect::inspect(__v0_14, __local_35);
-            String::append_char(__local_34, 10);
+            String::push(__local_34, 10);
             break __tmpl: __local_34;
         });
         unreachable;
@@ -461,26 +461,26 @@ condition: encode(&\"foobar\".bytes().collect()) == \"Zm9vYmFy\"
     if __cond_17 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_36 = String { repr: builtin::array_new<u8>(194), used: 0 };
-            String::append(__local_36, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_36, 114);
-            String::append_char(__local_36, 117);
-            String::append_char(__local_36, 110);
-            String::append_char(__local_36, 32);
-            String::append_char(__local_36, 97);
-            String::append_char(__local_36, 116);
-            String::append_char(__local_36, 32);
-            String::append(__local_36, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
-            String::append_char(__local_36, 58);
+            String::push_str(__local_36, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_36, 114);
+            String::push(__local_36, 117);
+            String::push(__local_36, 110);
+            String::push(__local_36, 32);
+            String::push(__local_36, 97);
+            String::push(__local_36, 116);
+            String::push(__local_36, 32);
+            String::push_str(__local_36, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
+            String::push(__local_36, 58);
             __local_37 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_36 };
             __local_113 = __local_37;
             i32::fmt_decimal(18, __local_113);
-            String::append(__local_36, String { repr: array.new_data<u8>("
+            String::push_str(__local_36, String { repr: array.new_data<u8>("
 condition: encode_url(&\"Hello\".bytes().collect()) == \"SGVsbG8\"
 "), used: 64 });
-            String::append(__local_36, String { repr: array.new_data<u8>("encode_url(&\"Hello\".bytes().collect()): "), used: 40 });
+            String::push_str(__local_36, String { repr: array.new_data<u8>("encode_url(&\"Hello\".bytes().collect()): "), used: 40 });
             __local_37 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_36 };
             String^Inspect::inspect(__v0_16, __local_37);
-            String::append_char(__local_36, 10);
+            String::push(__local_36, 10);
             break __tmpl: __local_36;
         });
         unreachable;
@@ -492,26 +492,26 @@ condition: encode_url(&\"Hello\".bytes().collect()) == \"SGVsbG8\"
     if __cond_19 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_38 = String { repr: builtin::array_new<u8>(238), used: 0 };
-            String::append(__local_38, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_38, 114);
-            String::append_char(__local_38, 117);
-            String::append_char(__local_38, 110);
-            String::append_char(__local_38, 32);
-            String::append_char(__local_38, 97);
-            String::append_char(__local_38, 116);
-            String::append_char(__local_38, 32);
-            String::append(__local_38, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
-            String::append_char(__local_38, 58);
+            String::push_str(__local_38, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_38, 114);
+            String::push(__local_38, 117);
+            String::push(__local_38, 110);
+            String::push(__local_38, 32);
+            String::push(__local_38, 97);
+            String::push(__local_38, 116);
+            String::push(__local_38, 32);
+            String::push_str(__local_38, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
+            String::push(__local_38, 58);
             __local_39 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_38 };
             __local_121 = __local_39;
             i32::fmt_decimal(21, __local_121);
-            String::append(__local_38, String { repr: array.new_data<u8>("
+            String::push_str(__local_38, String { repr: array.new_data<u8>("
 condition: encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding) == \"SGVsbG8\"
 "), used: 86 });
-            String::append(__local_38, String { repr: array.new_data<u8>("encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding): "), used: 62 });
+            String::push_str(__local_38, String { repr: array.new_data<u8>("encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding): "), used: 62 });
             __local_39 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_38 };
             String^Inspect::inspect(__v0_18, __local_39);
-            String::append_char(__local_38, 10);
+            String::push(__local_38, 10);
             break __tmpl: __local_38;
         });
         unreachable;
@@ -523,26 +523,26 @@ condition: encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding) == \"S
     if __cond_21 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_40 = String { repr: builtin::array_new<u8>(233), used: 0 };
-            String::append(__local_40, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_40, 114);
-            String::append_char(__local_40, 117);
-            String::append_char(__local_40, 110);
-            String::append_char(__local_40, 32);
-            String::append_char(__local_40, 97);
-            String::append_char(__local_40, 116);
-            String::append_char(__local_40, 32);
-            String::append(__local_40, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
-            String::append_char(__local_40, 58);
+            String::push_str(__local_40, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_40, 114);
+            String::push(__local_40, 117);
+            String::push(__local_40, 110);
+            String::push(__local_40, 32);
+            String::push(__local_40, 97);
+            String::push(__local_40, 116);
+            String::push(__local_40, 32);
+            String::push_str(__local_40, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
+            String::push(__local_40, 58);
             __local_41 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_40 };
             __local_129 = __local_41;
             i32::fmt_decimal(24, __local_129);
-            String::append(__local_40, String { repr: array.new_data<u8>("
+            String::push_str(__local_40, String { repr: array.new_data<u8>("
 condition: encode_with(&\"Hello\".bytes().collect(), Encoding::none()) == \"SGVsbG8=\"
 "), used: 84 });
-            String::append(__local_40, String { repr: array.new_data<u8>("encode_with(&\"Hello\".bytes().collect(), Encoding::none()): "), used: 59 });
+            String::push_str(__local_40, String { repr: array.new_data<u8>("encode_with(&\"Hello\".bytes().collect(), Encoding::none()): "), used: 59 });
             __local_41 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_40 };
             String^Inspect::inspect(__v0_20, __local_41);
-            String::append_char(__local_40, 10);
+            String::push(__local_40, 10);
             break __tmpl: __local_40;
         });
         unreachable;
@@ -633,7 +633,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 };
                 break __inline_Array_u8__IndexValue__index_value_4: builtin::array_get<u8>(_licm_repr_46, __local_20);
             };
-            String::append_char(out, __inline_Array_u8__IndexValue__index_value_5: block -> u8 {
+            String::push(out, __inline_Array_u8__IndexValue__index_value_5: block -> u8 {
                 __local_22 = (b0_7 >> 2) & 63;
                 if __local_22 >= _licm_used_47 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -641,7 +641,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 };
                 break __inline_Array_u8__IndexValue__index_value_5: builtin::array_get<u8>(_licm_repr_48, __local_22);
             });
-            String::append_char(out, __inline_Array_u8__IndexValue__index_value_6: block -> u8 {
+            String::push(out, __inline_Array_u8__IndexValue__index_value_6: block -> u8 {
                 __local_24 = ((b0_7 << 4) | (b1_8 >> 4)) & 63;
                 if __local_24 >= _licm_used_47 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -649,7 +649,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 };
                 break __inline_Array_u8__IndexValue__index_value_6: builtin::array_get<u8>(_licm_repr_48, __local_24);
             });
-            String::append_char(out, __inline_Array_u8__IndexValue__index_value_7: block -> u8 {
+            String::push(out, __inline_Array_u8__IndexValue__index_value_7: block -> u8 {
                 __local_26 = ((b1_8 << 2) | (b2 >> 6)) & 63;
                 if __local_26 >= _licm_used_47 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -657,7 +657,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 };
                 break __inline_Array_u8__IndexValue__index_value_7: builtin::array_get<u8>(_licm_repr_48, __local_26);
             });
-            String::append_char(out, __inline_Array_u8__IndexValue__index_value_8: block -> u8 {
+            String::push(out, __inline_Array_u8__IndexValue__index_value_8: block -> u8 {
                 __local_28 = b2 & 63;
                 if __local_28 >= _licm_used_47 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -678,7 +678,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
             };
             break __inline_Array_u8__IndexValue__index_value_9: builtin::array_get<u8>(data.repr, __local_30);
         };
-        String::append_char(out, __inline_Array_u8__IndexValue__index_value_10: block -> u8 {
+        String::push(out, __inline_Array_u8__IndexValue__index_value_10: block -> u8 {
             __local_32 = (b0_10 >> 2) & 63;
             if __local_32 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -686,7 +686,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
             };
             break __inline_Array_u8__IndexValue__index_value_10: builtin::array_get<u8>(table.repr, __local_32);
         });
-        String::append_char(out, __inline_Array_u8__IndexValue__index_value_11: block -> u8 {
+        String::push(out, __inline_Array_u8__IndexValue__index_value_11: block -> u8 {
             __local_34 = (b0_10 << 4) & 63;
             if __local_34 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -695,8 +695,8 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
             break __inline_Array_u8__IndexValue__index_value_11: builtin::array_get<u8>(table.repr, __local_34);
         });
         if pad {
-            String::append_char(out, 61);
-            String::append_char(out, 61);
+            String::push(out, 61);
+            String::push(out, 61);
         };
     } else if remainder == 2 {
         b0_11 = __inline_Array_u8__IndexValue__index_value_12: block -> u8 {
@@ -715,7 +715,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
             };
             break __inline_Array_u8__IndexValue__index_value_13: builtin::array_get<u8>(data.repr, __local_38);
         };
-        String::append_char(out, __inline_Array_u8__IndexValue__index_value_14: block -> u8 {
+        String::push(out, __inline_Array_u8__IndexValue__index_value_14: block -> u8 {
             __local_40 = (b0_11 >> 2) & 63;
             if __local_40 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -723,7 +723,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
             };
             break __inline_Array_u8__IndexValue__index_value_14: builtin::array_get<u8>(table.repr, __local_40);
         });
-        String::append_char(out, __inline_Array_u8__IndexValue__index_value_15: block -> u8 {
+        String::push(out, __inline_Array_u8__IndexValue__index_value_15: block -> u8 {
             __local_42 = ((b0_11 << 4) | (b1_12 >> 4)) & 63;
             if __local_42 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -731,7 +731,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
             };
             break __inline_Array_u8__IndexValue__index_value_15: builtin::array_get<u8>(table.repr, __local_42);
         });
-        String::append_char(out, __inline_Array_u8__IndexValue__index_value_16: block -> u8 {
+        String::push(out, __inline_Array_u8__IndexValue__index_value_16: block -> u8 {
             __local_44 = (b1_12 << 2) & 63;
             if __local_44 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -740,7 +740,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
             break __inline_Array_u8__IndexValue__index_value_16: builtin::array_get<u8>(table.repr, __local_44);
         });
         if pad {
-            String::append_char(out, 61);
+            String::push(out, 61);
         };
     };
     return out;
@@ -939,7 +939,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn "core:base64/Array<u8>::append"(self, value) {  // from core:base64
+fn "core:base64/Array<u8>::push"(self, value) {  // from core:base64
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1035,7 +1035,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -1103,7 +1103,15 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
                 };
                 byte = builtin::array_get_u8(_licm_repr_12, _hfs_index_13);
                 _hfs_index_13 = _hfs_index_13 + 1;
+<<<<<<< HEAD
                 Array<u8>::append(result, byte);
+||||||| 5b8974c
+                Array<u8>::append(result, byte);
+                self.index = _hfs_index_13;
+=======
+                Array<u8>::push(result, byte);
+                self.index = _hfs_index_13;
+>>>>>>> origin/main
                 break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
             };
             continue l64;
@@ -1157,7 +1165,7 @@ fn StrCharIter^Iterator::next(self) {
     return 0; code_10;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -1184,7 +1192,7 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Array<u8>::append(self, value) {
+fn Array<u8>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1237,7 +1245,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l79;
             };
@@ -1271,20 +1279,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -1294,10 +1302,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -1307,10 +1315,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -1318,10 +1326,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
@@ -1333,7 +1341,7 @@ fn String^Inspect::inspect(self, f) {
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
     let _licm_buf_33: ref String;
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
@@ -1350,22 +1358,22 @@ fn String^Inspect::inspect(self, f) {
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 34);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 110);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 114);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 116);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 116);
                 } else {
-                    String::append_char(_licm_buf_33, c);
+                    String::push(_licm_buf_33, c);
                 };
             } else {
                 break b98;
@@ -1373,7 +1381,7 @@ fn String^Inspect::inspect(self, f) {
             continue l99;
         };
     };
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
 }
 
 export fn __cm_export__run as "run"

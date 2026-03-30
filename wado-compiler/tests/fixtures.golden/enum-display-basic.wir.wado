@@ -58,7 +58,7 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/Color^Inspect::inspect" = fn(enum:Color, ref Formatter);
 
@@ -230,7 +230,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -251,13 +251,13 @@ fn Color^Inspect::inspect(self, f) {
     let __local_7: ref String;
     if self == 0 {
         __local_3 = String { repr: array.new_data<u8>("Color::Red"), used: 10 };
-        String::append(f.buf, __local_3);
+        String::push_str(f.buf, __local_3);
     } else if self == 1 {
         __local_5 = String { repr: array.new_data<u8>("Color::Green"), used: 12 };
-        String::append(f.buf, __local_5);
+        String::push_str(f.buf, __local_5);
     } else if self == 2 {
         __local_7 = String { repr: array.new_data<u8>("Color::Blue"), used: 11 };
-        String::append(f.buf, __local_7);
+        String::push_str(f.buf, __local_7);
     };
 }
 

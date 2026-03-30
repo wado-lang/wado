@@ -11,8 +11,8 @@ impl Container {
     fn add_items(&mut self, count: i32) {
         for let mut i = 0; i < count; i += 1 {
             // Multiple append calls in a loop
-            self.items.append(i);
-            self.items.append(i * 2);
+            self.items.push(i);
+            self.items.push(i * 2);
         }
     }
 
@@ -23,13 +23,13 @@ impl Container {
         for let mut i = 0; i < self.items.len(); i += 1 {
             let val = self.items[i];
             if val % 2 == 0 {
-                temp.append(val);
+                temp.push(val);
             }
         }
 
         // Copy back
         for let mut j = 0; j < temp.len(); j += 1 {
-            self.items.append(temp[j] + 100);
+            self.items.push(temp[j] + 100);
         }
     }
 }

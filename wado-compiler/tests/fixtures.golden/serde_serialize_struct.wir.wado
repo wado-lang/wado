@@ -83,9 +83,9 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/User^Serialize::serialize<JsonSerializer>" = fn(ref User, ref JsonSerializer) -> ref null SerializeError;
 
@@ -330,7 +330,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -345,7 +345,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -375,7 +375,7 @@ fn String::append_char(self, c) {
 fn JsonSerializer^Serializer::serialize_i32(self, v) {
     let __local_2: ref String;
     let __local_3: ref Formatter;
-    String::append(self, __tmpl: block -> ref String {
+    String::push_str(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(v, __local_3);
@@ -386,11 +386,11 @@ fn JsonSerializer^Serializer::serialize_i32(self, v) {
 
 fn JsonSerializer^Serializer::serialize_string(self, v) {
     let __local_2: ref String;
-    String::append(self, __tmpl: block -> ref String {
+    String::push_str(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_2, 34);
-        String::append(__local_2, v);
-        String::append_char(__local_2, 34);
+        String::push(__local_2, 34);
+        String::push_str(__local_2, v);
+        String::push(__local_2, 34);
         break __tmpl: __local_2;
     });
     return ref.null none;
@@ -398,16 +398,16 @@ fn JsonSerializer^Serializer::serialize_string(self, v) {
 
 fn JsonSerializer^Serializer::serialize_bool(self, v) {
     if v {
-        String::append_char(self, 116);
-        String::append_char(self, 114);
-        String::append_char(self, 117);
-        String::append_char(self, 101);
+        String::push(self, 116);
+        String::push(self, 114);
+        String::push(self, 117);
+        String::push(self, 101);
     } else {
-        String::append_char(self, 102);
-        String::append_char(self, 97);
-        String::append_char(self, 108);
-        String::append_char(self, 115);
-        String::append_char(self, 101);
+        String::push(self, 102);
+        String::push(self, 97);
+        String::push(self, 108);
+        String::push(self, 115);
+        String::push(self, 101);
     };
     return ref.null none;
 }
@@ -416,14 +416,14 @@ fn User^Serialize::serialize<JsonSerializer>(self, s) {
     let st: ref JsonStructSerializer;
     let __fused_payload_9: ref JsonStructSerializer;
     __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
-        String::append_char(s.buf, 123);
+        String::push(s.buf, 123);
         __fused_payload_9 = JsonStructSerializer { ser: s, count: 0 };
         st = __fused_payload_9;
         drop(JsonStructSerializer^SerializeStruct::field<String>(st, String { repr: array.new_data<u8>("userName"), used: 8 }, self.name));
         drop(JsonStructSerializer^SerializeStruct::field<i32>(st, String { repr: array.new_data<u8>("age"), used: 3 }, self.age));
         drop(JsonStructSerializer^SerializeStruct::field<bool>(st, String { repr: array.new_data<u8>("active"), used: 6 }, self.active));
         return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null SerializeError {
-            String::append_char(st.ser.buf, 125);
+            String::push(st.ser.buf, 125);
             break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
         };
         break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
@@ -435,14 +435,14 @@ fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
     let __local_3: ref String;
     let __local_6: ref JsonSerializer;
     if self.count > 0 {
-        String::append_char(self.ser.buf, 44);
+        String::push(self.ser.buf, 44);
     };
-    String::append(self.ser.buf, __tmpl: block -> ref String {
+    String::push_str(self.ser.buf, __tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(19), used: 0 };
-        String::append_char(__local_3, 34);
-        String::append(__local_3, name);
-        String::append_char(__local_3, 34);
-        String::append_char(__local_3, 58);
+        String::push(__local_3, 34);
+        String::push_str(__local_3, name);
+        String::push(__local_3, 34);
+        String::push(__local_3, 58);
         break __tmpl: __local_3;
     });
     drop(__inline_bool_Serialize__serialize_JsonSerializer__1: block -> ref null SerializeError {
@@ -457,14 +457,14 @@ fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
     let __local_3: ref String;
     let __local_6: ref JsonSerializer;
     if self.count > 0 {
-        String::append_char(self.ser.buf, 44);
+        String::push(self.ser.buf, 44);
     };
-    String::append(self.ser.buf, __tmpl: block -> ref String {
+    String::push_str(self.ser.buf, __tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(19), used: 0 };
-        String::append_char(__local_3, 34);
-        String::append(__local_3, name);
-        String::append_char(__local_3, 34);
-        String::append_char(__local_3, 58);
+        String::push(__local_3, 34);
+        String::push_str(__local_3, name);
+        String::push(__local_3, 34);
+        String::push(__local_3, 58);
         break __tmpl: __local_3;
     });
     drop(__inline_i32_Serialize__serialize_JsonSerializer__1: block -> ref null SerializeError {
@@ -479,14 +479,14 @@ fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
     let __local_3: ref String;
     let __local_6: ref JsonSerializer;
     if self.count > 0 {
-        String::append_char(self.ser.buf, 44);
+        String::push(self.ser.buf, 44);
     };
-    String::append(self.ser.buf, __tmpl: block -> ref String {
+    String::push_str(self.ser.buf, __tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(19), used: 0 };
-        String::append_char(__local_3, 34);
-        String::append(__local_3, name);
-        String::append_char(__local_3, 34);
-        String::append_char(__local_3, 58);
+        String::push(__local_3, 34);
+        String::push_str(__local_3, name);
+        String::push(__local_3, 34);
+        String::push(__local_3, 58);
         break __tmpl: __local_3;
     });
     drop(__inline_String_Serialize__serialize_JsonSerializer__1: block -> ref null SerializeError {
@@ -508,7 +508,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l27;
             };
@@ -542,20 +542,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -565,10 +565,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -578,10 +578,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -589,10 +589,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

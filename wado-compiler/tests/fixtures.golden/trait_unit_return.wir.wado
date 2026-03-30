@@ -45,7 +45,7 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
@@ -72,8 +72,8 @@ fn run() with Stdout {
     __sroa_m_text = String { repr: array.new_data<u8>("Hello, World!"), used: 13 };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(25), used: 0 };
-        String::append(__local_3, String { repr: array.new_data<u8>("Message: "), used: 9 });
-        String::append(__local_3, __sroa_m_text);
+        String::push_str(__local_3, String { repr: array.new_data<u8>("Message: "), used: 9 });
+        String::push_str(__local_3, __sroa_m_text);
         break __tmpl: __local_3;
     });
 }
@@ -88,8 +88,8 @@ fn __cm_export__run() {
     __sroa_m_text = String { repr: array.new_data<u8>("Hello, World!"), used: 13 };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(25), used: 0 };
-        String::append(__local_3, String { repr: array.new_data<u8>("Message: "), used: 9 });
-        String::append(__local_3, __sroa_m_text);
+        String::push_str(__local_3, String { repr: array.new_data<u8>("Message: "), used: 9 });
+        String::push_str(__local_3, __sroa_m_text);
         break __tmpl: __local_3;
     });
     "wasi/task-return"(0);
@@ -202,7 +202,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;

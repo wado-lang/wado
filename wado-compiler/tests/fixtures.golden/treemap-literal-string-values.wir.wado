@@ -113,7 +113,7 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
@@ -121,7 +121,7 @@ type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> b
 
 type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/TreeMap<String,String>^IndexValue::index_value" = fn(ref "core:allocator/TreeMap<String,String>", ref String) -> ref String;
 
@@ -135,7 +135,7 @@ type "functype/TreeMap<String,String>::split" = fn(ref "core:allocator/TreeMap<S
 
 type "functype/TreeMap<String,String>::skew" = fn(ref "core:allocator/TreeMap<String,String>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
 
-type "functype/Array<TreeMapEntry<String,String>>::append" = fn(ref Array<TreeMapEntry<String,String>>, ref "core:allocator/TreeMapEntry<String,String>");
+type "functype/Array<TreeMapEntry<String,String>>::push" = fn(ref Array<TreeMapEntry<String,String>>, ref "core:allocator/TreeMapEntry<String,String>");
 
 type "functype/Array<TreeMapEntry<String,String>>::grow" = fn(ref Array<TreeMapEntry<String,String>>);
 
@@ -221,27 +221,27 @@ fn run() with Stdout {
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_10 = String { repr: builtin::array_new<u8>(134), used: 0 };
-            String::append(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_10, 114);
-            String::append_char(__local_10, 117);
-            String::append_char(__local_10, 110);
-            String::append_char(__local_10, 32);
-            String::append_char(__local_10, 97);
-            String::append_char(__local_10, 116);
-            String::append_char(__local_10, 32);
-            String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-string-values.wado"), used: 63 });
-            String::append_char(__local_10, 58);
+            String::push_str(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_10, 114);
+            String::push(__local_10, 117);
+            String::push(__local_10, 110);
+            String::push(__local_10, 32);
+            String::push(__local_10, 97);
+            String::push(__local_10, 116);
+            String::push(__local_10, 32);
+            String::push_str(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-string-values.wado"), used: 63 });
+            String::push(__local_10, 58);
             __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             __local_35 = __local_11;
             i32::fmt_decimal(12, __local_35);
-            String::append(__local_10, String { repr: array.new_data<u8>("
+            String::push_str(__local_10, String { repr: array.new_data<u8>("
 condition: colors.len() == 3
 "), used: 30 });
-            String::append(__local_10, String { repr: array.new_data<u8>("colors.len(): "), used: 14 });
+            String::push_str(__local_10, String { repr: array.new_data<u8>("colors.len(): "), used: 14 });
             __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             __local_40 = __local_11;
             i32::fmt_decimal(__v0_2, __local_40);
-            String::append_char(__local_10, 10);
+            String::push(__local_10, 10);
             break __tmpl: __local_10;
         });
         unreachable;
@@ -251,26 +251,26 @@ condition: colors.len() == 3
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_12 = String { repr: builtin::array_new<u8>(144), used: 0 };
-            String::append(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_12, 114);
-            String::append_char(__local_12, 117);
-            String::append_char(__local_12, 110);
-            String::append_char(__local_12, 32);
-            String::append_char(__local_12, 97);
-            String::append_char(__local_12, 116);
-            String::append_char(__local_12, 32);
-            String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-string-values.wado"), used: 63 });
-            String::append_char(__local_12, 58);
+            String::push_str(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_12, 114);
+            String::push(__local_12, 117);
+            String::push(__local_12, 110);
+            String::push(__local_12, 32);
+            String::push(__local_12, 97);
+            String::push(__local_12, 116);
+            String::push(__local_12, 32);
+            String::push_str(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-string-values.wado"), used: 63 });
+            String::push(__local_12, 58);
             __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             __local_46 = __local_13;
             i32::fmt_decimal(14, __local_46);
-            String::append(__local_12, String { repr: array.new_data<u8>("
+            String::push_str(__local_12, String { repr: array.new_data<u8>("
 condition: colors[\"red\"] == \"#FF0000\"
 "), used: 39 });
-            String::append(__local_12, String { repr: array.new_data<u8>("colors[\"red\"]: "), used: 15 });
+            String::push_str(__local_12, String { repr: array.new_data<u8>("colors[\"red\"]: "), used: 15 });
             __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             String^Inspect::inspect(__v0_4, __local_13);
-            String::append_char(__local_12, 10);
+            String::push(__local_12, 10);
             break __tmpl: __local_12;
         });
         unreachable;
@@ -280,26 +280,26 @@ condition: colors[\"red\"] == \"#FF0000\"
     if __cond_7 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_14 = String { repr: builtin::array_new<u8>(148), used: 0 };
-            String::append(__local_14, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_14, 114);
-            String::append_char(__local_14, 117);
-            String::append_char(__local_14, 110);
-            String::append_char(__local_14, 32);
-            String::append_char(__local_14, 97);
-            String::append_char(__local_14, 116);
-            String::append_char(__local_14, 32);
-            String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-string-values.wado"), used: 63 });
-            String::append_char(__local_14, 58);
+            String::push_str(__local_14, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_14, 114);
+            String::push(__local_14, 117);
+            String::push(__local_14, 110);
+            String::push(__local_14, 32);
+            String::push(__local_14, 97);
+            String::push(__local_14, 116);
+            String::push(__local_14, 32);
+            String::push_str(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-string-values.wado"), used: 63 });
+            String::push(__local_14, 58);
             __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
             __local_53 = __local_15;
             i32::fmt_decimal(15, __local_53);
-            String::append(__local_14, String { repr: array.new_data<u8>("
+            String::push_str(__local_14, String { repr: array.new_data<u8>("
 condition: colors[\"green\"] == \"#00FF00\"
 "), used: 41 });
-            String::append(__local_14, String { repr: array.new_data<u8>("colors[\"green\"]: "), used: 17 });
+            String::push_str(__local_14, String { repr: array.new_data<u8>("colors[\"green\"]: "), used: 17 });
             __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
             String^Inspect::inspect(__v0_6, __local_15);
-            String::append_char(__local_14, 10);
+            String::push(__local_14, 10);
             break __tmpl: __local_14;
         });
         unreachable;
@@ -309,26 +309,26 @@ condition: colors[\"green\"] == \"#00FF00\"
     if __cond_9 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_16 = String { repr: builtin::array_new<u8>(146), used: 0 };
-            String::append(__local_16, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_16, 114);
-            String::append_char(__local_16, 117);
-            String::append_char(__local_16, 110);
-            String::append_char(__local_16, 32);
-            String::append_char(__local_16, 97);
-            String::append_char(__local_16, 116);
-            String::append_char(__local_16, 32);
-            String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-string-values.wado"), used: 63 });
-            String::append_char(__local_16, 58);
+            String::push_str(__local_16, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_16, 114);
+            String::push(__local_16, 117);
+            String::push(__local_16, 110);
+            String::push(__local_16, 32);
+            String::push(__local_16, 97);
+            String::push(__local_16, 116);
+            String::push(__local_16, 32);
+            String::push_str(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-string-values.wado"), used: 63 });
+            String::push(__local_16, 58);
             __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
             __local_60 = __local_17;
             i32::fmt_decimal(16, __local_60);
-            String::append(__local_16, String { repr: array.new_data<u8>("
+            String::push_str(__local_16, String { repr: array.new_data<u8>("
 condition: colors[\"blue\"] == \"#0000FF\"
 "), used: 40 });
-            String::append(__local_16, String { repr: array.new_data<u8>("colors[\"blue\"]: "), used: 16 });
+            String::push_str(__local_16, String { repr: array.new_data<u8>("colors[\"blue\"]: "), used: 16 });
             __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
             String^Inspect::inspect(__v0_8, __local_17);
-            String::append_char(__local_16, 10);
+            String::push(__local_16, 10);
             break __tmpl: __local_16;
         });
         unreachable;
@@ -568,7 +568,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -699,7 +699,7 @@ fn StrCharIter^Iterator::next(self) {
     return 0; code_10;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -735,7 +735,7 @@ fn TreeMap<String,String>^IndexValue::index_value(self, key) {
     if index < 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_3 = String { repr: builtin::array_new<u8>(31), used: 0 };
-            String::append(__local_3, String { repr: array.new_data<u8>("key not found: "), used: 15 });
+            String::push_str(__local_3, String { repr: array.new_data<u8>("key not found: "), used: 15 });
             __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
             String^Inspect::inspect(key, __local_4);
             break __tmpl: __local_3;
@@ -821,7 +821,7 @@ fn TreeMap<String,String>::insert(self, key, value) {
         break __inline_Array_TreeMapEntry_String_String____len_1: __local_8.used;
     };
     entry = "core:allocator/TreeMapEntry<String,String>" { key: key, value: value, deleted: 0 };
-    Array<TreeMapEntry<String,String>>::append(self.entries, entry);
+    Array<TreeMapEntry<String,String>>::push(self.entries, entry);
     self.root = TreeMap<String,String>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
@@ -895,7 +895,7 @@ fn TreeMap<String,String>::skew(self, node) {
     return ref.null none;
 }
 
-fn Array<TreeMapEntry<String,String>>::append(self, value) {
+fn Array<TreeMapEntry<String,String>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -948,7 +948,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l69;
             };
@@ -982,20 +982,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -1005,10 +1005,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -1018,10 +1018,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -1029,10 +1029,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
@@ -1044,7 +1044,7 @@ fn String^Inspect::inspect(self, f) {
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
     let _licm_buf_33: ref String;
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
@@ -1061,22 +1061,22 @@ fn String^Inspect::inspect(self, f) {
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 34);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 110);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 114);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 116);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 116);
                 } else {
-                    String::append_char(_licm_buf_33, c);
+                    String::push(_licm_buf_33, c);
                 };
             } else {
                 break b88;
@@ -1084,7 +1084,7 @@ fn String^Inspect::inspect(self, f) {
             continue l89;
         };
     };
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
 }
 
 export fn __cm_export__run as "run"

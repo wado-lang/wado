@@ -144,15 +144,15 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::concat" = fn(ref String, ref String) -> ref String;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/ArrayIter<Option<i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Option<i32>>") -> ref null Option<i32>;
 
-type "functype/Array<Option<i32>>::append" = fn(ref Array<Option<i32>>, ref Option<i32>);
+type "functype/Array<Option<i32>>::push" = fn(ref Array<Option<i32>>, ref Option<i32>);
 
 type "functype/Array<Option<i32>>::grow" = fn(ref Array<Option<i32>>);
 
@@ -160,7 +160,7 @@ type "functype/Array<Array<i32>>^Inspect::inspect" = fn(ref Array<Array<i32>>, r
 
 type "functype/Array<i32>^Inspect::inspect" = fn(ref Array<i32>, ref Formatter);
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
@@ -168,11 +168,11 @@ type "functype/ArrayIter<Array<i32>>^Iterator::next" = fn(ref "core:allocator/Ar
 
 type "functype/ArrayIter<Array<Array<i32>>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Array<Array<i32>>>") -> ref null Array<Array<i32>>;
 
-type "functype/Array<Array<i32>>::append" = fn(ref Array<Array<i32>>, ref Array<i32>);
+type "functype/Array<Array<i32>>::push" = fn(ref Array<Array<i32>>, ref Array<i32>);
 
 type "functype/Array<Array<i32>>::grow" = fn(ref Array<Array<i32>>);
 
-type "functype/Array<Array<Array<i32>>>::append" = fn(ref Array<Array<Array<i32>>>, ref Array<Array<i32>>);
+type "functype/Array<Array<Array<i32>>>::push" = fn(ref Array<Array<Array<i32>>>, ref Array<Array<i32>>);
 
 type "functype/Array<Array<Array<i32>>>::grow" = fn(ref Array<Array<Array<i32>>>);
 
@@ -415,7 +415,7 @@ fn nested_array_iterate_test() with Stdout {
                                 __local_12 = String { repr: builtin::array_new<u8>(17), used: 0 };
                                 __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                                 i32::fmt_decimal(val, __local_13);
-                                String::append_char(__local_12, 32);
+                                String::push(__local_12, 32);
                                 break __tmpl: __local_12;
                             });
                         } else {
@@ -517,7 +517,7 @@ fn nested_array_mutate_test() with Stdout {
         };
         break __inline_Array_Array_i32___IndexValue__index_value_15: builtin::array_get<ref Array<i32>>(matrix.repr, 0);
     };
-    Array<i32>::append(row, 99);
+    Array<i32>::push(row, 99);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
@@ -578,13 +578,13 @@ fn nested_array_option_access_test() with Stdout {
         x = ref.cast Option<i32>::Some(__pattern_temp_0).payload_0;
         "core:cli/println"(__tmpl: block -> ref String {
             __local_10 = String { repr: builtin::array_new<u8>(23), used: 0 };
-            String::append_char(__local_10, 102);
-            String::append_char(__local_10, 105);
-            String::append_char(__local_10, 114);
-            String::append_char(__local_10, 115);
-            String::append_char(__local_10, 116);
-            String::append_char(__local_10, 58);
-            String::append_char(__local_10, 32);
+            String::push(__local_10, 102);
+            String::push(__local_10, 105);
+            String::push(__local_10, 114);
+            String::push(__local_10, 115);
+            String::push(__local_10, 116);
+            String::push(__local_10, 58);
+            String::push(__local_10, 32);
             __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             i32::fmt_decimal(x, __local_11);
             break __tmpl: __local_10;
@@ -614,14 +614,14 @@ fn nested_array_option_access_test() with Stdout {
                     __local_8 = __cast_1.payload_0;
                     __tmpl: block -> ref String {
                         __local_12 = String { repr: builtin::array_new<u8>(22), used: 0 };
-                        String::append_char(__local_12, 83);
-                        String::append_char(__local_12, 111);
-                        String::append_char(__local_12, 109);
-                        String::append_char(__local_12, 101);
-                        String::append_char(__local_12, 40);
+                        String::push(__local_12, 83);
+                        String::push(__local_12, 111);
+                        String::push(__local_12, 109);
+                        String::push(__local_12, 101);
+                        String::push(__local_12, 40);
                         __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                         i32::fmt_decimal(__local_8, __local_13);
-                        String::append_char(__local_12, 41);
+                        String::push(__local_12, 41);
                         break __tmpl: __local_12;
                     };
                 } else if __match_scrut_0.discriminant == 1 -> ref String {
@@ -883,7 +883,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -912,7 +912,7 @@ fn String::concat(a, b) {
     return String { repr: repr, used: total };
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -949,7 +949,7 @@ fn ArrayIter<Option<i32>>^Iterator::next(self) {
     return item;
 }
 
-fn Array<Option<i32>>::append(self, value) {
+fn Array<Option<i32>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -997,7 +997,7 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
     let __local_9: i32;
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Array<i32>>;
-    String::append_char(f.buf, 91);
+    String::push(f.buf, 91);
     __for_5: block {
         i = 0;
         _licm_used_12 = self.used;
@@ -1009,7 +1009,7 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::append(f.buf, s);
+                    String::push_str(f.buf, s);
                 };
                 Array<i32>^Inspect::inspect(__inline_Array_Array_i32___IndexValue__index_value_3: block -> ref Array<i32> {
                     __local_9 = i;
@@ -1020,7 +1020,7 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
             };
         };
     };
-    String::append_char(f.buf, 93);
+    String::push(f.buf, 93);
 }
 
 fn Array<i32>^Inspect::inspect(self, f) {
@@ -1029,7 +1029,7 @@ fn Array<i32>^Inspect::inspect(self, f) {
     let __local_11: i32;
     let _licm_used_16: i32;
     let _licm_repr_17: ref array<i32>;
-    String::append_char(f.buf, 91);
+    String::push(f.buf, 91);
     __for_5: block {
         i = 0;
         _licm_used_16 = self.used;
@@ -1041,7 +1041,7 @@ fn Array<i32>^Inspect::inspect(self, f) {
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::append(f.buf, s);
+                    String::push_str(f.buf, s);
                 };
                 i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_4: block -> i32 {
                     __local_11 = i;
@@ -1052,10 +1052,10 @@ fn Array<i32>^Inspect::inspect(self, f) {
             };
         };
     };
-    String::append_char(f.buf, 93);
+    String::push(f.buf, 93);
 }
 
-fn Array<i32>::append(self, value) {
+fn Array<i32>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1127,7 +1127,7 @@ fn ArrayIter<Array<Array<i32>>>^Iterator::next(self) {
     return item;
 }
 
-fn Array<Array<i32>>::append(self, value) {
+fn Array<Array<i32>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1169,7 +1169,7 @@ fn Array<Array<i32>>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<Array<Array<i32>>>::append(self, value) {
+fn Array<Array<Array<i32>>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1222,7 +1222,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l88;
             };
@@ -1256,20 +1256,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -1279,10 +1279,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -1292,10 +1292,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -1303,10 +1303,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

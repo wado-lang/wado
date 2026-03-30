@@ -1,8 +1,8 @@
 test "append to empty array" {
     let arr: Array<i32> = [];
-    arr.append(10);
-    arr.append(20);
-    arr.append(30);
+    arr.push(10);
+    arr.push(20);
+    arr.push(30);
     assert arr.len() == 3;
     assert arr[0] == 10;
     assert arr[1] == 20;
@@ -11,12 +11,12 @@ test "append to empty array" {
 
 test "append triggers growth" {
     let arr: Array<i32> = [];
-    arr.append(10);
-    arr.append(20);
-    arr.append(30);
-    arr.append(40);
-    arr.append(50);  // should trigger resize (capacity 4 -> 8)
-    arr.append(60);
+    arr.push(10);
+    arr.push(20);
+    arr.push(30);
+    arr.push(40);
+    arr.push(50);  // should trigger resize (capacity 4 -> 8)
+    arr.push(60);
     assert arr.len() == 6;
     assert arr[3] == 40;
     assert arr[4] == 50;
@@ -57,7 +57,7 @@ test "is_empty on nonempty array" {
 test "is_empty after append" {
     let arr: Array<i32> = [];
     assert arr.is_empty();
-    arr.append(1);
+    arr.push(1);
     assert !arr.is_empty();
 }
 
@@ -356,4 +356,227 @@ test "truncate larger than len is no-op" {
     let mut arr: Array<i32> = [1, 2];
     arr.truncate(10);
     assert arr.len() == 2;
+}
+
+test "push to empty array" {
+    let arr: Array<i32> = [];
+    arr.push(10);
+    arr.push(20);
+    assert arr.len() == 2;
+    assert arr[0] == 10;
+    assert arr[1] == 20;
+}
+
+test "first on non-empty array" {
+    let arr: Array<i32> = [10, 20, 30];
+    assert arr.first() == Option::Some(10);
+}
+
+test "first on empty array" {
+    let arr: Array<i32> = [];
+    assert arr.first() matches { None };
+}
+
+test "clear" {
+    let mut arr: Array<i32> = [1, 2, 3];
+    arr.clear();
+    assert arr.len() == 0;
+    assert arr.is_empty();
+}
+
+test "capacity and reserve" {
+    let mut arr = Array::<i32>::with_capacity(2);
+    assert arr.capacity() >= 2;
+    arr.push(1);
+    arr.push(2);
+    arr.reserve(10);
+    assert arr.capacity() >= 12;
+    assert arr.len() == 2;
+    assert arr[0] == 1;
+}
+
+test "shrink_to_fit" {
+    let mut arr = Array::<i32>::with_capacity(100);
+    arr.push(1);
+    arr.push(2);
+    arr.shrink_to_fit();
+    assert arr.capacity() == 2;
+    assert arr.len() == 2;
+    assert arr[0] == 1;
+    assert arr[1] == 2;
+}
+
+test "insert at beginning" {
+    let mut arr: Array<i32> = [20, 30];
+    arr.insert(0, 10);
+    assert arr.len() == 3;
+    assert arr[0] == 10;
+    assert arr[1] == 20;
+    assert arr[2] == 30;
+}
+
+test "insert at middle" {
+    let mut arr: Array<i32> = [10, 30];
+    arr.insert(1, 20);
+    assert arr.len() == 3;
+    assert arr[0] == 10;
+    assert arr[1] == 20;
+    assert arr[2] == 30;
+}
+
+test "insert at end" {
+    let mut arr: Array<i32> = [10, 20];
+    arr.insert(2, 30);
+    assert arr.len() == 3;
+    assert arr[2] == 30;
+}
+
+test "remove from beginning" {
+    let mut arr: Array<i32> = [10, 20, 30];
+    let v = arr.remove(0);
+    assert v == 10;
+    assert arr.len() == 2;
+    assert arr[0] == 20;
+    assert arr[1] == 30;
+}
+
+test "remove from middle" {
+    let mut arr: Array<i32> = [10, 20, 30];
+    let v = arr.remove(1);
+    assert v == 20;
+    assert arr.len() == 2;
+    assert arr[0] == 10;
+    assert arr[1] == 30;
+}
+
+test "swap" {
+    let mut arr: Array<i32> = [10, 20, 30];
+    arr.swap(0, 2);
+    assert arr[0] == 30;
+    assert arr[2] == 10;
+}
+
+test "reverse" {
+    let mut arr: Array<i32> = [1, 2, 3, 4, 5];
+    arr.reverse();
+    assert arr[0] == 5;
+    assert arr[1] == 4;
+    assert arr[2] == 3;
+    assert arr[3] == 2;
+    assert arr[4] == 1;
+}
+
+test "reverse empty and single" {
+    let mut empty: Array<i32> = [];
+    empty.reverse();
+    assert empty.len() == 0;
+
+    let mut single: Array<i32> = [42];
+    single.reverse();
+    assert single[0] == 42;
+}
+
+test "extend" {
+    let mut arr: Array<i32> = [1, 2];
+    let other: Array<i32> = [3, 4, 5];
+    arr.extend(&other);
+    assert arr.len() == 5;
+    assert arr[2] == 3;
+    assert arr[4] == 5;
+}
+
+test "contains" {
+    let arr: Array<i32> = [10, 20, 30];
+    assert arr.contains(&20);
+    assert !arr.contains(&99);
+}
+
+test "contains empty" {
+    let arr: Array<i32> = [];
+    assert !arr.contains(&1);
+}
+
+test "repeat" {
+    let arr: Array<i32> = [1, 2];
+    let repeated = arr.repeat(3);
+    assert repeated.len() == 6;
+    assert repeated[0] == 1;
+    assert repeated[1] == 2;
+    assert repeated[2] == 1;
+    assert repeated[3] == 2;
+    assert repeated[4] == 1;
+    assert repeated[5] == 2;
+}
+
+test "repeat zero" {
+    let arr: Array<i32> = [1, 2, 3];
+    let empty = arr.repeat(0);
+    assert empty.len() == 0;
+}
+
+test "join" {
+    let arr: Array<i32> = [1, 2, 3];
+    assert arr.join(", ") == "1, 2, 3";
+}
+
+test "join single element" {
+    let arr: Array<i32> = [42];
+    assert arr.join(", ") == "42";
+}
+
+test "join empty" {
+    let arr: Array<i32> = [];
+    assert arr.join(", ") == "";
+}
+
+test "join strings" {
+    let arr: Array<String> = ["hello", "world"];
+    assert arr.join(" ") == "hello world";
+}
+
+test "windows" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let mut wins = arr.windows(3);
+    let w0 = wins.next();
+    assert w0 matches { Some(_) };
+    if let Some(s) = w0 {
+        assert s.len() == 3;
+        assert s[0] == 1;
+        assert s[1] == 2;
+        assert s[2] == 3;
+    }
+    let w1 = wins.next();
+    if let Some(s) = w1 {
+        assert s[0] == 2;
+        assert s[2] == 4;
+    }
+    let w2 = wins.next();
+    if let Some(s) = w2 {
+        assert s[0] == 3;
+        assert s[2] == 5;
+    }
+    assert wins.next() matches { None };
+}
+
+test "chunks" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let mut chs = arr.chunks(2);
+    let c0 = chs.next();
+    if let Some(s) = c0 {
+        assert s.len() == 2;
+        assert s[0] == 1;
+        assert s[1] == 2;
+    }
+    let c1 = chs.next();
+    if let Some(s) = c1 {
+        assert s.len() == 2;
+        assert s[0] == 3;
+        assert s[1] == 4;
+    }
+    let c2 = chs.next();
+    if let Some(s) = c2 {
+        assert s.len() == 1;
+        assert s[0] == 5;
+    }
+    assert chs.next() matches { None };
 }

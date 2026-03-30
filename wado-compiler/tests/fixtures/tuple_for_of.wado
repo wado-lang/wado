@@ -25,7 +25,7 @@ test "basic heterogeneous" {
     let t = [42, "hello", true];
     let mut results: Array<String> = [];
     for let v of t {
-        results.append(`{v}`);
+        results.push(`{v}`);
     }
     assert results[0] == "42";
     assert results[1] == "hello";
@@ -37,8 +37,8 @@ test "enumerate" {
     let mut indices: Array<i32> = [];
     let mut values: Array<String> = [];
     for let [i, v] of t.enumerate() {
-        indices.append(i);
-        values.append(`{v}`);
+        indices.push(i);
+        values.push(`{v}`);
     }
     assert indices[0] == 0;
     assert indices[1] == 1;
@@ -79,7 +79,7 @@ test "trait dispatch per element type" {
     let t = [42, "wado", true];
     let mut results: Array<String> = [];
     for let v of t {
-        results.append(v.describe());
+        results.push(v.describe());
     }
     assert results[0] == "int(42)";
     assert results[1] == "str(wado)";
@@ -90,7 +90,7 @@ test "enumerate with trait dispatch" {
     let t = [1, "two"];
     let mut results: Array<String> = [];
     for let [i, v] of t.enumerate() {
-        results.append(`{i}: {v.describe()}`);
+        results.push(`{i}: {v.describe()}`);
     }
     assert results[0] == "0: int(1)";
     assert results[1] == "1: str(two)";
@@ -101,7 +101,7 @@ test "nested tuple for-of expansion" {
     let mut results: Array<String> = [];
     for let v of t {
         for let w of v {
-            results.append(`{w}`);
+            results.push(`{w}`);
         }
     }
     assert results[0] == "1";
@@ -115,7 +115,7 @@ test "mutable binding" {
     let mut results: Array<i32> = [];
     for let mut v of t {
         v = v + 1;
-        results.append(v);
+        results.push(v);
     }
     assert results[0] == 11;
     assert results[1] == 21;

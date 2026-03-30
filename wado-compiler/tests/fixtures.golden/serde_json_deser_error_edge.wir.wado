@@ -351,7 +351,7 @@ type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, re
 
 type "functype/core:json/utf8_sequence_length" = fn(i32) -> i32;
 
-type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
+type "functype/Array<u64>::push" = fn(ref Array<u64>, u64);
 
 type "functype/Array<u64>::grow" = fn(ref Array<u64>);
 
@@ -363,15 +363,15 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
 type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
 type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> bool;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
@@ -566,24 +566,24 @@ fn __test_2_number_where_bool_expected() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_4 = String { repr: builtin::array_new<u8>(142), used: 0 };
-                String::append(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_4, String { repr: array.new_data<u8>("__test_2_number_where_bool_expected"), used: 35 });
-                String::append_char(__local_4, 32);
-                String::append_char(__local_4, 97);
-                String::append_char(__local_4, 116);
-                String::append_char(__local_4, 32);
-                String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_4, 58);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("__test_2_number_where_bool_expected"), used: 35 });
+                String::push(__local_4, 32);
+                String::push(__local_4, 97);
+                String::push(__local_4, 116);
+                String::push(__local_4, 32);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_4, 58);
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(28, __local_10);
-                String::append(__local_4, String { repr: array.new_data<u8>("
+                String::push_str(__local_4, String { repr: array.new_data<u8>("
 condition: e.message == \"expected bool\"
 "), used: 41 });
-                String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 String^Inspect::inspect(__v0, __local_5);
-                String::append_char(__local_4, 10);
+                String::push(__local_4, 10);
                 break __tmpl: __local_4;
             });
             unreachable;
@@ -619,24 +619,24 @@ fn __test_3_number_where_string_expected() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_4 = String { repr: builtin::array_new<u8>(144), used: 0 };
-                String::append(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_4, String { repr: array.new_data<u8>("__test_3_number_where_string_expected"), used: 37 });
-                String::append_char(__local_4, 32);
-                String::append_char(__local_4, 97);
-                String::append_char(__local_4, 116);
-                String::append_char(__local_4, 32);
-                String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_4, 58);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("__test_3_number_where_string_expected"), used: 37 });
+                String::push(__local_4, 32);
+                String::push(__local_4, 97);
+                String::push(__local_4, 116);
+                String::push(__local_4, 32);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_4, 58);
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(37, __local_10);
-                String::append(__local_4, String { repr: array.new_data<u8>("
+                String::push_str(__local_4, String { repr: array.new_data<u8>("
 condition: e.message == \"expected string\"
 "), used: 43 });
-                String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 String^Inspect::inspect(__v0, __local_5);
-                String::append_char(__local_4, 10);
+                String::push(__local_4, 10);
                 break __tmpl: __local_4;
             });
             unreachable;
@@ -767,24 +767,24 @@ fn __test_9_truncated_string() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_4 = String { repr: builtin::array_new<u8>(152), used: 0 };
-                String::append(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_4, String { repr: array.new_data<u8>("__test_9_truncated_string"), used: 25 });
-                String::append_char(__local_4, 32);
-                String::append_char(__local_4, 97);
-                String::append_char(__local_4, 116);
-                String::append_char(__local_4, 32);
-                String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_4, 58);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("__test_9_truncated_string"), used: 25 });
+                String::push(__local_4, 32);
+                String::push(__local_4, 97);
+                String::push(__local_4, 116);
+                String::push(__local_4, 32);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_4, 58);
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(93, __local_10);
-                String::append(__local_4, String { repr: array.new_data<u8>("
+                String::push_str(__local_4, String { repr: array.new_data<u8>("
 condition: e.message == \"unexpected end of input\"
 "), used: 51 });
-                String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 String^Inspect::inspect(__v0, __local_5);
-                String::append_char(__local_4, 10);
+                String::push(__local_4, 10);
                 break __tmpl: __local_4;
             });
             unreachable;
@@ -820,24 +820,24 @@ fn __test_10_trailing_garbage() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_4 = String { repr: builtin::array_new<u8>(154), used: 0 };
-                String::append(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_4, String { repr: array.new_data<u8>("__test_10_trailing_garbage"), used: 26 });
-                String::append_char(__local_4, 32);
-                String::append_char(__local_4, 97);
-                String::append_char(__local_4, 116);
-                String::append_char(__local_4, 32);
-                String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_4, 58);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("__test_10_trailing_garbage"), used: 26 });
+                String::push(__local_4, 32);
+                String::push(__local_4, 97);
+                String::push(__local_4, 116);
+                String::push(__local_4, 32);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_4, 58);
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(102, __local_10);
-                String::append(__local_4, String { repr: array.new_data<u8>("
+                String::push_str(__local_4, String { repr: array.new_data<u8>("
 condition: e.message == \"trailing data after value\"
 "), used: 53 });
-                String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 String^Inspect::inspect(__v0, __local_5);
-                String::append_char(__local_4, 10);
+                String::push(__local_4, 10);
                 break __tmpl: __local_4;
             });
             unreachable;
@@ -873,24 +873,24 @@ fn __test_11_multiple_values() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_4 = String { repr: builtin::array_new<u8>(154), used: 0 };
-                String::append(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_4, String { repr: array.new_data<u8>("__test_11_multiple_values"), used: 25 });
-                String::append_char(__local_4, 32);
-                String::append_char(__local_4, 97);
-                String::append_char(__local_4, 116);
-                String::append_char(__local_4, 32);
-                String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_4, 58);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("__test_11_multiple_values"), used: 25 });
+                String::push(__local_4, 32);
+                String::push(__local_4, 97);
+                String::push(__local_4, 116);
+                String::push(__local_4, 32);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_4, 58);
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(111, __local_10);
-                String::append(__local_4, String { repr: array.new_data<u8>("
+                String::push_str(__local_4, String { repr: array.new_data<u8>("
 condition: e.message == \"trailing data after value\"
 "), used: 53 });
-                String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 String^Inspect::inspect(__v0, __local_5);
-                String::append_char(__local_4, 10);
+                String::push(__local_4, 10);
                 break __tmpl: __local_4;
             });
             unreachable;
@@ -945,24 +945,24 @@ fn __test_13_u32_too_large() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_4 = String { repr: builtin::array_new<u8>(155), used: 0 };
-                String::append(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_4, String { repr: array.new_data<u8>("__test_13_u32_too_large"), used: 23 });
-                String::append_char(__local_4, 32);
-                String::append_char(__local_4, 97);
-                String::append_char(__local_4, 116);
-                String::append_char(__local_4, 32);
-                String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_4, 58);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("__test_13_u32_too_large"), used: 23 });
+                String::push(__local_4, 32);
+                String::push(__local_4, 97);
+                String::push(__local_4, 116);
+                String::push(__local_4, 32);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_4, 58);
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(131, __local_10);
-                String::append(__local_4, String { repr: array.new_data<u8>("
+                String::push_str(__local_4, String { repr: array.new_data<u8>("
 condition: e.message == \"value out of range for u32\"
 "), used: 54 });
-                String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 String^Inspect::inspect(__v0, __local_5);
-                String::append_char(__local_4, 10);
+                String::push(__local_4, 10);
                 break __tmpl: __local_4;
             });
             unreachable;
@@ -998,24 +998,24 @@ fn __test_14_f64_nan_serialize_error() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(155), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_14_f64_nan_serialize_error"), used: 33 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_14_f64_nan_serialize_error"), used: 33 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_11 = __local_6;
                 i32::fmt_decimal(143, __local_11);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: e.message == \"NaN is not allowed in JSON\"
 "), used: 54 });
-                String::append(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -1051,24 +1051,24 @@ fn __test_15_f64_infinity_serialize_error() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(160), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_15_f64_infinity_serialize_error"), used: 38 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_15_f64_infinity_serialize_error"), used: 38 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_11 = __local_6;
                 i32::fmt_decimal(153, __local_11);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: e.message == \"Infinity is not allowed in JSON\"
 "), used: 59 });
-                String::append(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -1104,24 +1104,24 @@ fn __test_16_f64_negative_infinity_serialize_error() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(160), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_16_f64_negative_infinity_serialize_error"), used: 47 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_16_f64_negative_infinity_serialize_error"), used: 47 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_11 = __local_6;
                 i32::fmt_decimal(163, __local_11);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: e.message == \"Infinity is not allowed in JSON\"
 "), used: 59 });
-                String::append(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -1157,24 +1157,24 @@ fn __test_17_f32_nan_serialize_error() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(155), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_17_f32_nan_serialize_error"), used: 33 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_17_f32_nan_serialize_error"), used: 33 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_11 = __local_6;
                 i32::fmt_decimal(173, __local_11);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: e.message == \"NaN is not allowed in JSON\"
 "), used: 54 });
-                String::append(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -1210,24 +1210,24 @@ fn __test_18_f32_infinity_serialize_error() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(160), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_18_f32_infinity_serialize_error"), used: 38 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_18_f32_infinity_serialize_error"), used: 38 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_11 = __local_6;
                 i32::fmt_decimal(183, __local_11);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: e.message == \"Infinity is not allowed in JSON\"
 "), used: 59 });
-                String::append(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -1301,24 +1301,24 @@ fn __test_21_struct_missing_required_field() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_4 = String { repr: builtin::array_new<u8>(151), used: 0 };
-                String::append(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_4, String { repr: array.new_data<u8>("__test_21_struct_missing_required_field"), used: 39 });
-                String::append_char(__local_4, 32);
-                String::append_char(__local_4, 97);
-                String::append_char(__local_4, 116);
-                String::append_char(__local_4, 32);
-                String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_4, 58);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("__test_21_struct_missing_required_field"), used: 39 });
+                String::push(__local_4, 32);
+                String::push(__local_4, 97);
+                String::push(__local_4, 116);
+                String::push(__local_4, 32);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_4, 58);
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(220, __local_10);
-                String::append(__local_4, String { repr: array.new_data<u8>("
+                String::push_str(__local_4, String { repr: array.new_data<u8>("
 condition: e.message == \"required field missing\"
 "), used: 50 });
-                String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 String^Inspect::inspect(__v0, __local_5);
-                String::append_char(__local_4, 10);
+                String::push(__local_4, 10);
                 break __tmpl: __local_4;
             });
             unreachable;
@@ -1439,27 +1439,27 @@ fn __test_26_option_some_deserialize() {
             if __cond == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_5 = String { repr: builtin::array_new<u8>(113), used: 0 };
-                    String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_5, String { repr: array.new_data<u8>("__test_26_option_some_deserialize"), used: 33 });
-                    String::append_char(__local_5, 32);
-                    String::append_char(__local_5, 97);
-                    String::append_char(__local_5, 116);
-                    String::append_char(__local_5, 32);
-                    String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                    String::append_char(__local_5, 58);
+                    String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_5, String { repr: array.new_data<u8>("__test_26_option_some_deserialize"), used: 33 });
+                    String::push(__local_5, 32);
+                    String::push(__local_5, 97);
+                    String::push(__local_5, 116);
+                    String::push(__local_5, 32);
+                    String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                    String::push(__local_5, 58);
                     __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                     __local_12 = __local_6;
                     i32::fmt_decimal(274, __local_12);
-                    String::append(__local_5, String { repr: array.new_data<u8>("
+                    String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: n == 42
 "), used: 20 });
-                    String::append_char(__local_5, 110);
-                    String::append_char(__local_5, 58);
-                    String::append_char(__local_5, 32);
+                    String::push(__local_5, 110);
+                    String::push(__local_5, 58);
+                    String::push(__local_5, 32);
                     __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                     __local_17 = __local_6;
                     i32::fmt_decimal(n, __local_17);
-                    String::append_char(__local_5, 10);
+                    String::push(__local_5, 10);
                     break __tmpl: __local_5;
                 });
                 unreachable;
@@ -1499,24 +1499,24 @@ fn __test_27_enum_unknown_variant() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_4 = String { repr: builtin::array_new<u8>(144), used: 0 };
-                String::append(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_4, String { repr: array.new_data<u8>("__test_27_enum_unknown_variant"), used: 30 });
-                String::append_char(__local_4, 32);
-                String::append_char(__local_4, 97);
-                String::append_char(__local_4, 116);
-                String::append_char(__local_4, 32);
-                String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
-                String::append_char(__local_4, 58);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("__test_27_enum_unknown_variant"), used: 30 });
+                String::push(__local_4, 32);
+                String::push(__local_4, 97);
+                String::push(__local_4, 116);
+                String::push(__local_4, 32);
+                String::push_str(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado"), used: 61 });
+                String::push(__local_4, 58);
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 __local_10 = __local_5;
                 i32::fmt_decimal(297, __local_10);
-                String::append(__local_4, String { repr: array.new_data<u8>("
+                String::push_str(__local_4, String { repr: array.new_data<u8>("
 condition: e.message == \"unknown variant\"
 "), used: 43 });
-                String::append(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
+                String::push_str(__local_4, String { repr: array.new_data<u8>("e.message: "), used: 11 });
                 __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 String^Inspect::inspect(__v0, __local_5);
-                String::append_char(__local_4, 10);
+                String::push(__local_4, 10);
                 break __tmpl: __local_4;
             });
             unreachable;
@@ -2929,8 +2929,8 @@ fn write_decimal(buf, d, p, nd) {
     let index: i32;
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
-        String::append_char(buf, 48);
-        String::append_char(buf, 46);
+        String::push(buf, 48);
+        String::push(buf, 46);
         n_10 = 0 - decimal_pos;
         String::append_byte_filled(buf, 48, n_10);
         digit_offset = buf.used;
@@ -2985,8 +2985,8 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
         leading_zeros = 0 - decimal_pos;
-        String::append_char(buf, 48);
-        String::append_char(buf, 46);
+        String::push(buf, 48);
+        String::push(buf, 46);
         if precision <= leading_zeros {
             String::append_byte_filled(buf, 48, precision);
             return;
@@ -3018,7 +3018,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         n_37 = decimal_pos - nd;
         String::append_byte_filled(buf, 48, n_37);
         if precision > 0 {
-            String::append_char(buf, 46);
+            String::push(buf, 46);
             String::append_byte_filled(buf, 48, precision);
         };
     } else {
@@ -3197,22 +3197,22 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
         break __inline_String__len_1: __local_6.used;
     };
     if kind == 3 {
-        String::append_char(f.buf, 78);
-        String::append_char(f.buf, 97);
-        String::append_char(f.buf, 78);
+        String::push(f.buf, 78);
+        String::push(f.buf, 97);
+        String::push(f.buf, 78);
     } else if kind == 2 {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
         });
     } else {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
         });
-        String::append(f.buf, zero_repr);
+        String::push_str(f.buf, zero_repr);
     };
     Formatter::apply_padding(f, mark);
 }
@@ -3230,7 +3230,7 @@ fn "core:json/utf8_sequence_length"(leading_byte) {  // from core:json
     return 4;
 }
 
-fn Array<u64>::append(self, value) {
+fn Array<u64>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -3365,9 +3365,9 @@ fn f64::fmt_into(self, f) {
         break __inline_String__len_5: __local_19.used;
     };
     if is_neg {
-        String::append_char(f.buf, 45);
+        String::push(f.buf, 45);
     } else if f.sign_plus {
-        String::append_char(f.buf, 43);
+        String::push(f.buf, 43);
     };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
@@ -3421,13 +3421,13 @@ fn f64::fmt_fixed(self, precision, f) {
             break __inline_String__len_1: __local_16.used;
         };
         if is_neg {
-            String::append_char(f.buf, 45);
+            String::push(f.buf, 45);
         } else if f.sign_plus {
-            String::append_char(f.buf, 43);
+            String::push(f.buf, 43);
         };
-        String::append_char(f.buf, 48);
+        String::push(f.buf, 48);
         if precision > 0 {
-            String::append_char(f.buf, 46);
+            String::push(f.buf, 46);
             String::append_byte_filled(f.buf, 48, precision);
         };
         Formatter::apply_padding(f, mark_7);
@@ -3462,9 +3462,9 @@ fn f64::fmt_fixed(self, precision, f) {
         break __inline_String__len_8: __local_25.used;
     };
     if is_neg {
-        String::append_char(f.buf, 45);
+        String::push(f.buf, 45);
     } else if f.sign_plus {
-        String::append_char(f.buf, 43);
+        String::push(f.buf, 43);
     };
     write_decimal_prec(f.buf, d, p, nd, precision);
     Formatter::apply_padding(f, mark_13);
@@ -3475,10 +3475,10 @@ fn char^Display::fmt(self, f) {
     let c: char;
     if f.width <= 0 {
         c = self;
-        String::append_char(f.buf, c);
+        String::push(f.buf, c);
     } else {
         s = String { repr: builtin::array_new<u8>(4), used: 0 };
-        String::append_char(s, self);
+        String::push(s, self);
         Formatter::pad(f, s);
     };
 }
@@ -3534,7 +3534,7 @@ fn String::append_byte_filled(self, byte, n) {
     self.used = new_used;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -3622,7 +3622,7 @@ fn StrCharIter^Iterator::next(self) {
     return 0; code_10;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -3798,7 +3798,7 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
             if ref.test Option<i32>::Some(first_opt) {
                 first_elem = ref.cast Option<i32>::Some(first_opt).payload_0;
                 items = Array<i32> { repr: builtin::array_new<i32>(2), used: 0 };
-                Array<i32>::append(items, first_elem);
+                Array<i32>::push(items, first_elem);
                 block {
                     l323: loop {
                         let __sroa_next_discriminant: i32;
@@ -3809,7 +3809,7 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
                             next_opt = __sroa_next_case0_payload_0;
                             if ref.test Option<i32>::Some(next_opt) {
                                 item = ref.cast Option<i32>::Some(next_opt).payload_0;
-                                Array<i32>::append(items, item);
+                                Array<i32>::push(items, item);
                             } else {
                                 end_result_12 = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
                                 if ref.is_null(end_result_12) == 0 {
@@ -3853,7 +3853,7 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
     unreachable;
 }
 
-fn Array<i32>::append(self, value) {
+fn Array<i32>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -4050,7 +4050,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_f32"(self, v) {  // from core
     } == 0 {
         return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
     };
-    String::append(self, __tmpl: block -> ref String {
+    String::push_str(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         f64::fmt_into(builtin::f64_promote_f32(v), __local_3);
@@ -4076,7 +4076,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core
     } == 0 {
         return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
     };
-    String::append(self, __tmpl: block -> ref String {
+    String::push_str(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         f64::fmt_into(v, __local_3);
@@ -4159,13 +4159,13 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {  // from core:json
         return ref.as_non_null(__inline_DeserializeError__malformed_6: block -> ref "core:serde/DeserializeError" {
             __local_12 = __tmpl: block -> ref String {
                 __local_3 = String { repr: builtin::array_new<u8>(53), used: 0 };
-                String::append(__local_3, String { repr: array.new_data<u8>("expected '"), used: 10 });
+                String::push_str(__local_3, String { repr: array.new_data<u8>("expected '"), used: 10 });
                 __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
                 char^Display::fmt(c & 255, __local_4);
-                String::append(__local_3, String { repr: array.new_data<u8>("', found '"), used: 10 });
+                String::push_str(__local_3, String { repr: array.new_data<u8>("', found '"), used: 10 });
                 __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
                 char^Display::fmt(b & 255, __local_4);
-                String::append_char(__local_3, 39);
+                String::push(__local_3, 39);
                 break __tmpl: __local_3;
             };
             __local_13 = builtin::i64_extend_i32_s(self.pos);
@@ -4230,9 +4230,9 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
                     return ref.as_non_null(__inline_DeserializeError__malformed_7: block -> ref "core:serde/DeserializeError" {
                         __local_16 = __tmpl: block -> ref String {
                             __local_5 = String { repr: builtin::array_new<u8>(27), used: 0 };
-                            String::append(__local_5, String { repr: array.new_data<u8>("expected '"), used: 10 });
-                            String::append(__local_5, lit);
-                            String::append_char(__local_5, 39);
+                            String::push_str(__local_5, String { repr: array.new_data<u8>("expected '"), used: 10 });
+                            String::push_str(__local_5, lit);
+                            String::push(__local_5, 39);
                             self.pos = _hfs_pos_27;
                             break __tmpl: __local_5;
                         };
@@ -4489,21 +4489,21 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     break __inline_String__get_byte_18: builtin::array_get_u8(__local_68.repr, __local_69);
                 };
                 if esc == 34 {
-                    String::append_char(result_8, 34);
+                    String::push(result_8, 34);
                 } else if esc == 92 {
-                    String::append_char(result_8, 92);
+                    String::push(result_8, 92);
                 } else if esc == 47 {
-                    String::append_char(result_8, 47);
+                    String::push(result_8, 47);
                 } else if esc == 110 {
-                    String::append_char(result_8, 10);
+                    String::push(result_8, 10);
                 } else if esc == 114 {
-                    String::append_char(result_8, 13);
+                    String::push(result_8, 13);
                 } else if esc == 116 {
-                    String::append_char(result_8, 9);
+                    String::push(result_8, 9);
                 } else if esc == 98 {
-                    String::append_char(result_8, 8);
+                    String::push(result_8, 8);
                 } else if esc == 102 {
-                    String::append_char(result_8, 12);
+                    String::push(result_8, 12);
                 } else if esc == 117 {
                     self.pos = _hfs_pos_98;
                     let __sroa_r_discriminant: i32;
@@ -4513,7 +4513,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     _hfs_pos_98 = self.pos;
                     if __sroa_r_discriminant == 0 {
                         c_14 = __sroa_r_case0_payload_0;
-                        String::append_char(result_8, c_14);
+                        String::push(result_8, c_14);
                     };
                     if __sroa_r_discriminant == 1 {
                         e = __sroa_r_case1_payload_0;
@@ -4525,10 +4525,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__malformed_21: block -> ref "core:serde/DeserializeError" {
                         __local_72 = __tmpl: block -> ref String {
                             __local_32 = String { repr: builtin::array_new<u8>(34), used: 0 };
-                            String::append(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
+                            String::push_str(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
                             __local_33 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_32 };
                             char^Display::fmt(esc & 255, __local_33);
-                            String::append_char(__local_32, 39);
+                            String::push(__local_32, 39);
                             self.pos = _hfs_pos_98;
                             break __tmpl: __local_32;
                         };
@@ -4553,7 +4553,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     });
                 };
                 if seq_len == 1 {
-                    String::append_char(result_8, b & 255);
+                    String::push(result_8, b & 255);
                 } else if seq_len == 2 {
                     b0_17 = b;
                     b1_18 = __inline_String__get_byte_24: block -> u8 {
@@ -4567,7 +4567,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     multivalue_bind [__sroa___pattern_temp_2_discriminant, __sroa___pattern_temp_2_payload_0] = char::from_u32(code_19);
                     if __sroa___pattern_temp_2_discriminant == 0 {
                         c_20 = __sroa___pattern_temp_2_payload_0;
-                        String::append_char(result_8, c_20);
+                        String::push(result_8, c_20);
                     };
                 } else if seq_len == 3 {
                     b0_21 = b;
@@ -4587,7 +4587,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     multivalue_bind [__sroa___pattern_temp_3_discriminant, __sroa___pattern_temp_3_payload_0] = char::from_u32(code_24);
                     if __sroa___pattern_temp_3_discriminant == 0 {
                         c_25 = __sroa___pattern_temp_3_payload_0;
-                        String::append_char(result_8, c_25);
+                        String::push(result_8, c_25);
                     };
                 } else {
                     b0_26 = b;
@@ -4612,7 +4612,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     multivalue_bind [__sroa___pattern_temp_4_discriminant, __sroa___pattern_temp_4_payload_0] = char::from_u32(code_30);
                     if __sroa___pattern_temp_4_discriminant == 0 {
                         c_31 = __sroa___pattern_temp_4_payload_0;
-                        String::append_char(result_8, c_31);
+                        String::push(result_8, c_31);
                     };
                 };
                 _hfs_pos_98 = _hfs_pos_98 + seq_len;
@@ -5701,10 +5701,10 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
     return ref.as_non_null(__inline_DeserializeError__malformed_20: block -> ref "core:serde/DeserializeError" {
         __local_47 = __tmpl: block -> ref String {
             __local_12 = String { repr: builtin::array_new<u8>(39), used: 0 };
-            String::append(__local_12, String { repr: array.new_data<u8>("unexpected character '"), used: 22 });
+            String::push_str(__local_12, String { repr: array.new_data<u8>("unexpected character '"), used: 22 });
             __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             char^Display::fmt(b & 255, __local_13);
-            String::append_char(__local_12, 39);
+            String::push(__local_12, 39);
             break __tmpl: __local_12;
         };
         __local_48 = builtin::i64_extend_i32_s(self.pos);
@@ -6098,7 +6098,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l596;
             };
@@ -6118,7 +6118,7 @@ fn Formatter::pad(self, content) {
     } else {
         content_len >= self.width;
     } {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         return;
     };
     padding = self.width - content_len;
@@ -6126,17 +6126,17 @@ fn Formatter::pad(self, content) {
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, padding);
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, right_pad);
     } else {
         Formatter::write_char_n(self, self.fill, padding);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
     };
 }
 
@@ -6290,20 +6290,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -6313,10 +6313,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -6326,10 +6326,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -6337,10 +6337,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
@@ -6352,7 +6352,7 @@ fn String^Inspect::inspect(self, f) {
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
     let _licm_buf_33: ref String;
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
@@ -6369,22 +6369,22 @@ fn String^Inspect::inspect(self, f) {
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 34);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 110);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 114);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 116);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 116);
                 } else {
-                    String::append_char(_licm_buf_33, c);
+                    String::push(_licm_buf_33, c);
                 };
             } else {
                 break b635;
@@ -6392,7 +6392,7 @@ fn String^Inspect::inspect(self, f) {
             continue l636;
         };
     };
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_json_deser_error_edge.wado/__closure_wrapper_0"(__env, __p0, __p1, __p2) {

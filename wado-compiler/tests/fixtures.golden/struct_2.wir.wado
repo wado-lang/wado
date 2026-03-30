@@ -131,17 +131,17 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
 type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> bool;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/ArrayIter<SDPoint>^Iterator::next" = fn(ref "core:allocator/ArrayIter<SDPoint>") -> ref null SDPoint;
 
-type "functype/Array<SDPoint>::append" = fn(ref Array<SDPoint>, ref SDPoint);
+type "functype/Array<SDPoint>::push" = fn(ref Array<SDPoint>, ref SDPoint);
 
 type "functype/Array<SDPoint>::grow" = fn(ref Array<SDPoint>);
 
@@ -199,8 +199,8 @@ fn destruct_basic() with Stdout {
         __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
         __local_23 = __local_9;
         i32::fmt_decimal(x, __local_23);
-        String::append_char(__local_8, 44);
-        String::append_char(__local_8, 32);
+        String::push(__local_8, 44);
+        String::push(__local_8, 32);
         __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
         __local_28 = __local_9;
         i32::fmt_decimal(y, __local_28);
@@ -213,8 +213,8 @@ fn destruct_basic() with Stdout {
         __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         __local_34 = __local_11;
         i32::fmt_decimal(a, __local_34);
-        String::append_char(__local_10, 44);
-        String::append_char(__local_10, 32);
+        String::push(__local_10, 44);
+        String::push(__local_10, 32);
         __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         __local_39 = __local_11;
         i32::fmt_decimal(b, __local_39);
@@ -236,8 +236,8 @@ fn destruct_basic() with Stdout {
         __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
         __local_51 = __local_15;
         i32::fmt_decimal(mx, __local_51);
-        String::append_char(__local_14, 44);
-        String::append_char(__local_14, 32);
+        String::push(__local_14, 44);
+        String::push(__local_14, 32);
         __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
         __local_56 = __local_15;
         i32::fmt_decimal(my, __local_56);
@@ -331,8 +331,8 @@ fn destruct_if_let() with Stdout {
         __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         __local_22 = __local_10;
         i32::fmt_decimal(x_1, __local_22);
-        String::append_char(__local_9, 44);
-        String::append_char(__local_9, 32);
+        String::push(__local_9, 44);
+        String::push(__local_9, 32);
         __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         __local_27 = __local_10;
         i32::fmt_decimal(y_2, __local_27);
@@ -388,18 +388,18 @@ fn destruct_nested() with Stdout {
         __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         __local_18 = __local_7;
         i32::fmt_decimal(x1, __local_18);
-        String::append_char(__local_6, 44);
-        String::append_char(__local_6, 32);
+        String::push(__local_6, 44);
+        String::push(__local_6, 32);
         __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         __local_23 = __local_7;
         i32::fmt_decimal(y1, __local_23);
-        String::append_char(__local_6, 44);
-        String::append_char(__local_6, 32);
+        String::push(__local_6, 44);
+        String::push(__local_6, 32);
         __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         __local_28 = __local_7;
         i32::fmt_decimal(x2, __local_28);
-        String::append_char(__local_6, 44);
-        String::append_char(__local_6, 32);
+        String::push(__local_6, 44);
+        String::push(__local_6, 32);
         __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         __local_33 = __local_7;
         i32::fmt_decimal(y2, __local_33);
@@ -442,8 +442,8 @@ fn destruct_rename() with Stdout {
         __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         __local_22 = __local_10;
         i32::fmt_decimal(horizontal, __local_22);
-        String::append_char(__local_9, 44);
-        String::append_char(__local_9, 32);
+        String::push(__local_9, 44);
+        String::push(__local_9, 32);
         __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         __local_27 = __local_10;
         i32::fmt_decimal(vertical, __local_27);
@@ -456,8 +456,8 @@ fn destruct_rename() with Stdout {
         __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
         __local_33 = __local_12;
         i32::fmt_decimal(x, __local_33);
-        String::append_char(__local_11, 44);
-        String::append_char(__local_11, 32);
+        String::push(__local_11, 44);
+        String::push(__local_11, 32);
         __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
         __local_38 = __local_12;
         i32::fmt_decimal(vertical2, __local_38);
@@ -472,8 +472,8 @@ fn destruct_rename() with Stdout {
         __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
         __local_44 = __local_14;
         i32::fmt_decimal(a, __local_44);
-        String::append_char(__local_13, 44);
-        String::append_char(__local_13, 32);
+        String::push(__local_13, 44);
+        String::push(__local_13, 32);
         __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
         __local_49 = __local_14;
         i32::fmt_decimal(b, __local_49);
@@ -585,13 +585,13 @@ fn destruct_match() with Stdout {
         __local_11 = __match_scrut_2.y;
         __tmpl: block -> ref String {
             __local_15 = String { repr: builtin::array_new<u8>(23), used: 0 };
-            String::append_char(__local_15, 101);
-            String::append_char(__local_15, 113);
-            String::append_char(__local_15, 117);
-            String::append_char(__local_15, 97);
-            String::append_char(__local_15, 108);
-            String::append_char(__local_15, 58);
-            String::append_char(__local_15, 32);
+            String::push(__local_15, 101);
+            String::push(__local_15, 113);
+            String::push(__local_15, 117);
+            String::push(__local_15, 97);
+            String::push(__local_15, 108);
+            String::push(__local_15, 58);
+            String::push(__local_15, 32);
             __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
             i32::fmt_decimal(__local_10, __local_16);
             break __tmpl: __local_15;
@@ -604,8 +604,8 @@ fn destruct_match() with Stdout {
             __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
             __local_28 = __local_18;
             i32::fmt_decimal(__local_12, __local_28);
-            String::append_char(__local_17, 44);
-            String::append_char(__local_17, 32);
+            String::push(__local_17, 44);
+            String::push(__local_17, 32);
             __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
             __local_33 = __local_18;
             i32::fmt_decimal(__local_13, __local_33);
@@ -700,8 +700,8 @@ fn destruct_literal() with Stdout {
         __local_22 = __match_scrut_0.value;
         __tmpl: block -> ref String {
             __local_16 = String { repr: builtin::array_new<u8>(29), used: 0 };
-            String::append(__local_16, String { repr: array.new_data<u8>("matched int: "), used: 13 });
-            String::append(__local_16, __local_1);
+            String::push_str(__local_16, String { repr: array.new_data<u8>("matched int: "), used: 13 });
+            String::push_str(__local_16, __local_1);
             break __tmpl: __local_16;
         };
     } else {
@@ -716,8 +716,8 @@ fn destruct_literal() with Stdout {
         __local_23 = __match_scrut_1.flag;
         __tmpl: block -> ref String {
             __local_17 = String { repr: builtin::array_new<u8>(30), used: 0 };
-            String::append(__local_17, String { repr: array.new_data<u8>("matched bool: "), used: 14 });
-            String::append(__local_17, __local_4);
+            String::push_str(__local_17, String { repr: array.new_data<u8>("matched bool: "), used: 14 });
+            String::push_str(__local_17, __local_4);
             break __tmpl: __local_17;
         };
     __local_5 = __match_scrut_1.label;
@@ -727,8 +727,8 @@ fn destruct_literal() with Stdout {
         __local_24 = __match_scrut_1.flag;
         __tmpl: block -> ref String {
             __local_18 = String { repr: builtin::array_new<u8>(29), used: 0 };
-            String::append(__local_18, String { repr: array.new_data<u8>("not matched: "), used: 13 });
-            String::append(__local_18, __local_5);
+            String::push_str(__local_18, String { repr: array.new_data<u8>("not matched: "), used: 13 });
+            String::push_str(__local_18, __local_5);
             break __tmpl: __local_18;
         };
     } else {
@@ -743,8 +743,8 @@ fn destruct_literal() with Stdout {
         __local_25 = __match_scrut_2.ch;
         __tmpl: block -> ref String {
             __local_19 = String { repr: builtin::array_new<u8>(30), used: 0 };
-            String::append(__local_19, String { repr: array.new_data<u8>("matched char: "), used: 14 });
-            String::append(__local_19, __local_8);
+            String::push_str(__local_19, String { repr: array.new_data<u8>("matched char: "), used: 14 });
+            String::push_str(__local_19, __local_8);
             break __tmpl: __local_19;
         };
     } else {
@@ -759,8 +759,8 @@ fn destruct_literal() with Stdout {
         __local_26 = __match_scrut_3.second;
         __tmpl: block -> ref String {
             __local_20 = String { repr: builtin::array_new<u8>(32), used: 0 };
-            String::append(__local_20, String { repr: array.new_data<u8>("matched string: "), used: 16 });
-            String::append(__local_20, __local_11);
+            String::push_str(__local_20, String { repr: array.new_data<u8>("matched string: "), used: 16 });
+            String::push_str(__local_20, __local_11);
             break __tmpl: __local_20;
         };
     } else {
@@ -770,8 +770,8 @@ fn destruct_literal() with Stdout {
     __sroa_ip2_label = String { repr: array.new_data<u8>("test"), used: 4 };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_21 = String { repr: builtin::array_new<u8>(28), used: 0 };
-        String::append(__local_21, String { repr: array.new_data<u8>("if-let int: "), used: 12 });
-        String::append(__local_21, __sroa_ip2_label);
+        String::push_str(__local_21, String { repr: array.new_data<u8>("if-let int: "), used: 12 });
+        String::push_str(__local_21, __sroa_ip2_label);
         break __tmpl: __local_21;
     });
     bp2 = SDBoolPair { label: String { repr: array.new_data<u8>("check"), used: 5 }, flag: 0 };
@@ -1002,7 +1002,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -1046,7 +1046,7 @@ fn String^Eq::eq_bytes(a, b, len) {
     return 1;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -1083,7 +1083,7 @@ fn ArrayIter<SDPoint>^Iterator::next(self) {
     return item;
 }
 
-fn Array<SDPoint>::append(self, value) {
+fn Array<SDPoint>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1136,7 +1136,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l56;
             };
@@ -1170,20 +1170,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -1193,10 +1193,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -1206,10 +1206,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -1217,10 +1217,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

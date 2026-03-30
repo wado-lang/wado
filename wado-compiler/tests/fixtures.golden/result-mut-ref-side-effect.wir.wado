@@ -330,9 +330,9 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/Parser::last_end" = fn(ref Parser) -> i32;
 
@@ -340,11 +340,11 @@ type "functype/Parser::advance" = fn(ref Parser) -> ref Token;
 
 type "functype/Parser::expect" = fn(ref Parser, i32, ref String) -> ref Result<Token,ParseError>;
 
-type "functype/Array<Token>::append" = fn(ref Array<Token>, ref Token);
+type "functype/Array<Token>::push" = fn(ref Array<Token>, ref Token);
 
 type "functype/Array<Token>::grow" = fn(ref Array<Token>);
 
-type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
+type "functype/Array<String>::push" = fn(ref Array<String>, ref String);
 
 type "functype/Array<String>::grow" = fn(ref Array<String>);
 
@@ -2027,8 +2027,8 @@ fn run() {
         e = ref.cast Result<E,ParseError>::Err(__sroa_r_value).payload_0;
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_7 = String { repr: builtin::array_new<u8>(30), used: 0 };
-            String::append(__local_7, String { repr: array.new_data<u8>("parse failed: "), used: 14 });
-            String::append(__local_7, e.message);
+            String::push_str(__local_7, String { repr: array.new_data<u8>("parse failed: "), used: 14 });
+            String::push_str(__local_7, e.message);
             break __tmpl: __local_7;
         });
         unreachable;
@@ -2038,42 +2038,42 @@ fn run() {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_10 = String { repr: builtin::array_new<u8>(138), used: 0 };
-            String::append(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_10, 114);
-            String::append_char(__local_10, 117);
-            String::append_char(__local_10, 110);
-            String::append_char(__local_10, 32);
-            String::append_char(__local_10, 97);
-            String::append_char(__local_10, 116);
-            String::append_char(__local_10, 32);
-            String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado"), used: 60 });
-            String::append_char(__local_10, 58);
+            String::push_str(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_10, 114);
+            String::push(__local_10, 117);
+            String::push(__local_10, 110);
+            String::push(__local_10, 32);
+            String::push(__local_10, 97);
+            String::push(__local_10, 116);
+            String::push(__local_10, 32);
+            String::push_str(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado"), used: 60 });
+            String::push(__local_10, 58);
             __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             __local_45 = __local_11;
             i32::fmt_decimal(267, __local_45);
-            String::append_char(__local_10, 58);
-            String::append_char(__local_10, 32);
-            String::append(__local_10, __tmpl: block -> ref String {
+            String::push(__local_10, 58);
+            String::push(__local_10, 32);
+            String::push_str(__local_10, __tmpl: block -> ref String {
                 __local_8 = String { repr: builtin::array_new<u8>(40), used: 0 };
-                String::append(__local_8, String { repr: array.new_data<u8>("expected pos=3, got pos="), used: 24 });
+                String::push_str(__local_8, String { repr: array.new_data<u8>("expected pos=3, got pos="), used: 24 });
                 __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
                 i32::fmt_decimal(p.pos, __local_9);
                 break __tmpl: __local_8;
             });
-            String::append(__local_10, String { repr: array.new_data<u8>("
+            String::push_str(__local_10, String { repr: array.new_data<u8>("
 condition: p.pos == 3
 "), used: 23 });
-            String::append_char(__local_10, 112);
-            String::append_char(__local_10, 46);
-            String::append_char(__local_10, 112);
-            String::append_char(__local_10, 111);
-            String::append_char(__local_10, 115);
-            String::append_char(__local_10, 58);
-            String::append_char(__local_10, 32);
+            String::push(__local_10, 112);
+            String::push(__local_10, 46);
+            String::push(__local_10, 112);
+            String::push(__local_10, 111);
+            String::push(__local_10, 115);
+            String::push(__local_10, 58);
+            String::push(__local_10, 32);
             __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             __local_56 = __local_11;
             i32::fmt_decimal(__v0, __local_56);
-            String::append_char(__local_10, 10);
+            String::push(__local_10, 10);
             break __tmpl: __local_10;
         });
         unreachable;
@@ -2276,7 +2276,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -2291,7 +2291,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -2386,17 +2386,17 @@ fn Parser::expect(self, kind, name) {
     return Result<Token,ParseError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_ParseError__new_7: block -> ref ParseError {
         __local_16 = __tmpl: block -> ref String {
             __local_5 = String { repr: builtin::array_new<u8>(49), used: 0 };
-            String::append(__local_5, String { repr: array.new_data<u8>("expected "), used: 9 });
-            String::append(__local_5, name);
-            String::append_char(__local_5, 44);
-            String::append_char(__local_5, 32);
-            String::append_char(__local_5, 103);
-            String::append_char(__local_5, 111);
-            String::append_char(__local_5, 116);
-            String::append_char(__local_5, 32);
-            String::append_char(__local_5, 34);
-            String::append(__local_5, tok.text);
-            String::append_char(__local_5, 34);
+            String::push_str(__local_5, String { repr: array.new_data<u8>("expected "), used: 9 });
+            String::push_str(__local_5, name);
+            String::push(__local_5, 44);
+            String::push(__local_5, 32);
+            String::push(__local_5, 103);
+            String::push(__local_5, 111);
+            String::push(__local_5, 116);
+            String::push(__local_5, 32);
+            String::push(__local_5, 34);
+            String::push_str(__local_5, tok.text);
+            String::push(__local_5, 34);
             break __tmpl: __local_5;
         };
         __local_17 = tok.span;
@@ -2408,7 +2408,7 @@ fn Parser::expect(self, kind, name) {
     }) };
 }
 
-fn Array<Token>::append(self, value) {
+fn Array<Token>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -2450,7 +2450,7 @@ fn Array<Token>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<String>::append(self, value) {
+fn Array<String>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -2503,7 +2503,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l234;
             };
@@ -2537,20 +2537,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -2560,10 +2560,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -2573,10 +2573,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -2584,10 +2584,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

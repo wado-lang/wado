@@ -91,7 +91,7 @@ type "functype/__initialize_module" = fn();
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
+type "functype/Array<u64>::push" = fn(ref Array<u64>, u64);
 
 type "functype/Array<u64>::grow" = fn(ref Array<u64>);
 
@@ -99,7 +99,7 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/Formatter::apply_padding" = fn(ref Formatter, i32);
 
@@ -250,14 +250,14 @@ fn run() with Stdout {
     abs_pos = builtin::f64_abs(3.5);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_30 = String { repr: builtin::array_new<u8>(32), used: 0 };
-        String::append(__local_30, String { repr: array.new_data<u8>("f64_abs(-3.5) = "), used: 16 });
+        String::push_str(__local_30, String { repr: array.new_data<u8>("f64_abs(-3.5) = "), used: 16 });
         __local_31 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_30 };
         f64::fmt_into(abs_neg, __local_31);
         break __tmpl: __local_30;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_32 = String { repr: builtin::array_new<u8>(31), used: 0 };
-        String::append(__local_32, String { repr: array.new_data<u8>("f64_abs(3.5) = "), used: 15 });
+        String::push_str(__local_32, String { repr: array.new_data<u8>("f64_abs(3.5) = "), used: 15 });
         __local_33 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_32 };
         f64::fmt_into(abs_pos, __local_33);
         break __tmpl: __local_32;
@@ -265,7 +265,7 @@ fn run() with Stdout {
     abs_neg32 = builtin::f32_abs(builtin::f32_demote_f64(-2.5));
     "core:cli/println"(__tmpl: block -> ref String {
         __local_34 = String { repr: builtin::array_new<u8>(32), used: 0 };
-        String::append(__local_34, String { repr: array.new_data<u8>("f32_abs(-2.5) = "), used: 16 });
+        String::push_str(__local_34, String { repr: array.new_data<u8>("f32_abs(-2.5) = "), used: 16 });
         __local_35 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_34 };
         f32::fmt_into(abs_neg32, __local_35);
         break __tmpl: __local_34;
@@ -275,21 +275,21 @@ fn run() with Stdout {
     ceil3 = builtin::f64_ceil(2);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_36 = String { repr: builtin::array_new<u8>(32), used: 0 };
-        String::append(__local_36, String { repr: array.new_data<u8>("f64_ceil(2.3) = "), used: 16 });
+        String::push_str(__local_36, String { repr: array.new_data<u8>("f64_ceil(2.3) = "), used: 16 });
         __local_37 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_36 };
         f64::fmt_into(ceil1, __local_37);
         break __tmpl: __local_36;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_38 = String { repr: builtin::array_new<u8>(33), used: 0 };
-        String::append(__local_38, String { repr: array.new_data<u8>("f64_ceil(-2.3) = "), used: 17 });
+        String::push_str(__local_38, String { repr: array.new_data<u8>("f64_ceil(-2.3) = "), used: 17 });
         __local_39 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_38 };
         f64::fmt_into(ceil2, __local_39);
         break __tmpl: __local_38;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_40 = String { repr: builtin::array_new<u8>(32), used: 0 };
-        String::append(__local_40, String { repr: array.new_data<u8>("f64_ceil(2.0) = "), used: 16 });
+        String::push_str(__local_40, String { repr: array.new_data<u8>("f64_ceil(2.0) = "), used: 16 });
         __local_41 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_40 };
         f64::fmt_into(ceil3, __local_41);
         break __tmpl: __local_40;
@@ -299,21 +299,21 @@ fn run() with Stdout {
     floor3 = builtin::f64_floor(2);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_42 = String { repr: builtin::array_new<u8>(33), used: 0 };
-        String::append(__local_42, String { repr: array.new_data<u8>("f64_floor(2.7) = "), used: 17 });
+        String::push_str(__local_42, String { repr: array.new_data<u8>("f64_floor(2.7) = "), used: 17 });
         __local_43 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_42 };
         f64::fmt_into(floor1, __local_43);
         break __tmpl: __local_42;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_44 = String { repr: builtin::array_new<u8>(34), used: 0 };
-        String::append(__local_44, String { repr: array.new_data<u8>("f64_floor(-2.7) = "), used: 18 });
+        String::push_str(__local_44, String { repr: array.new_data<u8>("f64_floor(-2.7) = "), used: 18 });
         __local_45 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_44 };
         f64::fmt_into(floor2, __local_45);
         break __tmpl: __local_44;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_46 = String { repr: builtin::array_new<u8>(33), used: 0 };
-        String::append(__local_46, String { repr: array.new_data<u8>("f64_floor(2.0) = "), used: 17 });
+        String::push_str(__local_46, String { repr: array.new_data<u8>("f64_floor(2.0) = "), used: 17 });
         __local_47 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_46 };
         f64::fmt_into(floor3, __local_47);
         break __tmpl: __local_46;
@@ -322,14 +322,14 @@ fn run() with Stdout {
     trunc2 = builtin::f64_trunc(-2.9);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_48 = String { repr: builtin::array_new<u8>(33), used: 0 };
-        String::append(__local_48, String { repr: array.new_data<u8>("f64_trunc(2.9) = "), used: 17 });
+        String::push_str(__local_48, String { repr: array.new_data<u8>("f64_trunc(2.9) = "), used: 17 });
         __local_49 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_48 };
         f64::fmt_into(trunc1, __local_49);
         break __tmpl: __local_48;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_50 = String { repr: builtin::array_new<u8>(34), used: 0 };
-        String::append(__local_50, String { repr: array.new_data<u8>("f64_trunc(-2.9) = "), used: 18 });
+        String::push_str(__local_50, String { repr: array.new_data<u8>("f64_trunc(-2.9) = "), used: 18 });
         __local_51 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_50 };
         f64::fmt_into(trunc2, __local_51);
         break __tmpl: __local_50;
@@ -340,28 +340,28 @@ fn run() with Stdout {
     near4 = builtin::f64_nearest(2.7);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_52 = String { repr: builtin::array_new<u8>(35), used: 0 };
-        String::append(__local_52, String { repr: array.new_data<u8>("f64_nearest(2.5) = "), used: 19 });
+        String::push_str(__local_52, String { repr: array.new_data<u8>("f64_nearest(2.5) = "), used: 19 });
         __local_53 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_52 };
         f64::fmt_into(near1, __local_53);
         break __tmpl: __local_52;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_54 = String { repr: builtin::array_new<u8>(35), used: 0 };
-        String::append(__local_54, String { repr: array.new_data<u8>("f64_nearest(3.5) = "), used: 19 });
+        String::push_str(__local_54, String { repr: array.new_data<u8>("f64_nearest(3.5) = "), used: 19 });
         __local_55 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_54 };
         f64::fmt_into(near2, __local_55);
         break __tmpl: __local_54;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_56 = String { repr: builtin::array_new<u8>(35), used: 0 };
-        String::append(__local_56, String { repr: array.new_data<u8>("f64_nearest(2.3) = "), used: 19 });
+        String::push_str(__local_56, String { repr: array.new_data<u8>("f64_nearest(2.3) = "), used: 19 });
         __local_57 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_56 };
         f64::fmt_into(near3, __local_57);
         break __tmpl: __local_56;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_58 = String { repr: builtin::array_new<u8>(35), used: 0 };
-        String::append(__local_58, String { repr: array.new_data<u8>("f64_nearest(2.7) = "), used: 19 });
+        String::push_str(__local_58, String { repr: array.new_data<u8>("f64_nearest(2.7) = "), used: 19 });
         __local_59 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_58 };
         f64::fmt_into(near4, __local_59);
         break __tmpl: __local_58;
@@ -371,14 +371,14 @@ fn run() with Stdout {
     sqrt3 = builtin::f64_sqrt(2);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_60 = String { repr: builtin::array_new<u8>(32), used: 0 };
-        String::append(__local_60, String { repr: array.new_data<u8>("f64_sqrt(4.0) = "), used: 16 });
+        String::push_str(__local_60, String { repr: array.new_data<u8>("f64_sqrt(4.0) = "), used: 16 });
         __local_61 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_60 };
         f64::fmt_into(sqrt1, __local_61);
         break __tmpl: __local_60;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_62 = String { repr: builtin::array_new<u8>(32), used: 0 };
-        String::append(__local_62, String { repr: array.new_data<u8>("f64_sqrt(9.0) = "), used: 16 });
+        String::push_str(__local_62, String { repr: array.new_data<u8>("f64_sqrt(9.0) = "), used: 16 });
         __local_63 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_62 };
         f64::fmt_into(sqrt2, __local_63);
         break __tmpl: __local_62;
@@ -396,28 +396,28 @@ fn run() with Stdout {
     max2 = f64.max(-1, 1);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_64 = String { repr: builtin::array_new<u8>(36), used: 0 };
-        String::append(__local_64, String { repr: array.new_data<u8>("f64_min(3.0, 5.0) = "), used: 20 });
+        String::push_str(__local_64, String { repr: array.new_data<u8>("f64_min(3.0, 5.0) = "), used: 20 });
         __local_65 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_64 };
         f64::fmt_into(min1, __local_65);
         break __tmpl: __local_64;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_66 = String { repr: builtin::array_new<u8>(37), used: 0 };
-        String::append(__local_66, String { repr: array.new_data<u8>("f64_min(-1.0, 1.0) = "), used: 21 });
+        String::push_str(__local_66, String { repr: array.new_data<u8>("f64_min(-1.0, 1.0) = "), used: 21 });
         __local_67 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_66 };
         f64::fmt_into(min2, __local_67);
         break __tmpl: __local_66;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_68 = String { repr: builtin::array_new<u8>(36), used: 0 };
-        String::append(__local_68, String { repr: array.new_data<u8>("f64_max(3.0, 5.0) = "), used: 20 });
+        String::push_str(__local_68, String { repr: array.new_data<u8>("f64_max(3.0, 5.0) = "), used: 20 });
         __local_69 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_68 };
         f64::fmt_into(max1, __local_69);
         break __tmpl: __local_68;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_70 = String { repr: builtin::array_new<u8>(37), used: 0 };
-        String::append(__local_70, String { repr: array.new_data<u8>("f64_max(-1.0, 1.0) = "), used: 21 });
+        String::push_str(__local_70, String { repr: array.new_data<u8>("f64_max(-1.0, 1.0) = "), used: 21 });
         __local_71 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_70 };
         f64::fmt_into(max2, __local_71);
         break __tmpl: __local_70;
@@ -427,21 +427,21 @@ fn run() with Stdout {
     copy3 = f64.copysign(5, 5);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_72 = String { repr: builtin::array_new<u8>(42), used: 0 };
-        String::append(__local_72, String { repr: array.new_data<u8>("f64_copysign(3.0, -1.0) = "), used: 26 });
+        String::push_str(__local_72, String { repr: array.new_data<u8>("f64_copysign(3.0, -1.0) = "), used: 26 });
         __local_73 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_72 };
         f64::fmt_into(copy1, __local_73);
         break __tmpl: __local_72;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_74 = String { repr: builtin::array_new<u8>(42), used: 0 };
-        String::append(__local_74, String { repr: array.new_data<u8>("f64_copysign(-3.0, 1.0) = "), used: 26 });
+        String::push_str(__local_74, String { repr: array.new_data<u8>("f64_copysign(-3.0, 1.0) = "), used: 26 });
         __local_75 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_74 };
         f64::fmt_into(copy2, __local_75);
         break __tmpl: __local_74;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_76 = String { repr: builtin::array_new<u8>(41), used: 0 };
-        String::append(__local_76, String { repr: array.new_data<u8>("f64_copysign(5.0, 5.0) = "), used: 25 });
+        String::push_str(__local_76, String { repr: array.new_data<u8>("f64_copysign(5.0, 5.0) = "), used: 25 });
         __local_77 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_76 };
         f64::fmt_into(copy3, __local_77);
         break __tmpl: __local_76;
@@ -453,35 +453,35 @@ fn run() with Stdout {
     f32_max = f32.max(builtin::f32_demote_f64(3), builtin::f32_demote_f64(5));
     "core:cli/println"(__tmpl: block -> ref String {
         __local_78 = String { repr: builtin::array_new<u8>(32), used: 0 };
-        String::append(__local_78, String { repr: array.new_data<u8>("f32_ceil(2.3) = "), used: 16 });
+        String::push_str(__local_78, String { repr: array.new_data<u8>("f32_ceil(2.3) = "), used: 16 });
         __local_79 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_78 };
         f32::fmt_into(f32_ceil, __local_79);
         break __tmpl: __local_78;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_80 = String { repr: builtin::array_new<u8>(33), used: 0 };
-        String::append(__local_80, String { repr: array.new_data<u8>("f32_floor(2.7) = "), used: 17 });
+        String::push_str(__local_80, String { repr: array.new_data<u8>("f32_floor(2.7) = "), used: 17 });
         __local_81 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_80 };
         f32::fmt_into(f32_floor, __local_81);
         break __tmpl: __local_80;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_82 = String { repr: builtin::array_new<u8>(32), used: 0 };
-        String::append(__local_82, String { repr: array.new_data<u8>("f32_sqrt(4.0) = "), used: 16 });
+        String::push_str(__local_82, String { repr: array.new_data<u8>("f32_sqrt(4.0) = "), used: 16 });
         __local_83 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_82 };
         f32::fmt_into(f32_sqrt, __local_83);
         break __tmpl: __local_82;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_84 = String { repr: builtin::array_new<u8>(36), used: 0 };
-        String::append(__local_84, String { repr: array.new_data<u8>("f32_min(3.0, 5.0) = "), used: 20 });
+        String::push_str(__local_84, String { repr: array.new_data<u8>("f32_min(3.0, 5.0) = "), used: 20 });
         __local_85 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_84 };
         f32::fmt_into(f32_min, __local_85);
         break __tmpl: __local_84;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_86 = String { repr: builtin::array_new<u8>(36), used: 0 };
-        String::append(__local_86, String { repr: array.new_data<u8>("f32_max(3.0, 5.0) = "), used: 20 });
+        String::push_str(__local_86, String { repr: array.new_data<u8>("f32_max(3.0, 5.0) = "), used: 20 });
         __local_87 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_86 };
         f32::fmt_into(f32_max, __local_87);
         break __tmpl: __local_86;
@@ -1378,7 +1378,7 @@ fn write_decimal(buf, d, p, nd) {
     let index: i32;
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
-        String::append(buf, String { repr: array.new_data<u8>("0."), used: 2 });
+        String::push_str(buf, String { repr: array.new_data<u8>("0."), used: 2 });
         n_10 = 0 - decimal_pos;
         String::append_byte_filled(buf, 48, n_10);
         digit_offset = buf.used;
@@ -1433,7 +1433,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
         leading_zeros = 0 - decimal_pos;
-        String::append(buf, String { repr: array.new_data<u8>("0."), used: 2 });
+        String::push_str(buf, String { repr: array.new_data<u8>("0."), used: 2 });
         if precision <= leading_zeros {
             String::append_byte_filled(buf, 48, precision);
             return;
@@ -1465,7 +1465,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         n_37 = decimal_pos - nd;
         String::append_byte_filled(buf, 48, n_37);
         if precision > 0 {
-            String::append(buf, String { repr: array.new_data<u8>("."), used: 1 });
+            String::push_str(buf, String { repr: array.new_data<u8>("."), used: 1 });
             String::append_byte_filled(buf, 48, precision);
         };
     } else {
@@ -1547,25 +1547,25 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
         break __inline_String__len_1: __local_6.used;
     };
     if kind == 3 {
-        String::append(f.buf, String { repr: array.new_data<u8>("NaN"), used: 3 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("NaN"), used: 3 });
     } else if kind == 2 {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
         });
     } else {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
         });
-        String::append(f.buf, zero_repr);
+        String::push_str(f.buf, zero_repr);
     };
     Formatter::apply_padding(f, mark);
 }
 
-fn Array<u64>::append(self, value) {
+fn Array<u64>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1668,9 +1668,9 @@ fn f32::fmt_into(self, f) {
         break __inline_String__len_6: __local_22.used;
     };
     if is_neg {
-        String::append(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
     } else if f.sign_plus {
-        String::append(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
     };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
@@ -1735,9 +1735,9 @@ fn f64::fmt_into(self, f) {
         break __inline_String__len_5: __local_19.used;
     };
     if is_neg {
-        String::append(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
     } else if f.sign_plus {
-        String::append(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
     };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
@@ -1791,13 +1791,13 @@ fn f64::fmt_fixed(self, precision, f) {
             break __inline_String__len_1: __local_16.used;
         };
         if is_neg {
-            String::append(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
+            String::push_str(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
         } else if f.sign_plus {
-            String::append(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
+            String::push_str(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
         };
-        String::append(f.buf, String { repr: array.new_data<u8>("0"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("0"), used: 1 });
         if precision > 0 {
-            String::append(f.buf, String { repr: array.new_data<u8>("."), used: 1 });
+            String::push_str(f.buf, String { repr: array.new_data<u8>("."), used: 1 });
             String::append_byte_filled(f.buf, 48, precision);
         };
         Formatter::apply_padding(f, mark_7);
@@ -1832,9 +1832,9 @@ fn f64::fmt_fixed(self, precision, f) {
         break __inline_String__len_8: __local_25.used;
     };
     if is_neg {
-        String::append(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
     } else if f.sign_plus {
-        String::append(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
     };
     write_decimal_prec(f.buf, d, p, nd, precision);
     Formatter::apply_padding(f, mark_13);
@@ -1875,7 +1875,7 @@ fn String::append_byte_filled(self, byte, n) {
     self.used = new_used;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;

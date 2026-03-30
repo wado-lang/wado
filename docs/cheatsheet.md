@@ -165,7 +165,7 @@ takes([1, 2, 3]);                        // coercion to Array
 
 // Array methods
 let mut arr: Array<i32> = [];
-arr.append(1);                           // add element to end
+arr.push(1);                             // add element to end
 let n = arr.len();                       // get length
 let empty = arr.is_empty();              // check if empty
 let first = arr[0];                      // index access (read)
@@ -219,8 +219,8 @@ let empty = s.is_empty();
 
 // String building
 let mut builder = String::with_capacity(20);
-builder.append("Hello");
-builder.append(", World!");
+builder.push_str("Hello");
+builder.push_str(", World!");
 
 // Iterating over characters
 for let c of "hello".chars() {

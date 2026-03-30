@@ -1596,10 +1596,14 @@ caller MUST fill all `n` bytes before the string is observed.
 Append `n` copies of `byte` to this string using array.fill.
 Much faster than a loop for large n (e.g., trailing zeros in large integers).
 
+##### `pub fn push_str(&mut self, other: String)`
+
+Appends another string to this string.
+Grows the string if necessary (O(1) amortized).
+
 ##### `pub fn append(&mut self, other: String)`
 
-Append another string to this string
-Grows the string if necessary (O(1) amortized)
+@deprecated Use `push_str` instead.
 
 ##### `pub fn concat(a: String, b: String) -> String`
 
@@ -1614,19 +1618,51 @@ Returns an iterator over the UTF-8 bytes of the string.
 
 Returns an iterator over the Unicode scalar values (chars) of the string.
 
+##### `pub fn push(&mut self, c: char)`
+
+Appends a Unicode scalar value (char) to this string.
+
 ##### `pub fn append_char(&mut self, c: char)`
 
-Append a Unicode scalar value (char) to this string.
+@deprecated Use `push` instead.
 
-##### `pub fn truncate_bytes(&mut self, byte_len: i32)`
+##### `pub fn truncate(&mut self, byte_len: i32)`
 
-Truncate the string to the given byte length.
+Truncates the string to the given byte length.
 Panics if `byte_len` is not on a UTF-8 character boundary.
 
 ##### `pub fn truncate_chars(&mut self, char_count: i32)`
 
 Truncate the string to the given number of characters.
 If `char_count` >= number of characters, the string is unchanged.
+
+##### `pub fn truncate_bytes(&mut self, byte_len: i32)`
+
+@deprecated Use `truncate` instead.
+
+##### `pub fn pop(&mut self) -> Option<char>`
+
+Removes and returns the last character, or None if empty.
+
+##### `pub fn clear(&mut self)`
+
+Removes all contents, making the string empty.
+
+##### `pub fn capacity(&self) -> i32`
+
+Returns the total capacity in bytes.
+
+##### `pub fn reserve(&mut self, additional: i32)`
+
+Reserves capacity for at least `additional` more bytes.
+
+##### `pub fn shrink_to_fit(&mut self)`
+
+Shrinks the capacity to match the current byte length.
+
+##### `pub fn as_bytes(&self) -> Array<u8>`
+
+Returns the bytes of this string as an Array<u8>.
 
 ##### `pub fn trim_ascii_start(&self) -> String`
 
@@ -1662,6 +1698,62 @@ Non-ASCII bytes are left unchanged.
 Returns a new string with all ASCII lowercase letters converted to uppercase.
 Non-ASCII bytes are left unchanged.
 
+##### `pub fn contains(&self, pat: String) -> bool`
+
+Returns true if this string contains the given substring.
+
+##### `pub fn starts_with(&self, pat: String) -> bool`
+
+Returns true if this string starts with the given prefix.
+
+##### `pub fn ends_with(&self, pat: String) -> bool`
+
+Returns true if this string ends with the given suffix.
+
+##### `pub fn find(&self, pat: String) -> Option<i32>`
+
+Returns the byte index of the first occurrence of `pat`, or None.
+
+##### `pub fn rfind(&self, pat: String) -> Option<i32>`
+
+Returns the byte index of the last occurrence of `pat`, or None.
+
+##### `pub fn contains_char(&self, ch: char) -> bool`
+
+Returns true if the string contains the given character.
+
+##### `pub fn find_char(&self, pred: Fn(char) -> bool) -> Option<i32>`
+
+Returns the byte index of the first character matching the predicate, or None.
+
+##### `pub fn insert(&mut self, byte_index: i32, ch: char)`
+
+Inserts a character at the given byte index.
+Panics if `byte_index` is not on a UTF-8 character boundary.
+
+##### `pub fn insert_str(&mut self, byte_index: i32, s: String)`
+
+Inserts a string at the given byte index.
+Panics if `byte_index` is not on a UTF-8 character boundary.
+
+##### `pub fn remove(&mut self, byte_index: i32) -> char`
+
+Removes and returns the character at the given byte index.
+Panics if the index is not on a UTF-8 character boundary.
+
+##### `pub fn repeat(&self, n: i32) -> String`
+
+Returns this string repeated `n` times.
+
+##### `pub fn replace(&self, from: String, to: String) -> String`
+
+Replaces all occurrences of `from` with `to`.
+
+##### `pub fn replacen(&self, from: String, to: String, count: i32) -> String`
+
+Replaces the first `count` occurrences of `from` with `to`.
+If `count` is negative, replaces all occurrences.
+
 ##### `pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String`
 
 Build a String from any iterable of chars.
@@ -1689,6 +1781,26 @@ Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, e
 
 The caller must ensure the bytes form valid UTF-8, otherwise the resulting
 String will contain invalid UTF-8, which may cause undefined behavior.
+
+##### `pub fn split(&self, sep: String) -> StrSplitIter`
+
+Returns an iterator over substrings split by the given separator.
+
+##### `pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter`
+
+Returns an iterator over at most `n` substrings split by the given separator.
+
+##### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter`
+
+Returns an iterator over whitespace-separated substrings.
+
+##### `pub fn lines(&self) -> StrLinesIter`
+
+Returns an iterator over the lines of this string.
+
+##### `pub fn char_indices(&self) -> StrCharIndicesIter`
+
+Returns an iterator over characters with their byte indices.
 
 ##### `impl Add for String`
 
@@ -1862,25 +1974,82 @@ _Fields are private._
 
 ##### `pub fn is_empty(&self) -> bool`
 
+##### `pub fn capacity(&self) -> i32`
+
+Returns the total number of elements the array can hold without reallocating.
+
 ##### `pub fn internal_raw_data(&self) -> builtin::array<T>`
 
 ##### `pub fn internal_from_raw(repr: builtin::array<T>, used: i32) -> Array<T>`
 
+##### `pub fn push(&mut self, value: T)`
+
+Appends a single element to the end.
+
 ##### `pub fn append(&mut self, value: T)`
+
+@deprecated Use `push` instead.
 
 ##### `pub fn pop(&mut self) -> Option<T>`
 
-##### `pub fn truncate(&mut self, len: i32)`
+##### `pub fn first(&self) -> Option<T>`
+
+Returns the first element, or None if empty.
 
 ##### `pub fn last(&self) -> Option<T>`
 
 ##### `pub fn get(&self, index: i32) -> Option<T>`
+
+##### `pub fn insert(&mut self, index: i32, value: T)`
+
+Inserts an element at the given index, shifting all elements after it to the right.
+Panics if `index > len()`.
+
+##### `pub fn remove(&mut self, index: i32) -> T`
+
+Removes and returns the element at the given index, shifting all elements after it to the left.
+Panics if `index >= len()`.
+
+##### `pub fn swap(&mut self, a: i32, b: i32)`
+
+Swaps two elements by index.
+Panics if either index is out of bounds.
+
+##### `pub fn truncate(&mut self, len: i32)`
+
+##### `pub fn clear(&mut self)`
+
+Removes all elements.
+
+##### `pub fn reserve(&mut self, additional: i32)`
+
+Reserves capacity for at least `additional` more elements.
+
+##### `pub fn shrink_to_fit(&mut self)`
+
+Shrinks the capacity to match the current length.
+
+##### `pub fn extend(&mut self, other: &Array<T>)`
+
+Extends this array with elements from another array.
+
+##### `pub fn reverse(&mut self)`
+
+Reverses the elements in place.
+
+##### `pub fn repeat(&self, n: i32) -> Array<T>`
+
+Returns a new array containing this array's elements repeated `n` times.
 
 ##### `pub fn copy_within_append(&mut self, src_start: i32, count: i32)`
 
 Copies `count` elements from `self[src_start..]` and appends them.
 Handles overlapping regions correctly for both non-overlapping and DEFLATE-style
 run-length expansion (where src < dst). Forward order is correct in both cases.
+
+##### `pub fn contains(&self, value: &T) -> bool`
+
+Returns true if the array contains the given value.
 
 ##### `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
 
@@ -1892,9 +2061,23 @@ In-place sort with comparator. Stable, O(n log n) worst case.
 
 ##### `pub fn sorted_by(&self, cmp: Fn(&T, &T) -> Ordering) -> Array<T>`
 
+##### `pub fn windows(&self, size: i32) -> WindowsIter<T>`
+
+Returns an iterator of overlapping windows of size `size`.
+Panics if `size` is 0.
+
+##### `pub fn chunks(&self, size: i32) -> ChunksIter<T>`
+
+Returns an iterator of non-overlapping chunks of size `size`.
+The last chunk may be shorter. Panics if `size` is 0.
+
 ##### `pub fn sort(&mut self)`
 
 ##### `pub fn sorted(&self) -> Array<T>`
+
+##### `pub fn join(&self, separator: String) -> String`
+
+Joins elements into a string with the given separator.
 
 ##### `impl IndexValue<i32> for Array<T>`
 

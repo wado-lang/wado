@@ -55,7 +55,7 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
@@ -210,7 +210,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -227,11 +227,11 @@ fn String::append(self, other) {
 
 fn JsonSerializer^Serializer::serialize_unit_variant(self, type_name, variant_name, disc) {
     let __local_4: ref String;
-    String::append(self, __tmpl: block -> ref String {
+    String::push_str(self, __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
-        String::append(__local_4, variant_name);
-        String::append(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
+        String::push_str(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
+        String::push_str(__local_4, variant_name);
+        String::push_str(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
         break __tmpl: __local_4;
     });
     return ref.null none;

@@ -2,15 +2,15 @@ use { Elem, Alt, RepeatElem, LabelElem } from "./sub/variant_deref_helper.wado";
 
 fn process(elem: &Elem, out: &mut String) {
     if let TokenRef(name) = *elem {
-        out.append(name);
+        out.push_str(name);
         return;
     }
     if let Literal(text) = *elem {
-        out.append(text);
+        out.push_str(text);
         return;
     }
     if let RuleRef(name) = *elem {
-        out.append(name);
+        out.push_str(name);
         return;
     }
     if let Repeat(rep) = *elem {

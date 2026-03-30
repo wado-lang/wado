@@ -91,19 +91,19 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
 type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> bool;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
-type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
+type "functype/Array<String>::push" = fn(ref Array<String>, ref String);
 
 type "functype/Array<String>::grow" = fn(ref Array<String>);
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
@@ -197,14 +197,14 @@ fn run() with Stdout {
             break __seq_lit: __local_33;
         }) };
         __local_41 = String { repr: array.new_data<u8>("x"), used: 1 };
-        Array<String>::append(__local_0.keys, __local_41);
-        Array<i32>::append(__local_0.values, 10);
+        Array<String>::push(__local_0.keys, __local_41);
+        Array<i32>::push(__local_0.values, 10);
         __local_44 = String { repr: array.new_data<u8>("y"), used: 1 };
-        Array<String>::append(__local_0.keys, __local_44);
-        Array<i32>::append(__local_0.values, 20);
+        Array<String>::push(__local_0.keys, __local_44);
+        Array<i32>::push(__local_0.values, 20);
         __local_47 = String { repr: array.new_data<u8>("z"), used: 1 };
-        Array<String>::append(__local_0.keys, __local_47);
-        Array<i32>::append(__local_0.values, 30);
+        Array<String>::push(__local_0.keys, __local_47);
+        Array<i32>::push(__local_0.values, 30);
         break __kv_lit: __local_0;
     };
     __v0_2 = __inline_Array_i32___len_14: block -> i32 {
@@ -215,27 +215,27 @@ fn run() with Stdout {
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_17 = String { repr: builtin::array_new<u8>(132), used: 0 };
-            String::append(__local_17, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_17, 114);
-            String::append_char(__local_17, 117);
-            String::append_char(__local_17, 110);
-            String::append_char(__local_17, 32);
-            String::append_char(__local_17, 97);
-            String::append_char(__local_17, 116);
-            String::append_char(__local_17, 32);
-            String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
-            String::append_char(__local_17, 58);
+            String::push_str(__local_17, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_17, 114);
+            String::push(__local_17, 117);
+            String::push(__local_17, 110);
+            String::push(__local_17, 32);
+            String::push(__local_17, 97);
+            String::push(__local_17, 116);
+            String::push(__local_17, 32);
+            String::push_str(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
+            String::push(__local_17, 58);
             __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
             __local_55 = __local_18;
             i32::fmt_decimal(75, __local_55);
-            String::append(__local_17, String { repr: array.new_data<u8>("
+            String::push_str(__local_17, String { repr: array.new_data<u8>("
 condition: named.len() == 3
 "), used: 29 });
-            String::append(__local_17, String { repr: array.new_data<u8>("named.len(): "), used: 13 });
+            String::push_str(__local_17, String { repr: array.new_data<u8>("named.len(): "), used: 13 });
             __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
             __local_60 = __local_18;
             i32::fmt_decimal(__v0_2, __local_60);
-            String::append_char(__local_17, 10);
+            String::push(__local_17, 10);
             break __tmpl: __local_17;
         });
         unreachable;
@@ -247,23 +247,23 @@ condition: named.len() == 3
     if __v0_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_19 = String { repr: builtin::array_new<u8>(137), used: 0 };
-            String::append(__local_19, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_19, 114);
-            String::append_char(__local_19, 117);
-            String::append_char(__local_19, 110);
-            String::append_char(__local_19, 32);
-            String::append_char(__local_19, 97);
-            String::append_char(__local_19, 116);
-            String::append_char(__local_19, 32);
-            String::append(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
-            String::append_char(__local_19, 58);
+            String::push_str(__local_19, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_19, 114);
+            String::push(__local_19, 117);
+            String::push(__local_19, 110);
+            String::push(__local_19, 32);
+            String::push(__local_19, 97);
+            String::push(__local_19, 116);
+            String::push(__local_19, 32);
+            String::push_str(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
+            String::push(__local_19, 58);
             __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
             __local_68 = __local_20;
             i32::fmt_decimal(76, __local_68);
-            String::append(__local_19, String { repr: array.new_data<u8>("
+            String::push_str(__local_19, String { repr: array.new_data<u8>("
 condition: named.is_named()
 "), used: 29 });
-            String::append(__local_19, String { repr: array.new_data<u8>("named.is_named(): "), used: 18 });
+            String::push_str(__local_19, String { repr: array.new_data<u8>("named.is_named(): "), used: 18 });
             __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
             __local_73 = __local_20;
             Formatter::pad(__local_73, if __v0_4 -> ref String {
@@ -271,7 +271,7 @@ condition: named.is_named()
             } else {
                 String { repr: array.new_data<u8>("false"), used: 5 };
             });
-            String::append_char(__local_19, 10);
+            String::push(__local_19, 10);
             break __tmpl: __local_19;
         });
         unreachable;
@@ -285,29 +285,29 @@ condition: named.is_named()
         if __cond_8 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_21 = String { repr: builtin::array_new<u8>(113), used: 0 };
-                String::append(__local_21, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append_char(__local_21, 114);
-                String::append_char(__local_21, 117);
-                String::append_char(__local_21, 110);
-                String::append_char(__local_21, 32);
-                String::append_char(__local_21, 97);
-                String::append_char(__local_21, 116);
-                String::append_char(__local_21, 32);
-                String::append(__local_21, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
-                String::append_char(__local_21, 58);
+                String::push_str(__local_21, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push(__local_21, 114);
+                String::push(__local_21, 117);
+                String::push(__local_21, 110);
+                String::push(__local_21, 32);
+                String::push(__local_21, 97);
+                String::push(__local_21, 116);
+                String::push(__local_21, 32);
+                String::push_str(__local_21, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
+                String::push(__local_21, 58);
                 __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
                 __local_79 = __local_22;
                 i32::fmt_decimal(78, __local_79);
-                String::append(__local_21, String { repr: array.new_data<u8>("
+                String::push_str(__local_21, String { repr: array.new_data<u8>("
 condition: v == 20
 "), used: 20 });
-                String::append_char(__local_21, 118);
-                String::append_char(__local_21, 58);
-                String::append_char(__local_21, 32);
+                String::push(__local_21, 118);
+                String::push(__local_21, 58);
+                String::push(__local_21, 32);
                 __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
                 __local_84 = __local_22;
                 i32::fmt_decimal(v, __local_84);
-                String::append_char(__local_21, 10);
+                String::push(__local_21, 10);
                 break __tmpl: __local_21;
             });
             unreachable;
@@ -328,27 +328,27 @@ condition: v == 20
     if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_23 = String { repr: builtin::array_new<u8>(136), used: 0 };
-            String::append(__local_23, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_23, 114);
-            String::append_char(__local_23, 117);
-            String::append_char(__local_23, 110);
-            String::append_char(__local_23, 32);
-            String::append_char(__local_23, 97);
-            String::append_char(__local_23, 116);
-            String::append_char(__local_23, 32);
-            String::append(__local_23, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
-            String::append_char(__local_23, 58);
+            String::push_str(__local_23, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_23, 114);
+            String::push(__local_23, 117);
+            String::push(__local_23, 110);
+            String::push(__local_23, 32);
+            String::push(__local_23, 97);
+            String::push(__local_23, 116);
+            String::push(__local_23, 32);
+            String::push_str(__local_23, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
+            String::push(__local_23, 58);
             __local_24 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_23 };
             __local_105 = __local_24;
             i32::fmt_decimal(83, __local_105);
-            String::append(__local_23, String { repr: array.new_data<u8>("
+            String::push_str(__local_23, String { repr: array.new_data<u8>("
 condition: indexed.len() == 3
 "), used: 31 });
-            String::append(__local_23, String { repr: array.new_data<u8>("indexed.len(): "), used: 15 });
+            String::push_str(__local_23, String { repr: array.new_data<u8>("indexed.len(): "), used: 15 });
             __local_24 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_23 };
             __local_110 = __local_24;
             i32::fmt_decimal(__v0_11, __local_110);
-            String::append_char(__local_23, 10);
+            String::push(__local_23, 10);
             break __tmpl: __local_23;
         });
         unreachable;
@@ -365,27 +365,27 @@ condition: indexed.len() == 3
     if __cond_14 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_25 = String { repr: builtin::array_new<u8>(158), used: 0 };
-            String::append(__local_25, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_25, 114);
-            String::append_char(__local_25, 117);
-            String::append_char(__local_25, 110);
-            String::append_char(__local_25, 32);
-            String::append_char(__local_25, 97);
-            String::append_char(__local_25, 116);
-            String::append_char(__local_25, 32);
-            String::append(__local_25, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
-            String::append_char(__local_25, 58);
+            String::push_str(__local_25, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_25, 114);
+            String::push(__local_25, 117);
+            String::push(__local_25, 110);
+            String::push(__local_25, 32);
+            String::push(__local_25, 97);
+            String::push(__local_25, 116);
+            String::push(__local_25, 32);
+            String::push_str(__local_25, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
+            String::push(__local_25, 58);
             __local_26 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_25 };
             __local_120 = __local_26;
             i32::fmt_decimal(84, __local_120);
-            String::append(__local_25, String { repr: array.new_data<u8>("
+            String::push_str(__local_25, String { repr: array.new_data<u8>("
 condition: indexed.get_by_index(0) == 100
 "), used: 43 });
-            String::append(__local_25, String { repr: array.new_data<u8>("indexed.get_by_index(0): "), used: 25 });
+            String::push_str(__local_25, String { repr: array.new_data<u8>("indexed.get_by_index(0): "), used: 25 });
             __local_26 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_25 };
             __local_125 = __local_26;
             i32::fmt_decimal(__v0_13, __local_125);
-            String::append_char(__local_25, 10);
+            String::push(__local_25, 10);
             break __tmpl: __local_25;
         });
         unreachable;
@@ -402,27 +402,27 @@ condition: indexed.get_by_index(0) == 100
     if __cond_16 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_27 = String { repr: builtin::array_new<u8>(158), used: 0 };
-            String::append(__local_27, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_27, 114);
-            String::append_char(__local_27, 117);
-            String::append_char(__local_27, 110);
-            String::append_char(__local_27, 32);
-            String::append_char(__local_27, 97);
-            String::append_char(__local_27, 116);
-            String::append_char(__local_27, 32);
-            String::append(__local_27, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
-            String::append_char(__local_27, 58);
+            String::push_str(__local_27, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_27, 114);
+            String::push(__local_27, 117);
+            String::push(__local_27, 110);
+            String::push(__local_27, 32);
+            String::push(__local_27, 97);
+            String::push(__local_27, 116);
+            String::push(__local_27, 32);
+            String::push_str(__local_27, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/key-value-literal-both-traits.wado"), used: 63 });
+            String::push(__local_27, 58);
             __local_28 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_27 };
             __local_135 = __local_28;
             i32::fmt_decimal(85, __local_135);
-            String::append(__local_27, String { repr: array.new_data<u8>("
+            String::push_str(__local_27, String { repr: array.new_data<u8>("
 condition: indexed.get_by_index(2) == 300
 "), used: 43 });
-            String::append(__local_27, String { repr: array.new_data<u8>("indexed.get_by_index(2): "), used: 25 });
+            String::push_str(__local_27, String { repr: array.new_data<u8>("indexed.get_by_index(2): "), used: 25 });
             __local_28 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_27 };
             __local_140 = __local_28;
             i32::fmt_decimal(__v0_15, __local_140);
-            String::append_char(__local_27, 10);
+            String::push(__local_27, 10);
             break __tmpl: __local_27;
         });
         unreachable;
@@ -662,7 +662,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -706,7 +706,7 @@ fn String^Eq::eq_bytes(a, b, len) {
     return 1;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -733,7 +733,7 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Array<String>::append(self, value) {
+fn Array<String>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -775,7 +775,7 @@ fn Array<String>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<i32>::append(self, value) {
+fn Array<i32>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -870,7 +870,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l52;
             };
@@ -890,7 +890,7 @@ fn Formatter::pad(self, content) {
     } else {
         content_len >= self.width;
     } {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         return;
     };
     padding = self.width - content_len;
@@ -898,17 +898,17 @@ fn Formatter::pad(self, content) {
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, padding);
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, right_pad);
     } else {
         Formatter::write_char_n(self, self.fill, padding);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
     };
 }
 
@@ -938,20 +938,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -961,10 +961,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -974,10 +974,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -985,10 +985,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

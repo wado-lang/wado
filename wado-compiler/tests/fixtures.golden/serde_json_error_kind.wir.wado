@@ -108,9 +108,9 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/core:serde/DeserializeErrorKind^Inspect::inspect" = fn("core:serde/enum:DeserializeErrorKind", ref Formatter);
 
@@ -167,17 +167,17 @@ fn __test_0_enum_field_access_on_cross_module_struct() {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_3 = String { repr: builtin::array_new<u8>(154), used: 0 };
-            String::append(__local_3, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_3, String { repr: array.new_data<u8>("__test_0_enum_field_access_on_cross_module_struct"), used: 49 });
-            String::append_char(__local_3, 32);
-            String::append_char(__local_3, 97);
-            String::append_char(__local_3, 116);
-            String::append_char(__local_3, 32);
-            String::append(__local_3, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_error_kind.wado"), used: 55 });
-            String::append_char(__local_3, 58);
+            String::push_str(__local_3, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_3, String { repr: array.new_data<u8>("__test_0_enum_field_access_on_cross_module_struct"), used: 49 });
+            String::push(__local_3, 32);
+            String::push(__local_3, 97);
+            String::push(__local_3, 116);
+            String::push(__local_3, 32);
+            String::push_str(__local_3, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_error_kind.wado"), used: 55 });
+            String::push(__local_3, 58);
             __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
             i32::fmt_decimal(11, __local_4);
-            String::append(__local_3, String { repr: array.new_data<u8>("
+            String::push_str(__local_3, String { repr: array.new_data<u8>("
 condition: r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData }
 "), used: 81 });
             break __tmpl: __local_3;
@@ -204,35 +204,35 @@ fn __test_1_enum_field_compared_directly() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(212), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_1_enum_field_compared_directly"), used: 37 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_error_kind.wado"), used: 55 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_1_enum_field_compared_directly"), used: 37 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_error_kind.wado"), used: 55 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_12 = __local_6;
                 i32::fmt_decimal(17, __local_12);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: e.kind == DeserializeErrorKind::UnexpectedType
 "), used: 59 });
-                String::append_char(__local_5, 101);
-                String::append_char(__local_5, 46);
-                String::append_char(__local_5, 107);
-                String::append_char(__local_5, 105);
-                String::append_char(__local_5, 110);
-                String::append_char(__local_5, 100);
-                String::append_char(__local_5, 58);
-                String::append_char(__local_5, 32);
+                String::push(__local_5, 101);
+                String::push(__local_5, 46);
+                String::push(__local_5, 107);
+                String::push(__local_5, 105);
+                String::push(__local_5, 110);
+                String::push(__local_5, 100);
+                String::push(__local_5, 58);
+                String::push(__local_5, 32);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 "core:serde/DeserializeErrorKind^Inspect::inspect"(__v0, __local_6);
-                String::append_char(__local_5, 10);
-                String::append(__local_5, String { repr: array.new_data<u8>("DeserializeErrorKind::UnexpectedType: "), used: 38 });
+                String::push(__local_5, 10);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("DeserializeErrorKind::UnexpectedType: "), used: 38 });
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 "core:serde/DeserializeErrorKind^Inspect::inspect"(__v1, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -818,7 +818,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -833,7 +833,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -873,34 +873,34 @@ fn "core:serde/DeserializeErrorKind^Inspect::inspect"(self, f) {  // from core:s
     let __local_21: ref String;
     if self == 0 {
         __local_3 = String { repr: array.new_data<u8>("DeserializeErrorKind::UnexpectedType"), used: 36 };
-        String::append(f.buf, __local_3);
+        String::push_str(f.buf, __local_3);
     } else if self == 1 {
         __local_5 = String { repr: array.new_data<u8>("DeserializeErrorKind::MissingField"), used: 34 };
-        String::append(f.buf, __local_5);
+        String::push_str(f.buf, __local_5);
     } else if self == 2 {
         __local_7 = String { repr: array.new_data<u8>("DeserializeErrorKind::UnknownVariant"), used: 36 };
-        String::append(f.buf, __local_7);
+        String::push_str(f.buf, __local_7);
     } else if self == 3 {
         __local_9 = String { repr: array.new_data<u8>("DeserializeErrorKind::DuplicateField"), used: 36 };
-        String::append(f.buf, __local_9);
+        String::push_str(f.buf, __local_9);
     } else if self == 4 {
         __local_11 = String { repr: array.new_data<u8>("DeserializeErrorKind::InvalidValue"), used: 34 };
-        String::append(f.buf, __local_11);
+        String::push_str(f.buf, __local_11);
     } else if self == 5 {
         __local_13 = String { repr: array.new_data<u8>("DeserializeErrorKind::Overflow"), used: 30 };
-        String::append(f.buf, __local_13);
+        String::push_str(f.buf, __local_13);
     } else if self == 6 {
         __local_15 = String { repr: array.new_data<u8>("DeserializeErrorKind::MalformedInput"), used: 36 };
-        String::append(f.buf, __local_15);
+        String::push_str(f.buf, __local_15);
     } else if self == 7 {
         __local_17 = String { repr: array.new_data<u8>("DeserializeErrorKind::TrailingData"), used: 34 };
-        String::append(f.buf, __local_17);
+        String::push_str(f.buf, __local_17);
     } else if self == 8 {
         __local_19 = String { repr: array.new_data<u8>("DeserializeErrorKind::Eof"), used: 25 };
-        String::append(f.buf, __local_19);
+        String::push_str(f.buf, __local_19);
     } else if self == 9 {
         __local_21 = String { repr: array.new_data<u8>("DeserializeErrorKind::Custom"), used: 28 };
-        String::append(f.buf, __local_21);
+        String::push_str(f.buf, __local_21);
     };
 }
 
@@ -1206,7 +1206,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l147;
             };
@@ -1240,20 +1240,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -1263,10 +1263,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -1276,10 +1276,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -1287,10 +1287,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

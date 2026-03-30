@@ -254,15 +254,15 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
-type "functype/Array<Tuple<Descriptor,String>>::append" = fn(ref Array<Tuple<Descriptor,String>>, ref "tuple/[Descriptor, String]");
+type "functype/Array<Tuple<Descriptor,String>>::push" = fn(ref Array<Tuple<Descriptor,String>>, ref "tuple/[Descriptor, String]");
 
 type "functype/Array<Tuple<Descriptor,String>>::grow" = fn(ref Array<Tuple<Descriptor,String>>);
 
-type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
+type "functype/Array<u8>::push" = fn(ref Array<u8>, u8);
 
 type "functype/Array<u8>::grow" = fn(ref Array<u8>);
 
@@ -367,7 +367,7 @@ fn read_all(file) {
                     multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<u8>^Iterator::next(__iter_6);
                     if __sroa___pattern_temp_1_discriminant == 0 {
                         b = __sroa___pattern_temp_1_payload_0;
-                        Array<u8>::append(result, b);
+                        Array<u8>::push(result, b);
                     } else {
                         break b3;
                     };
@@ -438,10 +438,10 @@ fn run() with Stdout, Stderr, Preopens {
                 sz_8 = s_7.size;
                 "core:cli/eprintln"(__tmpl: block -> ref String {
                     __local_18 = String { repr: builtin::array_new<u8>(55), used: 0 };
-                    String::append(__local_18, String { repr: array.new_data<u8>("set_size: initial size is "), used: 26 });
+                    String::push_str(__local_18, String { repr: array.new_data<u8>("set_size: initial size is "), used: 26 });
                     __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
                     u64::fmt_decimal(sz_8, __local_19);
-                    String::append(__local_18, String { repr: array.new_data<u8>(", expected 10"), used: 13 });
+                    String::push_str(__local_18, String { repr: array.new_data<u8>(", expected 10"), used: 13 });
                     break __tmpl: __local_18;
                 });
             };
@@ -462,10 +462,10 @@ fn run() with Stdout, Stderr, Preopens {
                 sz_12 = s_11.size;
                 "core:cli/eprintln"(__tmpl: block -> ref String {
                     __local_20 = String { repr: builtin::array_new<u8>(56), used: 0 };
-                    String::append(__local_20, String { repr: array.new_data<u8>("set_size: truncated size is "), used: 28 });
+                    String::push_str(__local_20, String { repr: array.new_data<u8>("set_size: truncated size is "), used: 28 });
                     __local_21 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
                     u64::fmt_decimal(sz_12, __local_21);
-                    String::append(__local_20, String { repr: array.new_data<u8>(", expected 5"), used: 12 });
+                    String::push_str(__local_20, String { repr: array.new_data<u8>(", expected 5"), used: 12 });
                     break __tmpl: __local_20;
                 });
             };
@@ -526,7 +526,7 @@ fn run() with Stdout, Stderr, Preopens {
         } else {
             "core:cli/eprintln"(__tmpl: block -> ref String {
                 __local_22 = String { repr: builtin::array_new<u8>(60), used: 0 };
-                String::append(__local_22, String { repr: array.new_data<u8>("set_size: truncated content unexpected, len="), used: 44 });
+                String::push_str(__local_22, String { repr: array.new_data<u8>("set_size: truncated content unexpected, len="), used: 44 });
                 __local_23 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
                 i32::fmt_decimal(content.used, __local_23);
                 break __tmpl: __local_22;
@@ -547,10 +547,10 @@ fn run() with Stdout, Stderr, Preopens {
                 sz_17 = s_16.size;
                 "core:cli/eprintln"(__tmpl: block -> ref String {
                     __local_24 = String { repr: builtin::array_new<u8>(55), used: 0 };
-                    String::append(__local_24, String { repr: array.new_data<u8>("set_size: extended size is "), used: 27 });
+                    String::push_str(__local_24, String { repr: array.new_data<u8>("set_size: extended size is "), used: 27 });
                     __local_25 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
                     u64::fmt_decimal(sz_17, __local_25);
-                    String::append(__local_24, String { repr: array.new_data<u8>(", expected 8"), used: 12 });
+                    String::push_str(__local_24, String { repr: array.new_data<u8>(", expected 8"), used: 12 });
                     break __tmpl: __local_24;
                 });
             };
@@ -617,7 +617,7 @@ fn __cm_binding__Preopens_get_directories() {
                 __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
                 break __inline_memory_to_gc_string_1: String { repr: __local_11, used: __local_10 };
             };
-            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
+            Array<Tuple<Descriptor,String>>::push(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
             continue l29;
@@ -1624,7 +1624,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -1639,7 +1639,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -1666,7 +1666,7 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Array<Tuple<Descriptor,String>>::append(self, value) {
+fn Array<Tuple<Descriptor,String>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1708,7 +1708,7 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<u8>::append(self, value) {
+fn Array<u8>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1771,7 +1771,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l249;
             };
@@ -1805,20 +1805,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -1828,10 +1828,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -1841,10 +1841,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -1852,10 +1852,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
