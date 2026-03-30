@@ -6,7 +6,6 @@ Quick reference for Wado syntax.
 
 ```wado
 #!/usr/bin/env wado
-// Shebang is only valid on the first line and is ignored by the compiler.
 ```
 
 ## Comments
