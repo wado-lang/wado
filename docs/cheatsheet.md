@@ -303,7 +303,7 @@ for let { x, y } of points {
 
 ### Enums
 
-Wado has three distinct type kinds for Component Model alignment: enums (no payload), variants (with payload), and flags (bitmask). Rust's `enum` covers all three.
+Wado has three distinct type kinds for Component Model alignment: enums (no payload), variants (with payload), and flags (bitmask).
 
 Enums are discriminated values without payloads (i32 discriminant):
 
