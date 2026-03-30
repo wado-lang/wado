@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774877098013,
+  "lastUpdate": 1774882382837,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8915,6 +8915,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/89206bc17ad97a34034f8de58d8a366031f798d5"
         },
         "date": 1774877097814,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ffd2800339b002bdcf938ec033af6f877bef9923",
+          "message": "Merge pull request #737 from wado-lang/claude/fix-e2e-todos-os4F9\n\nFix WASI HTTP E2E TODO tests",
+          "timestamp": "2026-03-30T23:50:02+09:00",
+          "tree_id": "ded8214201f97b6f03ea7a09c083dd5c461d03b4",
+          "url": "https://github.com/wado-lang/wado/commit/ffd2800339b002bdcf938ec033af6f877bef9923"
+        },
+        "date": 1774882382609,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
