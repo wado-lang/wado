@@ -123,13 +123,13 @@ type "functype/./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapE
 
 type "functype/./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entries" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>") -> ref Array<Tuple<String,Value>>;
 
-type "functype/./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::append" = fn(ref Array<Tuple<String,Value>>, ref "tuple/[String, Value]");
+type "functype/./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::push" = fn(ref Array<Tuple<String,Value>>, ref "tuple/[String, Value]");
 
 type "functype/./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::grow" = fn(ref Array<Tuple<String,Value>>);
 
 type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
@@ -145,7 +145,7 @@ type "functype/TreeMap<String,Value>::split" = fn(ref "./sub/cross_module_treema
 
 type "functype/TreeMap<String,Value>::skew" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>", ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>") -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
 
-type "functype/Array<TreeMapEntry<String,Value>>::append" = fn(ref Array<TreeMapEntry<String,Value>>, ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>");
+type "functype/Array<TreeMapEntry<String,Value>>::push" = fn(ref Array<TreeMapEntry<String,Value>>, ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>");
 
 type "functype/Array<TreeMapEntry<String,Value>>::grow" = fn(ref Array<TreeMapEntry<String,Value>>);
 
@@ -216,9 +216,9 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {  // from ./su
         __local_1 = __cast_2.payload_0;
         __tmpl: block -> ref String {
             __local_8 = String { repr: builtin::array_new<u8>(18), used: 0 };
-            String::append(__local_8, String { repr: array.new_data<u8>("\""), used: 1 });
-            String::append(__local_8, __local_1);
-            String::append(__local_8, String { repr: array.new_data<u8>("\""), used: 1 });
+            String::push_str(__local_8, String { repr: array.new_data<u8>("\""), used: 1 });
+            String::push_str(__local_8, __local_1);
+            String::push_str(__local_8, String { repr: array.new_data<u8>("\""), used: 1 });
             break __tmpl: __local_8;
         };
     } else if ref.test "./sub/cross_module_treemap_variant_helper.wado/Value::Obj"(__match_scrut_0) -> ref String {
@@ -237,8 +237,8 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {  // from ./su
                     if __local_5 > 0 {
                         __local_3 = __tmpl: block -> ref String {
                             __local_9 = String { repr: builtin::array_new<u8>(17), used: 0 };
-                            String::append(__local_9, __local_3);
-                            String::append(__local_9, String { repr: array.new_data<u8>(","), used: 1 });
+                            String::push_str(__local_9, __local_3);
+                            String::push_str(__local_9, String { repr: array.new_data<u8>(","), used: 1 });
                             break __tmpl: __local_9;
                         };
                     };
@@ -253,11 +253,11 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {  // from ./su
                     __local_6 = __local_12.0;
                     __local_3 = __tmpl: block -> ref String {
                         __local_10 = String { repr: builtin::array_new<u8>(51), used: 0 };
-                        String::append(__local_10, __local_3);
-                        String::append(__local_10, String { repr: array.new_data<u8>("\""), used: 1 });
-                        String::append(__local_10, __local_6);
-                        String::append(__local_10, String { repr: array.new_data<u8>("\":"), used: 2 });
-                        String::append(__local_10, "./sub/cross_module_treemap_variant_helper.wado/stringify"(__local_12.1));
+                        String::push_str(__local_10, __local_3);
+                        String::push_str(__local_10, String { repr: array.new_data<u8>("\""), used: 1 });
+                        String::push_str(__local_10, __local_6);
+                        String::push_str(__local_10, String { repr: array.new_data<u8>("\":"), used: 2 });
+                        String::push_str(__local_10, "./sub/cross_module_treemap_variant_helper.wado/stringify"(__local_12.1));
                         break __tmpl: __local_10;
                     };
                     __local_5 = __local_5 + 1;
@@ -267,8 +267,8 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {  // from ./su
         };
         __tmpl: block -> ref String {
             __local_11 = String { repr: builtin::array_new<u8>(17), used: 0 };
-            String::append(__local_11, __local_3);
-            String::append(__local_11, String { repr: array.new_data<u8>("}"), used: 1 });
+            String::push_str(__local_11, __local_3);
+            String::push_str(__local_11, String { repr: array.new_data<u8>("}"), used: 1 });
             break __tmpl: __local_11;
         };
     } else {
@@ -429,7 +429,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entrie
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = value_copy "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
-                    "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::append"(result, "tuple/[String, Value]" { 0: entry.key, 1: entry.value });
+                    "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::push"(result, "tuple/[String, Value]" { 0: entry.key, 1: entry.value });
                 };
             } else {
                 break b14;
@@ -440,7 +440,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entrie
     return result;
 }
 
-fn "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::append"(self, value) {  // from ./sub/cross_module_treemap_variant_helper.wado
+fn "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::push"(self, value) {  // from ./sub/cross_module_treemap_variant_helper.wado
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -504,7 +504,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -614,7 +614,7 @@ fn TreeMap<String,Value>::insert(self, key, value) {
         break __inline_Array_TreeMapEntry_String_Value____len_1: __local_8.used;
     };
     entry = "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>" { key: key, value: value, deleted: 0 };
-    Array<TreeMapEntry<String,Value>>::append(self.entries, entry);
+    Array<TreeMapEntry<String,Value>>::push(self.entries, entry);
     self.root = TreeMap<String,Value>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
@@ -688,7 +688,7 @@ fn TreeMap<String,Value>::skew(self, node) {
     return ref.null none;
 }
 
-fn Array<TreeMapEntry<String,Value>>::append(self, value) {
+fn Array<TreeMapEntry<String,Value>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {

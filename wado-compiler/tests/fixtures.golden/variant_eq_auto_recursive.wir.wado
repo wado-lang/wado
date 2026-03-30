@@ -88,9 +88,9 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/BranchData^Eq::eq" = fn(ref BranchData, ref BranchData) -> bool;
 
@@ -147,32 +147,32 @@ fn __test_0_recursive_variant_eq() {
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_10 = String { repr: builtin::array_new<u8>(132), used: 0 };
-            String::append(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_10, String { repr: array.new_data<u8>("__test_0_recursive_variant_eq"), used: 29 });
-            String::append_char(__local_10, 32);
-            String::append_char(__local_10, 97);
-            String::append_char(__local_10, 116);
-            String::append_char(__local_10, 32);
-            String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado"), used: 59 });
-            String::append_char(__local_10, 58);
+            String::push_str(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_10, String { repr: array.new_data<u8>("__test_0_recursive_variant_eq"), used: 29 });
+            String::push(__local_10, 32);
+            String::push(__local_10, 97);
+            String::push(__local_10, 116);
+            String::push(__local_10, 32);
+            String::push_str(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado"), used: 59 });
+            String::push(__local_10, 58);
             __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             __local_18 = __local_11;
             i32::fmt_decimal(20, __local_18);
-            String::append(__local_10, String { repr: array.new_data<u8>("
+            String::push_str(__local_10, String { repr: array.new_data<u8>("
 condition: a == b
 "), used: 19 });
-            String::append_char(__local_10, 97);
-            String::append_char(__local_10, 58);
-            String::append_char(__local_10, 32);
+            String::push(__local_10, 97);
+            String::push(__local_10, 58);
+            String::push(__local_10, 32);
             __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             Node^Inspect::inspect(a, __local_11);
-            String::append_char(__local_10, 10);
-            String::append_char(__local_10, 98);
-            String::append_char(__local_10, 58);
-            String::append_char(__local_10, 32);
+            String::push(__local_10, 10);
+            String::push(__local_10, 98);
+            String::push(__local_10, 58);
+            String::push(__local_10, 32);
             __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
             Node^Inspect::inspect(b, __local_11);
-            String::append_char(__local_10, 10);
+            String::push(__local_10, 10);
             break __tmpl: __local_10;
         });
         unreachable;
@@ -183,40 +183,40 @@ condition: a == b
     if __cond_9 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_12 = String { repr: builtin::array_new<u8>(158), used: 0 };
-            String::append(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_12, String { repr: array.new_data<u8>("__test_0_recursive_variant_eq"), used: 29 });
-            String::append_char(__local_12, 32);
-            String::append_char(__local_12, 97);
-            String::append_char(__local_12, 116);
-            String::append_char(__local_12, 32);
-            String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado"), used: 59 });
-            String::append_char(__local_12, 58);
+            String::push_str(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_12, String { repr: array.new_data<u8>("__test_0_recursive_variant_eq"), used: 29 });
+            String::push(__local_12, 32);
+            String::push(__local_12, 97);
+            String::push(__local_12, 116);
+            String::push(__local_12, 32);
+            String::push_str(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado"), used: 59 });
+            String::push(__local_12, 58);
             __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             __local_26 = __local_13;
             i32::fmt_decimal(26, __local_26);
-            String::append(__local_12, String { repr: array.new_data<u8>("
+            String::push_str(__local_12, String { repr: array.new_data<u8>("
 condition: !a == c
 "), used: 20 });
-            String::append_char(__local_12, 97);
-            String::append_char(__local_12, 58);
-            String::append_char(__local_12, 32);
+            String::push(__local_12, 97);
+            String::push(__local_12, 58);
+            String::push(__local_12, 32);
             __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             Node^Inspect::inspect(a, __local_13);
-            String::append_char(__local_12, 10);
-            String::append_char(__local_12, 99);
-            String::append_char(__local_12, 58);
-            String::append_char(__local_12, 32);
+            String::push(__local_12, 10);
+            String::push(__local_12, 99);
+            String::push(__local_12, 58);
+            String::push(__local_12, 32);
             __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             Node^Inspect::inspect(c, __local_13);
-            String::append_char(__local_12, 10);
-            String::append_char(__local_12, 97);
-            String::append_char(__local_12, 32);
-            String::append_char(__local_12, 61);
-            String::append_char(__local_12, 61);
-            String::append_char(__local_12, 32);
-            String::append_char(__local_12, 99);
-            String::append_char(__local_12, 58);
-            String::append_char(__local_12, 32);
+            String::push(__local_12, 10);
+            String::push(__local_12, 97);
+            String::push(__local_12, 32);
+            String::push(__local_12, 61);
+            String::push(__local_12, 61);
+            String::push(__local_12, 32);
+            String::push(__local_12, 99);
+            String::push(__local_12, 58);
+            String::push(__local_12, 32);
             __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             __local_33 = __local_13;
             Formatter::pad(__local_33, if __v2 -> ref String {
@@ -224,7 +224,7 @@ condition: !a == c
             } else {
                 String { repr: array.new_data<u8>("false"), used: 5 };
             });
-            String::append_char(__local_12, 10);
+            String::push(__local_12, 10);
             break __tmpl: __local_12;
         });
         unreachable;
@@ -244,32 +244,32 @@ fn __test_1_recursive_variant_eq_nested() {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_5 = String { repr: builtin::array_new<u8>(132), used: 0 };
-            String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_5, String { repr: array.new_data<u8>("__test_1_recursive_variant_eq_nested"), used: 36 });
-            String::append_char(__local_5, 32);
-            String::append_char(__local_5, 97);
-            String::append_char(__local_5, 116);
-            String::append_char(__local_5, 32);
-            String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado"), used: 59 });
-            String::append_char(__local_5, 58);
+            String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_5, String { repr: array.new_data<u8>("__test_1_recursive_variant_eq_nested"), used: 36 });
+            String::push(__local_5, 32);
+            String::push(__local_5, 97);
+            String::push(__local_5, 116);
+            String::push(__local_5, 32);
+            String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado"), used: 59 });
+            String::push(__local_5, 58);
             __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
             __local_11 = __local_6;
             i32::fmt_decimal(44, __local_11);
-            String::append(__local_5, String { repr: array.new_data<u8>("
+            String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: a == b
 "), used: 19 });
-            String::append_char(__local_5, 97);
-            String::append_char(__local_5, 58);
-            String::append_char(__local_5, 32);
+            String::push(__local_5, 97);
+            String::push(__local_5, 58);
+            String::push(__local_5, 32);
             __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
             Node^Inspect::inspect(a, __local_6);
-            String::append_char(__local_5, 10);
-            String::append_char(__local_5, 98);
-            String::append_char(__local_5, 58);
-            String::append_char(__local_5, 32);
+            String::push(__local_5, 10);
+            String::push(__local_5, 98);
+            String::push(__local_5, 58);
+            String::push(__local_5, 32);
             __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
             Node^Inspect::inspect(b, __local_6);
-            String::append_char(__local_5, 10);
+            String::push(__local_5, 10);
             break __tmpl: __local_5;
         });
         unreachable;
@@ -477,7 +477,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -492,7 +492,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -558,17 +558,17 @@ fn BranchData^Inspect::inspect(self, f) {
     let s_9: ref String;
     let s_11: ref String;
     s_3 = String { repr: array.new_data<u8>("BranchData { "), used: 13 };
-    String::append(f.buf, s_3);
+    String::push_str(f.buf, s_3);
     s_5 = String { repr: array.new_data<u8>("left: "), used: 6 };
-    String::append(f.buf, s_5);
+    String::push_str(f.buf, s_5);
     Node^Inspect::inspect(self.left, f);
     s_7 = String { repr: array.new_data<u8>(", "), used: 2 };
-    String::append(f.buf, s_7);
+    String::push_str(f.buf, s_7);
     s_9 = String { repr: array.new_data<u8>("right: "), used: 7 };
-    String::append(f.buf, s_9);
+    String::push_str(f.buf, s_9);
     Node^Inspect::inspect(self.right, f);
     s_11 = String { repr: array.new_data<u8>(" }"), used: 2 };
-    String::append(f.buf, s_11);
+    String::push_str(f.buf, s_11);
 }
 
 fn Node^Inspect::inspect(self, f) {
@@ -578,16 +578,16 @@ fn Node^Inspect::inspect(self, f) {
     let __local_13: ref String;
     if ref.test Node::Leaf(self) {
         __local_3 = String { repr: array.new_data<u8>("Node::Leaf("), used: 11 };
-        String::append(f.buf, __local_3);
+        String::push_str(f.buf, __local_3);
         i32::fmt_decimal(ref.cast Node::Leaf(self).payload_0, f);
         __local_9 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_9);
+        String::push_str(f.buf, __local_9);
     } else if ref.test Node::Branch(self) {
         __local_11 = String { repr: array.new_data<u8>("Node::Branch("), used: 13 };
-        String::append(f.buf, __local_11);
+        String::push_str(f.buf, __local_11);
         BranchData^Inspect::inspect(ref.cast Node::Branch(self).payload_0, f);
         __local_13 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_13);
+        String::push_str(f.buf, __local_13);
     };
 }
 
@@ -602,7 +602,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l34;
             };
@@ -622,7 +622,7 @@ fn Formatter::pad(self, content) {
     } else {
         content_len >= self.width;
     } {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         return;
     };
     padding = self.width - content_len;
@@ -630,17 +630,17 @@ fn Formatter::pad(self, content) {
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, padding);
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, right_pad);
     } else {
         Formatter::write_char_n(self, self.fill, padding);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
     };
 }
 
@@ -670,20 +670,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -693,10 +693,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -706,10 +706,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -717,10 +717,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

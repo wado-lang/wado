@@ -160,7 +160,7 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
@@ -168,19 +168,19 @@ type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> b
 
 type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
-type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
+type "functype/Array<String>::push" = fn(ref Array<String>, ref String);
 
 type "functype/Array<String>::grow" = fn(ref Array<String>);
 
 type "functype/BTreeNode<String,i32>::compact" = fn(ref BTreeNode<String,i32>);
 
-type "functype/Array<bool>::append" = fn(ref Array<bool>, bool);
+type "functype/Array<bool>::push" = fn(ref Array<bool>, bool);
 
 type "functype/Array<bool>::grow" = fn(ref Array<bool>);
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
@@ -192,7 +192,7 @@ type "functype/TreeMap<String,i32>::iter" = fn(ref TreeMap<String,i32>) -> ref A
 
 type "functype/TreeMap<String,i32>::collect_entries" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>, ref Array<Tuple<String,i32>>);
 
-type "functype/Array<Tuple<String,i32>>::append" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
+type "functype/Array<Tuple<String,i32>>::push" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
 
 type "functype/Array<Tuple<String,i32>>::grow" = fn(ref Array<Tuple<String,i32>>);
 
@@ -210,7 +210,7 @@ type "functype/TreeMap<String,i32>::sort_node_entries" = fn(ref TreeMap<String,i
 
 type "functype/TreeMap<String,i32>::split_child" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>, i32);
 
-type "functype/Array<BTreeNode<String,i32>>::append" = fn(ref Array<BTreeNode<String,i32>>, ref BTreeNode<String,i32>);
+type "functype/Array<BTreeNode<String,i32>>::push" = fn(ref Array<BTreeNode<String,i32>>, ref BTreeNode<String,i32>);
 
 type "functype/Array<BTreeNode<String,i32>>::grow" = fn(ref Array<BTreeNode<String,i32>>);
 
@@ -308,32 +308,32 @@ fn run() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("=== After insertion ==="), used: 23 });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(22), used: 0 };
-        String::append_char(__local_11, 83);
-        String::append_char(__local_11, 105);
-        String::append_char(__local_11, 122);
-        String::append_char(__local_11, 101);
-        String::append_char(__local_11, 58);
-        String::append_char(__local_11, 32);
+        String::push(__local_11, 83);
+        String::push(__local_11, 105);
+        String::push(__local_11, 122);
+        String::push(__local_11, 101);
+        String::push(__local_11, 58);
+        String::push(__local_11, 32);
         __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
         i32::fmt_decimal(map.size, __local_12);
         break __tmpl: __local_11;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_13 = String { repr: builtin::array_new<u8>(25), used: 0 };
-        String::append(__local_13, String { repr: array.new_data<u8>("banana = "), used: 9 });
+        String::push_str(__local_13, String { repr: array.new_data<u8>("banana = "), used: 9 });
         __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
         i32::fmt_decimal(TreeMap<String,i32>^Index::index(map, String { repr: array.new_data<u8>("banana"), used: 6 }).value, __local_14);
         break __tmpl: __local_13;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_15 = String { repr: builtin::array_new<u8>(23), used: 0 };
-        String::append_char(__local_15, 100);
-        String::append_char(__local_15, 97);
-        String::append_char(__local_15, 116);
-        String::append_char(__local_15, 101);
-        String::append_char(__local_15, 32);
-        String::append_char(__local_15, 61);
-        String::append_char(__local_15, 32);
+        String::push(__local_15, 100);
+        String::push(__local_15, 97);
+        String::push(__local_15, 116);
+        String::push(__local_15, 101);
+        String::push(__local_15, 32);
+        String::push(__local_15, 61);
+        String::push(__local_15, 32);
         __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
         i32::fmt_decimal(TreeMap<String,i32>^Index::index(map, String { repr: array.new_data<u8>("date"), used: 4 }).value, __local_16);
         break __tmpl: __local_15;
@@ -342,7 +342,7 @@ fn run() with Stdout {
     TreeMap<String,i32>::insert(map, key_68, 20);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_17 = String { repr: builtin::array_new<u8>(35), used: 0 };
-        String::append(__local_17, String { repr: array.new_data<u8>("banana (updated) = "), used: 19 });
+        String::push_str(__local_17, String { repr: array.new_data<u8>("banana (updated) = "), used: 19 });
         __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
         i32::fmt_decimal(TreeMap<String,i32>^Index::index(map, String { repr: array.new_data<u8>("banana"), used: 6 }).value, __local_18);
         break __tmpl: __local_17;
@@ -361,12 +361,12 @@ fn run() with Stdout {
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_19 = String { repr: builtin::array_new<u8>(22), used: 0 };
-        String::append_char(__local_19, 83);
-        String::append_char(__local_19, 105);
-        String::append_char(__local_19, 122);
-        String::append_char(__local_19, 101);
-        String::append_char(__local_19, 58);
-        String::append_char(__local_19, 32);
+        String::push(__local_19, 83);
+        String::push(__local_19, 105);
+        String::push(__local_19, 122);
+        String::push(__local_19, 101);
+        String::push(__local_19, 58);
+        String::push(__local_19, 32);
         __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
         i32::fmt_decimal(map.size, __local_20);
         break __tmpl: __local_19;
@@ -384,10 +384,10 @@ fn run() with Stdout {
                 value_5 = entry_3.1;
                 "core:cli/println"(__tmpl: block -> ref String {
                     __local_21 = String { repr: builtin::array_new<u8>(35), used: 0 };
-                    String::append(__local_21, key_4);
-                    String::append_char(__local_21, 32);
-                    String::append_char(__local_21, 61);
-                    String::append_char(__local_21, 32);
+                    String::push_str(__local_21, key_4);
+                    String::push(__local_21, 32);
+                    String::push(__local_21, 61);
+                    String::push(__local_21, 32);
                     __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
                     i32::fmt_decimal(value_5, __local_22);
                     break __tmpl: __local_21;
@@ -411,19 +411,19 @@ fn run() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_23 = String { repr: builtin::array_new<u8>(22), used: 0 };
-        String::append_char(__local_23, 83);
-        String::append_char(__local_23, 105);
-        String::append_char(__local_23, 122);
-        String::append_char(__local_23, 101);
-        String::append_char(__local_23, 58);
-        String::append_char(__local_23, 32);
+        String::push(__local_23, 83);
+        String::push(__local_23, 105);
+        String::push(__local_23, 122);
+        String::push(__local_23, 101);
+        String::push(__local_23, 58);
+        String::push(__local_23, 32);
         __local_24 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_23 };
         i32::fmt_decimal(map.size, __local_24);
         break __tmpl: __local_23;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_25 = String { repr: builtin::array_new<u8>(31), used: 0 };
-        String::append(__local_25, String { repr: array.new_data<u8>("Deleted count: "), used: 15 });
+        String::push_str(__local_25, String { repr: array.new_data<u8>("Deleted count: "), used: 15 });
         __local_26 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_25 };
         i32::fmt_decimal(map.deleted_count, __local_26);
         break __tmpl: __local_25;
@@ -441,10 +441,10 @@ fn run() with Stdout {
                 value_10 = entry_8.1;
                 "core:cli/println"(__tmpl: block -> ref String {
                     __local_27 = String { repr: builtin::array_new<u8>(35), used: 0 };
-                    String::append(__local_27, key_9);
-                    String::append_char(__local_27, 32);
-                    String::append_char(__local_27, 61);
-                    String::append_char(__local_27, 32);
+                    String::push_str(__local_27, key_9);
+                    String::push(__local_27, 32);
+                    String::push(__local_27, 61);
+                    String::push(__local_27, 32);
                     __local_28 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_27 };
                     i32::fmt_decimal(value_10, __local_28);
                     break __tmpl: __local_27;
@@ -689,7 +689,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -820,7 +820,7 @@ fn StrCharIter^Iterator::next(self) {
     return 0; code_10;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -847,7 +847,7 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Array<String>::append(self, value) {
+fn Array<String>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -950,11 +950,11 @@ fn BTreeNode<String,i32>::compact(self) {
                     };
                     break __inline_Array_bool__IndexValue__index_value_10: builtin::array_get<bool>(_licm_repr_33, __local_20);
                 } == 0 {
-                    Array<String>::append(new_keys, __inline_Array_String__IndexValue__index_value_11: block -> ref String {
+                    Array<String>::push(new_keys, __inline_Array_String__IndexValue__index_value_11: block -> ref String {
                         __local_22 = i_7;
                         break __inline_Array_String__IndexValue__index_value_11: builtin::array_get<ref String>(_licm_repr_34, __local_22);
                     });
-                    Array<i32>::append(new_values, __inline_Array_i32__IndexValue__index_value_12: block -> i32 {
+                    Array<i32>::push(new_values, __inline_Array_i32__IndexValue__index_value_12: block -> i32 {
                         __local_24 = i_7;
                         if __local_24 >= _licm_used_35 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -962,7 +962,7 @@ fn BTreeNode<String,i32>::compact(self) {
                         };
                         break __inline_Array_i32__IndexValue__index_value_12: builtin::array_get<i32>(_licm_repr_36, __local_24);
                     });
-                    Array<bool>::append(new_deleted, 0);
+                    Array<bool>::push(new_deleted, 0);
                 };
                 i_7 = i_7 + 1;
                 continue l53;
@@ -995,7 +995,7 @@ fn BTreeNode<String,i32>::compact(self) {
     };
 }
 
-fn Array<bool>::append(self, value) {
+fn Array<bool>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1037,7 +1037,7 @@ fn Array<bool>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<i32>::append(self, value) {
+fn Array<i32>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1177,7 +1177,7 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
                 };
                 break __inline_Array_bool__IndexValue__index_value_3: builtin::array_get<bool>(_licm_repr_26, __local_9);
             } == 0 {
-                Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: ref.as_non_null(__inline_Array_String__IndexValue__index_value_4: block -> ref String {
+                Array<Tuple<String,i32>>::push(result, "tuple/[String, i32]" { 0: ref.as_non_null(__inline_Array_String__IndexValue__index_value_4: block -> ref String {
                     __local_11 = i;
                     break __inline_Array_String__IndexValue__index_value_4: builtin::array_get<ref String>(_licm_repr_27, __local_11);
                 }), 1: __inline_Array_i32__IndexValue__index_value_5: block -> i32 {
@@ -1213,7 +1213,7 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
     };
 }
 
-fn Array<Tuple<String,i32>>::append(self, value) {
+fn Array<Tuple<String,i32>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1367,7 +1367,7 @@ fn TreeMap<String,i32>^Index::index(self, key) {
     };
     "core:internal/panic"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(31), used: 0 };
-        String::append(__local_3, String { repr: array.new_data<u8>("key not found: "), used: 15 });
+        String::push_str(__local_3, String { repr: array.new_data<u8>("key not found: "), used: 15 });
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
         String^Inspect::inspect(key, __local_4);
         break __tmpl: __local_3;
@@ -1476,9 +1476,9 @@ fn TreeMap<String,i32>::insert(self, key, value) {
     __pattern_temp_0 = self.root;
     if ref.is_null(__pattern_temp_0) {
         new_root_3 = BTreeNode<String,i32>::new_leaf();
-        Array<String>::append(new_root_3.keys, key);
-        Array<i32>::append(new_root_3.values, value);
-        Array<bool>::append(new_root_3.deleted, 0);
+        Array<String>::push(new_root_3.keys, key);
+        Array<i32>::push(new_root_3.values, value);
+        Array<bool>::push(new_root_3.deleted, 0);
         self.root = new_root_3;
         self.size = 1;
         return;
@@ -1488,7 +1488,7 @@ fn TreeMap<String,i32>::insert(self, key, value) {
         root = ref.as_non_null(__pattern_temp_1);
         if BTreeNode<String,i32>::is_full(root, (2 * self.t) - 1) {
             new_root_5 = BTreeNode<String,i32>::new_internal();
-            Array<BTreeNode<String,i32>>::append(new_root_5.children, root);
+            Array<BTreeNode<String,i32>>::push(new_root_5.children, root);
             TreeMap<String,i32>::split_child(self, new_root_5, 0);
             self.root = new_root_5;
         };
@@ -1594,9 +1594,9 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
             };
             return;
         };
-        Array<String>::append(node.keys, key);
-        Array<i32>::append(node.values, value);
-        Array<bool>::append(node.deleted, 0);
+        Array<String>::push(node.keys, key);
+        Array<i32>::push(node.values, value);
+        Array<bool>::push(node.deleted, 0);
         TreeMap<String,i32>::sort_node_entries(self, node);
         self.size = self.size + 1;
     } else {
@@ -1878,11 +1878,11 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
                 if (i_6 < _licm_used_35) == 0 {
                     break __for_3;
                 };
-                Array<String>::append(_licm_keys_30, __inline_Array_String__IndexValue__index_value_2: block -> ref String {
+                Array<String>::push(_licm_keys_30, __inline_Array_String__IndexValue__index_value_2: block -> ref String {
                     __local_15 = i_6;
                     break __inline_Array_String__IndexValue__index_value_2: builtin::array_get<ref String>(_licm_repr_36, __local_15);
                 });
-                Array<i32>::append(_licm_values_31, __inline_Array_i32__IndexValue__index_value_3: block -> i32 {
+                Array<i32>::push(_licm_values_31, __inline_Array_i32__IndexValue__index_value_3: block -> i32 {
                     __local_17 = i_6;
                     if __local_17 >= _licm_used_37 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -1890,7 +1890,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
                     };
                     break __inline_Array_i32__IndexValue__index_value_3: builtin::array_get<i32>(_licm_repr_38, __local_17);
                 });
-                Array<bool>::append(_licm_deleted_33, __inline_Array_bool__IndexValue__index_value_4: block -> bool {
+                Array<bool>::push(_licm_deleted_33, __inline_Array_bool__IndexValue__index_value_4: block -> bool {
                     __local_19 = i_6;
                     if __local_19 >= _licm_used_39 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -1915,7 +1915,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
                     if (i_7 < _licm_used_43) == 0 {
                         break __for_4;
                     };
-                    Array<BTreeNode<String,i32>>::append(_licm_children_42, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: block -> ref BTreeNode<String,i32> {
+                    Array<BTreeNode<String,i32>>::push(_licm_children_42, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: block -> ref BTreeNode<String,i32> {
                         __local_22 = i_7;
                         break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: builtin::array_get<ref BTreeNode<String,i32>>(_licm_repr_44, __local_22);
                     });
@@ -1949,14 +1949,14 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
         };
         break __inline_Array_bool__IndexValue__index_value_9: builtin::array_get<bool>(__local_27.repr, mid);
     };
-    Array<String>::append(parent.keys, promoted_key);
-    Array<i32>::append(parent.values, promoted_value);
-    Array<bool>::append(parent.deleted, promoted_deleted);
-    Array<BTreeNode<String,i32>>::append(parent.children, new_sibling);
+    Array<String>::push(parent.keys, promoted_key);
+    Array<i32>::push(parent.values, promoted_value);
+    Array<bool>::push(parent.deleted, promoted_deleted);
+    Array<BTreeNode<String,i32>>::push(parent.children, new_sibling);
     TreeMap<String,i32>::sort_node_entries(self, parent);
 }
 
-fn Array<BTreeNode<String,i32>>::append(self, value) {
+fn Array<BTreeNode<String,i32>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -2089,7 +2089,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l186;
             };
@@ -2123,20 +2123,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -2146,10 +2146,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -2159,10 +2159,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -2170,10 +2170,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
@@ -2185,7 +2185,7 @@ fn String^Inspect::inspect(self, f) {
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
     let _licm_buf_33: ref String;
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
@@ -2202,22 +2202,22 @@ fn String^Inspect::inspect(self, f) {
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 34);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 110);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 114);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 116);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 116);
                 } else {
-                    String::append_char(_licm_buf_33, c);
+                    String::push(_licm_buf_33, c);
                 };
             } else {
                 break b205;
@@ -2225,7 +2225,7 @@ fn String^Inspect::inspect(self, f) {
             continue l206;
         };
     };
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
 }
 
 export fn __cm_export__run as "run"

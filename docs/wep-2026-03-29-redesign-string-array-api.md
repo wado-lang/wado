@@ -18,55 +18,55 @@ Wado intentionally omits Rust concepts tied to ownership and lifetimes (`as_str(
 
 "—" means intentionally excluded (see rationale below the table).
 
-| Rust `Vec<T>` / `&[T]`   | Wado `Array<T>`                           | Status                               |
-| ------------------------ | ----------------------------------------- | ------------------------------------ |
-| `Vec::new()`             | `[]` (literal) or `Array::<T>::default()` | OK                                   |
-| `Vec::with_capacity(n)`  | `Array::<T>::with_capacity(n)`            | OK                                   |
-| `vec![x; n]`             | `Array::filled(n, x)`                     | OK                                   |
-| `len()`                  | `len()`                                   | OK                                   |
-| `is_empty()`             | `is_empty()`                              | OK                                   |
-| `v[i]` (index)           | `arr[i]`                                  | OK                                   |
-| `v[i] = x` (assign)      | `arr[i] = x`                              | OK                                   |
-| `get(i)`                 | `get(i)`                                  | OK                                   |
-| `first()`                | `first()`                                 | NEW                                  |
-| `last()`                 | `last()`                                  | OK                                   |
-| `push(x)`                | `push(x)`                                 | RENAME from `append`                 |
-| `pop()`                  | `pop()`                                   | OK                                   |
-| `insert(i, x)`           | `insert(i, x)`                            | NEW                                  |
-| `remove(i)`              | `remove(i)`                               | NEW                                  |
-| `swap(a, b)`             | `swap(a, b)`                              | NEW                                  |
-| `truncate(len)`          | `truncate(len)`                           | OK                                   |
-| `clear()`                | `clear()`                                 | NEW                                  |
-| `extend(iter)`           | `extend(iter)`                            | NEW                                  |
-| `extend_from_slice(s)`   | —                                         | use `extend`                         |
-| `contains(&x)`           | `contains(&x)`                            | NEW                                  |
-| `iter()`                 | `iter()`                                  | OK                                   |
-| `sort()`                 | `sort()`                                  | OK                                   |
-| `sort_by(cmp)`           | `sort_by(cmp)`                            | OK                                   |
-| `sort_by_key(f)`         | —                                         | use `sort_by`                        |
+| Rust `Vec<T>` / `&[T]`   | Wado `Array<T>`                           | Status                                  |
+| ------------------------ | ----------------------------------------- | --------------------------------------- |
+| `Vec::new()`             | `[]` (literal) or `Array::<T>::default()` | OK                                      |
+| `Vec::with_capacity(n)`  | `Array::<T>::with_capacity(n)`            | OK                                      |
+| `vec![x; n]`             | `Array::filled(n, x)`                     | OK                                      |
+| `len()`                  | `len()`                                   | OK                                      |
+| `is_empty()`             | `is_empty()`                              | OK                                      |
+| `v[i]` (index)           | `arr[i]`                                  | OK                                      |
+| `v[i] = x` (assign)      | `arr[i] = x`                              | OK                                      |
+| `get(i)`                 | `get(i)`                                  | OK                                      |
+| `first()`                | `first()`                                 | NEW                                     |
+| `last()`                 | `last()`                                  | OK                                      |
+| `push(x)`                | `push(x)`                                 | RENAME from `append`                    |
+| `pop()`                  | `pop()`                                   | OK                                      |
+| `insert(i, x)`           | `insert(i, x)`                            | NEW                                     |
+| `remove(i)`              | `remove(i)`                               | NEW                                     |
+| `swap(a, b)`             | `swap(a, b)`                              | NEW                                     |
+| `truncate(len)`          | `truncate(len)`                           | OK                                      |
+| `clear()`                | `clear()`                                 | NEW                                     |
+| `extend(iter)`           | `extend(iter)`                            | NEW                                     |
+| `extend_from_slice(s)`   | —                                         | use `extend`                            |
+| `contains(&x)`           | `contains(&x)`                            | NEW                                     |
+| `iter()`                 | `iter()`                                  | OK                                      |
+| `sort()`                 | `sort()`                                  | OK                                      |
+| `sort_by(cmp)`           | `sort_by(cmp)`                            | OK                                      |
+| `sort_by_key(f)`         | —                                         | use `sort_by`                           |
 | `sort_unstable()`        | —                                         | `sort()` is stable; unstable not needed |
-| `binary_search(&x)`      | —                                         | use `TreeMap` / `TreeSet` instead    |
-| `reverse()`              | `reverse()`                               | NEW                                  |
-| `dedup()`                | —                                         | use `TreeSet`                        |
-| `dedup_by(f)`            | —                                         | use `TreeSet`                        |
-| `retain(pred)`           | —                                         | use `.iter().filter().collect()`     |
-| `windows(n)`             | `windows(n)`                              | NEW                                  |
-| `chunks(n)`              | `chunks(n)`                               | NEW                                  |
-| `repeat(n)`              | `repeat(n)`                               | NEW                                  |
-| `concat()` / `join(sep)` | `join(sep)`                               | NEW                                  |
-| `split_at(i)`            | —                                         | use `slice` + `truncate`             |
-| `split_off(i)`           | —                                         | use `slice` + `truncate`             |
-| `drain(..)`              | —                                         | complex; use iterator                |
-| `rotate_left(n)`         | —                                         | niche                                |
-| `rotate_right(n)`        | —                                         | niche                                |
-| `resize(n, val)`         | —                                         | use `truncate` + `extend`            |
-| `capacity()`             | `capacity()`                              | NEW                                  |
-| `reserve(n)`             | `reserve(n)`                              | NEW                                  |
-| `shrink_to_fit()`        | `shrink_to_fit()`                         | NEW                                  |
-| `as_slice()`             | —                                         | no borrowing distinction             |
-| `as_mut_slice()`         | —                                         | no borrowing distinction             |
-| `into_boxed_slice()`     | —                                         | no ownership transfer                |
-| `leak()`                 | —                                         | no ownership model                   |
+| `binary_search(&x)`      | —                                         | use `TreeMap` / `TreeSet` instead       |
+| `reverse()`              | `reverse()`                               | NEW                                     |
+| `dedup()`                | —                                         | use `TreeSet`                           |
+| `dedup_by(f)`            | —                                         | use `TreeSet`                           |
+| `retain(pred)`           | —                                         | use `.iter().filter().collect()`        |
+| `windows(n)`             | `windows(n)`                              | NEW                                     |
+| `chunks(n)`              | `chunks(n)`                               | NEW                                     |
+| `repeat(n)`              | `repeat(n)`                               | NEW                                     |
+| `concat()` / `join(sep)` | `join(sep)`                               | NEW                                     |
+| `split_at(i)`            | —                                         | use `slice` + `truncate`                |
+| `split_off(i)`           | —                                         | use `slice` + `truncate`                |
+| `drain(..)`              | —                                         | complex; use iterator                   |
+| `rotate_left(n)`         | —                                         | niche                                   |
+| `rotate_right(n)`        | —                                         | niche                                   |
+| `resize(n, val)`         | —                                         | use `truncate` + `extend`               |
+| `capacity()`             | `capacity()`                              | NEW                                     |
+| `reserve(n)`             | `reserve(n)`                              | NEW                                     |
+| `shrink_to_fit()`        | `shrink_to_fit()`                         | NEW                                     |
+| `as_slice()`             | —                                         | no borrowing distinction                |
+| `as_mut_slice()`         | —                                         | no borrowing distinction                |
+| `into_boxed_slice()`     | —                                         | no ownership transfer                   |
+| `leak()`                 | —                                         | no ownership model                      |
 
 Also available via existing Wado features:
 

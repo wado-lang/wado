@@ -95,7 +95,7 @@ type "functype/__initialize_module" = fn();
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
+type "functype/Array<u64>::push" = fn(ref Array<u64>, u64);
 
 type "functype/Array<u64>::grow" = fn(ref Array<u64>);
 
@@ -103,7 +103,7 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/Formatter::apply_padding" = fn(ref Formatter, i32);
 
@@ -165,7 +165,7 @@ fn user_func_return_f32() with Stdout {
     result = (a * b) + builtin::f32_demote_f64(1.5);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(25), used: 0 };
-        String::append(__local_3, String { repr: array.new_data<u8>("result = "), used: 9 });
+        String::push_str(__local_3, String { repr: array.new_data<u8>("result = "), used: 9 });
         __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
         f32::fmt_into(result, __local_4);
         break __tmpl: __local_3;
@@ -177,7 +177,7 @@ fn user_func_return_f64() with Stdout {
     let __local_2: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(25), used: 0 };
-        String::append(__local_1, String { repr: array.new_data<u8>("result = "), used: 9 });
+        String::push_str(__local_1, String { repr: array.new_data<u8>("result = "), used: 9 });
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         f64::fmt_into(7.5, __local_2);
         break __tmpl: __local_1;
@@ -1094,7 +1094,7 @@ fn write_decimal(buf, d, p, nd) {
     let index: i32;
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
-        String::append(buf, String { repr: array.new_data<u8>("0."), used: 2 });
+        String::push_str(buf, String { repr: array.new_data<u8>("0."), used: 2 });
         n_10 = 0 - decimal_pos;
         String::append_byte_filled(buf, 48, n_10);
         digit_offset = buf.used;
@@ -1149,7 +1149,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
         leading_zeros = 0 - decimal_pos;
-        String::append(buf, String { repr: array.new_data<u8>("0."), used: 2 });
+        String::push_str(buf, String { repr: array.new_data<u8>("0."), used: 2 });
         if precision <= leading_zeros {
             String::append_byte_filled(buf, 48, precision);
             return;
@@ -1181,7 +1181,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         n_37 = decimal_pos - nd;
         String::append_byte_filled(buf, 48, n_37);
         if precision > 0 {
-            String::append(buf, String { repr: array.new_data<u8>("."), used: 1 });
+            String::push_str(buf, String { repr: array.new_data<u8>("."), used: 1 });
             String::append_byte_filled(buf, 48, precision);
         };
     } else {
@@ -1263,25 +1263,25 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
         break __inline_String__len_1: __local_6.used;
     };
     if kind == 3 {
-        String::append(f.buf, String { repr: array.new_data<u8>("NaN"), used: 3 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("NaN"), used: 3 });
     } else if kind == 2 {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
         });
     } else {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
         });
-        String::append(f.buf, zero_repr);
+        String::push_str(f.buf, zero_repr);
     };
     Formatter::apply_padding(f, mark);
 }
 
-fn Array<u64>::append(self, value) {
+fn Array<u64>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1384,9 +1384,9 @@ fn f32::fmt_into(self, f) {
         break __inline_String__len_6: __local_22.used;
     };
     if is_neg {
-        String::append(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
     } else if f.sign_plus {
-        String::append(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
     };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
@@ -1451,9 +1451,9 @@ fn f64::fmt_into(self, f) {
         break __inline_String__len_5: __local_19.used;
     };
     if is_neg {
-        String::append(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
     } else if f.sign_plus {
-        String::append(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
     };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
@@ -1507,13 +1507,13 @@ fn f64::fmt_fixed(self, precision, f) {
             break __inline_String__len_1: __local_16.used;
         };
         if is_neg {
-            String::append(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
+            String::push_str(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
         } else if f.sign_plus {
-            String::append(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
+            String::push_str(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
         };
-        String::append(f.buf, String { repr: array.new_data<u8>("0"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("0"), used: 1 });
         if precision > 0 {
-            String::append(f.buf, String { repr: array.new_data<u8>("."), used: 1 });
+            String::push_str(f.buf, String { repr: array.new_data<u8>("."), used: 1 });
             String::append_byte_filled(f.buf, 48, precision);
         };
         Formatter::apply_padding(f, mark_7);
@@ -1548,9 +1548,9 @@ fn f64::fmt_fixed(self, precision, f) {
         break __inline_String__len_8: __local_25.used;
     };
     if is_neg {
-        String::append(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("-"), used: 1 });
     } else if f.sign_plus {
-        String::append(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
+        String::push_str(f.buf, String { repr: array.new_data<u8>("+"), used: 1 });
     };
     write_decimal_prec(f.buf, d, p, nd, precision);
     Formatter::apply_padding(f, mark_13);
@@ -1591,7 +1591,7 @@ fn String::append_byte_filled(self, byte, n) {
     self.used = new_used;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;

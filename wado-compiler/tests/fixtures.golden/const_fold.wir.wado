@@ -73,7 +73,7 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
+type "functype/Array<u64>::push" = fn(ref Array<u64>, u64);
 
 type "functype/Array<u64>::grow" = fn(ref Array<u64>);
 
@@ -81,9 +81,9 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -133,56 +133,56 @@ fn const_fold_int_basic() with Stdout {
     let __local_20: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_7, 97);
-        String::append_char(__local_7, 61);
+        String::push(__local_7, 97);
+        String::push(__local_7, 61);
         __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         i32::fmt_decimal(42, __local_8);
         break __tmpl: __local_7;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_9, 98);
-        String::append_char(__local_9, 61);
+        String::push(__local_9, 98);
+        String::push(__local_9, 61);
         __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
         i32::fmt_decimal(123, __local_10);
         break __tmpl: __local_9;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_11, 99);
-        String::append_char(__local_11, 61);
+        String::push(__local_11, 99);
+        String::push(__local_11, 61);
         __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
         i32::fmt_decimal(42, __local_12);
         break __tmpl: __local_11;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_13 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_13, 100);
-        String::append_char(__local_13, 61);
+        String::push(__local_13, 100);
+        String::push(__local_13, 61);
         __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
         i32::fmt_decimal(42, __local_14);
         break __tmpl: __local_13;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_15 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_15, 101);
-        String::append_char(__local_15, 61);
+        String::push(__local_15, 101);
+        String::push(__local_15, 61);
         __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
         i32::fmt_decimal(1, __local_16);
         break __tmpl: __local_15;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_17 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_17, 102);
-        String::append_char(__local_17, 61);
+        String::push(__local_17, 102);
+        String::push(__local_17, 61);
         __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
         i32::fmt_decimal(9, __local_18);
         break __tmpl: __local_17;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_19 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_19, 103);
-        String::append_char(__local_19, 61);
+        String::push(__local_19, 103);
+        String::push(__local_19, 61);
         __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
         i32::fmt_decimal(25, __local_20);
         break __tmpl: __local_19;
@@ -204,48 +204,48 @@ fn const_fold_int_types() with Stdout {
     let __local_17: ref Formatter;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_6, 97);
-        String::append_char(__local_6, 61);
+        String::push(__local_6, 97);
+        String::push(__local_6, 61);
         __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         i64::fmt_decimal(1000000000000_i64, __local_7);
         break __tmpl: __local_6;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_8 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_8, 98);
-        String::append_char(__local_8, 61);
+        String::push(__local_8, 98);
+        String::push(__local_8, 61);
         __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
         u32::fmt_decimal(300, __local_9);
         break __tmpl: __local_8;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_10 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_10, 99);
-        String::append_char(__local_10, 61);
+        String::push(__local_10, 99);
+        String::push(__local_10, 61);
         __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         i32::fmt_decimal(33, __local_11);
         break __tmpl: __local_10;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_12 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_12, 100);
-        String::append_char(__local_12, 61);
+        String::push(__local_12, 100);
+        String::push(__local_12, 61);
         __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
         i32::fmt_decimal(0, __local_13);
         break __tmpl: __local_12;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_14 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_14, 101);
-        String::append_char(__local_14, 61);
+        String::push(__local_14, 101);
+        String::push(__local_14, 61);
         __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
         i32::fmt_decimal(0, __local_15);
         break __tmpl: __local_14;
     });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_16 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_16, 102);
-        String::append_char(__local_16, 61);
+        String::push(__local_16, 102);
+        String::push(__local_16, 61);
         __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
         i32::fmt_decimal(2, __local_17);
         break __tmpl: __local_16;
@@ -418,7 +418,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn Array<u64>::append(self, value) {
+fn Array<u64>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -573,7 +573,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -588,7 +588,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -626,7 +626,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l32;
             };
@@ -660,20 +660,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -683,10 +683,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -696,10 +696,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -707,10 +707,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

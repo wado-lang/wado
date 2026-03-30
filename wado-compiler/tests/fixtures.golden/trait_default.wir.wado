@@ -98,15 +98,15 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/Article^Summary::summary" = fn(ref Article) -> ref String;
 
 type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
@@ -151,8 +151,8 @@ fn trait_default_calls_default() with Stdout {
     "core:cli/println"(Item^Describable::short_desc(__sroa_item_name));
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(29), used: 0 };
-        String::append(__local_3, String { repr: array.new_data<u8>("Description: "), used: 13 });
-        String::append(__local_3, Item^Describable::short_desc(__sroa_item_name));
+        String::push_str(__local_3, String { repr: array.new_data<u8>("Description: "), used: 13 });
+        String::push_str(__local_3, Item^Describable::short_desc(__sroa_item_name));
         break __tmpl: __local_3;
     });
 }
@@ -204,14 +204,14 @@ fn trait_default_override() with Stdout {
     __sroa_t_text = String { repr: array.new_data<u8>("Hello world"), used: 11 };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(23), used: 0 };
-        String::append_char(__local_3, 84);
-        String::append_char(__local_3, 105);
-        String::append_char(__local_3, 116);
-        String::append_char(__local_3, 108);
-        String::append_char(__local_3, 101);
-        String::append_char(__local_3, 58);
-        String::append_char(__local_3, 32);
-        String::append(__local_3, __sroa_t_text);
+        String::push(__local_3, 84);
+        String::push(__local_3, 105);
+        String::push(__local_3, 116);
+        String::push(__local_3, 108);
+        String::push(__local_3, 101);
+        String::push(__local_3, 58);
+        String::push(__local_3, 32);
+        String::push_str(__local_3, __sroa_t_text);
         break __tmpl: __local_3;
     });
 }
@@ -423,7 +423,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -438,7 +438,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -469,12 +469,12 @@ fn Person^Greet::greet(self) {
     let __local_1: ref String;
     return __tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(21), used: 0 };
-        String::append_char(__local_1, 72);
-        String::append_char(__local_1, 105);
-        String::append_char(__local_1, 44);
-        String::append_char(__local_1, 32);
-        String::append(__local_1, self);
-        String::append_char(__local_1, 33);
+        String::push(__local_1, 72);
+        String::push(__local_1, 105);
+        String::push(__local_1, 44);
+        String::push(__local_1, 32);
+        String::push_str(__local_1, self);
+        String::push(__local_1, 33);
         break __tmpl: __local_1;
     };
 }
@@ -484,12 +484,12 @@ fn Robot^Greet::name(self) {
     let __local_2: ref Formatter;
     return __tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(22), used: 0 };
-        String::append_char(__local_1, 82);
-        String::append_char(__local_1, 111);
-        String::append_char(__local_1, 98);
-        String::append_char(__local_1, 111);
-        String::append_char(__local_1, 116);
-        String::append_char(__local_1, 45);
+        String::push(__local_1, 82);
+        String::push(__local_1, 111);
+        String::push(__local_1, 98);
+        String::push(__local_1, 111);
+        String::push(__local_1, 116);
+        String::push(__local_1, 45);
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         i32::fmt_decimal(self, __local_2);
         break __tmpl: __local_1;
@@ -500,15 +500,15 @@ fn Robot^Greet::greet(self) {
     let __local_1: ref String;
     return __tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(24), used: 0 };
-        String::append_char(__local_1, 72);
-        String::append_char(__local_1, 101);
-        String::append_char(__local_1, 108);
-        String::append_char(__local_1, 108);
-        String::append_char(__local_1, 111);
-        String::append_char(__local_1, 44);
-        String::append_char(__local_1, 32);
-        String::append(__local_1, Robot^Greet::name(self));
-        String::append_char(__local_1, 33);
+        String::push(__local_1, 72);
+        String::push(__local_1, 101);
+        String::push(__local_1, 108);
+        String::push(__local_1, 108);
+        String::push(__local_1, 111);
+        String::push(__local_1, 44);
+        String::push(__local_1, 32);
+        String::push_str(__local_1, Robot^Greet::name(self));
+        String::push(__local_1, 33);
         break __tmpl: __local_1;
     };
 }
@@ -517,9 +517,9 @@ fn Item^Describable::short_desc(self) {
     let __local_1: ref String;
     return __tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append_char(__local_1, 91);
-        String::append(__local_1, self);
-        String::append_char(__local_1, 93);
+        String::push(__local_1, 91);
+        String::push_str(__local_1, self);
+        String::push(__local_1, 93);
         break __tmpl: __local_1;
     };
 }
@@ -528,11 +528,11 @@ fn Article^Summary::summary(self) {
     let __local_1: ref String;
     return __tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(35), used: 0 };
-        String::append(__local_1, self.headline);
-        String::append_char(__local_1, 32);
-        String::append_char(__local_1, 45);
-        String::append_char(__local_1, 32);
-        String::append(__local_1, self.content);
+        String::push_str(__local_1, self.headline);
+        String::push(__local_1, 32);
+        String::push(__local_1, 45);
+        String::push(__local_1, 32);
+        String::push_str(__local_1, self.content);
         break __tmpl: __local_1;
     };
 }
@@ -547,7 +547,7 @@ fn ArrayIter<i32>^Iterator::next(self) {
     return Option<i32>::Some { discriminant: 0, payload_0: item };
 }
 
-fn Array<i32>::append(self, value) {
+fn Array<i32>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -600,7 +600,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l31;
             };
@@ -634,20 +634,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -657,10 +657,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -670,10 +670,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -681,10 +681,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

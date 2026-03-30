@@ -91,19 +91,19 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
-type "functype/Array<u16>::append" = fn(ref Array<u16>, u16);
+type "functype/Array<u16>::push" = fn(ref Array<u16>, u16);
 
 type "functype/Array<u16>::grow" = fn(ref Array<u16>);
 
-type "functype/Array<i64>::append" = fn(ref Array<i64>, i64);
+type "functype/Array<i64>::push" = fn(ref Array<i64>, i64);
 
 type "functype/Array<i64>::grow" = fn(ref Array<i64>);
 
-type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
+type "functype/Array<u8>::push" = fn(ref Array<u8>, u8);
 
 type "functype/Array<u8>::grow" = fn(ref Array<u8>);
 
@@ -179,8 +179,8 @@ fn run() with Stdout {
             };
             break __inline_Array_u8__IndexValue__index_value_11: builtin::array_get<u8>(a.repr, 0);
         }, __local_29);
-        String::append_char(__local_8, 44);
-        String::append_char(__local_8, 32);
+        String::push(__local_8, 44);
+        String::push(__local_8, 32);
         __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
         __local_36 = __local_9;
         i32::fmt_decimal(__inline_Array_u8__IndexValue__index_value_15: block -> u8 {
@@ -190,8 +190,8 @@ fn run() with Stdout {
             };
             break __inline_Array_u8__IndexValue__index_value_15: builtin::array_get<u8>(a.repr, 1);
         }, __local_36);
-        String::append_char(__local_8, 44);
-        String::append_char(__local_8, 32);
+        String::push(__local_8, 44);
+        String::push(__local_8, 32);
         __local_9 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
         __local_43 = __local_9;
         i32::fmt_decimal(__inline_Array_u8__IndexValue__index_value_19: block -> u8 {
@@ -218,8 +218,8 @@ fn run() with Stdout {
             };
             break __inline_Array_i64__IndexValue__index_value_30: builtin::array_get<i64>(b.repr, 0);
         }, __local_60);
-        String::append_char(__local_10, 44);
-        String::append_char(__local_10, 32);
+        String::push(__local_10, 44);
+        String::push(__local_10, 32);
         __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         __local_67 = __local_11;
         i64::fmt_decimal(__inline_Array_i64__IndexValue__index_value_34: block -> i64 {
@@ -229,8 +229,8 @@ fn run() with Stdout {
             };
             break __inline_Array_i64__IndexValue__index_value_34: builtin::array_get<i64>(b.repr, 1);
         }, __local_67);
-        String::append_char(__local_10, 44);
-        String::append_char(__local_10, 32);
+        String::push(__local_10, 44);
+        String::push(__local_10, 32);
         __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         __local_74 = __local_11;
         i64::fmt_decimal(__inline_Array_i64__IndexValue__index_value_38: block -> i64 {
@@ -257,8 +257,8 @@ fn run() with Stdout {
             };
             break __inline_Array_u16__IndexValue__index_value_49: builtin::array_get<u16>(c.repr, 0);
         }, __local_91);
-        String::append_char(__local_12, 44);
-        String::append_char(__local_12, 32);
+        String::push(__local_12, 44);
+        String::push(__local_12, 32);
         __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
         __local_98 = __local_13;
         i32::fmt_decimal(__inline_Array_u16__IndexValue__index_value_53: block -> u16 {
@@ -268,8 +268,8 @@ fn run() with Stdout {
             };
             break __inline_Array_u16__IndexValue__index_value_53: builtin::array_get<u16>(c.repr, 1);
         }, __local_98);
-        String::append_char(__local_12, 44);
-        String::append_char(__local_12, 32);
+        String::push(__local_12, 44);
+        String::push(__local_12, 32);
         __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
         __local_105 = __local_13;
         i32::fmt_decimal(__inline_Array_u16__IndexValue__index_value_57: block -> u16 {
@@ -296,8 +296,8 @@ fn run() with Stdout {
             };
             break __inline_Array_u8__IndexValue__index_value_68: builtin::array_get<u8>(d.repr, 0);
         }, __local_122);
-        String::append_char(__local_14, 44);
-        String::append_char(__local_14, 32);
+        String::push(__local_14, 44);
+        String::push(__local_14, 32);
         __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
         __local_129 = __local_15;
         i32::fmt_decimal(__inline_Array_u8__IndexValue__index_value_72: block -> u8 {
@@ -307,8 +307,8 @@ fn run() with Stdout {
             };
             break __inline_Array_u8__IndexValue__index_value_72: builtin::array_get<u8>(d.repr, 1);
         }, __local_129);
-        String::append_char(__local_14, 44);
-        String::append_char(__local_14, 32);
+        String::push(__local_14, 44);
+        String::push(__local_14, 32);
         __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
         __local_136 = __local_15;
         i32::fmt_decimal(__inline_Array_u8__IndexValue__index_value_76: block -> u8 {
@@ -593,7 +593,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -608,7 +608,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -635,7 +635,7 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Array<u16>::append(self, value) {
+fn Array<u16>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -677,7 +677,7 @@ fn Array<u16>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<i64>::append(self, value) {
+fn Array<i64>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -719,7 +719,7 @@ fn Array<i64>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<u8>::append(self, value) {
+fn Array<u8>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -772,7 +772,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l50;
             };
@@ -806,20 +806,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -829,10 +829,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -842,10 +842,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -853,10 +853,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

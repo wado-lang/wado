@@ -133,7 +133,7 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
@@ -141,7 +141,7 @@ type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> b
 
 type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/TreeMap<String,i32>::insert" = fn(ref "core:allocator/TreeMap<String,i32>", ref String, i32);
 
@@ -151,7 +151,7 @@ type "functype/TreeMap<String,i32>::split" = fn(ref "core:allocator/TreeMap<Stri
 
 type "functype/TreeMap<String,i32>::skew" = fn(ref "core:allocator/TreeMap<String,i32>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
 
-type "functype/Array<TreeMapEntry<String,i32>>::append" = fn(ref Array<TreeMapEntry<String,i32>>, ref "core:allocator/TreeMapEntry<String,i32>");
+type "functype/Array<TreeMapEntry<String,i32>>::push" = fn(ref Array<TreeMapEntry<String,i32>>, ref "core:allocator/TreeMapEntry<String,i32>");
 
 type "functype/Array<TreeMapEntry<String,i32>>::grow" = fn(ref Array<TreeMapEntry<String,i32>>);
 
@@ -161,7 +161,7 @@ type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:alloc
 
 type "functype/TreeMap<String,i32>::entries" = fn(ref "core:allocator/TreeMap<String,i32>") -> ref Array<Tuple<String,i32>>;
 
-type "functype/Array<Tuple<String,i32>>::append" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
+type "functype/Array<Tuple<String,i32>>::push" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
 
 type "functype/Array<Tuple<String,i32>>::grow" = fn(ref Array<Tuple<String,i32>>);
 
@@ -248,33 +248,33 @@ fn run() with Stdout {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_4 = String { repr: builtin::array_new<u8>(121), used: 0 };
-            String::append(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_4, 114);
-            String::append_char(__local_4, 117);
-            String::append_char(__local_4, 110);
-            String::append_char(__local_4, 32);
-            String::append_char(__local_4, 97);
-            String::append_char(__local_4, 116);
-            String::append_char(__local_4, 32);
-            String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-fn-arg.wado"), used: 56 });
-            String::append_char(__local_4, 58);
+            String::push_str(__local_4, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_4, 114);
+            String::push(__local_4, 117);
+            String::push(__local_4, 110);
+            String::push(__local_4, 32);
+            String::push(__local_4, 97);
+            String::push(__local_4, 116);
+            String::push(__local_4, 32);
+            String::push_str(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-fn-arg.wado"), used: 56 });
+            String::push(__local_4, 58);
             __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
             __local_22 = __local_5;
             i32::fmt_decimal(15, __local_22);
-            String::append(__local_4, String { repr: array.new_data<u8>("
+            String::push_str(__local_4, String { repr: array.new_data<u8>("
 condition: total == 60
 "), used: 24 });
-            String::append_char(__local_4, 116);
-            String::append_char(__local_4, 111);
-            String::append_char(__local_4, 116);
-            String::append_char(__local_4, 97);
-            String::append_char(__local_4, 108);
-            String::append_char(__local_4, 58);
-            String::append_char(__local_4, 32);
+            String::push(__local_4, 116);
+            String::push(__local_4, 111);
+            String::push(__local_4, 116);
+            String::push(__local_4, 97);
+            String::push(__local_4, 108);
+            String::push(__local_4, 58);
+            String::push(__local_4, 32);
             __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
             __local_27 = __local_5;
             i32::fmt_decimal(total, __local_27);
-            String::append_char(__local_4, 10);
+            String::push(__local_4, 10);
             break __tmpl: __local_4;
         });
         unreachable;
@@ -514,7 +514,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -601,7 +601,7 @@ fn String^Ord::cmp(self, other) {
     return 1;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -651,7 +651,7 @@ fn TreeMap<String,i32>::insert(self, key, value) {
         break __inline_Array_TreeMapEntry_String_i32____len_1: __local_8.used;
     };
     entry = "core:allocator/TreeMapEntry<String,i32>" { key: key, value: value, deleted: 0 };
-    Array<TreeMapEntry<String,i32>>::append(self.entries, entry);
+    Array<TreeMapEntry<String,i32>>::push(self.entries, entry);
     self.root = TreeMap<String,i32>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
@@ -725,7 +725,7 @@ fn TreeMap<String,i32>::skew(self, node) {
     return ref.null none;
 }
 
-fn Array<TreeMapEntry<String,i32>>::append(self, value) {
+fn Array<TreeMapEntry<String,i32>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -844,7 +844,7 @@ fn TreeMap<String,i32>::entries(self) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = value_copy "core:allocator/TreeMapEntry<String,i32>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
-                    Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: entry.key, 1: entry.value });
+                    Array<Tuple<String,i32>>::push(result, "tuple/[String, i32]" { 0: entry.key, 1: entry.value });
                 };
             } else {
                 break b63;
@@ -855,7 +855,7 @@ fn TreeMap<String,i32>::entries(self) {
     return result;
 }
 
-fn Array<Tuple<String,i32>>::append(self, value) {
+fn Array<Tuple<String,i32>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -918,7 +918,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l73;
             };
@@ -952,20 +952,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -975,10 +975,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -988,10 +988,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -999,10 +999,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

@@ -148,11 +148,11 @@ type "functype/core:internal/cm_stream_write_u8" = fn(i32, ref Array<u8>);
 
 type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
 
-type "functype/Array<Tuple<Descriptor,String>>::append" = fn(ref Array<Tuple<Descriptor,String>>, ref "tuple/[Descriptor, String]");
+type "functype/Array<Tuple<Descriptor,String>>::push" = fn(ref Array<Tuple<Descriptor,String>>, ref "tuple/[Descriptor, String]");
 
 type "functype/Array<Tuple<Descriptor,String>>::grow" = fn(ref Array<Tuple<Descriptor,String>>);
 
-type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
+type "functype/Array<u8>::push" = fn(ref Array<u8>, u8);
 
 type "functype/Array<u8>::grow" = fn(ref Array<u8>);
 
@@ -223,9 +223,9 @@ fn to_upper(data) {
                 } else {
                     0;
                 } {
-                    Array<u8>::append(result, (b - 32) & 255);
+                    Array<u8>::push(result, (b - 32) & 255);
                 } else {
-                    Array<u8>::append(result, b);
+                    Array<u8>::push(result, b);
                 };
                 i = i + 1;
                 continue l1;
@@ -322,7 +322,7 @@ fn __cm_binding__Preopens_get_directories() {
                 __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
                 break __inline_memory_to_gc_string_1: String { repr: __local_11, used: __local_10 };
             };
-            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
+            Array<Tuple<Descriptor,String>>::push(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
             continue l12;
@@ -678,7 +678,7 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     return code; evt_handle; payload;
 }
 
-fn Array<Tuple<Descriptor,String>>::append(self, value) {
+fn Array<Tuple<Descriptor,String>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -720,7 +720,7 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<u8>::append(self, value) {
+fn Array<u8>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {

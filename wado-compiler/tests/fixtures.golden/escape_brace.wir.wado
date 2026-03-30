@@ -45,7 +45,7 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
@@ -72,9 +72,9 @@ fn run() with Stdout {
     name = String { repr: array.new_data<u8>("world"), used: 5 };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(20), used: 0 };
-        String::append(__local_1, String { repr: array.new_data<u8>("{\""), used: 2 });
-        String::append(__local_1, name);
-        String::append(__local_1, String { repr: array.new_data<u8>("\"}"), used: 2 });
+        String::push_str(__local_1, String { repr: array.new_data<u8>("{\""), used: 2 });
+        String::push_str(__local_1, name);
+        String::push_str(__local_1, String { repr: array.new_data<u8>("\"}"), used: 2 });
         break __tmpl: __local_1;
     });
     "core:cli/println"(String { repr: array.new_data<u8>("{\"key\": \"value\"}"), used: 16 });
@@ -197,7 +197,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
