@@ -191,6 +191,7 @@ let n = arr.len();                       // get length
 let empty = arr.is_empty();              // check if empty
 let first = arr[0];                      // index access (read)
 arr[0] = 100;                            // index assignment (write, requires mut)
+// Note: there is no iter_mut(); mutate elements via index access
 
 // Sorting
 let mut nums: Array<i32> = [5, 3, 8, 1];
@@ -285,6 +286,12 @@ let { x: horizontal, y: vertical } = p;  // renaming
 let { name, .. } = person;            // ignore remaining fields
 let mut { x, y } = p;                 // mutable
 
+// Recursive types (no Box needed — GC handles indirection)
+struct Node {
+    value: i32,
+    next: Option<Node>,
+}
+
 // Nested destructuring
 let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
 
@@ -295,6 +302,8 @@ for let { x, y } of points {
 ```
 
 ### Enums
+
+Wado has three distinct type kinds for Component Model alignment: enums (no payload), variants (with payload), and flags (bitmask). Rust's `enum` covers all three.
 
 Enums are discriminated values without payloads (i32 discriminant):
 
@@ -517,6 +526,9 @@ match expr {
 
 // Or patterns in matches operator
 if shape matches { Circle(_) | Square(_) } { ... }
+// Note: matches bindings don't escape — use guard instead
+// if opt matches { Some(x) } && x > 0 { ... }  // Error: x not in scope
+if opt matches { Some(x) && x > 0 } { ... }     // OK: guard inside braces
 
 // Match with guard
 let label = match value {
