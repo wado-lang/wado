@@ -19,10 +19,6 @@ function parseMs(output: string, pattern: RegExp = /Elapsed: ([\d.]+) ms/): numb
 
 const OPT_LEVELS = ['-O1', '-O2', '-O3'] as const;
 
-// sqlite_parse triggers a miscompilation at -O3 (inline threshold 20).
-// Run it only at -O1 and -O2 until the optimizer bug is fixed.
-const SQLITE_PARSE_OPT_LEVELS = ['-O1', '-O2'] as const;
-
 const benchmarks: BenchResult[] = [];
 
 for (const opt of OPT_LEVELS) {
@@ -52,11 +48,8 @@ for (const opt of OPT_LEVELS) {
 
   output = runBench('benchmark/json_catalog/json_catalog.wado', opt);
   benchmarks.push({ name: `json/catalog (${label})`, unit: 'ms', value: parseMs(output) });
-}
 
-for (const opt of SQLITE_PARSE_OPT_LEVELS) {
-  const label = opt;
-  const output = runBench('benchmark/sqlite_parse/sqlite_parse.wado', opt, ['--dir', '.::.']);
+  output = runBench('benchmark/sqlite_parse/sqlite_parse.wado', opt, ['--dir', '.::.']);
   benchmarks.push({ name: `sqlite_parse (${label})`, unit: 'ms', value: parseMs(output) });
 }
 
