@@ -93,4 +93,4 @@ It may include TODOs on WIP.
 - [WIT Bundling in Component Binaries](./wep-2026-03-21-wit-bundling.md)
 - [Same-Scope Shadowing with Self-Reference](./wep-2026-03-25-same-scope-shadowing.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
-- [Align String and Array API Design](./wep-2026-03-29-align-string-array-api.md)
+- [Redesign String and Array APIs](./wep-2026-03-29-redesign-string-array-api.md)

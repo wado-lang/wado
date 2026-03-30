@@ -1,4 +1,4 @@
-# WEP: Align String and Array APIs with Rust
+# WEP: Redesign String and Array APIs
 
 ## Status
 
