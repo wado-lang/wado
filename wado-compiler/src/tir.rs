@@ -1277,6 +1277,31 @@ impl TypeTable {
         }
     }
 
+    /// Check if a type contains UNKNOWN (undefined type that was not resolved).
+    pub fn contains_unknown(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::Unknown => true,
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.contains_unknown(*inner),
+            ResolvedType::Tuple(elems) => elems.iter().any(|e| self.contains_unknown(*e)),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|p| self.contains_unknown(*p))
+                    || self.contains_unknown(*return_type)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                type_args.iter().any(|t| self.contains_unknown(*t))
+            }
+            _ => false,
+        }
+    }
+
     /// Check if a type is or contains type parameters or unresolved types (Unknown/Error)
     pub fn contains_type_param(&self, id: TypeId) -> bool {
         match self.get(id) {

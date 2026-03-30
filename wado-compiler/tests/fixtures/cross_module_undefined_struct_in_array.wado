@@ -1,0 +1,10 @@
+use { println, Stdout } from "core:cli";
+use lib from "./sub/cross_module_undefined_struct_in_array.wado";
+
+export fn run() with Stdout {
+    let o = lib::make();
+    println(`{o.span}`);
+}
+
+__DATA__
+{"compile_error": "unknown type 'UndefinedStruct'"}
