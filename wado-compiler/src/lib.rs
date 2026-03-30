@@ -230,7 +230,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     let is_todo_module = load_result.entry_ast.has_todo();
 
     // Wrap all subsequent Bail errors with is_todo_module
-    let result = compile_after_load(load_result, options, &logger, filename).await;
+    let result = compile_after_load(load_result, options, &logger, filename);
     match result {
         Ok((wasm, module, wir_module)) => Ok(CompileResult {
             wasm,
@@ -243,7 +243,7 @@ pub async fn compile_with_options<H: CompilerHost>(
 }
 
 /// Internal: run compilation phases after module loading.
-async fn compile_after_load<H: CompilerHost>(
+fn compile_after_load<H: CompilerHost>(
     load_result: loader::LoadResult,
     options: CompilerOptions,
     logger: &Logger<'_, H>,

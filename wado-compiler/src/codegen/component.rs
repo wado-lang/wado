@@ -1437,7 +1437,7 @@ fn generate_wasi_imports(
                 .iter()
                 .filter(|name| {
                     project.wasi_registry.is_variant(name)
-                        && !(name.as_str() == "ErrorCode" && !has_local_error_code)
+                        && (name.as_str() != "ErrorCode" || has_local_error_code)
                 })
                 .cloned()
                 .collect();
@@ -1448,7 +1448,7 @@ fn generate_wasi_imports(
                 .filter(|name| {
                     project.wasi_registry.is_enum(name)
                         && !needed_variants.contains(name)
-                        && !(name.as_str() == "ErrorCode" && !has_local_error_code)
+                        && (name.as_str() != "ErrorCode" || has_local_error_code)
                 })
                 .cloned()
                 .collect();

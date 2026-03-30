@@ -1974,7 +1974,7 @@ impl Monomorphizer {
             // selects the correct generic function template
             // ("&^IntoIterator::into_iter" instead of "Array^IntoIterator::into_iter").
             if info.is_ref_impl {
-                new_info.base_struct_name = info.base_struct_name.clone();
+                new_info.base_struct_name.clone_from(&info.base_struct_name);
             }
             new_info
         } else {

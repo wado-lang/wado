@@ -6757,13 +6757,8 @@ fn parameterize_stream_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) ->
     // Resolve through references: &Stream<T> → Stream<T>
     use crate::tir::ResolvedType;
     let mut type_id = receiver_type_id;
-    loop {
-        match tt.get(type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                type_id = *inner;
-            }
-            _ => break,
-        }
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
+        type_id = *inner;
     }
     // Extract element type from Stream<T>
     if let Some(type_args) = tt.generic_type_args(type_id)
