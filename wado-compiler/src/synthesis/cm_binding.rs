@@ -593,10 +593,21 @@ fn synthesize_lift_wasi_variant(
     ));
 
     // Compute max payload alignment for payload offset calculation
+    let wasi_package = ctx.and_then(|c| c.wasi_package);
     let max_payload_align = cases
         .iter()
         .filter_map(|case| case.payload.as_ref())
-        .map(cm_abi::cm_align)
+        .map(|ty| {
+            if let Some(c) = ctx {
+                crate::component_model::cm_align_with_registry_scoped(
+                    ty,
+                    c.wasi_registry,
+                    wasi_package,
+                )
+            } else {
+                cm_abi::cm_align(ty)
+            }
+        })
         .max()
         .unwrap_or(1);
     let payload_offset = cm_abi::align_to(1, max_payload_align); // after 1-byte disc
@@ -935,7 +946,7 @@ fn synthesize_lift_option_inner(
     ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
     let layout = if let Some(c) = ctx {
-        cm_abi::layout_option_with_registry(inner_ty, c.wasi_registry)
+        cm_abi::layout_option_with_registry_scoped(inner_ty, c.wasi_registry, c.wasi_package)
     } else {
         cm_abi::layout_option(inner_ty)
     };
@@ -1012,7 +1023,7 @@ fn synthesize_lift_result_inner(
     ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
     let layout = if let Some(c) = ctx {
-        cm_abi::layout_result_with_registry(ok_ty, err_ty, c.wasi_registry)
+        cm_abi::layout_result_with_registry_scoped(ok_ty, err_ty, c.wasi_registry, c.wasi_package)
     } else {
         cm_abi::layout_result(ok_ty, err_ty)
     };
@@ -2036,19 +2047,23 @@ fn synthesize_adapter(
         crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
             || crate::component_model::wasi_named_type_return_needs_outptr(rt, wasi_registry)
     });
+    let pkg = Some(func_info.package.as_str());
     let outptr_alloc = if needs_outptr {
         func_info.return_type.as_ref().map(|rt| {
             // WASI variants need their registry-computed size/align, not the generic cm_size
             if let crate::ast::Type::Named(named) = rt
-                && let Some(sa) =
-                    crate::component_model::wasi_variant_cm_size_align(&named.name, wasi_registry)
+                && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
+                    &named.name,
+                    wasi_registry,
+                    pkg,
+                )
             {
                 return sa;
             }
             // Use registry-aware size/align for WASI structs and other complex types
             (
-                crate::component_model::cm_size_with_registry(rt, wasi_registry),
-                crate::component_model::cm_align_with_registry(rt, wasi_registry),
+                crate::component_model::cm_size_with_registry_scoped(rt, wasi_registry, pkg),
+                crate::component_model::cm_align_with_registry_scoped(rt, wasi_registry, pkg),
             )
         })
     } else {
@@ -2514,20 +2529,30 @@ fn synthesize_adapter(
 
         // Allocate the async results buffer via realloc (only when there are results).
         if has_results {
+            let pkg = Some(func_info.package.as_str());
             let (async_result_size, async_result_align) = if let Some(return_type) =
                 &func_info.return_type
             {
                 if let crate::ast::Type::Named(named) = return_type
-                    && let Some(sa) = crate::component_model::wasi_variant_cm_size_align(
+                    && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
                         &named.name,
                         wasi_registry,
+                        pkg,
                     )
                 {
                     sa
                 } else {
                     (
-                        crate::component_model::cm_size_with_registry(return_type, wasi_registry),
-                        crate::component_model::cm_align_with_registry(return_type, wasi_registry),
+                        crate::component_model::cm_size_with_registry_scoped(
+                            return_type,
+                            wasi_registry,
+                            pkg,
+                        ),
+                        crate::component_model::cm_align_with_registry_scoped(
+                            return_type,
+                            wasi_registry,
+                            pkg,
+                        ),
                     )
                 }
             } else {

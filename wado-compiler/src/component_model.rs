@@ -2286,7 +2286,26 @@ pub fn cm_align_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
 /// - payload: at `align_to(1, max_payload_align)`
 /// - total: `align_to(payload_offset + max_payload_size, max_payload_align)`
 pub fn wasi_variant_cm_size_align(name: &str, registry: &WasiRegistry) -> Option<(u32, u32)> {
-    let cases = registry.get_variant_cases(name)?;
+    wasi_variant_cm_size_align_scoped(name, registry, None)
+}
+
+/// Package-scoped variant of `wasi_variant_cm_size_align`.
+///
+/// When `wasi_package` is provided (e.g., `"http"`), uses package-scoped lookup
+/// to disambiguate variant types that share the same Wado name across different
+/// WASI packages (e.g., `ErrorCode` exists in http, filesystem, and sockets).
+pub fn wasi_variant_cm_size_align_scoped(
+    name: &str,
+    registry: &WasiRegistry,
+    wasi_package: Option<&str>,
+) -> Option<(u32, u32)> {
+    let cases = if let Some(pkg) = wasi_package {
+        registry
+            .get_variant_cases_by_package(pkg, name)
+            .or_else(|| registry.get_variant_cases(name))
+    } else {
+        registry.get_variant_cases(name)
+    }?;
     if !cases.iter().any(|case| case.payload.is_some()) {
         return None; // no payload cases — not outptr
     }
@@ -2294,8 +2313,10 @@ pub fn wasi_variant_cm_size_align(name: &str, registry: &WasiRegistry) -> Option
     let mut max_payload_align = 1u32;
     for case in cases {
         if let Some(ty) = &case.payload {
-            max_payload_size = max_payload_size.max(cm_size_with_registry(ty, registry));
-            max_payload_align = max_payload_align.max(cm_align_with_registry(ty, registry));
+            max_payload_size =
+                max_payload_size.max(cm_size_with_registry_scoped(ty, registry, wasi_package));
+            max_payload_align =
+                max_payload_align.max(cm_align_with_registry_scoped(ty, registry, wasi_package));
         }
     }
     let disc_size = 1u32; // u8 for n ≤ 256 cases
@@ -2303,6 +2324,119 @@ pub fn wasi_variant_cm_size_align(name: &str, registry: &WasiRegistry) -> Option
     let overall_align = max_payload_align; // max(disc_align=1, payload_align)
     let size = crate::cm_abi::align_to(payload_offset + max_payload_size, overall_align);
     Some((size, overall_align))
+}
+
+/// Package-scoped CM canonical ABI size for a type.
+///
+/// Like `cm_size_with_registry`, but uses `wasi_package` to disambiguate types
+/// with the same name across different WASI packages.
+pub fn cm_size_with_registry_scoped(
+    ty: &Type,
+    registry: &WasiRegistry,
+    wasi_package: Option<&str>,
+) -> u32 {
+    match ty {
+        Type::Named(named) => {
+            if let Some(resolved) = registry.get_newtype(&named.name) {
+                return cm_size_with_registry_scoped(resolved, registry, wasi_package);
+            }
+            if let Some(fields) = registry.get_struct_fields(&named.name) {
+                let resolved_fields: Vec<Type> = fields
+                    .iter()
+                    .map(|(_, ty)| registry.resolve_type(ty))
+                    .collect();
+                let mut offset = 0u32;
+                let mut max_align = 1u32;
+                for field_ty in &resolved_fields {
+                    let fa = cm_align_with_registry_scoped(field_ty, registry, wasi_package);
+                    let fs = cm_size_with_registry_scoped(field_ty, registry, wasi_package);
+                    offset = crate::cm_abi::align_to(offset, fa);
+                    offset += fs;
+                    max_align = max_align.max(fa);
+                }
+                return crate::cm_abi::align_to(offset, max_align);
+            }
+            if let Some(sa) = wasi_variant_cm_size_align_scoped(&named.name, registry, wasi_package)
+            {
+                return sa.0;
+            }
+            if let Some(variants) = registry.get_enum_variants(&named.name) {
+                return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
+            }
+            if let Some(members) = registry.get_flags_members(&named.name) {
+                return crate::synthesis::cm_binding::cm_flags_byte_size(members.len());
+            }
+            crate::cm_abi::cm_size(ty)
+        }
+        Type::Generic(g) => match g.name.as_str() {
+            "Option" if g.args.len() == 1 => {
+                let inner = &g.args[0];
+                let payload_align = cm_align_with_registry_scoped(inner, registry, wasi_package);
+                let payload_size = cm_size_with_registry_scoped(inner, registry, wasi_package);
+                let payload_offset = crate::cm_abi::align_to(1, payload_align);
+                let overall_align = 1u32.max(payload_align);
+                crate::cm_abi::align_to(payload_offset + payload_size, overall_align)
+            }
+            "Result" if g.args.len() == 2 => {
+                let ok_size = cm_size_with_registry_scoped(&g.args[0], registry, wasi_package);
+                let err_size = cm_size_with_registry_scoped(&g.args[1], registry, wasi_package);
+                let payload_size = ok_size.max(err_size);
+                let payload_align = cm_align_with_registry_scoped(&g.args[0], registry, wasi_package)
+                    .max(cm_align_with_registry_scoped(&g.args[1], registry, wasi_package));
+                let payload_offset = crate::cm_abi::align_to(1, payload_align);
+                let overall_align = 1u32.max(payload_align);
+                crate::cm_abi::align_to(payload_offset + payload_size, overall_align)
+            }
+            _ => crate::cm_abi::cm_size(ty),
+        },
+        _ => crate::cm_abi::cm_size(ty),
+    }
+}
+
+/// Package-scoped CM canonical ABI alignment for a type.
+pub fn cm_align_with_registry_scoped(
+    ty: &Type,
+    registry: &WasiRegistry,
+    wasi_package: Option<&str>,
+) -> u32 {
+    match ty {
+        Type::Named(named) => {
+            if let Some(resolved) = registry.get_newtype(&named.name) {
+                return cm_align_with_registry_scoped(resolved, registry, wasi_package);
+            }
+            if let Some(fields) = registry.get_struct_fields(&named.name) {
+                let mut max_align = 1u32;
+                for (_, field_ty) in fields {
+                    let resolved = registry.resolve_type(field_ty);
+                    max_align =
+                        max_align.max(cm_align_with_registry_scoped(&resolved, registry, wasi_package));
+                }
+                return max_align;
+            }
+            if let Some(sa) =
+                wasi_variant_cm_size_align_scoped(&named.name, registry, wasi_package)
+            {
+                return sa.1;
+            }
+            if let Some(variants) = registry.get_enum_variants(&named.name) {
+                return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
+            }
+            if let Some(members) = registry.get_flags_members(&named.name) {
+                return crate::synthesis::cm_binding::cm_flags_byte_align(members.len());
+            }
+            crate::cm_abi::cm_align(ty)
+        }
+        Type::Generic(g) => match g.name.as_str() {
+            "Option" if g.args.len() == 1 => {
+                1u32.max(cm_align_with_registry_scoped(&g.args[0], registry, wasi_package))
+            }
+            "Result" if g.args.len() == 2 => 1u32
+                .max(cm_align_with_registry_scoped(&g.args[0], registry, wasi_package))
+                .max(cm_align_with_registry_scoped(&g.args[1], registry, wasi_package)),
+            _ => crate::cm_abi::cm_align(ty),
+        },
+        _ => crate::cm_abi::cm_align(ty),
+    }
 }
 
 /// Primitive type for CM tuple return handling

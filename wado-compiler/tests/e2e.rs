@@ -426,8 +426,9 @@ fn verify_http_result(result: &HttpTestResult, spec: &HttpServiceSpec, fixture_n
     if let Some(expected_status) = spec.status {
         assert_eq!(
             result.status, expected_status,
-            "[{fixture_name}] HTTP status mismatch: expected {expected_status}, got {}",
-            result.status
+            "[{fixture_name}] HTTP status mismatch: expected {expected_status}, got {}; body: {}",
+            result.status,
+            String::from_utf8_lossy(&result.body),
         );
     }
 
