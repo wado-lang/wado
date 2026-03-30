@@ -1,0 +1,48 @@
+// Verify that HFS write-backs are not inserted inside inlined labeled blocks.
+// The inner loop should have no struct.set for `self.pos` except at exits.
+use { println, Stdout } from "core:cli";
+
+struct Scanner {
+    data: String,
+    pos: i32,
+}
+
+impl Scanner {
+    fn peek(&self) -> i32 {
+        if self.pos >= self.data.len() {
+            return -1;
+        }
+        return self.data.get_byte(self.pos) as i32;
+    }
+
+    fn skip_spaces(&mut self) {
+        while self.pos < self.data.len() {
+            let b = self.data.get_byte(self.pos) as i32;
+            if b == ' ' as i32 {
+                self.pos += 1;
+            } else {
+                return;
+            }
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut s = Scanner { data: "  a  b  c  ", pos: 0 };
+    let mut count = 0;
+    while s.pos < s.data.len() {
+        s.skip_spaces();
+        if s.peek() >= 0 {
+            count += 1;
+            s.pos += 1;
+        }
+    }
+    println(`{count}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n",
+    "wir_expect:O2": ["break __inline_String__get_byte_1: builtin::array_get_u8(_licm_repr_"],
+    "wir_not_expect:O2": ["self.pos = _hfs_pos_8;\n                break __inline_"]
+}
