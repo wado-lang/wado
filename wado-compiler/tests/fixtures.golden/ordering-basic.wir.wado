@@ -62,7 +62,7 @@ type "functype/Array<i32>^Eq::eq" = fn(ref Array<i32>, ref Array<i32>) -> bool;
 
 type "functype/Array<i32>^Ord::cmp" = fn(ref Array<i32>, ref Array<i32>) -> enum:Ordering;
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
@@ -342,7 +342,7 @@ fn Array<i32>^Eq::eq(self, other) {
     if self.used != other.used {
         return 0;
     };
-    __for_3: block {
+    __for_9: block {
         i = 0;
         _licm_used_3 = self.used;
         _licm_repr_4 = self.repr;
@@ -350,7 +350,7 @@ fn Array<i32>^Eq::eq(self, other) {
         block {
             l33: loop {
                 if (i < _licm_used_3) == 0 {
-                    break __for_3;
+                    break __for_9;
                 };
                 if (builtin::array_get<i32>(_licm_repr_4, i) == builtin::array_get<i32>(_licm_repr_5, i)) == 0 {
                     return 0;
@@ -377,14 +377,14 @@ fn Array<i32>^Ord::cmp(self, other) {
         __local_7 = other.used;
         break __inline_i32_min_0: select i32(__local_6 < __local_7, __local_6, __local_7);
     };
-    __for_4: block {
+    __for_10: block {
         i = 0;
         _licm_repr_8 = self.repr;
         _licm_repr_9 = other.repr;
         block {
             l37: loop {
                 if (i < min_len) == 0 {
-                    break __for_4;
+                    break __for_10;
                 };
                 a = builtin::array_get<i32>(_licm_repr_8, i);
                 b = builtin::array_get<i32>(_licm_repr_9, i);
@@ -408,7 +408,7 @@ fn Array<i32>^Ord::cmp(self, other) {
     return 1;
 }
 
-fn Array<i32>::append(self, value) {
+fn Array<i32>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {

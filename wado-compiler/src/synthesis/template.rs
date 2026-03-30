@@ -423,12 +423,12 @@ fn build_template_block(
                         receiver: Box::new(buf_ref),
                         func: FunctionRef {
                             module_source: ModuleSource::string(),
-                            name: "String::append".to_string(),
+                            name: "String::push_str".to_string(),
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
                                 "String".to_string(),
                                 None,
-                                "append".to_string(),
+                                "push_str".to_string(),
                             )),
                             is_cm_binding: false,
                         },
@@ -467,12 +467,12 @@ fn build_template_block(
                             receiver: Box::new(buf_ref),
                             func: FunctionRef {
                                 module_source: ModuleSource::string(),
-                                name: "String::append".to_string(),
+                                name: "String::push_str".to_string(),
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
                                     "String".to_string(),
                                     None,
-                                    "append".to_string(),
+                                    "push_str".to_string(),
                                 )),
                                 is_cm_binding: false,
                             },

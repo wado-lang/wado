@@ -250,7 +250,7 @@ test "loop scope c-style for" {
 
     for let mut i = 0; i < 5; i += 1 {
         let get_i = |_: i32| i;
-        closures.append(get_i);
+        closures.push(get_i);
     }
 
     assert call_fn(closures[0], 0) == 0;
@@ -266,7 +266,7 @@ test "loop scope for-of" {
 
     for let item of items {
         let get_item = |_: i32| item;
-        closures.append(get_item);
+        closures.push(get_item);
     }
 
     assert call_fn(closures[0], 0) == 10;

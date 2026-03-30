@@ -250,7 +250,7 @@ type "functype/core:internal/cm_lower_string" = fn(ref String) -> i64;
 
 type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
 
-type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
+type "functype/Array<u8>::push" = fn(ref Array<u8>, u8);
 
 type "functype/Array<u8>::grow" = fn(ref Array<u8>);
 
@@ -890,7 +890,7 @@ fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
-fn Array<u8>::append(self, value) {
+fn Array<u8>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {

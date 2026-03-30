@@ -853,13 +853,22 @@ impl String {
     pub fn internal_append_from_memory(&mut self, ptr: i32, len: i32);
     pub fn internal_reserve_uninit(&mut self, n: i32) -> i32;
     pub fn append_byte_filled(&mut self, byte: u8, n: i32);
+    pub fn push_str(&mut self, other: String);
     pub fn append(&mut self, other: String);
     pub fn concat(a: String, b: String) -> String;
     pub fn bytes(&self) -> StrUtf8ByteIter;
     pub fn chars(&self) -> StrCharIter;
+    pub fn push(&mut self, c: char);
     pub fn append_char(&mut self, c: char);
-    pub fn truncate_bytes(&mut self, byte_len: i32);
+    pub fn truncate(&mut self, byte_len: i32);
     pub fn truncate_chars(&mut self, char_count: i32);
+    pub fn truncate_bytes(&mut self, byte_len: i32);
+    pub fn pop(&mut self) -> Option<char>;
+    pub fn clear(&mut self);
+    pub fn capacity(&self) -> i32;
+    pub fn reserve(&mut self, additional: i32);
+    pub fn shrink_to_fit(&mut self);
+    pub fn as_bytes(&self) -> Array<u8>;
     pub fn trim_ascii_start(&self) -> String;
     pub fn trim_ascii_end(&self) -> String;
     pub fn trim_ascii(&self) -> String;
@@ -868,10 +877,28 @@ impl String {
     pub fn trim(&self) -> String;
     pub fn to_ascii_lowercase(&self) -> String;
     pub fn to_ascii_uppercase(&self) -> String;
+    pub fn contains(&self, pat: String) -> bool;
+    pub fn starts_with(&self, pat: String) -> bool;
+    pub fn ends_with(&self, pat: String) -> bool;
+    pub fn find(&self, pat: String) -> Option<i32>;
+    pub fn rfind(&self, pat: String) -> Option<i32>;
+    pub fn contains_char(&self, ch: char) -> bool;
+    pub fn find_char(&self, pred: Fn(char) -> bool) -> Option<i32>;
+    pub fn insert(&mut self, byte_index: i32, ch: char);
+    pub fn insert_str(&mut self, byte_index: i32, s: String);
+    pub fn remove(&mut self, byte_index: i32) -> char;
+    pub fn repeat(&self, n: i32) -> String;
+    pub fn replace(&self, from: String, to: String) -> String;
+    pub fn replacen(&self, from: String, to: String, count: i32) -> String;
     pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String;
     pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>;
     pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String;
     pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String;
+    pub fn split(&self, sep: String) -> StrSplitIter;
+    pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter;
+    pub fn split_whitespace(&self) -> StrSplitWhitespaceIter;
+    pub fn lines(&self) -> StrLinesIter;
+    pub fn char_indices(&self) -> StrCharIndicesIter;
 }
 
 impl Add for String {
@@ -1033,20 +1060,36 @@ impl Array {
     pub fn filled(n: i32, element: T) -> Array<T>;
     pub fn len(&self) -> i32;
     pub fn is_empty(&self) -> bool;
+    pub fn capacity(&self) -> i32;
     pub fn internal_raw_data(&self) -> builtin::array<T>;
     pub fn internal_from_raw(repr: builtin::array<T>, used: i32) -> Array<T>;
+    pub fn push(&mut self, value: T);
     pub fn append(&mut self, value: T);
     pub fn pop(&mut self) -> Option<T>;
-    pub fn truncate(&mut self, len: i32);
+    pub fn first(&self) -> Option<T>;
     pub fn last(&self) -> Option<T>;
     pub fn get(&self, index: i32) -> Option<T>;
+    pub fn insert(&mut self, index: i32, value: T);
+    pub fn remove(&mut self, index: i32) -> T;
+    pub fn swap(&mut self, a: i32, b: i32);
+    pub fn truncate(&mut self, len: i32);
+    pub fn clear(&mut self);
+    pub fn reserve(&mut self, additional: i32);
+    pub fn shrink_to_fit(&mut self);
+    pub fn extend(&mut self, other: &Array<T>);
+    pub fn reverse(&mut self);
+    pub fn repeat(&self, n: i32) -> Array<T>;
     pub fn copy_within_append(&mut self, src_start: i32, count: i32);
+    pub fn contains(&self, value: &T) -> bool;
     pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>;
     pub fn iter(&self) -> ArrayIter<T>;
     pub fn sort_by(&mut self, cmp: Fn(&T, &T) -> Ordering);
     pub fn sorted_by(&self, cmp: Fn(&T, &T) -> Ordering) -> Array<T>;
+    pub fn windows(&self, size: i32) -> WindowsIter<T>;
+    pub fn chunks(&self, size: i32) -> ChunksIter<T>;
     pub fn sort(&mut self);
     pub fn sorted(&self) -> Array<T>;
+    pub fn join(&self, separator: String) -> String;
 }
 
 impl IndexValue<i32> for Array<T> {

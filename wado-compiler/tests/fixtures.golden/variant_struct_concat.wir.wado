@@ -58,7 +58,7 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::concat" = fn(ref String, ref String) -> ref String;
 
@@ -89,9 +89,9 @@ fn run() with Stdout {
     s = "./variant_struct_concat_module.wado/format_str"(String { repr: array.new_data<u8>("hi"), used: 2 }, opts);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::append(__local_2, String { repr: array.new_data<u8>("["), used: 1 });
-        String::append(__local_2, s);
-        String::append(__local_2, String { repr: array.new_data<u8>("]"), used: 1 });
+        String::push_str(__local_2, String { repr: array.new_data<u8>("["), used: 1 });
+        String::push_str(__local_2, s);
+        String::push_str(__local_2, String { repr: array.new_data<u8>("]"), used: 1 });
         break __tmpl: __local_2;
     });
 }
@@ -226,7 +226,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;

@@ -58,7 +58,7 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::concat" = fn(ref String, ref String) -> ref String;
 
@@ -106,7 +106,7 @@ fn format_with_opts(s, opts) {
                 if (i < pad_len) == 0 {
                     break __for_0;
                 };
-                String::append(pad, String { repr: array.new_data<u8>(" "), used: 1 });
+                String::push_str(pad, String { repr: array.new_data<u8>(" "), used: 1 });
                 i = i + 1;
                 continue l3;
             };
@@ -128,7 +128,7 @@ fn format_with_opts(s, opts) {
                     if (__local_9 < __local_5) == 0 {
                         break __for_0;
                     };
-                    String::append(__local_7, String { repr: array.new_data<u8>(" "), used: 1 });
+                    String::push_str(__local_7, String { repr: array.new_data<u8>(" "), used: 1 });
                     __local_9 = __local_9 + 1;
                     continue l9;
                 };
@@ -141,7 +141,7 @@ fn format_with_opts(s, opts) {
                     if (__local_10 < __local_6) == 0 {
                         break __for_1;
                     };
-                    String::append(__local_8, String { repr: array.new_data<u8>(" "), used: 1 });
+                    String::push_str(__local_8, String { repr: array.new_data<u8>(" "), used: 1 });
                     __local_10 = __local_10 + 1;
                     continue l12;
                 };
@@ -281,7 +281,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;

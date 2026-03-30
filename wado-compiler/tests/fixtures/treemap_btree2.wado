@@ -58,9 +58,9 @@ impl<K, V> BTreeNode<K, V> {
 
         for let mut i = 0; i < self.keys.len(); i += 1 {
             if !self.deleted[i] {
-                new_keys.append(self.keys[i]);
-                new_values.append(self.values[i]);
-                new_deleted.append(false);
+                new_keys.push(self.keys[i]);
+                new_values.push(self.values[i]);
+                new_deleted.push(false);
             }
         }
 
@@ -137,9 +137,9 @@ impl<K, V> TreeMap<K, V> {
     fn insert(&mut self, key: K, value: V) {
         if let None = self.root {
             let mut new_root = BTreeNode::<K, V>::new_leaf();
-            new_root.keys.append(key);
-            new_root.values.append(value);
-            new_root.deleted.append(false);
+            new_root.keys.push(key);
+            new_root.values.push(value);
+            new_root.deleted.push(false);
             self.root = Option::Some(&mut new_root);
             self.size = 1;
             return;
@@ -148,7 +148,7 @@ impl<K, V> TreeMap<K, V> {
         if let Some(root) = self.root {
             if root.is_full(self.max_keys()) {
                 let mut new_root = BTreeNode::<K, V>::new_internal();
-                new_root.children.append(root);
+                new_root.children.push(root);
                 self.split_child(&mut new_root, 0);
                 self.root = Option::Some(&mut new_root);
             }
@@ -175,9 +175,9 @@ impl<K, V> TreeMap<K, V> {
                 return;
             }
 
-            node.keys.append(key);
-            node.values.append(value);
-            node.deleted.append(false);
+            node.keys.push(key);
+            node.values.push(value);
+            node.deleted.push(false);
 
             self.sort_node_entries(node);
             self.size += 1;
@@ -209,14 +209,14 @@ impl<K, V> TreeMap<K, V> {
         let mid = self.t - 1;
 
         for let mut i = mid + 1; i < full_child.keys.len(); i += 1 {
-            new_sibling.keys.append(full_child.keys[i]);
-            new_sibling.values.append(full_child.values[i]);
-            new_sibling.deleted.append(full_child.deleted[i]);
+            new_sibling.keys.push(full_child.keys[i]);
+            new_sibling.values.push(full_child.values[i]);
+            new_sibling.deleted.push(full_child.deleted[i]);
         }
 
         if !full_child.is_leaf {
             for let mut i = mid + 1; i < full_child.children.len(); i += 1 {
-                new_sibling.children.append(full_child.children[i]);
+                new_sibling.children.push(full_child.children[i]);
             }
         }
 
@@ -224,10 +224,10 @@ impl<K, V> TreeMap<K, V> {
         let promoted_value = full_child.values[mid];
         let promoted_deleted = full_child.deleted[mid];
 
-        parent.keys.append(promoted_key);
-        parent.values.append(promoted_value);
-        parent.deleted.append(promoted_deleted);
-        parent.children.append(&mut new_sibling);
+        parent.keys.push(promoted_key);
+        parent.values.push(promoted_value);
+        parent.deleted.push(promoted_deleted);
+        parent.children.push(&mut new_sibling);
 
         self.sort_node_entries(parent);
     }
@@ -319,7 +319,7 @@ impl<K, V> TreeMap<K, V> {
             }
 
             if !node.deleted[i] {
-                result.append([node.keys[i], node.values[i]]);
+                result.push([node.keys[i], node.values[i]]);
             }
 
             i += 1;

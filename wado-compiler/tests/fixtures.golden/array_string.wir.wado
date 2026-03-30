@@ -68,9 +68,9 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
+type "functype/Array<String>::push" = fn(ref Array<String>, ref String);
 
 type "functype/Array<String>::grow" = fn(ref Array<String>);
 
@@ -98,15 +98,15 @@ fn join_names(names) {
     let __local_1: ref String;
     return __tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(37), used: 0 };
-        String::append(__local_1, __inline_Array_String__IndexValue__index_value_1: block -> ref String {
+        String::push_str(__local_1, __inline_Array_String__IndexValue__index_value_1: block -> ref String {
             if 0 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
             break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(names.repr, 0);
         });
-        String::append(__local_1, String { repr: array.new_data<u8>(" and "), used: 5 });
-        String::append(__local_1, __inline_Array_String__IndexValue__index_value_2: block -> ref String {
+        String::push_str(__local_1, String { repr: array.new_data<u8>(" and "), used: 5 });
+        String::push_str(__local_1, __inline_Array_String__IndexValue__index_value_2: block -> ref String {
             if 1 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
@@ -127,23 +127,23 @@ fn array_string() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(52), used: 0 };
-        String::append(__local_2, __inline_Array_String__IndexValue__index_value_7: block -> ref String {
+        String::push_str(__local_2, __inline_Array_String__IndexValue__index_value_7: block -> ref String {
             if 0 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
             break __inline_Array_String__IndexValue__index_value_7: builtin::array_get<ref String>(names.repr, 0);
         });
-        String::append(__local_2, String { repr: array.new_data<u8>(", "), used: 2 });
-        String::append(__local_2, __inline_Array_String__IndexValue__index_value_8: block -> ref String {
+        String::push_str(__local_2, String { repr: array.new_data<u8>(", "), used: 2 });
+        String::push_str(__local_2, __inline_Array_String__IndexValue__index_value_8: block -> ref String {
             if 1 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
             break __inline_Array_String__IndexValue__index_value_8: builtin::array_get<ref String>(names.repr, 1);
         });
-        String::append(__local_2, String { repr: array.new_data<u8>(", "), used: 2 });
-        String::append(__local_2, __inline_Array_String__IndexValue__index_value_9: block -> ref String {
+        String::push_str(__local_2, String { repr: array.new_data<u8>(", "), used: 2 });
+        String::push_str(__local_2, __inline_Array_String__IndexValue__index_value_9: block -> ref String {
             if 2 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
@@ -164,15 +164,15 @@ fn array_string_cast() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(33), used: 0 };
-        String::append(__local_2, __inline_Array_String__IndexValue__index_value_6: block -> ref String {
+        String::push_str(__local_2, __inline_Array_String__IndexValue__index_value_6: block -> ref String {
             if 0 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
             break __inline_Array_String__IndexValue__index_value_6: builtin::array_get<ref String>(names.repr, 0);
         });
-        String::append(__local_2, String { repr: array.new_data<u8>(" "), used: 1 });
-        String::append(__local_2, __inline_Array_String__IndexValue__index_value_7: block -> ref String {
+        String::push_str(__local_2, String { repr: array.new_data<u8>(" "), used: 1 });
+        String::push_str(__local_2, __inline_Array_String__IndexValue__index_value_7: block -> ref String {
             if 1 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
@@ -354,7 +354,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -369,7 +369,7 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn Array<String>::append(self, value) {
+fn Array<String>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {

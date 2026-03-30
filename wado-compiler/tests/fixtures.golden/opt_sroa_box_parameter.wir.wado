@@ -168,7 +168,7 @@ type "functype/count_digits_base" = fn(i64, i32) -> i32;
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
+type "functype/Array<u64>::push" = fn(ref Array<u64>, u64);
 
 type "functype/Array<u64>::grow" = fn(ref Array<u64>);
 
@@ -178,13 +178,13 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
 type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
 type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> bool;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/__Closure_5::__call" = fn(ref __Closure_5) -> ref String;
 
@@ -281,24 +281,24 @@ fn check_i32(x, expected) {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(130), used: 0 };
-            String::append(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_6, String { repr: array.new_data<u8>("check_i32"), used: 9 });
-            String::append_char(__local_6, 32);
-            String::append_char(__local_6, 97);
-            String::append_char(__local_6, 116);
-            String::append_char(__local_6, 32);
-            String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_6, 58);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_6, String { repr: array.new_data<u8>("check_i32"), used: 9 });
+            String::push(__local_6, 32);
+            String::push(__local_6, 97);
+            String::push(__local_6, 116);
+            String::push(__local_6, 32);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_6, 58);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_17 = __local_7;
             i32::fmt_decimal(15, __local_17);
-            String::append(__local_6, String { repr: array.new_data<u8>("
+            String::push_str(__local_6, String { repr: array.new_data<u8>("
 condition: `{x}` == expected
 "), used: 30 });
-            String::append(__local_6, String { repr: array.new_data<u8>("expected: "), used: 10 });
+            String::push_str(__local_6, String { repr: array.new_data<u8>("expected: "), used: 10 });
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             String^Inspect::inspect(__v0, __local_7);
-            String::append_char(__local_6, 10);
+            String::push(__local_6, 10);
             break __tmpl: __local_6;
         });
         unreachable;
@@ -323,24 +323,24 @@ fn check_i64(x, expected) {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(130), used: 0 };
-            String::append(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_6, String { repr: array.new_data<u8>("check_i64"), used: 9 });
-            String::append_char(__local_6, 32);
-            String::append_char(__local_6, 97);
-            String::append_char(__local_6, 116);
-            String::append_char(__local_6, 32);
-            String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_6, 58);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_6, String { repr: array.new_data<u8>("check_i64"), used: 9 });
+            String::push(__local_6, 32);
+            String::push(__local_6, 97);
+            String::push(__local_6, 116);
+            String::push(__local_6, 32);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_6, 58);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_17 = __local_7;
             i32::fmt_decimal(19, __local_17);
-            String::append(__local_6, String { repr: array.new_data<u8>("
+            String::push_str(__local_6, String { repr: array.new_data<u8>("
 condition: `{x}` == expected
 "), used: 30 });
-            String::append(__local_6, String { repr: array.new_data<u8>("expected: "), used: 10 });
+            String::push_str(__local_6, String { repr: array.new_data<u8>("expected: "), used: 10 });
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             String^Inspect::inspect(__v0, __local_7);
-            String::append_char(__local_6, 10);
+            String::push(__local_6, 10);
             break __tmpl: __local_6;
         });
         unreachable;
@@ -365,24 +365,24 @@ fn check_f32(x, expected) {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(130), used: 0 };
-            String::append(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_6, String { repr: array.new_data<u8>("check_f32"), used: 9 });
-            String::append_char(__local_6, 32);
-            String::append_char(__local_6, 97);
-            String::append_char(__local_6, 116);
-            String::append_char(__local_6, 32);
-            String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_6, 58);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_6, String { repr: array.new_data<u8>("check_f32"), used: 9 });
+            String::push(__local_6, 32);
+            String::push(__local_6, 97);
+            String::push(__local_6, 116);
+            String::push(__local_6, 32);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_6, 58);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_15 = __local_7;
             i32::fmt_decimal(23, __local_15);
-            String::append(__local_6, String { repr: array.new_data<u8>("
+            String::push_str(__local_6, String { repr: array.new_data<u8>("
 condition: `{x}` == expected
 "), used: 30 });
-            String::append(__local_6, String { repr: array.new_data<u8>("expected: "), used: 10 });
+            String::push_str(__local_6, String { repr: array.new_data<u8>("expected: "), used: 10 });
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             String^Inspect::inspect(__v0, __local_7);
-            String::append_char(__local_6, 10);
+            String::push(__local_6, 10);
             break __tmpl: __local_6;
         });
         unreachable;
@@ -407,24 +407,24 @@ fn check_f64(x, expected) {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(130), used: 0 };
-            String::append(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_6, String { repr: array.new_data<u8>("check_f64"), used: 9 });
-            String::append_char(__local_6, 32);
-            String::append_char(__local_6, 97);
-            String::append_char(__local_6, 116);
-            String::append_char(__local_6, 32);
-            String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_6, 58);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_6, String { repr: array.new_data<u8>("check_f64"), used: 9 });
+            String::push(__local_6, 32);
+            String::push(__local_6, 97);
+            String::push(__local_6, 116);
+            String::push(__local_6, 32);
+            String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_6, 58);
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_15 = __local_7;
             i32::fmt_decimal(27, __local_15);
-            String::append(__local_6, String { repr: array.new_data<u8>("
+            String::push_str(__local_6, String { repr: array.new_data<u8>("
 condition: `{x}` == expected
 "), used: 30 });
-            String::append(__local_6, String { repr: array.new_data<u8>("expected: "), used: 10 });
+            String::push_str(__local_6, String { repr: array.new_data<u8>("expected: "), used: 10 });
             __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             String^Inspect::inspect(__v0, __local_7);
-            String::append_char(__local_6, 10);
+            String::push(__local_6, 10);
             break __tmpl: __local_6;
         });
         unreachable;
@@ -687,19 +687,19 @@ fn run() with Stdout {
     if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_101 = String { repr: builtin::array_new<u8>(104), used: 0 };
-            String::append(__local_101, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_101, 114);
-            String::append_char(__local_101, 117);
-            String::append_char(__local_101, 110);
-            String::append_char(__local_101, 32);
-            String::append_char(__local_101, 97);
-            String::append_char(__local_101, 116);
-            String::append_char(__local_101, 32);
-            String::append(__local_101, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_101, 58);
+            String::push_str(__local_101, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_101, 114);
+            String::push(__local_101, 117);
+            String::push(__local_101, 110);
+            String::push(__local_101, 32);
+            String::push(__local_101, 97);
+            String::push(__local_101, 116);
+            String::push(__local_101, 32);
+            String::push_str(__local_101, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_101, 58);
             __local_102 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_101 };
             i32::fmt_decimal(45, __local_102);
-            String::append(__local_101, String { repr: array.new_data<u8>("
+            String::push_str(__local_101, String { repr: array.new_data<u8>("
 condition: `{i8_val}` == \"42\"
 "), used: 31 });
             break __tmpl: __local_101;
@@ -715,19 +715,19 @@ condition: `{i8_val}` == \"42\"
     if __cond_13 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_105 = String { repr: builtin::array_new<u8>(107), used: 0 };
-            String::append(__local_105, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_105, 114);
-            String::append_char(__local_105, 117);
-            String::append_char(__local_105, 110);
-            String::append_char(__local_105, 32);
-            String::append_char(__local_105, 97);
-            String::append_char(__local_105, 116);
-            String::append_char(__local_105, 32);
-            String::append(__local_105, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_105, 58);
+            String::push_str(__local_105, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_105, 114);
+            String::push(__local_105, 117);
+            String::push(__local_105, 110);
+            String::push(__local_105, 32);
+            String::push(__local_105, 97);
+            String::push(__local_105, 116);
+            String::push(__local_105, 32);
+            String::push_str(__local_105, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_105, 58);
             __local_106 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_105 };
             i32::fmt_decimal(46, __local_106);
-            String::append(__local_105, String { repr: array.new_data<u8>("
+            String::push_str(__local_105, String { repr: array.new_data<u8>("
 condition: `{i16_val}` == \"1000\"
 "), used: 34 });
             break __tmpl: __local_105;
@@ -743,19 +743,19 @@ condition: `{i16_val}` == \"1000\"
     if __cond_14 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_109 = String { repr: builtin::array_new<u8>(109), used: 0 };
-            String::append(__local_109, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_109, 114);
-            String::append_char(__local_109, 117);
-            String::append_char(__local_109, 110);
-            String::append_char(__local_109, 32);
-            String::append_char(__local_109, 97);
-            String::append_char(__local_109, 116);
-            String::append_char(__local_109, 32);
-            String::append(__local_109, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_109, 58);
+            String::push_str(__local_109, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_109, 114);
+            String::push(__local_109, 117);
+            String::push(__local_109, 110);
+            String::push(__local_109, 32);
+            String::push(__local_109, 97);
+            String::push(__local_109, 116);
+            String::push(__local_109, 32);
+            String::push_str(__local_109, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_109, 58);
             __local_110 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_109 };
             i32::fmt_decimal(47, __local_110);
-            String::append(__local_109, String { repr: array.new_data<u8>("
+            String::push_str(__local_109, String { repr: array.new_data<u8>("
 condition: `{i32_val}` == \"100000\"
 "), used: 36 });
             break __tmpl: __local_109;
@@ -771,19 +771,19 @@ condition: `{i32_val}` == \"100000\"
     if __cond_15 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_113 = String { repr: builtin::array_new<u8>(112), used: 0 };
-            String::append(__local_113, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_113, 114);
-            String::append_char(__local_113, 117);
-            String::append_char(__local_113, 110);
-            String::append_char(__local_113, 32);
-            String::append_char(__local_113, 97);
-            String::append_char(__local_113, 116);
-            String::append_char(__local_113, 32);
-            String::append(__local_113, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_113, 58);
+            String::push_str(__local_113, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_113, 114);
+            String::push(__local_113, 117);
+            String::push(__local_113, 110);
+            String::push(__local_113, 32);
+            String::push(__local_113, 97);
+            String::push(__local_113, 116);
+            String::push(__local_113, 32);
+            String::push_str(__local_113, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_113, 58);
             __local_114 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_113 };
             i32::fmt_decimal(48, __local_114);
-            String::append(__local_113, String { repr: array.new_data<u8>("
+            String::push_str(__local_113, String { repr: array.new_data<u8>("
 condition: `{i64_val}` == \"999999999\"
 "), used: 39 });
             break __tmpl: __local_113;
@@ -799,19 +799,19 @@ condition: `{i64_val}` == \"999999999\"
     if __cond_16 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_117 = String { repr: builtin::array_new<u8>(105), used: 0 };
-            String::append(__local_117, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_117, 114);
-            String::append_char(__local_117, 117);
-            String::append_char(__local_117, 110);
-            String::append_char(__local_117, 32);
-            String::append_char(__local_117, 97);
-            String::append_char(__local_117, 116);
-            String::append_char(__local_117, 32);
-            String::append(__local_117, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_117, 58);
+            String::push_str(__local_117, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_117, 114);
+            String::push(__local_117, 117);
+            String::push(__local_117, 110);
+            String::push(__local_117, 32);
+            String::push(__local_117, 97);
+            String::push(__local_117, 116);
+            String::push(__local_117, 32);
+            String::push_str(__local_117, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_117, 58);
             __local_118 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_117 };
             i32::fmt_decimal(49, __local_118);
-            String::append(__local_117, String { repr: array.new_data<u8>("
+            String::push_str(__local_117, String { repr: array.new_data<u8>("
 condition: `{u8_val}` == \"255\"
 "), used: 32 });
             break __tmpl: __local_117;
@@ -827,19 +827,19 @@ condition: `{u8_val}` == \"255\"
     if __cond_17 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_121 = String { repr: builtin::array_new<u8>(108), used: 0 };
-            String::append(__local_121, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_121, 114);
-            String::append_char(__local_121, 117);
-            String::append_char(__local_121, 110);
-            String::append_char(__local_121, 32);
-            String::append_char(__local_121, 97);
-            String::append_char(__local_121, 116);
-            String::append_char(__local_121, 32);
-            String::append(__local_121, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_121, 58);
+            String::push_str(__local_121, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_121, 114);
+            String::push(__local_121, 117);
+            String::push(__local_121, 110);
+            String::push(__local_121, 32);
+            String::push(__local_121, 97);
+            String::push(__local_121, 116);
+            String::push(__local_121, 32);
+            String::push_str(__local_121, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_121, 58);
             __local_122 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_121 };
             i32::fmt_decimal(50, __local_122);
-            String::append(__local_121, String { repr: array.new_data<u8>("
+            String::push_str(__local_121, String { repr: array.new_data<u8>("
 condition: `{u16_val}` == \"60000\"
 "), used: 35 });
             break __tmpl: __local_121;
@@ -855,19 +855,19 @@ condition: `{u16_val}` == \"60000\"
     if __cond_18 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_125 = String { repr: builtin::array_new<u8>(113), used: 0 };
-            String::append(__local_125, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_125, 114);
-            String::append_char(__local_125, 117);
-            String::append_char(__local_125, 110);
-            String::append_char(__local_125, 32);
-            String::append_char(__local_125, 97);
-            String::append_char(__local_125, 116);
-            String::append_char(__local_125, 32);
-            String::append(__local_125, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_125, 58);
+            String::push_str(__local_125, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_125, 114);
+            String::push(__local_125, 117);
+            String::push(__local_125, 110);
+            String::push(__local_125, 32);
+            String::push(__local_125, 97);
+            String::push(__local_125, 116);
+            String::push(__local_125, 32);
+            String::push_str(__local_125, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_125, 58);
             __local_126 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_125 };
             i32::fmt_decimal(51, __local_126);
-            String::append(__local_125, String { repr: array.new_data<u8>("
+            String::push_str(__local_125, String { repr: array.new_data<u8>("
 condition: `{u32_val}` == \"4000000000\"
 "), used: 40 });
             break __tmpl: __local_125;
@@ -883,19 +883,19 @@ condition: `{u32_val}` == \"4000000000\"
     if __cond_19 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_129 = String { repr: builtin::array_new<u8>(123), used: 0 };
-            String::append(__local_129, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_129, 114);
-            String::append_char(__local_129, 117);
-            String::append_char(__local_129, 110);
-            String::append_char(__local_129, 32);
-            String::append_char(__local_129, 97);
-            String::append_char(__local_129, 116);
-            String::append_char(__local_129, 32);
-            String::append(__local_129, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_129, 58);
+            String::push_str(__local_129, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_129, 114);
+            String::push(__local_129, 117);
+            String::push(__local_129, 110);
+            String::push(__local_129, 32);
+            String::push(__local_129, 97);
+            String::push(__local_129, 116);
+            String::push(__local_129, 32);
+            String::push_str(__local_129, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_129, 58);
             __local_130 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_129 };
             i32::fmt_decimal(52, __local_130);
-            String::append(__local_129, String { repr: array.new_data<u8>("
+            String::push_str(__local_129, String { repr: array.new_data<u8>("
 condition: `{u64_val}` == \"18000000000000000000\"
 "), used: 50 });
             break __tmpl: __local_129;
@@ -911,19 +911,19 @@ condition: `{u64_val}` == \"18000000000000000000\"
     if __cond_20 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_133 = String { repr: builtin::array_new<u8>(107), used: 0 };
-            String::append(__local_133, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_133, 114);
-            String::append_char(__local_133, 117);
-            String::append_char(__local_133, 110);
-            String::append_char(__local_133, 32);
-            String::append_char(__local_133, 97);
-            String::append_char(__local_133, 116);
-            String::append_char(__local_133, 32);
-            String::append(__local_133, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_133, 58);
+            String::push_str(__local_133, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_133, 114);
+            String::push(__local_133, 117);
+            String::push(__local_133, 110);
+            String::push(__local_133, 32);
+            String::push(__local_133, 97);
+            String::push(__local_133, 116);
+            String::push(__local_133, 32);
+            String::push_str(__local_133, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_133, 58);
             __local_134 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_133 };
             i32::fmt_decimal(53, __local_134);
-            String::append(__local_133, String { repr: array.new_data<u8>("
+            String::push_str(__local_133, String { repr: array.new_data<u8>("
 condition: `{f32_val}` == \"3.14\"
 "), used: 34 });
             break __tmpl: __local_133;
@@ -939,19 +939,19 @@ condition: `{f32_val}` == \"3.14\"
     if __cond_21 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_137 = String { repr: builtin::array_new<u8>(110), used: 0 };
-            String::append(__local_137, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_137, 114);
-            String::append_char(__local_137, 117);
-            String::append_char(__local_137, 110);
-            String::append_char(__local_137, 32);
-            String::append_char(__local_137, 97);
-            String::append_char(__local_137, 116);
-            String::append_char(__local_137, 32);
-            String::append(__local_137, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_137, 58);
+            String::push_str(__local_137, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_137, 114);
+            String::push(__local_137, 117);
+            String::push(__local_137, 110);
+            String::push(__local_137, 32);
+            String::push(__local_137, 97);
+            String::push(__local_137, 116);
+            String::push(__local_137, 32);
+            String::push_str(__local_137, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_137, 58);
             __local_138 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_137 };
             i32::fmt_decimal(54, __local_138);
-            String::append(__local_137, String { repr: array.new_data<u8>("
+            String::push_str(__local_137, String { repr: array.new_data<u8>("
 condition: `{f64_val}` == \"2.71828\"
 "), used: 37 });
             break __tmpl: __local_137;
@@ -969,19 +969,19 @@ condition: `{f64_val}` == \"2.71828\"
     if __cond_22 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_141 = String { repr: builtin::array_new<u8>(108), used: 0 };
-            String::append(__local_141, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_141, 114);
-            String::append_char(__local_141, 117);
-            String::append_char(__local_141, 110);
-            String::append_char(__local_141, 32);
-            String::append_char(__local_141, 97);
-            String::append_char(__local_141, 116);
-            String::append_char(__local_141, 32);
-            String::append(__local_141, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_141, 58);
+            String::push_str(__local_141, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_141, 114);
+            String::push(__local_141, 117);
+            String::push(__local_141, 110);
+            String::push(__local_141, 32);
+            String::push(__local_141, 97);
+            String::push(__local_141, 116);
+            String::push(__local_141, 32);
+            String::push_str(__local_141, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_141, 58);
             __local_142 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_141 };
             i32::fmt_decimal(55, __local_142);
-            String::append(__local_141, String { repr: array.new_data<u8>("
+            String::push_str(__local_141, String { repr: array.new_data<u8>("
 condition: `{bool_val}` == \"true\"
 "), used: 35 });
             break __tmpl: __local_141;
@@ -997,19 +997,19 @@ condition: `{bool_val}` == \"true\"
     if __cond_23 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_145 = String { repr: builtin::array_new<u8>(105), used: 0 };
-            String::append(__local_145, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_145, 114);
-            String::append_char(__local_145, 117);
-            String::append_char(__local_145, 110);
-            String::append_char(__local_145, 32);
-            String::append_char(__local_145, 97);
-            String::append_char(__local_145, 116);
-            String::append_char(__local_145, 32);
-            String::append(__local_145, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_145, 58);
+            String::push_str(__local_145, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_145, 114);
+            String::push(__local_145, 117);
+            String::push(__local_145, 110);
+            String::push(__local_145, 32);
+            String::push(__local_145, 97);
+            String::push(__local_145, 116);
+            String::push(__local_145, 32);
+            String::push_str(__local_145, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_145, 58);
             __local_146 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_145 };
             i32::fmt_decimal(56, __local_146);
-            String::append(__local_145, String { repr: array.new_data<u8>("
+            String::push_str(__local_145, String { repr: array.new_data<u8>("
 condition: `{char_val}` == \"Z\"
 "), used: 32 });
             break __tmpl: __local_145;
@@ -1025,19 +1025,19 @@ condition: `{char_val}` == \"Z\"
     if __cond_24 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_149 = String { repr: builtin::array_new<u8>(112), used: 0 };
-            String::append(__local_149, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_149, 114);
-            String::append_char(__local_149, 117);
-            String::append_char(__local_149, 110);
-            String::append_char(__local_149, 32);
-            String::append_char(__local_149, 97);
-            String::append_char(__local_149, 116);
-            String::append_char(__local_149, 32);
-            String::append(__local_149, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_149, 58);
+            String::push_str(__local_149, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_149, 114);
+            String::push(__local_149, 117);
+            String::push(__local_149, 110);
+            String::push(__local_149, 32);
+            String::push(__local_149, 97);
+            String::push(__local_149, 116);
+            String::push(__local_149, 32);
+            String::push_str(__local_149, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_149, 58);
             __local_150 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_149 };
             i32::fmt_decimal(59, __local_150);
-            String::append(__local_149, String { repr: array.new_data<u8>("
+            String::push_str(__local_149, String { repr: array.new_data<u8>("
 condition: `{f64_val:0.2f}` == \"2.72\"
 "), used: 39 });
             break __tmpl: __local_149;
@@ -1053,19 +1053,19 @@ condition: `{f64_val:0.2f}` == \"2.72\"
     if __cond_25 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_153 = String { repr: builtin::array_new<u8>(110), used: 0 };
-            String::append(__local_153, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_153, 114);
-            String::append_char(__local_153, 117);
-            String::append_char(__local_153, 110);
-            String::append_char(__local_153, 32);
-            String::append_char(__local_153, 97);
-            String::append_char(__local_153, 116);
-            String::append_char(__local_153, 32);
-            String::append(__local_153, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_153, 58);
+            String::push_str(__local_153, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_153, 114);
+            String::push(__local_153, 117);
+            String::push(__local_153, 110);
+            String::push(__local_153, 32);
+            String::push(__local_153, 97);
+            String::push(__local_153, 116);
+            String::push(__local_153, 32);
+            String::push_str(__local_153, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_153, 58);
             __local_154 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_153 };
             i32::fmt_decimal(60, __local_154);
-            String::append(__local_153, String { repr: array.new_data<u8>("
+            String::push_str(__local_153, String { repr: array.new_data<u8>("
 condition: `{i32_val:x}` == \"186a0\"
 "), used: 37 });
             break __tmpl: __local_153;
@@ -1081,19 +1081,19 @@ condition: `{i32_val:x}` == \"186a0\"
     if __cond_31 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_157 = String { repr: builtin::array_new<u8>(99), used: 0 };
-            String::append(__local_157, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_157, 114);
-            String::append_char(__local_157, 117);
-            String::append_char(__local_157, 110);
-            String::append_char(__local_157, 32);
-            String::append_char(__local_157, 97);
-            String::append_char(__local_157, 116);
-            String::append_char(__local_157, 32);
-            String::append(__local_157, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_157, 58);
+            String::push_str(__local_157, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_157, 114);
+            String::push(__local_157, 117);
+            String::push(__local_157, 110);
+            String::push(__local_157, 32);
+            String::push(__local_157, 97);
+            String::push(__local_157, 116);
+            String::push(__local_157, 32);
+            String::push_str(__local_157, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_157, 58);
             __local_158 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_157 };
             i32::fmt_decimal(69, __local_158);
-            String::append(__local_157, String { repr: array.new_data<u8>("
+            String::push_str(__local_157, String { repr: array.new_data<u8>("
 condition: `{a}` == \"42\"
 "), used: 26 });
             break __tmpl: __local_157;
@@ -1109,19 +1109,19 @@ condition: `{a}` == \"42\"
     if __cond_32 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_161 = String { repr: builtin::array_new<u8>(107), used: 0 };
-            String::append(__local_161, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_161, 114);
-            String::append_char(__local_161, 117);
-            String::append_char(__local_161, 110);
-            String::append_char(__local_161, 32);
-            String::append_char(__local_161, 97);
-            String::append_char(__local_161, 116);
-            String::append_char(__local_161, 32);
-            String::append(__local_161, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_161, 58);
+            String::push_str(__local_161, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_161, 114);
+            String::push(__local_161, 117);
+            String::push(__local_161, 110);
+            String::push(__local_161, 32);
+            String::push(__local_161, 97);
+            String::push(__local_161, 116);
+            String::push(__local_161, 32);
+            String::push_str(__local_161, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_161, 58);
             __local_162 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_161 };
             i32::fmt_decimal(70, __local_162);
-            String::append(__local_161, String { repr: array.new_data<u8>("
+            String::push_str(__local_161, String { repr: array.new_data<u8>("
 condition: `{b}` == \"9999999999\"
 "), used: 34 });
             break __tmpl: __local_161;
@@ -1137,19 +1137,19 @@ condition: `{b}` == \"9999999999\"
     if __cond_33 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_165 = String { repr: builtin::array_new<u8>(100), used: 0 };
-            String::append(__local_165, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_165, 114);
-            String::append_char(__local_165, 117);
-            String::append_char(__local_165, 110);
-            String::append_char(__local_165, 32);
-            String::append_char(__local_165, 97);
-            String::append_char(__local_165, 116);
-            String::append_char(__local_165, 32);
-            String::append(__local_165, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_165, 58);
+            String::push_str(__local_165, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_165, 114);
+            String::push(__local_165, 117);
+            String::push(__local_165, 110);
+            String::push(__local_165, 32);
+            String::push(__local_165, 97);
+            String::push(__local_165, 116);
+            String::push(__local_165, 32);
+            String::push_str(__local_165, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_165, 58);
             __local_166 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_165 };
             i32::fmt_decimal(71, __local_166);
-            String::append(__local_165, String { repr: array.new_data<u8>("
+            String::push_str(__local_165, String { repr: array.new_data<u8>("
 condition: `{c}` == \"1.5\"
 "), used: 27 });
             break __tmpl: __local_165;
@@ -1165,19 +1165,19 @@ condition: `{c}` == \"1.5\"
     if __cond_34 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_169 = String { repr: builtin::array_new<u8>(100), used: 0 };
-            String::append(__local_169, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_169, 114);
-            String::append_char(__local_169, 117);
-            String::append_char(__local_169, 110);
-            String::append_char(__local_169, 32);
-            String::append_char(__local_169, 97);
-            String::append_char(__local_169, 116);
-            String::append_char(__local_169, 32);
-            String::append(__local_169, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_169, 58);
+            String::push_str(__local_169, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_169, 114);
+            String::push(__local_169, 117);
+            String::push(__local_169, 110);
+            String::push(__local_169, 32);
+            String::push(__local_169, 97);
+            String::push(__local_169, 116);
+            String::push(__local_169, 32);
+            String::push_str(__local_169, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_169, 58);
             __local_170 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_169 };
             i32::fmt_decimal(72, __local_170);
-            String::append(__local_169, String { repr: array.new_data<u8>("
+            String::push_str(__local_169, String { repr: array.new_data<u8>("
 condition: `{d}` == \"2.5\"
 "), used: 27 });
             break __tmpl: __local_169;
@@ -1195,19 +1195,19 @@ condition: `{d}` == \"2.5\"
     if __cond_35 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_173 = String { repr: builtin::array_new<u8>(102), used: 0 };
-            String::append(__local_173, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_173, 114);
-            String::append_char(__local_173, 117);
-            String::append_char(__local_173, 110);
-            String::append_char(__local_173, 32);
-            String::append_char(__local_173, 97);
-            String::append_char(__local_173, 116);
-            String::append_char(__local_173, 32);
-            String::append(__local_173, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_173, 58);
+            String::push_str(__local_173, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_173, 114);
+            String::push(__local_173, 117);
+            String::push(__local_173, 110);
+            String::push(__local_173, 32);
+            String::push(__local_173, 97);
+            String::push(__local_173, 116);
+            String::push(__local_173, 32);
+            String::push_str(__local_173, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_173, 58);
             __local_174 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_173 };
             i32::fmt_decimal(73, __local_174);
-            String::append(__local_173, String { repr: array.new_data<u8>("
+            String::push_str(__local_173, String { repr: array.new_data<u8>("
 condition: `{e}` == \"false\"
 "), used: 29 });
             break __tmpl: __local_173;
@@ -1223,19 +1223,19 @@ condition: `{e}` == \"false\"
     if __cond_36 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_177 = String { repr: builtin::array_new<u8>(109), used: 0 };
-            String::append(__local_177, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_177, 114);
-            String::append_char(__local_177, 117);
-            String::append_char(__local_177, 110);
-            String::append_char(__local_177, 32);
-            String::append_char(__local_177, 97);
-            String::append_char(__local_177, 116);
-            String::append_char(__local_177, 32);
-            String::append(__local_177, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_177, 58);
+            String::push_str(__local_177, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_177, 114);
+            String::push(__local_177, 117);
+            String::push(__local_177, 110);
+            String::push(__local_177, 32);
+            String::push(__local_177, 97);
+            String::push(__local_177, 116);
+            String::push(__local_177, 32);
+            String::push_str(__local_177, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_177, 58);
             __local_178 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_177 };
             i32::fmt_decimal(77, __local_178);
-            String::append(__local_177, String { repr: array.new_data<u8>("
+            String::push_str(__local_177, String { repr: array.new_data<u8>("
 condition: `{i32_val}` == \"100000\"
 "), used: 36 });
             break __tmpl: __local_177;
@@ -1251,19 +1251,19 @@ condition: `{i32_val}` == \"100000\"
     if __cond_37 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_181 = String { repr: builtin::array_new<u8>(111), used: 0 };
-            String::append(__local_181, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_181, 114);
-            String::append_char(__local_181, 117);
-            String::append_char(__local_181, 110);
-            String::append_char(__local_181, 32);
-            String::append_char(__local_181, 97);
-            String::append_char(__local_181, 116);
-            String::append_char(__local_181, 32);
-            String::append(__local_181, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_181, 58);
+            String::push_str(__local_181, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_181, 114);
+            String::push(__local_181, 117);
+            String::push(__local_181, 110);
+            String::push(__local_181, 32);
+            String::push(__local_181, 97);
+            String::push(__local_181, 116);
+            String::push(__local_181, 32);
+            String::push_str(__local_181, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_181, 58);
             __local_182 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_181 };
             i32::fmt_decimal(78, __local_182);
-            String::append(__local_181, String { repr: array.new_data<u8>("
+            String::push_str(__local_181, String { repr: array.new_data<u8>("
 condition: `{f64_val:0.1f}` == \"2.7\"
 "), used: 38 });
             break __tmpl: __local_181;
@@ -1297,29 +1297,29 @@ condition: `{f64_val:0.1f}` == \"2.7\"
     if __cond_47 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_189 = String { repr: builtin::array_new<u8>(117), used: 0 };
-            String::append(__local_189, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_189, 114);
-            String::append_char(__local_189, 117);
-            String::append_char(__local_189, 110);
-            String::append_char(__local_189, 32);
-            String::append_char(__local_189, 97);
-            String::append_char(__local_189, 116);
-            String::append_char(__local_189, 32);
-            String::append(__local_189, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_189, 58);
+            String::push_str(__local_189, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_189, 114);
+            String::push(__local_189, 117);
+            String::push(__local_189, 110);
+            String::push(__local_189, 32);
+            String::push(__local_189, 97);
+            String::push(__local_189, 116);
+            String::push(__local_189, 32);
+            String::push_str(__local_189, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_189, 58);
             __local_190 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_189 };
             __local_502 = __local_190;
             i32::fmt_decimal(94, __local_502);
-            String::append(__local_189, String { repr: array.new_data<u8>("
+            String::push_str(__local_189, String { repr: array.new_data<u8>("
 condition: r1 == \"77\"
 "), used: 23 });
-            String::append_char(__local_189, 114);
-            String::append_char(__local_189, 49);
-            String::append_char(__local_189, 58);
-            String::append_char(__local_189, 32);
+            String::push(__local_189, 114);
+            String::push(__local_189, 49);
+            String::push(__local_189, 58);
+            String::push(__local_189, 32);
             __local_190 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_189 };
             String^Inspect::inspect(__v0_46, __local_190);
-            String::append_char(__local_189, 10);
+            String::push(__local_189, 10);
             break __tmpl: __local_189;
         });
         unreachable;
@@ -1346,29 +1346,29 @@ condition: r1 == \"77\"
     if __cond_51 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_193 = String { repr: builtin::array_new<u8>(124), used: 0 };
-            String::append(__local_193, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_193, 114);
-            String::append_char(__local_193, 117);
-            String::append_char(__local_193, 110);
-            String::append_char(__local_193, 32);
-            String::append_char(__local_193, 97);
-            String::append_char(__local_193, 116);
-            String::append_char(__local_193, 32);
-            String::append(__local_193, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_193, 58);
+            String::push_str(__local_193, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_193, 114);
+            String::push(__local_193, 117);
+            String::push(__local_193, 110);
+            String::push(__local_193, 32);
+            String::push(__local_193, 97);
+            String::push(__local_193, 116);
+            String::push(__local_193, 32);
+            String::push_str(__local_193, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_193, 58);
             __local_194 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_193 };
             __local_515 = __local_194;
             i32::fmt_decimal(100, __local_515);
-            String::append(__local_193, String { repr: array.new_data<u8>("
+            String::push_str(__local_193, String { repr: array.new_data<u8>("
 condition: r2 == \"123456789\"
 "), used: 30 });
-            String::append_char(__local_193, 114);
-            String::append_char(__local_193, 50);
-            String::append_char(__local_193, 58);
-            String::append_char(__local_193, 32);
+            String::push(__local_193, 114);
+            String::push(__local_193, 50);
+            String::push(__local_193, 58);
+            String::push(__local_193, 32);
             __local_194 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_193 };
             String^Inspect::inspect(__v0_50, __local_194);
-            String::append_char(__local_193, 10);
+            String::push(__local_193, 10);
             break __tmpl: __local_193;
         });
         unreachable;
@@ -1395,29 +1395,29 @@ condition: r2 == \"123456789\"
     if __cond_55 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_197 = String { repr: builtin::array_new<u8>(119), used: 0 };
-            String::append(__local_197, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_197, 114);
-            String::append_char(__local_197, 117);
-            String::append_char(__local_197, 110);
-            String::append_char(__local_197, 32);
-            String::append_char(__local_197, 97);
-            String::append_char(__local_197, 116);
-            String::append_char(__local_197, 32);
-            String::append(__local_197, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_197, 58);
+            String::push_str(__local_197, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_197, 114);
+            String::push(__local_197, 117);
+            String::push(__local_197, 110);
+            String::push(__local_197, 32);
+            String::push(__local_197, 97);
+            String::push(__local_197, 116);
+            String::push(__local_197, 32);
+            String::push_str(__local_197, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_197, 58);
             __local_198 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_197 };
             __local_526 = __local_198;
             i32::fmt_decimal(106, __local_526);
-            String::append(__local_197, String { repr: array.new_data<u8>("
+            String::push_str(__local_197, String { repr: array.new_data<u8>("
 condition: r3 == \"6.28\"
 "), used: 25 });
-            String::append_char(__local_197, 114);
-            String::append_char(__local_197, 51);
-            String::append_char(__local_197, 58);
-            String::append_char(__local_197, 32);
+            String::push(__local_197, 114);
+            String::push(__local_197, 51);
+            String::push(__local_197, 58);
+            String::push(__local_197, 32);
             __local_198 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_197 };
             String^Inspect::inspect(__v0_54, __local_198);
-            String::append_char(__local_197, 10);
+            String::push(__local_197, 10);
             break __tmpl: __local_197;
         });
         unreachable;
@@ -1444,29 +1444,29 @@ condition: r3 == \"6.28\"
     if __cond_59 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_201 = String { repr: builtin::array_new<u8>(120), used: 0 };
-            String::append(__local_201, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_201, 114);
-            String::append_char(__local_201, 117);
-            String::append_char(__local_201, 110);
-            String::append_char(__local_201, 32);
-            String::append_char(__local_201, 97);
-            String::append_char(__local_201, 116);
-            String::append_char(__local_201, 32);
-            String::append(__local_201, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_201, 58);
+            String::push_str(__local_201, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_201, 114);
+            String::push(__local_201, 117);
+            String::push(__local_201, 110);
+            String::push(__local_201, 32);
+            String::push(__local_201, 97);
+            String::push(__local_201, 116);
+            String::push(__local_201, 32);
+            String::push_str(__local_201, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_201, 58);
             __local_202 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_201 };
             __local_537 = __local_202;
             i32::fmt_decimal(112, __local_537);
-            String::append(__local_201, String { repr: array.new_data<u8>("
+            String::push_str(__local_201, String { repr: array.new_data<u8>("
 condition: r4 == \"1.414\"
 "), used: 26 });
-            String::append_char(__local_201, 114);
-            String::append_char(__local_201, 52);
-            String::append_char(__local_201, 58);
-            String::append_char(__local_201, 32);
+            String::push(__local_201, 114);
+            String::push(__local_201, 52);
+            String::push(__local_201, 58);
+            String::push(__local_201, 32);
             __local_202 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_201 };
             String^Inspect::inspect(__v0_58, __local_202);
-            String::append_char(__local_201, 10);
+            String::push(__local_201, 10);
             break __tmpl: __local_201;
         });
         unreachable;
@@ -1498,29 +1498,29 @@ condition: r4 == \"1.414\"
     if __cond_63 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_205 = String { repr: builtin::array_new<u8>(119), used: 0 };
-            String::append(__local_205, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_205, 114);
-            String::append_char(__local_205, 117);
-            String::append_char(__local_205, 110);
-            String::append_char(__local_205, 32);
-            String::append_char(__local_205, 97);
-            String::append_char(__local_205, 116);
-            String::append_char(__local_205, 32);
-            String::append(__local_205, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_205, 58);
+            String::push_str(__local_205, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_205, 114);
+            String::push(__local_205, 117);
+            String::push(__local_205, 110);
+            String::push(__local_205, 32);
+            String::push(__local_205, 97);
+            String::push(__local_205, 116);
+            String::push(__local_205, 32);
+            String::push_str(__local_205, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_205, 58);
             __local_206 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_205 };
             __local_550 = __local_206;
             i32::fmt_decimal(118, __local_550);
-            String::append(__local_205, String { repr: array.new_data<u8>("
+            String::push_str(__local_205, String { repr: array.new_data<u8>("
 condition: r5 == \"true\"
 "), used: 25 });
-            String::append_char(__local_205, 114);
-            String::append_char(__local_205, 53);
-            String::append_char(__local_205, 58);
-            String::append_char(__local_205, 32);
+            String::push(__local_205, 114);
+            String::push(__local_205, 53);
+            String::push(__local_205, 58);
+            String::push(__local_205, 32);
             __local_206 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_205 };
             String^Inspect::inspect(__v0_62, __local_206);
-            String::append_char(__local_205, 10);
+            String::push(__local_205, 10);
             break __tmpl: __local_205;
         });
         unreachable;
@@ -1537,28 +1537,28 @@ condition: r5 == \"true\"
         if __cond_66 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_209 = String { repr: builtin::array_new<u8>(119), used: 0 };
-                String::append(__local_209, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append_char(__local_209, 114);
-                String::append_char(__local_209, 117);
-                String::append_char(__local_209, 110);
-                String::append_char(__local_209, 32);
-                String::append_char(__local_209, 97);
-                String::append_char(__local_209, 116);
-                String::append_char(__local_209, 32);
-                String::append(__local_209, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-                String::append_char(__local_209, 58);
+                String::push_str(__local_209, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push(__local_209, 114);
+                String::push(__local_209, 117);
+                String::push(__local_209, 110);
+                String::push(__local_209, 32);
+                String::push(__local_209, 97);
+                String::push(__local_209, 116);
+                String::push(__local_209, 32);
+                String::push_str(__local_209, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+                String::push(__local_209, 58);
                 __local_210 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_209 };
                 __local_563 = __local_210;
                 i32::fmt_decimal(122, __local_563);
-                String::append(__local_209, String { repr: array.new_data<u8>("
+                String::push_str(__local_209, String { repr: array.new_data<u8>("
 condition: s == \"100000\"
 "), used: 26 });
-                String::append_char(__local_209, 115);
-                String::append_char(__local_209, 58);
-                String::append_char(__local_209, 32);
+                String::push(__local_209, 115);
+                String::push(__local_209, 58);
+                String::push(__local_209, 32);
                 __local_210 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_209 };
                 String^Inspect::inspect(__v0_65, __local_210);
-                String::append_char(__local_209, 10);
+                String::push(__local_209, 10);
                 break __tmpl: __local_209;
             });
             unreachable;
@@ -1579,28 +1579,28 @@ condition: s == \"100000\"
         if __cond_69 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_213 = String { repr: builtin::array_new<u8>(122), used: 0 };
-                String::append(__local_213, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append_char(__local_213, 114);
-                String::append_char(__local_213, 117);
-                String::append_char(__local_213, 110);
-                String::append_char(__local_213, 32);
-                String::append_char(__local_213, 97);
-                String::append_char(__local_213, 116);
-                String::append_char(__local_213, 32);
-                String::append(__local_213, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-                String::append_char(__local_213, 58);
+                String::push_str(__local_213, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push(__local_213, 114);
+                String::push(__local_213, 117);
+                String::push(__local_213, 110);
+                String::push(__local_213, 32);
+                String::push(__local_213, 97);
+                String::push(__local_213, 116);
+                String::push(__local_213, 32);
+                String::push_str(__local_213, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+                String::push(__local_213, 58);
                 __local_214 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_213 };
                 __local_576 = __local_214;
                 i32::fmt_decimal(128, __local_576);
-                String::append(__local_213, String { repr: array.new_data<u8>("
+                String::push_str(__local_213, String { repr: array.new_data<u8>("
 condition: s == \"999999999\"
 "), used: 29 });
-                String::append_char(__local_213, 115);
-                String::append_char(__local_213, 58);
-                String::append_char(__local_213, 32);
+                String::push(__local_213, 115);
+                String::push(__local_213, 58);
+                String::push(__local_213, 32);
                 __local_214 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_213 };
                 String^Inspect::inspect(__v0_68, __local_214);
-                String::append_char(__local_213, 10);
+                String::push(__local_213, 10);
                 break __tmpl: __local_213;
             });
             unreachable;
@@ -1621,28 +1621,28 @@ condition: s == \"999999999\"
         if __cond_72 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_217 = String { repr: builtin::array_new<u8>(117), used: 0 };
-                String::append(__local_217, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append_char(__local_217, 114);
-                String::append_char(__local_217, 117);
-                String::append_char(__local_217, 110);
-                String::append_char(__local_217, 32);
-                String::append_char(__local_217, 97);
-                String::append_char(__local_217, 116);
-                String::append_char(__local_217, 32);
-                String::append(__local_217, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-                String::append_char(__local_217, 58);
+                String::push_str(__local_217, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push(__local_217, 114);
+                String::push(__local_217, 117);
+                String::push(__local_217, 110);
+                String::push(__local_217, 32);
+                String::push(__local_217, 97);
+                String::push(__local_217, 116);
+                String::push(__local_217, 32);
+                String::push_str(__local_217, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+                String::push(__local_217, 58);
                 __local_218 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_217 };
                 __local_587 = __local_218;
                 i32::fmt_decimal(134, __local_587);
-                String::append(__local_217, String { repr: array.new_data<u8>("
+                String::push_str(__local_217, String { repr: array.new_data<u8>("
 condition: s == \"3.14\"
 "), used: 24 });
-                String::append_char(__local_217, 115);
-                String::append_char(__local_217, 58);
-                String::append_char(__local_217, 32);
+                String::push(__local_217, 115);
+                String::push(__local_217, 58);
+                String::push(__local_217, 32);
                 __local_218 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_217 };
                 String^Inspect::inspect(__v0_71, __local_218);
-                String::append_char(__local_217, 10);
+                String::push(__local_217, 10);
                 break __tmpl: __local_217;
             });
             unreachable;
@@ -1663,28 +1663,28 @@ condition: s == \"3.14\"
         if __cond_75 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_221 = String { repr: builtin::array_new<u8>(120), used: 0 };
-                String::append(__local_221, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append_char(__local_221, 114);
-                String::append_char(__local_221, 117);
-                String::append_char(__local_221, 110);
-                String::append_char(__local_221, 32);
-                String::append_char(__local_221, 97);
-                String::append_char(__local_221, 116);
-                String::append_char(__local_221, 32);
-                String::append(__local_221, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-                String::append_char(__local_221, 58);
+                String::push_str(__local_221, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push(__local_221, 114);
+                String::push(__local_221, 117);
+                String::push(__local_221, 110);
+                String::push(__local_221, 32);
+                String::push(__local_221, 97);
+                String::push(__local_221, 116);
+                String::push(__local_221, 32);
+                String::push_str(__local_221, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+                String::push(__local_221, 58);
                 __local_222 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_221 };
                 __local_598 = __local_222;
                 i32::fmt_decimal(140, __local_598);
-                String::append(__local_221, String { repr: array.new_data<u8>("
+                String::push_str(__local_221, String { repr: array.new_data<u8>("
 condition: s == \"2.71828\"
 "), used: 27 });
-                String::append_char(__local_221, 115);
-                String::append_char(__local_221, 58);
-                String::append_char(__local_221, 32);
+                String::push(__local_221, 115);
+                String::push(__local_221, 58);
+                String::push(__local_221, 32);
                 __local_222 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_221 };
                 String^Inspect::inspect(__v0_74, __local_222);
-                String::append_char(__local_221, 10);
+                String::push(__local_221, 10);
                 break __tmpl: __local_221;
             });
             unreachable;
@@ -1706,28 +1706,28 @@ condition: s == \"2.71828\"
         if __cond_78 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_225 = String { repr: builtin::array_new<u8>(117), used: 0 };
-                String::append(__local_225, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append_char(__local_225, 114);
-                String::append_char(__local_225, 117);
-                String::append_char(__local_225, 110);
-                String::append_char(__local_225, 32);
-                String::append_char(__local_225, 97);
-                String::append_char(__local_225, 116);
-                String::append_char(__local_225, 32);
-                String::append(__local_225, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-                String::append_char(__local_225, 58);
+                String::push_str(__local_225, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push(__local_225, 114);
+                String::push(__local_225, 117);
+                String::push(__local_225, 110);
+                String::push(__local_225, 32);
+                String::push(__local_225, 97);
+                String::push(__local_225, 116);
+                String::push(__local_225, 32);
+                String::push_str(__local_225, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+                String::push(__local_225, 58);
                 __local_226 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_225 };
                 __local_611 = __local_226;
                 i32::fmt_decimal(146, __local_611);
-                String::append(__local_225, String { repr: array.new_data<u8>("
+                String::push_str(__local_225, String { repr: array.new_data<u8>("
 condition: s == \"true\"
 "), used: 24 });
-                String::append_char(__local_225, 115);
-                String::append_char(__local_225, 58);
-                String::append_char(__local_225, 32);
+                String::push(__local_225, 115);
+                String::push(__local_225, 58);
+                String::push(__local_225, 32);
                 __local_226 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_225 };
                 String^Inspect::inspect(__v0_77, __local_226);
-                String::append_char(__local_225, 10);
+                String::push(__local_225, 10);
                 break __tmpl: __local_225;
             });
             unreachable;
@@ -1746,26 +1746,26 @@ condition: s == \"true\"
     if __cond_85 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_237 = String { repr: builtin::array_new<u8>(135), used: 0 };
-            String::append(__local_237, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_237, 114);
-            String::append_char(__local_237, 117);
-            String::append_char(__local_237, 110);
-            String::append_char(__local_237, 32);
-            String::append_char(__local_237, 97);
-            String::append_char(__local_237, 116);
-            String::append_char(__local_237, 32);
-            String::append(__local_237, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_237, 58);
+            String::push_str(__local_237, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_237, 114);
+            String::push(__local_237, 117);
+            String::push(__local_237, 110);
+            String::push(__local_237, 32);
+            String::push(__local_237, 97);
+            String::push(__local_237, 116);
+            String::push(__local_237, 32);
+            String::push_str(__local_237, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_237, 58);
             __local_238 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_237 };
             __local_854 = __local_238;
             i32::fmt_decimal(158, __local_854);
-            String::append(__local_237, String { repr: array.new_data<u8>("
+            String::push_str(__local_237, String { repr: array.new_data<u8>("
 condition: fmt_i32(42) == \"42\"
 "), used: 32 });
-            String::append(__local_237, String { repr: array.new_data<u8>("fmt_i32(42): "), used: 13 });
+            String::push_str(__local_237, String { repr: array.new_data<u8>("fmt_i32(42): "), used: 13 });
             __local_238 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_237 };
             String^Inspect::inspect(__v0_84, __local_238);
-            String::append_char(__local_237, 10);
+            String::push(__local_237, 10);
             break __tmpl: __local_237;
         });
         unreachable;
@@ -1780,26 +1780,26 @@ condition: fmt_i32(42) == \"42\"
     if __cond_87 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_239 = String { repr: builtin::array_new<u8>(156), used: 0 };
-            String::append(__local_239, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_239, 114);
-            String::append_char(__local_239, 117);
-            String::append_char(__local_239, 110);
-            String::append_char(__local_239, 32);
-            String::append_char(__local_239, 97);
-            String::append_char(__local_239, 116);
-            String::append_char(__local_239, 32);
-            String::append(__local_239, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_239, 58);
+            String::push_str(__local_239, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_239, 114);
+            String::push(__local_239, 117);
+            String::push(__local_239, 110);
+            String::push(__local_239, 32);
+            String::push(__local_239, 97);
+            String::push(__local_239, 116);
+            String::push(__local_239, 32);
+            String::push_str(__local_239, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_239, 58);
             __local_240 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_239 };
             __local_1099 = __local_240;
             i32::fmt_decimal(159, __local_1099);
-            String::append(__local_239, String { repr: array.new_data<u8>("
+            String::push_str(__local_239, String { repr: array.new_data<u8>("
 condition: fmt_i64(123456789) == \"123456789\"
 "), used: 46 });
-            String::append(__local_239, String { repr: array.new_data<u8>("fmt_i64(123456789): "), used: 20 });
+            String::push_str(__local_239, String { repr: array.new_data<u8>("fmt_i64(123456789): "), used: 20 });
             __local_240 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_239 };
             String^Inspect::inspect(__v0_86, __local_240);
-            String::append_char(__local_239, 10);
+            String::push(__local_239, 10);
             break __tmpl: __local_239;
         });
         unreachable;
@@ -1814,26 +1814,26 @@ condition: fmt_i64(123456789) == \"123456789\"
     if __cond_89 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_241 = String { repr: builtin::array_new<u8>(138), used: 0 };
-            String::append(__local_241, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_241, 114);
-            String::append_char(__local_241, 117);
-            String::append_char(__local_241, 110);
-            String::append_char(__local_241, 32);
-            String::append_char(__local_241, 97);
-            String::append_char(__local_241, 116);
-            String::append_char(__local_241, 32);
-            String::append(__local_241, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_241, 58);
+            String::push_str(__local_241, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_241, 114);
+            String::push(__local_241, 117);
+            String::push(__local_241, 110);
+            String::push(__local_241, 32);
+            String::push(__local_241, 97);
+            String::push(__local_241, 116);
+            String::push(__local_241, 32);
+            String::push_str(__local_241, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_241, 58);
             __local_242 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_241 };
             __local_1344 = __local_242;
             i32::fmt_decimal(160, __local_1344);
-            String::append(__local_241, String { repr: array.new_data<u8>("
+            String::push_str(__local_241, String { repr: array.new_data<u8>("
 condition: fmt_f32(2.5) == \"2.5\"
 "), used: 34 });
-            String::append(__local_241, String { repr: array.new_data<u8>("fmt_f32(2.5): "), used: 14 });
+            String::push_str(__local_241, String { repr: array.new_data<u8>("fmt_f32(2.5): "), used: 14 });
             __local_242 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_241 };
             String^Inspect::inspect(__v0_88, __local_242);
-            String::append_char(__local_241, 10);
+            String::push(__local_241, 10);
             break __tmpl: __local_241;
         });
         unreachable;
@@ -1848,26 +1848,26 @@ condition: fmt_f32(2.5) == \"2.5\"
     if __cond_91 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_243 = String { repr: builtin::array_new<u8>(150), used: 0 };
-            String::append(__local_243, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_243, 114);
-            String::append_char(__local_243, 117);
-            String::append_char(__local_243, 110);
-            String::append_char(__local_243, 32);
-            String::append_char(__local_243, 97);
-            String::append_char(__local_243, 116);
-            String::append_char(__local_243, 32);
-            String::append(__local_243, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_243, 58);
+            String::push_str(__local_243, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_243, 114);
+            String::push(__local_243, 117);
+            String::push(__local_243, 110);
+            String::push(__local_243, 32);
+            String::push(__local_243, 97);
+            String::push(__local_243, 116);
+            String::push(__local_243, 32);
+            String::push_str(__local_243, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_243, 58);
             __local_244 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_243 };
             __local_1591 = __local_244;
             i32::fmt_decimal(161, __local_1591);
-            String::append(__local_243, String { repr: array.new_data<u8>("
+            String::push_str(__local_243, String { repr: array.new_data<u8>("
 condition: fmt_f64(3.14159) == \"3.14159\"
 "), used: 42 });
-            String::append(__local_243, String { repr: array.new_data<u8>("fmt_f64(3.14159): "), used: 18 });
+            String::push_str(__local_243, String { repr: array.new_data<u8>("fmt_f64(3.14159): "), used: 18 });
             __local_244 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_243 };
             String^Inspect::inspect(__v0_90, __local_244);
-            String::append_char(__local_243, 10);
+            String::push(__local_243, 10);
             break __tmpl: __local_243;
         });
         unreachable;
@@ -1883,26 +1883,26 @@ condition: fmt_f64(3.14159) == \"3.14159\"
     if __cond_93 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_245 = String { repr: builtin::array_new<u8>(146), used: 0 };
-            String::append(__local_245, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_245, 114);
-            String::append_char(__local_245, 117);
-            String::append_char(__local_245, 110);
-            String::append_char(__local_245, 32);
-            String::append_char(__local_245, 97);
-            String::append_char(__local_245, 116);
-            String::append_char(__local_245, 32);
-            String::append(__local_245, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_245, 58);
+            String::push_str(__local_245, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_245, 114);
+            String::push(__local_245, 117);
+            String::push(__local_245, 110);
+            String::push(__local_245, 32);
+            String::push(__local_245, 97);
+            String::push(__local_245, 116);
+            String::push(__local_245, 32);
+            String::push_str(__local_245, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_245, 58);
             __local_246 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_245 };
             __local_1842 = __local_246;
             i32::fmt_decimal(162, __local_1842);
-            String::append(__local_245, String { repr: array.new_data<u8>("
+            String::push_str(__local_245, String { repr: array.new_data<u8>("
 condition: fmt_bool(false) == \"false\"
 "), used: 39 });
-            String::append(__local_245, String { repr: array.new_data<u8>("fmt_bool(false): "), used: 17 });
+            String::push_str(__local_245, String { repr: array.new_data<u8>("fmt_bool(false): "), used: 17 });
             __local_246 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_245 };
             String^Inspect::inspect(__v0_92, __local_246);
-            String::append_char(__local_245, 10);
+            String::push(__local_245, 10);
             break __tmpl: __local_245;
         });
         unreachable;
@@ -1913,26 +1913,26 @@ condition: fmt_bool(false) == \"false\"
     if __cond_98 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_249 = String { repr: builtin::array_new<u8>(149), used: 0 };
-            String::append(__local_249, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append_char(__local_249, 114);
-            String::append_char(__local_249, 117);
-            String::append_char(__local_249, 110);
-            String::append_char(__local_249, 32);
-            String::append_char(__local_249, 97);
-            String::append_char(__local_249, 116);
-            String::append_char(__local_249, 32);
-            String::append(__local_249, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
-            String::append_char(__local_249, 58);
+            String::push_str(__local_249, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push(__local_249, 114);
+            String::push(__local_249, 117);
+            String::push(__local_249, 110);
+            String::push(__local_249, 32);
+            String::push(__local_249, 97);
+            String::push(__local_249, 116);
+            String::push(__local_249, 32);
+            String::push_str(__local_249, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
+            String::push(__local_249, 58);
             __local_250 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_249 };
             __local_1849 = __local_250;
             i32::fmt_decimal(168, __local_1849);
-            String::append(__local_249, String { repr: array.new_data<u8>("
+            String::push_str(__local_249, String { repr: array.new_data<u8>("
 condition: fmt_captured() == \"999, 1.618\"
 "), used: 43 });
-            String::append(__local_249, String { repr: array.new_data<u8>("fmt_captured(): "), used: 16 });
+            String::push_str(__local_249, String { repr: array.new_data<u8>("fmt_captured(): "), used: 16 });
             __local_250 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_249 };
             String^Inspect::inspect(__v0_97, __local_250);
-            String::append_char(__local_249, 10);
+            String::push(__local_249, 10);
             break __tmpl: __local_249;
         });
         unreachable;
@@ -2834,8 +2834,8 @@ fn write_decimal(buf, d, p, nd) {
     let index: i32;
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
-        String::append_char(buf, 48);
-        String::append_char(buf, 46);
+        String::push(buf, 48);
+        String::push(buf, 46);
         n_10 = 0 - decimal_pos;
         String::append_byte_filled(buf, 48, n_10);
         digit_offset = buf.used;
@@ -2890,8 +2890,8 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
         leading_zeros = 0 - decimal_pos;
-        String::append_char(buf, 48);
-        String::append_char(buf, 46);
+        String::push(buf, 48);
+        String::push(buf, 46);
         if precision <= leading_zeros {
             String::append_byte_filled(buf, 48, precision);
             return;
@@ -2923,7 +2923,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         n_37 = decimal_pos - nd;
         String::append_byte_filled(buf, 48, n_37);
         if precision > 0 {
-            String::append_char(buf, 46);
+            String::push(buf, 46);
             String::append_byte_filled(buf, 48, precision);
         };
     } else {
@@ -3113,27 +3113,27 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
         break __inline_String__len_1: __local_6.used;
     };
     if kind == 3 {
-        String::append_char(f.buf, 78);
-        String::append_char(f.buf, 97);
-        String::append_char(f.buf, 78);
+        String::push(f.buf, 78);
+        String::push(f.buf, 97);
+        String::push(f.buf, 78);
     } else if kind == 2 {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
         });
     } else {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
         });
-        String::append(f.buf, zero_repr);
+        String::push_str(f.buf, zero_repr);
     };
     Formatter::apply_padding(f, mark);
 }
 
-fn Array<u64>::append(self, value) {
+fn Array<u64>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -3418,9 +3418,9 @@ fn f32::fmt_into(self, f) {
         break __inline_String__len_6: __local_22.used;
     };
     if is_neg {
-        String::append_char(f.buf, 45);
+        String::push(f.buf, 45);
     } else if f.sign_plus {
-        String::append_char(f.buf, 43);
+        String::push(f.buf, 43);
     };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
@@ -3485,9 +3485,9 @@ fn f64::fmt_into(self, f) {
         break __inline_String__len_5: __local_19.used;
     };
     if is_neg {
-        String::append_char(f.buf, 45);
+        String::push(f.buf, 45);
     } else if f.sign_plus {
-        String::append_char(f.buf, 43);
+        String::push(f.buf, 43);
     };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
@@ -3541,13 +3541,13 @@ fn f64::fmt_fixed(self, precision, f) {
             break __inline_String__len_1: __local_16.used;
         };
         if is_neg {
-            String::append_char(f.buf, 45);
+            String::push(f.buf, 45);
         } else if f.sign_plus {
-            String::append_char(f.buf, 43);
+            String::push(f.buf, 43);
         };
-        String::append_char(f.buf, 48);
+        String::push(f.buf, 48);
         if precision > 0 {
-            String::append_char(f.buf, 46);
+            String::push(f.buf, 46);
             String::append_byte_filled(f.buf, 48, precision);
         };
         Formatter::apply_padding(f, mark_7);
@@ -3582,9 +3582,9 @@ fn f64::fmt_fixed(self, precision, f) {
         break __inline_String__len_8: __local_25.used;
     };
     if is_neg {
-        String::append_char(f.buf, 45);
+        String::push(f.buf, 45);
     } else if f.sign_plus {
-        String::append_char(f.buf, 43);
+        String::push(f.buf, 43);
     };
     write_decimal_prec(f.buf, d, p, nd, precision);
     Formatter::apply_padding(f, mark_13);
@@ -3595,10 +3595,10 @@ fn char^Display::fmt(self, f) {
     let c: char;
     if f.width <= 0 {
         c = self;
-        String::append_char(f.buf, c);
+        String::push(f.buf, c);
     } else {
         s = String { repr: builtin::array_new<u8>(4), used: 0 };
-        String::append_char(s, self);
+        String::push(s, self);
         Formatter::pad(f, s);
     };
 }
@@ -3664,7 +3664,7 @@ fn String::append_byte_filled(self, byte, n) {
     self.used = new_used;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -3752,7 +3752,7 @@ fn StrCharIter^Iterator::next(self) {
     return 0; code_10;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -3789,8 +3789,8 @@ fn __Closure_5::__call(self) {
         __local_249 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_248 };
         __local_253 = __local_249;
         i32::fmt_decimal(self.__capture_0, __local_253);
-        String::append_char(__local_248, 44);
-        String::append_char(__local_248, 32);
+        String::push(__local_248, 44);
+        String::push(__local_248, 32);
         __local_249 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_248 };
         __local_258 = __local_249;
         f64::fmt_into(self.__capture_1, __local_258);
@@ -3809,7 +3809,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l261;
             };
@@ -3829,7 +3829,7 @@ fn Formatter::pad(self, content) {
     } else {
         content_len >= self.width;
     } {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         return;
     };
     padding = self.width - content_len;
@@ -3837,17 +3837,17 @@ fn Formatter::pad(self, content) {
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, padding);
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, right_pad);
     } else {
         Formatter::write_char_n(self, self.fill, padding);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
     };
 }
 
@@ -4001,20 +4001,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -4024,10 +4024,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -4037,10 +4037,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -4048,10 +4048,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
@@ -4063,7 +4063,7 @@ fn String^Inspect::inspect(self, f) {
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
     let _licm_buf_33: ref String;
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
@@ -4080,22 +4080,22 @@ fn String^Inspect::inspect(self, f) {
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 34);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 110);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 114);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 116);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 116);
                 } else {
-                    String::append_char(_licm_buf_33, c);
+                    String::push(_licm_buf_33, c);
                 };
             } else {
                 break b300;
@@ -4103,7 +4103,7 @@ fn String^Inspect::inspect(self, f) {
             continue l301;
         };
     };
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
 }
 
 fn "closure/wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado/__closure_wrapper_0"(__env) {

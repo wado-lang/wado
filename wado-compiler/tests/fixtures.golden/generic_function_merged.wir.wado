@@ -127,7 +127,7 @@ type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
+type "functype/Array<u64>::push" = fn(ref Array<u64>, u64);
 
 type "functype/Array<u64>::grow" = fn(ref Array<u64>);
 
@@ -137,13 +137,13 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
 type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
 type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> bool;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -233,26 +233,26 @@ fn __test_1_with_string() {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_3 = String { repr: builtin::array_new<u8>(118), used: 0 };
-            String::append(__local_3, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_3, String { repr: array.new_data<u8>("__test_1_with_string"), used: 20 });
-            String::append_char(__local_3, 32);
-            String::append_char(__local_3, 97);
-            String::append_char(__local_3, 116);
-            String::append_char(__local_3, 32);
-            String::append(__local_3, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/generic_function_merged.wado"), used: 57 });
-            String::append_char(__local_3, 58);
+            String::push_str(__local_3, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_3, String { repr: array.new_data<u8>("__test_1_with_string"), used: 20 });
+            String::push(__local_3, 32);
+            String::push(__local_3, 97);
+            String::push(__local_3, 116);
+            String::push(__local_3, 32);
+            String::push_str(__local_3, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/generic_function_merged.wado"), used: 57 });
+            String::push(__local_3, 58);
             __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
             __local_9 = __local_4;
             i32::fmt_decimal(22, __local_9);
-            String::append(__local_3, String { repr: array.new_data<u8>("
+            String::push_str(__local_3, String { repr: array.new_data<u8>("
 condition: s == \"hello\"
 "), used: 25 });
-            String::append_char(__local_3, 115);
-            String::append_char(__local_3, 58);
-            String::append_char(__local_3, 32);
+            String::push(__local_3, 115);
+            String::push(__local_3, 58);
+            String::push(__local_3, 32);
             __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
             String^Inspect::inspect(__v0, __local_4);
-            String::append_char(__local_3, 10);
+            String::push(__local_3, 10);
             break __tmpl: __local_3;
         });
         unreachable;
@@ -292,27 +292,27 @@ fn __test_3_multi_instantiations() {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_19 = String { repr: builtin::array_new<u8>(121), used: 0 };
-            String::append(__local_19, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_19, String { repr: array.new_data<u8>("__test_3_multi_instantiations"), used: 29 });
-            String::append_char(__local_19, 32);
-            String::append_char(__local_19, 97);
-            String::append_char(__local_19, 116);
-            String::append_char(__local_19, 32);
-            String::append(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/generic_function_merged.wado"), used: 57 });
-            String::append_char(__local_19, 58);
+            String::push_str(__local_19, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_19, String { repr: array.new_data<u8>("__test_3_multi_instantiations"), used: 29 });
+            String::push(__local_19, 32);
+            String::push(__local_19, 97);
+            String::push(__local_19, 116);
+            String::push(__local_19, 32);
+            String::push_str(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/generic_function_merged.wado"), used: 57 });
+            String::push(__local_19, 58);
             __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
             __local_55 = __local_20;
             i32::fmt_decimal(48, __local_55);
-            String::append(__local_19, String { repr: array.new_data<u8>("
+            String::push_str(__local_19, String { repr: array.new_data<u8>("
 condition: c == 3.5 as f32
 "), used: 28 });
-            String::append_char(__local_19, 99);
-            String::append_char(__local_19, 58);
-            String::append_char(__local_19, 32);
+            String::push(__local_19, 99);
+            String::push(__local_19, 58);
+            String::push(__local_19, 32);
             __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
             __local_60 = __local_20;
             f32::inspect_into(c, __local_60);
-            String::append_char(__local_19, 10);
+            String::push(__local_19, 10);
             break __tmpl: __local_19;
         });
         unreachable;
@@ -373,26 +373,26 @@ fn __test_7_two_params_swap() {
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_13 = String { repr: builtin::array_new<u8>(118), used: 0 };
-            String::append(__local_13, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::append(__local_13, String { repr: array.new_data<u8>("__test_7_two_params_swap"), used: 24 });
-            String::append_char(__local_13, 32);
-            String::append_char(__local_13, 97);
-            String::append_char(__local_13, 116);
-            String::append_char(__local_13, 32);
-            String::append(__local_13, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/generic_function_merged.wado"), used: 57 });
-            String::append_char(__local_13, 58);
+            String::push_str(__local_13, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_13, String { repr: array.new_data<u8>("__test_7_two_params_swap"), used: 24 });
+            String::push(__local_13, 32);
+            String::push(__local_13, 97);
+            String::push(__local_13, 116);
+            String::push(__local_13, 32);
+            String::push_str(__local_13, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/generic_function_merged.wado"), used: 57 });
+            String::push(__local_13, 58);
             __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
             __local_46 = __local_14;
             i32::fmt_decimal(107, __local_46);
-            String::append(__local_13, String { repr: array.new_data<u8>("
+            String::push_str(__local_13, String { repr: array.new_data<u8>("
 condition: z == \"hello\"
 "), used: 25 });
-            String::append_char(__local_13, 122);
-            String::append_char(__local_13, 58);
-            String::append_char(__local_13, 32);
+            String::push(__local_13, 122);
+            String::push(__local_13, 58);
+            String::push(__local_13, 32);
             __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
             String^Inspect::inspect(__v0, __local_14);
-            String::append_char(__local_13, 10);
+            String::push(__local_13, 10);
             break __tmpl: __local_13;
         });
         unreachable;
@@ -1236,8 +1236,8 @@ fn write_decimal(buf, d, p, nd) {
     let index: i32;
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
-        String::append_char(buf, 48);
-        String::append_char(buf, 46);
+        String::push(buf, 48);
+        String::push(buf, 46);
         n_10 = 0 - decimal_pos;
         String::append_byte_filled(buf, 48, n_10);
         digit_offset = buf.used;
@@ -1292,13 +1292,13 @@ fn write_exp(buf, d, p, nd, upper) {
         String::append_byte_filled(buf, 48, 1);
         write_digits_at(buf, start_8, d, 1);
     };
-    String::append(buf, if upper -> ref String {
+    String::push_str(buf, if upper -> ref String {
         String { repr: array.new_data<u8>("E"), used: 1 };
     } else {
         String { repr: array.new_data<u8>("e"), used: 1 };
     });
     if exp < 0 {
-        String::append_char(buf, 45);
+        String::push(buf, 45);
     };
     abs_exp = if exp < 0 -> i32 {
         0 - exp;
@@ -1306,25 +1306,25 @@ fn write_exp(buf, d, p, nd, upper) {
         exp;
     };
     if abs_exp < 10 {
-        String::append_char(buf, __inline_char__from_u32_unchecked_6: block -> char {
+        String::push(buf, __inline_char__from_u32_unchecked_6: block -> char {
             __local_20 = 48 + abs_exp;
             break __inline_char__from_u32_unchecked_6: __local_20;
         });
     } else if abs_exp < 100 {
-        String::append_char(buf, __inline_char__from_u32_unchecked_0: block -> char {
+        String::push(buf, __inline_char__from_u32_unchecked_0: block -> char {
             __local_26 = 48 + (abs_exp / 10);
             break __inline_char__from_u32_unchecked_0: __local_26;
         });
-        String::append_char(buf, __inline_char__from_u32_unchecked_1: block -> char {
+        String::push(buf, __inline_char__from_u32_unchecked_1: block -> char {
             __local_27 = 48 + (abs_exp % 10);
             break __inline_char__from_u32_unchecked_1: __local_27;
         });
     } else {
-        String::append_char(buf, __inline_char__from_u32_unchecked_9: block -> char {
+        String::push(buf, __inline_char__from_u32_unchecked_9: block -> char {
             __local_23 = 48 + (abs_exp / 100);
             break __inline_char__from_u32_unchecked_9: __local_23;
         });
-        String::append_char(buf, __inline_i2a_first_10: block -> char {
+        String::push(buf, __inline_i2a_first_10: block -> char {
             __local_24 = abs_exp % 100;
             __inline_char__from_u32_unchecked_2: block -> char {
                 __local_28 = 48 + (__local_24 / 10);
@@ -1332,7 +1332,7 @@ fn write_exp(buf, d, p, nd, upper) {
             };
             break __inline_i2a_first_10;
         });
-        String::append_char(buf, __inline_i2a_second_11: block -> char {
+        String::push(buf, __inline_i2a_second_11: block -> char {
             __local_25 = abs_exp % 100;
             __inline_char__from_u32_unchecked_3: block -> char {
                 __local_29 = 48 + (__local_25 % 10);
@@ -1374,8 +1374,8 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
         leading_zeros = 0 - decimal_pos;
-        String::append_char(buf, 48);
-        String::append_char(buf, 46);
+        String::push(buf, 48);
+        String::push(buf, 46);
         if precision <= leading_zeros {
             String::append_byte_filled(buf, 48, precision);
             return;
@@ -1407,7 +1407,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         n_37 = decimal_pos - nd;
         String::append_byte_filled(buf, 48, n_37);
         if precision > 0 {
-            String::append_char(buf, 46);
+            String::push(buf, 46);
             String::append_byte_filled(buf, 48, precision);
         };
     } else {
@@ -1536,27 +1536,27 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
         break __inline_String__len_1: __local_6.used;
     };
     if kind == 3 {
-        String::append_char(f.buf, 78);
-        String::append_char(f.buf, 97);
-        String::append_char(f.buf, 78);
+        String::push(f.buf, 78);
+        String::push(f.buf, 97);
+        String::push(f.buf, 78);
     } else if kind == 2 {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
         });
     } else {
-        String::append(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
         });
-        String::append(f.buf, zero_repr);
+        String::push_str(f.buf, zero_repr);
     };
     Formatter::apply_padding(f, mark);
 }
 
-fn Array<u64>::append(self, value) {
+fn Array<u64>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1681,9 +1681,9 @@ fn f32::inspect_into(self, f) {
         break __inline_String__len_6: __local_23.used;
     };
     if is_neg {
-        String::append_char(f.buf, 45);
+        String::push(f.buf, 45);
     } else if f.sign_plus {
-        String::append_char(f.buf, 43);
+        String::push(f.buf, 43);
     };
     if if exp < -4 -> i32 {
         1;
@@ -1693,8 +1693,8 @@ fn f32::inspect_into(self, f) {
         write_exp(f.buf, d, p, nd, 0);
     } else if p >= 0 {
         write_decimal(f.buf, d, p, nd);
-        String::append_char(f.buf, 46);
-        String::append_char(f.buf, 48);
+        String::push(f.buf, 46);
+        String::push(f.buf, 48);
     } else {
         write_decimal(f.buf, d, p, nd);
     };
@@ -1749,13 +1749,13 @@ fn f64::fmt_fixed(self, precision, f) {
             break __inline_String__len_1: __local_16.used;
         };
         if is_neg {
-            String::append_char(f.buf, 45);
+            String::push(f.buf, 45);
         } else if f.sign_plus {
-            String::append_char(f.buf, 43);
+            String::push(f.buf, 43);
         };
-        String::append_char(f.buf, 48);
+        String::push(f.buf, 48);
         if precision > 0 {
-            String::append_char(f.buf, 46);
+            String::push(f.buf, 46);
             String::append_byte_filled(f.buf, 48, precision);
         };
         Formatter::apply_padding(f, mark_7);
@@ -1790,9 +1790,9 @@ fn f64::fmt_fixed(self, precision, f) {
         break __inline_String__len_8: __local_25.used;
     };
     if is_neg {
-        String::append_char(f.buf, 45);
+        String::push(f.buf, 45);
     } else if f.sign_plus {
-        String::append_char(f.buf, 43);
+        String::push(f.buf, 43);
     };
     write_decimal_prec(f.buf, d, p, nd, precision);
     Formatter::apply_padding(f, mark_13);
@@ -1845,7 +1845,7 @@ fn String::append_byte_filled(self, byte, n) {
     self.used = new_used;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -1933,7 +1933,7 @@ fn StrCharIter^Iterator::next(self) {
     return 0; code_10;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -1971,7 +1971,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l189;
             };
@@ -2129,20 +2129,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -2152,10 +2152,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -2165,10 +2165,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -2176,10 +2176,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
@@ -2191,7 +2191,7 @@ fn String^Inspect::inspect(self, f) {
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
     let _licm_buf_33: ref String;
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
@@ -2208,22 +2208,22 @@ fn String^Inspect::inspect(self, f) {
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 34);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 110);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 114);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 116);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 116);
                 } else {
-                    String::append_char(_licm_buf_33, c);
+                    String::push(_licm_buf_33, c);
                 };
             } else {
                 break b224;
@@ -2231,7 +2231,7 @@ fn String^Inspect::inspect(self, f) {
             continue l225;
         };
     };
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
 }
 
 export fn __cm_export____test_0_basic_turbofish as "__test_0_basic_turbofish"

@@ -38,26 +38,26 @@ impl Serializer for JsonSerializer {
     type StructSerializer = JsonStructSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.append(`{v}`);
+        self.buf.push_str(`{v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        self.buf.append(`"{*v}"`);
+        self.buf.push_str(`"{*v}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
         if v {
-            self.buf.append("true");
+            self.buf.push_str("true");
         } else {
-            self.buf.append("false");
+            self.buf.push_str("false");
         }
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> {
-        self.buf.append("{");
+        self.buf.push_str("{");
         return Result::<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer {
             ser: *self,
             count: 0,
@@ -68,16 +68,16 @@ impl Serializer for JsonSerializer {
 impl SerializeStruct for JsonStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.ser.buf.append(",");
+            self.ser.buf.push_str(",");
         }
-        self.ser.buf.append(`"{*name}":`);
+        self.ser.buf.push_str(`"{*name}":`);
         value.serialize::<JsonSerializer>(&mut self.ser);
         self.count += 1;
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.ser.buf.append("}");
+        self.ser.buf.push_str("}");
         return Result::<(), SerializeError>::Ok(());
     }
 }

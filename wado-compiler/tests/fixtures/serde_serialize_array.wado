@@ -36,17 +36,17 @@ impl Serializer for JsonSerializer {
     type SeqSerializer = JsonSeqSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.append(`{v}`);
+        self.buf.push_str(`{v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        self.buf.append(`"{*v}"`);
+        self.buf.push_str(`"{*v}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> {
-        self.buf.append("[");
+        self.buf.push_str("[");
         return Result::<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer {
             ser: *self,
             count: 0,
@@ -57,7 +57,7 @@ impl Serializer for JsonSerializer {
 impl SerializeSeq for JsonSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.ser.buf.append(",");
+            self.ser.buf.push_str(",");
         }
         value.serialize::<JsonSerializer>(&mut self.ser);
         self.count += 1;
@@ -65,7 +65,7 @@ impl SerializeSeq for JsonSeqSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.ser.buf.append("]");
+        self.ser.buf.push_str("]");
         return Result::<(), SerializeError>::Ok(());
     }
 }

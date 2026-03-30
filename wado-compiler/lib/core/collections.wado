@@ -189,7 +189,7 @@ impl<K: Ord> TreeMap<K, V> {
             value,
             deleted: false,
         };
-        self.entries.append(entry);
+        self.entries.push(entry);
         // insert_node will update the index if the key already exists in tree
         self.root = self.insert_node(self.root, key, new_index);
         self.size = self.size + 1;
@@ -240,7 +240,7 @@ impl<K: Ord> TreeMap<K, V> {
         let mut new_entries: Array<TreeMapEntry<K, V>> = [];
         for let entry of self.entries {
             if !entry.deleted {
-                new_entries.append(TreeMapEntry {
+                new_entries.push(TreeMapEntry {
                     key: entry.key,
                     value: entry.value,
                     deleted: false,
@@ -266,7 +266,7 @@ impl<K: Ord> TreeMap<K, V> {
         let mut result: Array<K> = [];
         for let entry of self.entries {
             if !entry.deleted {
-                result.append(entry.key);
+                result.push(entry.key);
             }
         }
         return result;
@@ -277,7 +277,7 @@ impl<K: Ord> TreeMap<K, V> {
         let mut result: Array<V> = [];
         for let entry of self.entries {
             if !entry.deleted {
-                result.append(entry.value);
+                result.push(entry.value);
             }
         }
         return result;
@@ -288,7 +288,7 @@ impl<K: Ord> TreeMap<K, V> {
         let mut result: Array<[K, V]> = [];
         for let entry of self.entries {
             if !entry.deleted {
-                result.append([entry.key, entry.value]);
+                result.push([entry.key, entry.value]);
             }
         }
         return result;

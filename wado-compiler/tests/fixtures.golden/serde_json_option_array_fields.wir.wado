@@ -261,17 +261,17 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
 type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> bool;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/Array<i32>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> ref Result<Array<i32>,DeserializeError>;
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
@@ -392,26 +392,26 @@ fn __test_0_serialize_with_some_and_non_empty_array() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_6 = String { repr: builtin::array_new<u8>(179), used: 0 };
-                String::append(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_6, String { repr: array.new_data<u8>("__test_0_serialize_with_some_and_non_empty_array"), used: 48 });
-                String::append_char(__local_6, 32);
-                String::append_char(__local_6, 97);
-                String::append_char(__local_6, 116);
-                String::append_char(__local_6, 32);
-                String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
-                String::append_char(__local_6, 58);
+                String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_6, String { repr: array.new_data<u8>("__test_0_serialize_with_some_and_non_empty_array"), used: 48 });
+                String::push(__local_6, 32);
+                String::push(__local_6, 97);
+                String::push(__local_6, 116);
+                String::push(__local_6, 32);
+                String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
+                String::push(__local_6, 58);
                 __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
                 __local_22 = __local_7;
                 i32::fmt_decimal(23, __local_22);
-                String::append(__local_6, String { repr: array.new_data<u8>("
+                String::push_str(__local_6, String { repr: array.new_data<u8>("
 condition: s == `\\{\"name\":\"Alice\",\"email\":\"alice@example.com\",\"scores\":[95,87,92]\\}`
 "), used: 86 });
-                String::append_char(__local_6, 115);
-                String::append_char(__local_6, 58);
-                String::append_char(__local_6, 32);
+                String::push(__local_6, 115);
+                String::push(__local_6, 58);
+                String::push(__local_6, 32);
                 __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
                 String^Inspect::inspect(__v0, __local_7);
-                String::append_char(__local_6, 10);
+                String::push(__local_6, 10);
                 break __tmpl: __local_6;
             });
             unreachable;
@@ -446,26 +446,26 @@ fn __test_1_serialize_with_none_and_empty_array() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_6 = String { repr: builtin::array_new<u8>(154), used: 0 };
-                String::append(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_6, String { repr: array.new_data<u8>("__test_1_serialize_with_none_and_empty_array"), used: 44 });
-                String::append_char(__local_6, 32);
-                String::append_char(__local_6, 97);
-                String::append_char(__local_6, 116);
-                String::append_char(__local_6, 32);
-                String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
-                String::append_char(__local_6, 58);
+                String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_6, String { repr: array.new_data<u8>("__test_1_serialize_with_none_and_empty_array"), used: 44 });
+                String::push(__local_6, 32);
+                String::push(__local_6, 97);
+                String::push(__local_6, 116);
+                String::push(__local_6, 32);
+                String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
+                String::push(__local_6, 58);
                 __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
                 __local_16 = __local_7;
                 i32::fmt_decimal(37, __local_16);
-                String::append(__local_6, String { repr: array.new_data<u8>("
+                String::push_str(__local_6, String { repr: array.new_data<u8>("
 condition: s == `\\{\"name\":\"Bob\",\"email\":null,\"scores\":[]\\}`
 "), used: 61 });
-                String::append_char(__local_6, 115);
-                String::append_char(__local_6, 58);
-                String::append_char(__local_6, 32);
+                String::push(__local_6, 115);
+                String::push(__local_6, 58);
+                String::push(__local_6, 32);
                 __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
                 String^Inspect::inspect(__v0, __local_7);
-                String::append_char(__local_6, 10);
+                String::push(__local_6, 10);
                 break __tmpl: __local_6;
             });
             unreachable;
@@ -528,24 +528,24 @@ fn __test_2_roundtrip_with_some() {
             if __cond_7 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_15 = String { repr: builtin::array_new<u8>(140), used: 0 };
-                    String::append(__local_15, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_15, String { repr: array.new_data<u8>("__test_2_roundtrip_with_some"), used: 28 });
-                    String::append_char(__local_15, 32);
-                    String::append_char(__local_15, 97);
-                    String::append_char(__local_15, 116);
-                    String::append_char(__local_15, 32);
-                    String::append(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
-                    String::append_char(__local_15, 58);
+                    String::push_str(__local_15, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_15, String { repr: array.new_data<u8>("__test_2_roundtrip_with_some"), used: 28 });
+                    String::push(__local_15, 32);
+                    String::push(__local_15, 97);
+                    String::push(__local_15, 116);
+                    String::push(__local_15, 32);
+                    String::push_str(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
+                    String::push(__local_15, 58);
                     __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
                     __local_35 = __local_16;
                     i32::fmt_decimal(53, __local_35);
-                    String::append(__local_15, String { repr: array.new_data<u8>("
+                    String::push_str(__local_15, String { repr: array.new_data<u8>("
 condition: parsed.name == \"Charlie\"
 "), used: 37 });
-                    String::append(__local_15, String { repr: array.new_data<u8>("parsed.name: "), used: 13 });
+                    String::push_str(__local_15, String { repr: array.new_data<u8>("parsed.name: "), used: 13 });
                     __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
                     String^Inspect::inspect(__v0_6, __local_16);
-                    String::append_char(__local_15, 10);
+                    String::push(__local_15, 10);
                     break __tmpl: __local_15;
                 });
                 unreachable;
@@ -558,26 +558,26 @@ condition: parsed.name == \"Charlie\"
                 if __cond_10 == 0 {
                     "core:internal/panic"(__tmpl: block -> ref String {
                         __local_17 = String { repr: builtin::array_new<u8>(129), used: 0 };
-                        String::append(__local_17, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                        String::append(__local_17, String { repr: array.new_data<u8>("__test_2_roundtrip_with_some"), used: 28 });
-                        String::append_char(__local_17, 32);
-                        String::append_char(__local_17, 97);
-                        String::append_char(__local_17, 116);
-                        String::append_char(__local_17, 32);
-                        String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
-                        String::append_char(__local_17, 58);
+                        String::push_str(__local_17, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                        String::push_str(__local_17, String { repr: array.new_data<u8>("__test_2_roundtrip_with_some"), used: 28 });
+                        String::push(__local_17, 32);
+                        String::push(__local_17, 97);
+                        String::push(__local_17, 116);
+                        String::push(__local_17, 32);
+                        String::push_str(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
+                        String::push(__local_17, 58);
                         __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
                         __local_42 = __local_18;
                         i32::fmt_decimal(55, __local_42);
-                        String::append(__local_17, String { repr: array.new_data<u8>("
+                        String::push_str(__local_17, String { repr: array.new_data<u8>("
 condition: e == \"charlie@test.com\"
 "), used: 36 });
-                        String::append_char(__local_17, 101);
-                        String::append_char(__local_17, 58);
-                        String::append_char(__local_17, 32);
+                        String::push(__local_17, 101);
+                        String::push(__local_17, 58);
+                        String::push(__local_17, 32);
                         __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
                         String^Inspect::inspect(__v0_9, __local_18);
-                        String::append_char(__local_17, 10);
+                        String::push(__local_17, 10);
                         break __tmpl: __local_17;
                     });
                     unreachable;
@@ -594,25 +594,25 @@ condition: e == \"charlie@test.com\"
             if __cond_12 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_19 = String { repr: builtin::array_new<u8>(148), used: 0 };
-                    String::append(__local_19, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_19, String { repr: array.new_data<u8>("__test_2_roundtrip_with_some"), used: 28 });
-                    String::append_char(__local_19, 32);
-                    String::append_char(__local_19, 97);
-                    String::append_char(__local_19, 116);
-                    String::append_char(__local_19, 32);
-                    String::append(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
-                    String::append_char(__local_19, 58);
+                    String::push_str(__local_19, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_19, String { repr: array.new_data<u8>("__test_2_roundtrip_with_some"), used: 28 });
+                    String::push(__local_19, 32);
+                    String::push(__local_19, 97);
+                    String::push(__local_19, 116);
+                    String::push(__local_19, 32);
+                    String::push_str(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
+                    String::push(__local_19, 58);
                     __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
                     __local_50 = __local_20;
                     i32::fmt_decimal(59, __local_50);
-                    String::append(__local_19, String { repr: array.new_data<u8>("
+                    String::push_str(__local_19, String { repr: array.new_data<u8>("
 condition: parsed.scores.len() == 1
 "), used: 37 });
-                    String::append(__local_19, String { repr: array.new_data<u8>("parsed.scores.len(): "), used: 21 });
+                    String::push_str(__local_19, String { repr: array.new_data<u8>("parsed.scores.len(): "), used: 21 });
                     __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
                     __local_55 = __local_20;
                     i32::fmt_decimal(__v0_11, __local_55);
-                    String::append_char(__local_19, 10);
+                    String::push(__local_19, 10);
                     break __tmpl: __local_19;
                 });
                 unreachable;
@@ -629,25 +629,25 @@ condition: parsed.scores.len() == 1
             if __cond_14 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_21 = String { repr: builtin::array_new<u8>(144), used: 0 };
-                    String::append(__local_21, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_21, String { repr: array.new_data<u8>("__test_2_roundtrip_with_some"), used: 28 });
-                    String::append_char(__local_21, 32);
-                    String::append_char(__local_21, 97);
-                    String::append_char(__local_21, 116);
-                    String::append_char(__local_21, 32);
-                    String::append(__local_21, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
-                    String::append_char(__local_21, 58);
+                    String::push_str(__local_21, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_21, String { repr: array.new_data<u8>("__test_2_roundtrip_with_some"), used: 28 });
+                    String::push(__local_21, 32);
+                    String::push(__local_21, 97);
+                    String::push(__local_21, 116);
+                    String::push(__local_21, 32);
+                    String::push_str(__local_21, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
+                    String::push(__local_21, 58);
                     __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
                     __local_63 = __local_22;
                     i32::fmt_decimal(60, __local_63);
-                    String::append(__local_21, String { repr: array.new_data<u8>("
+                    String::push_str(__local_21, String { repr: array.new_data<u8>("
 condition: parsed.scores[0] == 100
 "), used: 36 });
-                    String::append(__local_21, String { repr: array.new_data<u8>("parsed.scores[0]: "), used: 18 });
+                    String::push_str(__local_21, String { repr: array.new_data<u8>("parsed.scores[0]: "), used: 18 });
                     __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
                     __local_68 = __local_22;
                     i32::fmt_decimal(__v0_13, __local_68);
-                    String::append_char(__local_21, 10);
+                    String::push(__local_21, 10);
                     break __tmpl: __local_21;
                 });
                 unreachable;
@@ -701,24 +701,24 @@ fn __test_3_roundtrip_with_none() {
             if __cond_7 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_10 = String { repr: builtin::array_new<u8>(137), used: 0 };
-                    String::append(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_10, String { repr: array.new_data<u8>("__test_3_roundtrip_with_none"), used: 28 });
-                    String::append_char(__local_10, 32);
-                    String::append_char(__local_10, 97);
-                    String::append_char(__local_10, 116);
-                    String::append_char(__local_10, 32);
-                    String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
-                    String::append_char(__local_10, 58);
+                    String::push_str(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_10, String { repr: array.new_data<u8>("__test_3_roundtrip_with_none"), used: 28 });
+                    String::push(__local_10, 32);
+                    String::push(__local_10, 97);
+                    String::push(__local_10, 116);
+                    String::push(__local_10, 32);
+                    String::push_str(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
+                    String::push(__local_10, 58);
                     __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
                     __local_24 = __local_11;
                     i32::fmt_decimal(79, __local_24);
-                    String::append(__local_10, String { repr: array.new_data<u8>("
+                    String::push_str(__local_10, String { repr: array.new_data<u8>("
 condition: parsed.name == \"Dave\"
 "), used: 34 });
-                    String::append(__local_10, String { repr: array.new_data<u8>("parsed.name: "), used: 13 });
+                    String::push_str(__local_10, String { repr: array.new_data<u8>("parsed.name: "), used: 13 });
                     __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
                     String^Inspect::inspect(__v0_6, __local_11);
-                    String::append_char(__local_10, 10);
+                    String::push(__local_10, 10);
                     break __tmpl: __local_10;
                 });
                 unreachable;
@@ -737,25 +737,25 @@ condition: parsed.name == \"Dave\"
             if __cond_9 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_12 = String { repr: builtin::array_new<u8>(148), used: 0 };
-                    String::append(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_12, String { repr: array.new_data<u8>("__test_3_roundtrip_with_none"), used: 28 });
-                    String::append_char(__local_12, 32);
-                    String::append_char(__local_12, 97);
-                    String::append_char(__local_12, 116);
-                    String::append_char(__local_12, 32);
-                    String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
-                    String::append_char(__local_12, 58);
+                    String::push_str(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_12, String { repr: array.new_data<u8>("__test_3_roundtrip_with_none"), used: 28 });
+                    String::push(__local_12, 32);
+                    String::push(__local_12, 97);
+                    String::push(__local_12, 116);
+                    String::push(__local_12, 32);
+                    String::push_str(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado"), used: 64 });
+                    String::push(__local_12, 58);
                     __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                     __local_32 = __local_13;
                     i32::fmt_decimal(85, __local_32);
-                    String::append(__local_12, String { repr: array.new_data<u8>("
+                    String::push_str(__local_12, String { repr: array.new_data<u8>("
 condition: parsed.scores.len() == 0
 "), used: 37 });
-                    String::append(__local_12, String { repr: array.new_data<u8>("parsed.scores.len(): "), used: 21 });
+                    String::push_str(__local_12, String { repr: array.new_data<u8>("parsed.scores.len(): "), used: 21 });
                     __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                     __local_37 = __local_13;
                     i32::fmt_decimal(__v0_8, __local_37);
-                    String::append_char(__local_12, 10);
+                    String::push(__local_12, 10);
                     break __tmpl: __local_12;
                 });
                 unreachable;
@@ -1418,7 +1418,7 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
     let code: i32;
     let hi: i32;
     let lo: i32;
-    String::append_char(buf, 34);
+    String::push(buf, 34);
     __iter_2 = StrCharIter { repr: s.repr, used: s.used, byte_index: 0 };
     b120: block {
         l121: loop {
@@ -1428,32 +1428,32 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 34);
+                    String::push(buf, 92);
+                    String::push(buf, 34);
                 } else if c == 92 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 92);
+                    String::push(buf, 92);
+                    String::push(buf, 92);
                 } else if c == 10 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 110);
+                    String::push(buf, 92);
+                    String::push(buf, 110);
                 } else if c == 13 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 114);
+                    String::push(buf, 92);
+                    String::push(buf, 114);
                 } else if c == 9 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 116);
+                    String::push(buf, 92);
+                    String::push(buf, 116);
                 } else if c <u 32 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 117);
-                    String::append_char(buf, 48);
-                    String::append_char(buf, 48);
+                    String::push(buf, 92);
+                    String::push(buf, 117);
+                    String::push(buf, 48);
+                    String::push(buf, 48);
                     code = c;
                     hi = (code >> 4) & 15;
                     lo = code & 15;
-                    String::append_char(buf, "core:json/hex_digit"(hi));
-                    String::append_char(buf, "core:json/hex_digit"(lo));
+                    String::push(buf, "core:json/hex_digit"(hi));
+                    String::push(buf, "core:json/hex_digit"(lo));
                 } else {
-                    String::append_char(buf, c);
+                    String::push(buf, c);
                 };
             } else {
                 break b120;
@@ -1461,7 +1461,7 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
             continue l121;
         };
     };
-    String::append_char(buf, 34);
+    String::push(buf, 34);
 }
 
 fn char::from_u32(value) {
@@ -1503,10 +1503,10 @@ fn char^Display::fmt(self, f) {
     let c: char;
     if f.width <= 0 {
         c = self;
-        String::append_char(f.buf, c);
+        String::push(f.buf, c);
     } else {
         s = String { repr: builtin::array_new<u8>(4), used: 0 };
-        String::append_char(s, self);
+        String::push(s, self);
         Formatter::pad(f, s);
     };
 }
@@ -1549,7 +1549,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -1637,7 +1637,7 @@ fn StrCharIter^Iterator::next(self) {
     return 0; code_10;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -1791,7 +1791,7 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
             if ref.test Option<i32>::Some(first_opt) {
                 first_elem = ref.cast Option<i32>::Some(first_opt).payload_0;
                 items = Array<i32> { repr: builtin::array_new<i32>(2), used: 0 };
-                Array<i32>::append(items, first_elem);
+                Array<i32>::push(items, first_elem);
                 block {
                     l167: loop {
                         let __sroa_next_discriminant: i32;
@@ -1802,7 +1802,7 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
                             next_opt = __sroa_next_case0_payload_0;
                             if ref.test Option<i32>::Some(next_opt) {
                                 item = ref.cast Option<i32>::Some(next_opt).payload_0;
-                                Array<i32>::append(items, item);
+                                Array<i32>::push(items, item);
                             } else {
                                 end_result_12 = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
                                 if ref.is_null(end_result_12) == 0 {
@@ -1846,7 +1846,7 @@ fn Array<i32>^Deserialize::deserialize<JsonDeserializer>(d) {
     unreachable;
 }
 
-fn Array<i32>::append(self, value) {
+fn Array<i32>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -1976,13 +1976,13 @@ fn Option<String>^Deserialize::deserialize<JsonDeserializer>(d) {
 fn User^Serialize::serialize<JsonSerializer>(self, s) {
     let __fused_payload_9: ref "core:json/JsonStructSerializer";
     __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
-        String::append_char(s, 123);
+        String::push(s, 123);
         __fused_payload_9 = "core:json/JsonStructSerializer" { buf: s, count: 0 };
         drop(JsonStructSerializer^SerializeStruct::field<String>(__fused_payload_9, String { repr: array.new_data<u8>("name"), used: 4 }, self.name));
         drop(JsonStructSerializer^SerializeStruct::field<Option<String>>(__fused_payload_9, String { repr: array.new_data<u8>("email"), used: 5 }, self.email));
         drop(JsonStructSerializer^SerializeStruct::field<Array<i32>>(__fused_payload_9, String { repr: array.new_data<u8>("scores"), used: 6 }, self.scores));
         return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null "core:serde/SerializeError" {
-            String::append_char(__fused_payload_9.buf, 125);
+            String::push(__fused_payload_9.buf, 125);
             break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
         };
         break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
@@ -1993,10 +1993,10 @@ fn JsonStructSerializer^SerializeStruct::field<Array<i32>>(self, name, value) {
     let ser: ref "core:json/JsonSerializer";
     let r: ref null "core:serde/SerializeError";
     if self.count > 0 {
-        String::append_char(self.buf, 44);
+        String::push(self.buf, 44);
     };
     "core:json/write_escaped_string"(self.buf, name);
-    String::append_char(self.buf, 58);
+    String::push(self.buf, 58);
     ser = "core:json/JsonSerializer" { buf: self.buf };
     r = Array<i32>^Serialize::serialize<JsonSerializer>(value, ser.buf);
     self.buf = ser.buf;
@@ -2015,7 +2015,7 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
     let __local_16: ref Array<i32>;
     seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref Result<JsonSeqSerializer,SerializeError> {
         __local_14 = self.used;
-        String::append_char(s, 91);
+        String::push(s, 91);
         break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonSeqSerializer" { buf: s, count: 0 } };
     };
     if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(seq_2) {
@@ -2042,7 +2042,7 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
             };
         };
         return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref null "core:serde/SerializeError" {
-            String::append_char(seq_3.buf, 93);
+            String::push(seq_3.buf, 93);
             break __inline_JsonSeqSerializer_SerializeSeq__end_3: ref.null none;
         };
     };
@@ -2057,7 +2057,7 @@ fn JsonSeqSerializer^SerializeSeq::element<i32>(self, value) {
     let ser: ref "core:json/JsonSerializer";
     let r: ref null "core:serde/SerializeError";
     if self.count > 0 {
-        String::append_char(self.buf, 44);
+        String::push(self.buf, 44);
     };
     ser = "core:json/JsonSerializer" { buf: self.buf };
     r = "core:json/JsonSerializer^Serializer::serialize_i32"(ser.buf, value);
@@ -2082,10 +2082,10 @@ fn JsonStructSerializer^SerializeStruct::field<Option<String>>(self, name, value
     let __local_8: ref null String;
     let __sroa_ser_buf: ref String;
     if self.count > 0 {
-        String::append_char(self.buf, 44);
+        String::push(self.buf, 44);
     };
     "core:json/write_escaped_string"(self.buf, name);
-    String::append_char(self.buf, 58);
+    String::push(self.buf, 58);
     __sroa_ser_buf = self.buf;
     r = __inline_Option_String__Serialize__serialize_JsonSerializer__0: block -> ref null "core:serde/SerializeError" {
         __local_8 = value_copy Option<String>(value);
@@ -2098,10 +2098,10 @@ fn JsonStructSerializer^SerializeStruct::field<Option<String>>(self, name, value
             break __inline_Option_String__Serialize__serialize_JsonSerializer__0;
         };
         __inline_JsonSerializer_Serializer__serialize_null_2: block -> ref null "core:serde/SerializeError" {
-            String::append_char(__sroa_ser_buf, 110);
-            String::append_char(__sroa_ser_buf, 117);
-            String::append_char(__sroa_ser_buf, 108);
-            String::append_char(__sroa_ser_buf, 108);
+            String::push(__sroa_ser_buf, 110);
+            String::push(__sroa_ser_buf, 117);
+            String::push(__sroa_ser_buf, 108);
+            String::push(__sroa_ser_buf, 108);
             break __inline_JsonSerializer_Serializer__serialize_null_2: ref.null none;
         };
         break __inline_Option_String__Serialize__serialize_JsonSerializer__0;
@@ -2115,10 +2115,10 @@ fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
     let ser: ref "core:json/JsonSerializer";
     let r: ref null "core:serde/SerializeError";
     if self.count > 0 {
-        String::append_char(self.buf, 44);
+        String::push(self.buf, 44);
     };
     "core:json/write_escaped_string"(self.buf, name);
-    String::append_char(self.buf, 58);
+    String::push(self.buf, 58);
     ser = "core:json/JsonSerializer" { buf: self.buf };
     r = __inline_JsonSerializer_Serializer__serialize_string_1: block -> ref null "core:serde/SerializeError" {
         "core:json/write_escaped_string"(ser.buf, value);
@@ -2136,7 +2136,7 @@ fn __Closure_0::__call(self, __input, __start, __end) {
 fn "core:json/JsonSerializer^Serializer::serialize_i32"(self, v) {  // from core:json
     let __local_2: ref String;
     let __local_3: ref Formatter;
-    String::append(self, __tmpl: block -> ref String {
+    String::push_str(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(v, __local_3);
@@ -2220,13 +2220,13 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {  // from core:json
         return ref.as_non_null(__inline_DeserializeError__malformed_6: block -> ref "core:serde/DeserializeError" {
             __local_12 = __tmpl: block -> ref String {
                 __local_3 = String { repr: builtin::array_new<u8>(53), used: 0 };
-                String::append(__local_3, String { repr: array.new_data<u8>("expected '"), used: 10 });
+                String::push_str(__local_3, String { repr: array.new_data<u8>("expected '"), used: 10 });
                 __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
                 char^Display::fmt(c & 255, __local_4);
-                String::append(__local_3, String { repr: array.new_data<u8>("', found '"), used: 10 });
+                String::push_str(__local_3, String { repr: array.new_data<u8>("', found '"), used: 10 });
                 __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
                 char^Display::fmt(b & 255, __local_4);
-                String::append_char(__local_3, 39);
+                String::push(__local_3, 39);
                 break __tmpl: __local_3;
             };
             __local_13 = builtin::i64_extend_i32_s(self.pos);
@@ -2292,9 +2292,9 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
                     return ref.as_non_null(__inline_DeserializeError__malformed_7: block -> ref "core:serde/DeserializeError" {
                         __local_16 = __tmpl: block -> ref String {
                             __local_5 = String { repr: builtin::array_new<u8>(27), used: 0 };
-                            String::append(__local_5, String { repr: array.new_data<u8>("expected '"), used: 10 });
-                            String::append(__local_5, lit);
-                            String::append_char(__local_5, 39);
+                            String::push_str(__local_5, String { repr: array.new_data<u8>("expected '"), used: 10 });
+                            String::push_str(__local_5, lit);
+                            String::push(__local_5, 39);
                             self.pos = _hfs_pos_27;
                             break __tmpl: __local_5;
                         };
@@ -2554,21 +2554,21 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     break __inline_String__get_byte_18: builtin::array_get_u8(__local_68.repr, __local_69);
                 };
                 if esc == 34 {
-                    String::append_char(result_8, 34);
+                    String::push(result_8, 34);
                 } else if esc == 92 {
-                    String::append_char(result_8, 92);
+                    String::push(result_8, 92);
                 } else if esc == 47 {
-                    String::append_char(result_8, 47);
+                    String::push(result_8, 47);
                 } else if esc == 110 {
-                    String::append_char(result_8, 10);
+                    String::push(result_8, 10);
                 } else if esc == 114 {
-                    String::append_char(result_8, 13);
+                    String::push(result_8, 13);
                 } else if esc == 116 {
-                    String::append_char(result_8, 9);
+                    String::push(result_8, 9);
                 } else if esc == 98 {
-                    String::append_char(result_8, 8);
+                    String::push(result_8, 8);
                 } else if esc == 102 {
-                    String::append_char(result_8, 12);
+                    String::push(result_8, 12);
                 } else if esc == 117 {
                     self.pos = _hfs_pos_98;
                     let __sroa_r_discriminant: i32;
@@ -2578,7 +2578,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     _hfs_pos_98 = self.pos;
                     if __sroa_r_discriminant == 0 {
                         c_14 = __sroa_r_case0_payload_0;
-                        String::append_char(result_8, c_14);
+                        String::push(result_8, c_14);
                     };
                     if __sroa_r_discriminant == 1 {
                         e = __sroa_r_case1_payload_0;
@@ -2590,10 +2590,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__malformed_21: block -> ref "core:serde/DeserializeError" {
                         __local_72 = __tmpl: block -> ref String {
                             __local_32 = String { repr: builtin::array_new<u8>(34), used: 0 };
-                            String::append(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
+                            String::push_str(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
                             __local_33 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_32 };
                             char^Display::fmt(esc & 255, __local_33);
-                            String::append_char(__local_32, 39);
+                            String::push(__local_32, 39);
                             self.pos = _hfs_pos_98;
                             break __tmpl: __local_32;
                         };
@@ -2618,7 +2618,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     }) };
                 };
                 if seq_len == 1 {
-                    String::append_char(result_8, b & 255);
+                    String::push(result_8, b & 255);
                 } else if seq_len == 2 {
                     b0_17 = b;
                     b1_18 = __inline_String__get_byte_24: block -> u8 {
@@ -2633,7 +2633,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     multivalue_bind [__sroa___pattern_temp_2_discriminant, __sroa___pattern_temp_2_payload_0] = char::from_u32(code_19);
                     if __sroa___pattern_temp_2_discriminant == 0 {
                         c_20 = __sroa___pattern_temp_2_payload_0;
-                        String::append_char(result_8, c_20);
+                        String::push(result_8, c_20);
                     };
                 } else if seq_len == 3 {
                     b0_21 = b;
@@ -2655,7 +2655,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     multivalue_bind [__sroa___pattern_temp_3_discriminant, __sroa___pattern_temp_3_payload_0] = char::from_u32(code_24);
                     if __sroa___pattern_temp_3_discriminant == 0 {
                         c_25 = __sroa___pattern_temp_3_payload_0;
-                        String::append_char(result_8, c_25);
+                        String::push(result_8, c_25);
                     };
                 } else {
                     b0_26 = b;
@@ -2683,7 +2683,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     multivalue_bind [__sroa___pattern_temp_4_discriminant, __sroa___pattern_temp_4_payload_0] = char::from_u32(code_30);
                     if __sroa___pattern_temp_4_discriminant == 0 {
                         c_31 = __sroa___pattern_temp_4_payload_0;
-                        String::append_char(result_8, c_31);
+                        String::push(result_8, c_31);
                     };
                 };
                 _hfs_pos_98 = _hfs_pos_98 + seq_len;
@@ -3553,10 +3553,10 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
     return ref.as_non_null(__inline_DeserializeError__malformed_20: block -> ref "core:serde/DeserializeError" {
         __local_47 = __tmpl: block -> ref String {
             __local_12 = String { repr: builtin::array_new<u8>(39), used: 0 };
-            String::append(__local_12, String { repr: array.new_data<u8>("unexpected character '"), used: 22 });
+            String::push_str(__local_12, String { repr: array.new_data<u8>("unexpected character '"), used: 22 });
             __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             char^Display::fmt(b & 255, __local_13);
-            String::append_char(__local_12, 39);
+            String::push(__local_12, 39);
             break __tmpl: __local_12;
         };
         __local_48 = builtin::i64_extend_i32_s(self.pos);
@@ -3796,7 +3796,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l392;
             };
@@ -3816,7 +3816,7 @@ fn Formatter::pad(self, content) {
     } else {
         content_len >= self.width;
     } {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         return;
     };
     padding = self.width - content_len;
@@ -3824,17 +3824,17 @@ fn Formatter::pad(self, content) {
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, padding);
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, right_pad);
     } else {
         Formatter::write_char_n(self, self.fill, padding);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
     };
 }
 
@@ -3864,20 +3864,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -3887,10 +3887,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -3900,10 +3900,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -3911,10 +3911,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
@@ -3926,7 +3926,7 @@ fn String^Inspect::inspect(self, f) {
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
     let _licm_buf_33: ref String;
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
@@ -3943,22 +3943,22 @@ fn String^Inspect::inspect(self, f) {
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 34);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 110);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 114);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 116);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 116);
                 } else {
-                    String::append_char(_licm_buf_33, c);
+                    String::push(_licm_buf_33, c);
                 };
             } else {
                 break b415;
@@ -3966,7 +3966,7 @@ fn String^Inspect::inspect(self, f) {
             continue l416;
         };
     };
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/__closure_wrapper_0"(__env, __p0, __p1, __p2) {

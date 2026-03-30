@@ -866,7 +866,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         copy = have;
                     }
                     for let mut i = 0; i < copy; i += 1 {
-                        output.append(input[inp + i]);
+                        output.push(input[inp + i]);
                     }
                     have -= copy;
                     inp += copy;
@@ -1311,7 +1311,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                             win_copy = copy;
                         }
                         for let mut i = 0; i < win_copy; i += 1 {
-                            output.append(state.window[(from_win + i) % state.wsize]);
+                            output.push(state.window[(from_win + i) % state.wsize]);
                         }
                         copy -= win_copy;
                         // rest from output
@@ -1332,7 +1332,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 }
             },
             Lit => {
-                output.append(state.length as u8);
+                output.push(state.length as u8);
                 // update window periodically
                 if output.len() % 32768 == 0 {
                     let wlen = if output.len() > 32768 { 32768 } else { output.len() };
@@ -1453,23 +1453,23 @@ pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
 
         // Block header: BFINAL (1 bit) + BTYPE=00 (2 bits) = stored
         if is_last {
-            output.append(1);  // BFINAL=1, BTYPE=00
+            output.push(1);  // BFINAL=1, BTYPE=00
         } else {
-            output.append(0);  // BFINAL=0, BTYPE=00
+            output.push(0);  // BFINAL=0, BTYPE=00
         }
 
         // LEN and NLEN (little-endian)
         let len_lo = (block_len & 0xFF) as u8;
         let len_hi = (block_len >> 8 & 0xFF) as u8;
-        output.append(len_lo);
-        output.append(len_hi);
+        output.push(len_lo);
+        output.push(len_hi);
         let nlen = block_len ^ 0xFFFF;
-        output.append((nlen & 0xFF) as u8);
-        output.append((nlen >> 8 & 0xFF) as u8);
+        output.push((nlen & 0xFF) as u8);
+        output.push((nlen >> 8 & 0xFF) as u8);
 
         // Data
         for let mut i = 0; i < block_len; i += 1 {
-            output.append(input[pos + i]);
+            output.push(input[pos + i]);
         }
         pos += block_len;
     }
@@ -1483,21 +1483,21 @@ pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8> {
     let mut output: Array<u8> = Array::<u8>::with_capacity(input.len() + 12);
 
     // zlib header: CMF=0x78 (deflate, 32K window), FLG=0x01 (check bits)
-    output.append(0x78);
-    output.append(0x01);
+    output.push(0x78);
+    output.push(0x01);
 
     // deflate stored blocks
     let deflated = deflate_stored(input);
     for let mut i = 0; i < deflated.len(); i += 1 {
-        output.append(deflated[i]);
+        output.push(deflated[i]);
     }
 
     // adler32 trailer (big-endian)
     let checksum = adler32(adler32_init(), input, 0, input.len());
-    output.append((checksum >> 24 & 0xFF) as u8);
-    output.append((checksum >> 16 & 0xFF) as u8);
-    output.append((checksum >> 8 & 0xFF) as u8);
-    output.append((checksum & 0xFF) as u8);
+    output.push((checksum >> 24 & 0xFF) as u8);
+    output.push((checksum >> 16 & 0xFF) as u8);
+    output.push((checksum >> 8 & 0xFF) as u8);
+    output.push((checksum & 0xFF) as u8);
 
     return output;
 }
@@ -1536,10 +1536,10 @@ impl BitWriter {
         self.buf = self.buf | value as u64 << self.bits as u64;
         self.bits += count;
         while self.bits >= 32 {
-            self.output.append((self.buf & 0xFF) as u8);
-            self.output.append((self.buf >> 8 & 0xFF) as u8);
-            self.output.append((self.buf >> 16 & 0xFF) as u8);
-            self.output.append((self.buf >> 24 & 0xFF) as u8);
+            self.output.push((self.buf & 0xFF) as u8);
+            self.output.push((self.buf >> 8 & 0xFF) as u8);
+            self.output.push((self.buf >> 16 & 0xFF) as u8);
+            self.output.push((self.buf >> 24 & 0xFF) as u8);
             self.buf = self.buf >> 32;
             self.bits -= 32;
         }
@@ -1547,12 +1547,12 @@ impl BitWriter {
 
     fn flush(&mut self) {
         while self.bits >= 8 {
-            self.output.append((self.buf & 0xFF) as u8);
+            self.output.push((self.buf & 0xFF) as u8);
             self.buf = self.buf >> 8;
             self.bits -= 8;
         }
         if self.bits > 0 {
-            self.output.append((self.buf & 0xFF) as u8);
+            self.output.push((self.buf & 0xFF) as u8);
             self.buf = 0 as u64;
             self.bits = 0;
         }
@@ -1865,7 +1865,7 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
     let mut items: Array<[i32, i32]> = [];  // [freq, index]
     for let mut i = 0; i < max_sym; i += 1 {
         if freqs[i] > 0 {
-            items.append([freqs[i], i]);
+            items.push([freqs[i], i]);
         }
     }
 
@@ -1959,7 +1959,7 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
         node_freq[parent] = n1_freq + n2_freq;
         dad[n1_idx] = parent;
         dad[n2_idx] = parent;
-        int_nodes.append([n1_freq + n2_freq, parent]);
+        int_nodes.push([n1_freq + n2_freq, parent]);
         next_node += 1;
         nodes_remaining -= 1;
     }
@@ -2024,7 +2024,7 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
             if d > max_bits {
                 d = max_bits;
             }
-            sym_list.append([d, freqs[i], i]);
+            sym_list.push([d, freqs[i], i]);
         }
     }
     // Sort by depth ascending, then freq ascending
@@ -2196,32 +2196,32 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
             while rem > 0 {
                 if rem >= 11 {
                     let run = i32::min(rem, 138);
-                    rle.append(18);
-                    rle_extra.append(run - 11);
+                    rle.push(18);
+                    rle_extra.push(run - 11);
                     rem -= run;
                 } else if rem >= 3 {
-                    rle.append(17);
-                    rle_extra.append(rem - 3);
+                    rle.push(17);
+                    rle_extra.push(rem - 3);
                     rem = 0;
                 } else {
-                    rle.append(0);
-                    rle_extra.append(0);
+                    rle.push(0);
+                    rle_extra.push(0);
                     rem -= 1;
                 }
             }
         } else {
-            rle.append(val);
-            rle_extra.append(0);
+            rle.push(val);
+            rle_extra.push(0);
             let mut rem = count - 1;
             while rem > 0 {
                 if rem >= 3 {
                     let run = i32::min(rem, 6);
-                    rle.append(16);
-                    rle_extra.append(run - 3);
+                    rle.push(16);
+                    rle_extra.push(run - 3);
                     rem -= run;
                 } else {
-                    rle.append(val);
-                    rle_extra.append(0);
+                    rle.push(val);
+                    rle_extra.push(0);
                     rem -= 1;
                 }
             }
@@ -2426,8 +2426,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
     if strategy == 2 {
         // Z_HUFFMAN_ONLY
         for let mut i = 0; i < input_len; i += 1 {
-            symbols.append(input[i] as i32);
-            distances.append(0);
+            symbols.push(input[i] as i32);
+            distances.push(0);
         }
     } else if strategy == 3 {
         // Z_RLE — run-length only
@@ -2441,17 +2441,17 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             }
             if run >= 4 {
                 // Emit literal for first byte, then match(distance=1, length=run-1) for the rest
-                symbols.append(input[pos] as i32);
-                distances.append(0);
+                symbols.push(input[pos] as i32);
+                distances.push(0);
                 let match_len = run - 1;
                 // Cap match at 258
                 let actual_match = i32::min(match_len, 258);
-                symbols.append(257 + actual_match - 3);
-                distances.append(1);
+                symbols.push(257 + actual_match - 3);
+                distances.push(1);
                 pos += 1 + actual_match;
             } else {
-                symbols.append(input[pos] as i32);
-                distances.append(0);
+                symbols.push(input[pos] as i32);
+                distances.push(0);
                 pos += 1;
             }
         }
@@ -2519,15 +2519,15 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                 if match_available {
                     if best_len > prev_match_len {
                         // Current match is better: emit previous as literal
-                        symbols.append(input[pos - 1] as i32);
-                        distances.append(0);
+                        symbols.push(input[pos - 1] as i32);
+                        distances.push(0);
                         prev_match_len = best_len;
                         prev_match_dist = best_dist;
                         pos += 1;
                     } else {
                         // Previous match was better: emit it
-                        symbols.append(257 + prev_match_len - 3);
-                        distances.append(prev_match_dist);
+                        symbols.push(257 + prev_match_len - 3);
+                        distances.push(prev_match_dist);
                         // Insert hash entries for skipped positions
                         let skip = prev_match_len - 1;
                         for let mut i = 0; i < skip - 1; i += 1 {
@@ -2551,8 +2551,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         pos += 1;
                     } else {
                         // Match is long enough, emit immediately
-                        symbols.append(257 + best_len - 3);
-                        distances.append(best_dist);
+                        symbols.push(257 + best_len - 3);
+                        distances.push(best_dist);
                         for let mut i = 1; i < best_len; i += 1 {
                             if pos + i + 2 < input_len {
                                 let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
@@ -2565,16 +2565,16 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         prev_match_len = 0;
                     }
                 } else {
-                    symbols.append(input[pos] as i32);
-                    distances.append(0);
+                    symbols.push(input[pos] as i32);
+                    distances.push(0);
                     pos += 1;
                 }
             }
 
             // Flush pending match
             if match_available {
-                symbols.append(input[input_len - 1] as i32);
-                distances.append(0);
+                symbols.push(input[input_len - 1] as i32);
+                distances.push(0);
             }
         } else {
             // Fast matching (levels 1-3) — no lazy evaluation
@@ -2624,8 +2624,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                 }
 
                 if best_len >= 3 {
-                    symbols.append(257 + best_len - 3);
-                    distances.append(best_dist);
+                    symbols.push(257 + best_len - 3);
+                    distances.push(best_dist);
                     for let mut i = 1; i < best_len; i += 1 {
                         if pos + i + 2 < input_len {
                             let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
@@ -2635,8 +2635,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                     }
                     pos += best_len;
                 } else {
-                    symbols.append(input[pos] as i32);
-                    distances.append(0);
+                    symbols.push(input[pos] as i32);
+                    distances.push(0);
                     pos += 1;
                 }
             }
@@ -2759,32 +2759,32 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             while hrem > 0 {
                 if hrem >= 11 {
                     let hrun = i32::min(hrem, 138);
-                    hdr_rle.append(18);
-                    hdr_rle_extra.append(hrun - 11);
+                    hdr_rle.push(18);
+                    hdr_rle_extra.push(hrun - 11);
                     hrem -= hrun;
                 } else if hrem >= 3 {
-                    hdr_rle.append(17);
-                    hdr_rle_extra.append(hrem - 3);
+                    hdr_rle.push(17);
+                    hdr_rle_extra.push(hrem - 3);
                     hrem = 0;
                 } else {
-                    hdr_rle.append(0);
-                    hdr_rle_extra.append(0);
+                    hdr_rle.push(0);
+                    hdr_rle_extra.push(0);
                     hrem -= 1;
                 }
             }
         } else {
-            hdr_rle.append(hval);
-            hdr_rle_extra.append(0);
+            hdr_rle.push(hval);
+            hdr_rle_extra.push(0);
             let mut hrem = hcount - 1;
             while hrem > 0 {
                 if hrem >= 3 {
                     let hrun = i32::min(hrem, 6);
-                    hdr_rle.append(16);
-                    hdr_rle_extra.append(hrun - 3);
+                    hdr_rle.push(16);
+                    hdr_rle_extra.push(hrun - 3);
                     hrem -= hrun;
                 } else {
-                    hdr_rle.append(hval);
-                    hdr_rle_extra.append(0);
+                    hdr_rle.push(hval);
+                    hdr_rle_extra.push(0);
                     hrem -= 1;
                 }
             }
@@ -2883,19 +2883,19 @@ fn zlib_wrap(input: &Array<u8>, deflated: &Array<u8>, level: i32) -> Array<u8> {
     if rem != 0 {
         flg += 31 - rem;
     }
-    output.append(cmf as u8);
-    output.append(flg as u8);
+    output.push(cmf as u8);
+    output.push(flg as u8);
 
     for let mut i = 0; i < deflated.len(); i += 1 {
-        output.append(deflated[i]);
+        output.push(deflated[i]);
     }
 
     // adler32 trailer (big-endian)
     let checksum = adler32(adler32_init(), input, 0, input.len());
-    output.append((checksum >> 24 & 0xFF) as u8);
-    output.append((checksum >> 16 & 0xFF) as u8);
-    output.append((checksum >> 8 & 0xFF) as u8);
-    output.append((checksum & 0xFF) as u8);
+    output.push((checksum >> 24 & 0xFF) as u8);
+    output.push((checksum >> 16 & 0xFF) as u8);
+    output.push((checksum >> 8 & 0xFF) as u8);
+    output.push((checksum & 0xFF) as u8);
 
     return output;
 }
@@ -3033,7 +3033,7 @@ pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
 
         // Append member output
         for let mut i = 0; i < member_output.len(); i += 1 {
-            output.append(member_output[i]);
+            output.push(member_output[i]);
         }
 
         // Move to next member
@@ -3059,14 +3059,14 @@ pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
     let mut output: Array<u8> = Array::<u8>::with_capacity(deflated.len() + 18);
 
     // Gzip header (10 bytes)
-    output.append(GZIP_MAGIC1);  // ID1
-    output.append(GZIP_MAGIC2);  // ID2
-    output.append(8);  // CM = deflate
-    output.append(0);  // FLG = no flags
-    output.append(0);  // MTIME (4 bytes, zero)
-    output.append(0);
-    output.append(0);
-    output.append(0);
+    output.push(GZIP_MAGIC1);  // ID1
+    output.push(GZIP_MAGIC2);  // ID2
+    output.push(8);  // CM = deflate
+    output.push(0);  // FLG = no flags
+    output.push(0);  // MTIME (4 bytes, zero)
+    output.push(0);
+    output.push(0);
+    output.push(0);
     // XFL: compression level hint
     let xfl: u8 = if level <= 1 {
         4;
@@ -3075,27 +3075,27 @@ pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
     } else {
         0;
     };
-    output.append(xfl);
-    output.append(0xFF);  // OS = unknown
+    output.push(xfl);
+    output.push(0xFF);  // OS = unknown
 
     // Compressed data
     for let mut i = 0; i < deflated.len(); i += 1 {
-        output.append(deflated[i]);
+        output.push(deflated[i]);
     }
 
     // CRC32 trailer (little-endian)
     let crc = crc32(crc32_init(), input, 0, input.len());
-    output.append((crc & 0xFF) as u8);
-    output.append((crc >> 8 & 0xFF) as u8);
-    output.append((crc >> 16 & 0xFF) as u8);
-    output.append((crc >> 24 & 0xFF) as u8);
+    output.push((crc & 0xFF) as u8);
+    output.push((crc >> 8 & 0xFF) as u8);
+    output.push((crc >> 16 & 0xFF) as u8);
+    output.push((crc >> 24 & 0xFF) as u8);
 
     // ISIZE: original size mod 2^32 (little-endian)
     let isize_val = input.len() as u32;
-    output.append((isize_val & 0xFF) as u8);
-    output.append((isize_val >> 8 & 0xFF) as u8);
-    output.append((isize_val >> 16 & 0xFF) as u8);
-    output.append((isize_val >> 24 & 0xFF) as u8);
+    output.push((isize_val & 0xFF) as u8);
+    output.push((isize_val >> 8 & 0xFF) as u8);
+    output.push((isize_val >> 16 & 0xFF) as u8);
+    output.push((isize_val >> 24 & 0xFF) as u8);
 
     return output;
 }
@@ -3184,7 +3184,7 @@ impl GzipHeader {
     pub fn set_extra(&mut self, extra: &Array<u8>) {
         self.extra = [];
         for let mut i = 0; i < extra.len(); i += 1 {
-            self.extra.append(extra[i]);
+            self.extra.push(extra[i]);
         }
     }
 
@@ -3208,9 +3208,9 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
     let mut output: Array<u8> = Array::<u8>::with_capacity(deflated.len() + 64);
 
     // Gzip header
-    output.append(GZIP_MAGIC1);
-    output.append(GZIP_MAGIC2);
-    output.append(8);  // CM = deflate
+    output.push(GZIP_MAGIC1);
+    output.push(GZIP_MAGIC2);
+    output.push(8);  // CM = deflate
 
     // Flags
     let mut flags = 0;
@@ -3229,13 +3229,13 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
     if header.comment.len() > 0 {
         flags = flags | 16;  // FCOMMENT
     }
-    output.append(flags as u8);
+    output.push(flags as u8);
 
     // MTIME (4 bytes little-endian)
-    output.append((header.time & 0xFF) as u8);
-    output.append((header.time >> 8 & 0xFF) as u8);
-    output.append((header.time >> 16 & 0xFF) as u8);
-    output.append((header.time >> 24 & 0xFF) as u8);
+    output.push((header.time & 0xFF) as u8);
+    output.push((header.time >> 8 & 0xFF) as u8);
+    output.push((header.time >> 16 & 0xFF) as u8);
+    output.push((header.time >> 24 & 0xFF) as u8);
 
     // XFL
     let xfl = if level <= 1 {
@@ -3245,62 +3245,62 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
     } else {
         0;
     };
-    output.append(xfl as u8);
+    output.push(xfl as u8);
 
     // OS
-    output.append(header.os as u8);
+    output.push(header.os as u8);
 
     // Extra field
     if header.extra.len() > 0 {
         let xlen = header.extra.len();
-        output.append((xlen & 0xFF) as u8);
-        output.append((xlen >> 8 & 0xFF) as u8);
+        output.push((xlen & 0xFF) as u8);
+        output.push((xlen >> 8 & 0xFF) as u8);
         for let mut i = 0; i < xlen; i += 1 {
-            output.append(header.extra[i]);
+            output.push(header.extra[i]);
         }
     }
 
     // File name (null-terminated)
     if header.name.len() > 0 {
         for let mut i = 0; i < header.name.len(); i += 1 {
-            output.append(header.name.get_byte(i));
+            output.push(header.name.get_byte(i));
         }
-        output.append(0);
+        output.push(0);
     }
 
     // Comment (null-terminated)
     if header.comment.len() > 0 {
         for let mut i = 0; i < header.comment.len(); i += 1 {
-            output.append(header.comment.get_byte(i));
+            output.push(header.comment.get_byte(i));
         }
-        output.append(0);
+        output.push(0);
     }
 
     // Header CRC16
     if header.hcrc {
         let hcrc = crc32(crc32_init(), &output, 0, output.len());
-        output.append((hcrc & 0xFF) as u8);
-        output.append((hcrc >> 8 & 0xFF) as u8);
+        output.push((hcrc & 0xFF) as u8);
+        output.push((hcrc >> 8 & 0xFF) as u8);
     }
 
     // Compressed data
     for let mut i = 0; i < deflated.len(); i += 1 {
-        output.append(deflated[i]);
+        output.push(deflated[i]);
     }
 
     // CRC32 trailer
     let crc = crc32(crc32_init(), input, 0, input.len());
-    output.append((crc & 0xFF) as u8);
-    output.append((crc >> 8 & 0xFF) as u8);
-    output.append((crc >> 16 & 0xFF) as u8);
-    output.append((crc >> 24 & 0xFF) as u8);
+    output.push((crc & 0xFF) as u8);
+    output.push((crc >> 8 & 0xFF) as u8);
+    output.push((crc >> 16 & 0xFF) as u8);
+    output.push((crc >> 24 & 0xFF) as u8);
 
     // ISIZE
     let isize_val = input.len() as u32;
-    output.append((isize_val & 0xFF) as u8);
-    output.append((isize_val >> 8 & 0xFF) as u8);
-    output.append((isize_val >> 16 & 0xFF) as u8);
-    output.append((isize_val >> 24 & 0xFF) as u8);
+    output.push((isize_val & 0xFF) as u8);
+    output.push((isize_val >> 8 & 0xFF) as u8);
+    output.push((isize_val >> 16 & 0xFF) as u8);
+    output.push((isize_val >> 24 & 0xFF) as u8);
 
     return output;
 }
@@ -3310,7 +3310,7 @@ fn bytes_to_string(buf: &Array<u8>, offset: i32, len: i32) -> String {
     let mut s = String::with_capacity(len);
     for let mut i = 0; i < len; i += 1 {
         // Append single-byte characters as strings via template
-        s.append(`{buf[offset + i] as char}`);
+        s.push(`{buf[offset + i] as char}`);
     }
     return s;
 }
@@ -3348,7 +3348,7 @@ pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, ZlibErro
         pos += 2;
         header.extra = [];
         for let mut i = 0; i < xlen && pos + i < input.len(); i += 1 {
-            header.extra.append(input[pos + i]);
+            header.extra.push(input[pos + i]);
         }
         pos += xlen;
     }
@@ -3513,7 +3513,7 @@ impl DeflateStream {
     pub fn copy(&self) -> DeflateStream {
         let mut buf_copy: Array<u8> = Array::<u8>::with_capacity(self.buffer.len());
         for let mut i = 0; i < self.buffer.len(); i += 1 {
-            buf_copy.append(self.buffer[i]);
+            buf_copy.push(self.buffer[i]);
         }
         return DeflateStream {
             level: self.level,
@@ -3543,7 +3543,7 @@ impl DeflateStream {
             panic("DeflateStream already finished");
         }
         for let mut i = 0; i < chunk.len(); i += 1 {
-            self.buffer.append(chunk[i]);
+            self.buffer.push(chunk[i]);
         }
     }
 
@@ -3649,7 +3649,7 @@ impl InflateStream {
     pub fn copy(&self) -> InflateStream {
         let mut buf_copy: Array<u8> = Array::<u8>::with_capacity(self.buffer.len());
         for let mut i = 0; i < self.buffer.len(); i += 1 {
-            buf_copy.append(self.buffer[i]);
+            buf_copy.push(self.buffer[i]);
         }
         return InflateStream {
             format: self.format,
@@ -3662,7 +3662,7 @@ impl InflateStream {
     /// Adds a compressed data chunk to the stream buffer.
     pub fn update(&mut self, chunk: &Array<u8>) {
         for let mut i = 0; i < chunk.len(); i += 1 {
-            self.buffer.append(chunk[i]);
+            self.buffer.push(chunk[i]);
         }
     }
 

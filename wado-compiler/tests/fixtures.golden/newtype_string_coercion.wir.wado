@@ -66,9 +66,9 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -104,19 +104,19 @@ fn greet(name) {
     let __local_10: ref String;
     return __tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(24), used: 0 };
-        String::append_char(__local_1, 72);
-        String::append_char(__local_1, 101);
-        String::append_char(__local_1, 108);
-        String::append_char(__local_1, 108);
-        String::append_char(__local_1, 111);
-        String::append_char(__local_1, 44);
-        String::append_char(__local_1, 32);
+        String::push(__local_1, 72);
+        String::push(__local_1, 101);
+        String::push(__local_1, 108);
+        String::push(__local_1, 108);
+        String::push(__local_1, 111);
+        String::push(__local_1, 44);
+        String::push(__local_1, 32);
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         __local_8 = __local_2;
         String^Inspect::inspect(name, __local_8);
         __local_10 = String { repr: array.new_data<u8>(" as Name"), used: 8 };
-        String::append(__local_8.buf, __local_10);
-        String::append_char(__local_1, 33);
+        String::push_str(__local_8.buf, __local_10);
+        String::push(__local_1, 33);
         break __tmpl: __local_1;
     };
 }
@@ -133,12 +133,12 @@ fn run() with Stdout {
     x = String { repr: array.new_data<u8>("world"), used: 5 };
     label2 = __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(22), used: 0 };
-        String::append_char(__local_4, 104);
-        String::append_char(__local_4, 101);
-        String::append_char(__local_4, 108);
-        String::append_char(__local_4, 108);
-        String::append_char(__local_4, 111);
-        String::append_char(__local_4, 32);
+        String::push(__local_4, 104);
+        String::push(__local_4, 101);
+        String::push(__local_4, 108);
+        String::push(__local_4, 108);
+        String::push(__local_4, 111);
+        String::push(__local_4, 32);
         __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
         Formatter::pad(__local_5, x);
         break __tmpl: __local_4;
@@ -264,7 +264,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -323,7 +323,7 @@ fn StrCharIter^Iterator::next(self) {
     return 0; code_10;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -361,7 +361,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l17;
             };
@@ -381,7 +381,7 @@ fn Formatter::pad(self, content) {
     } else {
         content_len >= self.width;
     } {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         return;
     };
     padding = self.width - content_len;
@@ -389,17 +389,17 @@ fn Formatter::pad(self, content) {
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, padding);
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, right_pad);
     } else {
         Formatter::write_char_n(self, self.fill, padding);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
     };
 }
 
@@ -409,7 +409,7 @@ fn String^Inspect::inspect(self, f) {
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
     let _licm_buf_33: ref String;
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
@@ -426,22 +426,22 @@ fn String^Inspect::inspect(self, f) {
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 34);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 110);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 114);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 116);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 116);
                 } else {
-                    String::append_char(_licm_buf_33, c);
+                    String::push(_licm_buf_33, c);
                 };
             } else {
                 break b23;
@@ -449,7 +449,7 @@ fn String^Inspect::inspect(self, f) {
             continue l24;
         };
     };
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
 }
 
 export fn __cm_export__run as "run"

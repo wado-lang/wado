@@ -870,11 +870,11 @@ fn synthesize_lift_list(
     );
     loop_stmts.extend(elem_lift_stmts);
 
-    // __result.append(lifted_elem)
+    // __result.push(lifted_elem)
     loop_stmts.push(expr_stmt(generic_method_call(
         local_ref(result_local, "__result", array_type_id),
         "Array",
-        "append",
+        "push",
         ModuleSource::prelude(),
         vec![lifted_elem],
         TypeTable::UNIT,
@@ -5832,9 +5832,9 @@ fn synthesize_stream_read_func(
             receiver: Box::new(local_ref(arr_idx, "arr", array_type_id)),
             func: FunctionRef {
                 module_source: ModuleSource::prelude(),
-                name: format!("Array<{elem_name}>::append"),
+                name: format!("Array<{elem_name}>::push"),
                 monomorph_info: Some(MonomorphInfo {
-                    generic_name: "Array::append".to_string(),
+                    generic_name: "Array::push".to_string(),
                     impl_type_args: vec![elem_type_id],
                     method_type_args: vec![],
                     is_blanket: false,
@@ -5843,7 +5843,7 @@ fn synthesize_stream_read_func(
                     struct_name: format!("Array<{elem_name}>"),
                     base_struct_name: "Array".to_string(),
                     trait_name: None,
-                    method_name: "append".to_string(),
+                    method_name: "push".to_string(),
                     method_type_args: vec![],
                     is_type_param_receiver: false,
                     is_ref_impl: false,

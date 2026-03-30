@@ -72,7 +72,7 @@ fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
 fn string_to_bytes(s: String) -> Array<u8> {
     let mut out: Array<u8> = Array::<u8>::with_capacity(s.len());
     for let mut i = 0; i < s.len(); i += 1 {
-        out.append(s.get_byte(i));
+        out.push(s.get_byte(i));
     }
     return out;
 }
@@ -80,7 +80,7 @@ fn string_to_bytes(s: String) -> Array<u8> {
 fn make_pattern_data(size: i32) -> Array<u8> {
     let mut data: Array<u8> = Array::<u8>::with_capacity(size);
     for let mut i = 0; i < size; i += 1 {
-        data.append((i % 256) as u8);
+        data.push((i % 256) as u8);
     }
     return data;
 }
@@ -88,7 +88,7 @@ fn make_pattern_data(size: i32) -> Array<u8> {
 fn make_repeated(byte: u8, count: i32) -> Array<u8> {
     let mut data: Array<u8> = Array::<u8>::with_capacity(count);
     for let mut i = 0; i < count; i += 1 {
-        data.append(byte);
+        data.push(byte);
     }
     return data;
 }
@@ -157,10 +157,10 @@ test "adler32_combine" {
     let seg2 = string_to_bytes("World!");
     let mut combined: Array<u8> = Array::<u8>::with_capacity(seg1.len() + seg2.len());
     for let mut i = 0; i < seg1.len(); i += 1 {
-        combined.append(seg1[i]);
+        combined.push(seg1[i]);
     }
     for let mut i = 0; i < seg2.len(); i += 1 {
-        combined.append(seg2[i]);
+        combined.push(seg2[i]);
     }
 
     let a1 = adler32(adler32_init(), &seg1, 0, seg1.len());
@@ -175,10 +175,10 @@ test "crc32_combine" {
     let seg2 = string_to_bytes("World!");
     let mut combined: Array<u8> = Array::<u8>::with_capacity(seg1.len() + seg2.len());
     for let mut i = 0; i < seg1.len(); i += 1 {
-        combined.append(seg1[i]);
+        combined.push(seg1[i]);
     }
     for let mut i = 0; i < seg2.len(); i += 1 {
-        combined.append(seg2[i]);
+        combined.push(seg2[i]);
     }
 
     let c1 = crc32(crc32_init(), &seg1, 0, seg1.len());
@@ -289,7 +289,7 @@ test "Huffman round-trip Hello World x20" {
     let mut data: Array<u8> = Array::<u8>::with_capacity(280);
     for let mut j = 0; j < 20; j += 1 {
         for let mut i = 0; i < 14; i += 1 {
-            data.append(unit[i]);
+            data.push(unit[i]);
         }
     }
     let compressed = zlib_compress(&data);
@@ -422,10 +422,10 @@ test "gzip multi-member" {
 
     let mut multi: Array<u8> = Array::<u8>::with_capacity(gz1.len() + gz2.len());
     for let mut i = 0; i < gz1.len(); i += 1 {
-        multi.append(gz1[i]);
+        multi.push(gz1[i]);
     }
     for let mut i = 0; i < gz2.len(); i += 1 {
-        multi.append(gz2[i]);
+        multi.push(gz2[i]);
     }
 
     let decompressed = inflate_gzip(&multi).unwrap();
@@ -459,11 +459,11 @@ test "DeflateStream chunked update/finish" {
     let data = make_pattern_data(500);
     let mut chunk1: Array<u8> = Array::<u8>::with_capacity(200);
     for let mut i = 0; i < 200; i += 1 {
-        chunk1.append(data[i]);
+        chunk1.push(data[i]);
     }
     let mut chunk2: Array<u8> = Array::<u8>::with_capacity(300);
     for let mut i = 200; i < 500; i += 1 {
-        chunk2.append(data[i]);
+        chunk2.push(data[i]);
     }
 
     let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
@@ -482,11 +482,11 @@ test "InflateStream chunked update/finish" {
     let half = compressed.len() / 2;
     let mut c1: Array<u8> = Array::<u8>::with_capacity(half);
     for let mut i = 0; i < half; i += 1 {
-        c1.append(compressed[i]);
+        c1.push(compressed[i]);
     }
     let mut c2: Array<u8> = Array::<u8>::with_capacity(compressed.len() - half);
     for let mut i = half; i < compressed.len(); i += 1 {
-        c2.append(compressed[i]);
+        c2.push(compressed[i]);
     }
 
     let mut is = InflateStream::new();

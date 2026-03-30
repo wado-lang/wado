@@ -458,7 +458,7 @@ type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref String, ref String);
+type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
@@ -466,7 +466,7 @@ type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> b
 
 type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
 
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/String::push" = fn(ref String, char);
 
 type "functype/JsonMapSerializer^SerializeMap::key<String>" = fn(ref "core:json/JsonMapSerializer", ref String) -> ref null "core:serde/SerializeError";
 
@@ -474,7 +474,7 @@ type "functype/ArrayIter<Tuple<String,Option<i32>>>^Iterator::next" = fn(ref "wa
 
 type "functype/TreeMap<String,Option<i32>>::entries" = fn(ref "core:allocator/TreeMap<String,Option<i32>>") -> ref Array<Tuple<String,Option<i32>>>;
 
-type "functype/Array<Tuple<String,Option<i32>>>::append" = fn(ref Array<Tuple<String,Option<i32>>>, ref "tuple/[String, Option<i32>]");
+type "functype/Array<Tuple<String,Option<i32>>>::push" = fn(ref Array<Tuple<String,Option<i32>>>, ref "tuple/[String, Option<i32>]");
 
 type "functype/Array<Tuple<String,Option<i32>>>::grow" = fn(ref Array<Tuple<String,Option<i32>>>);
 
@@ -488,7 +488,7 @@ type "functype/TreeMap<String,Option<i32>>::split" = fn(ref "core:allocator/Tree
 
 type "functype/TreeMap<String,Option<i32>>::skew" = fn(ref "core:allocator/TreeMap<String,Option<i32>>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
 
-type "functype/Array<TreeMapEntry<String,Option<i32>>>::append" = fn(ref Array<TreeMapEntry<String,Option<i32>>>, ref "core:allocator/TreeMapEntry<String,Option<i32>>");
+type "functype/Array<TreeMapEntry<String,Option<i32>>>::push" = fn(ref Array<TreeMapEntry<String,Option<i32>>>, ref "core:allocator/TreeMapEntry<String,Option<i32>>");
 
 type "functype/Array<TreeMapEntry<String,Option<i32>>>::grow" = fn(ref Array<TreeMapEntry<String,Option<i32>>>);
 
@@ -500,13 +500,13 @@ type "functype/ArrayIter<Tuple<String,Array<i32>>>^Iterator::next" = fn(ref "was
 
 type "functype/TreeMap<String,Array<i32>>::entries" = fn(ref "core:allocator/TreeMap<String,Array<i32>>") -> ref Array<Tuple<String,Array<i32>>>;
 
-type "functype/Array<Tuple<String,Array<i32>>>::append" = fn(ref Array<Tuple<String,Array<i32>>>, ref "tuple/[String, Array<i32>]");
+type "functype/Array<Tuple<String,Array<i32>>>::push" = fn(ref Array<Tuple<String,Array<i32>>>, ref "tuple/[String, Array<i32>]");
 
 type "functype/Array<Tuple<String,Array<i32>>>::grow" = fn(ref Array<Tuple<String,Array<i32>>>);
 
 type "functype/ArrayIter<TreeMapEntry<String,Array<i32>>>^Iterator::next" = fn(ref "wasi:cli/types.wado/ArrayIter<TreeMapEntry<String,Array<i32>>>") -> ref null "core:allocator/TreeMapEntry<String,Array<i32>>";
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
@@ -518,7 +518,7 @@ type "functype/TreeMap<String,Array<i32>>::split" = fn(ref "core:allocator/TreeM
 
 type "functype/TreeMap<String,Array<i32>>::skew" = fn(ref "core:allocator/TreeMap<String,Array<i32>>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
 
-type "functype/Array<TreeMapEntry<String,Array<i32>>>::append" = fn(ref Array<TreeMapEntry<String,Array<i32>>>, ref "core:allocator/TreeMapEntry<String,Array<i32>>");
+type "functype/Array<TreeMapEntry<String,Array<i32>>>::push" = fn(ref Array<TreeMapEntry<String,Array<i32>>>, ref "core:allocator/TreeMapEntry<String,Array<i32>>");
 
 type "functype/Array<TreeMapEntry<String,Array<i32>>>::grow" = fn(ref Array<TreeMapEntry<String,Array<i32>>>);
 
@@ -528,7 +528,7 @@ type "functype/ArrayIter<Tuple<String,bool>>^Iterator::next" = fn(ref "wasi:cli/
 
 type "functype/TreeMap<String,bool>::entries" = fn(ref "core:allocator/TreeMap<String,bool>") -> ref Array<Tuple<String,bool>>;
 
-type "functype/Array<Tuple<String,bool>>::append" = fn(ref Array<Tuple<String,bool>>, ref "tuple/[String, bool]");
+type "functype/Array<Tuple<String,bool>>::push" = fn(ref Array<Tuple<String,bool>>, ref "tuple/[String, bool]");
 
 type "functype/Array<Tuple<String,bool>>::grow" = fn(ref Array<Tuple<String,bool>>);
 
@@ -542,7 +542,7 @@ type "functype/TreeMap<String,bool>::split" = fn(ref "core:allocator/TreeMap<Str
 
 type "functype/TreeMap<String,bool>::skew" = fn(ref "core:allocator/TreeMap<String,bool>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
 
-type "functype/Array<TreeMapEntry<String,bool>>::append" = fn(ref Array<TreeMapEntry<String,bool>>, ref "core:allocator/TreeMapEntry<String,bool>");
+type "functype/Array<TreeMapEntry<String,bool>>::push" = fn(ref Array<TreeMapEntry<String,bool>>, ref "core:allocator/TreeMapEntry<String,bool>");
 
 type "functype/Array<TreeMapEntry<String,bool>>::grow" = fn(ref Array<TreeMapEntry<String,bool>>);
 
@@ -554,7 +554,7 @@ type "functype/ArrayIter<Tuple<String,String>>^Iterator::next" = fn(ref "wasi:cl
 
 type "functype/TreeMap<String,String>::entries" = fn(ref "core:allocator/TreeMap<String,String>") -> ref Array<Tuple<String,String>>;
 
-type "functype/Array<Tuple<String,String>>::append" = fn(ref Array<Tuple<String,String>>, ref "tuple/[String, String]");
+type "functype/Array<Tuple<String,String>>::push" = fn(ref Array<Tuple<String,String>>, ref "tuple/[String, String]");
 
 type "functype/Array<Tuple<String,String>>::grow" = fn(ref Array<Tuple<String,String>>);
 
@@ -568,7 +568,7 @@ type "functype/TreeMap<String,String>::split" = fn(ref "core:allocator/TreeMap<S
 
 type "functype/TreeMap<String,String>::skew" = fn(ref "core:allocator/TreeMap<String,String>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
 
-type "functype/Array<TreeMapEntry<String,String>>::append" = fn(ref Array<TreeMapEntry<String,String>>, ref "core:allocator/TreeMapEntry<String,String>");
+type "functype/Array<TreeMapEntry<String,String>>::push" = fn(ref Array<TreeMapEntry<String,String>>, ref "core:allocator/TreeMapEntry<String,String>");
 
 type "functype/Array<TreeMapEntry<String,String>>::grow" = fn(ref Array<TreeMapEntry<String,String>>);
 
@@ -586,7 +586,7 @@ type "functype/TreeMap<String,i32>::split" = fn(ref "core:allocator/TreeMap<Stri
 
 type "functype/TreeMap<String,i32>::skew" = fn(ref "core:allocator/TreeMap<String,i32>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
 
-type "functype/Array<TreeMapEntry<String,i32>>::append" = fn(ref Array<TreeMapEntry<String,i32>>, ref "core:allocator/TreeMapEntry<String,i32>");
+type "functype/Array<TreeMapEntry<String,i32>>::push" = fn(ref Array<TreeMapEntry<String,i32>>, ref "core:allocator/TreeMapEntry<String,i32>");
 
 type "functype/Array<TreeMapEntry<String,i32>>::grow" = fn(ref Array<TreeMapEntry<String,i32>>);
 
@@ -594,7 +594,7 @@ type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "wasi:cli/t
 
 type "functype/TreeMap<String,i32>::entries" = fn(ref "core:allocator/TreeMap<String,i32>") -> ref Array<Tuple<String,i32>>;
 
-type "functype/Array<Tuple<String,i32>>::append" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
+type "functype/Array<Tuple<String,i32>>::push" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
 
 type "functype/Array<Tuple<String,i32>>::grow" = fn(ref Array<Tuple<String,i32>>);
 
@@ -723,26 +723,26 @@ fn __test_0_treemap_serialize_string_keys() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(136), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_0_treemap_serialize_string_keys"), used: 38 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_0_treemap_serialize_string_keys"), used: 38 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_22 = __local_6;
                 i32::fmt_decimal(15, __local_22);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: s == `\\{\"alice\":30,\"bob\":25\\}`
 "), used: 43 });
-                String::append_char(__local_5, 115);
-                String::append_char(__local_5, 58);
-                String::append_char(__local_5, 32);
+                String::push(__local_5, 115);
+                String::push(__local_5, 58);
+                String::push(__local_5, 32);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -797,25 +797,25 @@ fn __test_1_treemap_roundtrip() {
             if __cond_6 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_9 = String { repr: builtin::array_new<u8>(132), used: 0 };
-                    String::append(__local_9, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_9, String { repr: array.new_data<u8>("__test_1_treemap_roundtrip"), used: 26 });
-                    String::append_char(__local_9, 32);
-                    String::append_char(__local_9, 97);
-                    String::append_char(__local_9, 116);
-                    String::append_char(__local_9, 32);
-                    String::append(__local_9, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                    String::append_char(__local_9, 58);
+                    String::push_str(__local_9, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_9, String { repr: array.new_data<u8>("__test_1_treemap_roundtrip"), used: 26 });
+                    String::push(__local_9, 32);
+                    String::push(__local_9, 97);
+                    String::push(__local_9, 116);
+                    String::push(__local_9, 32);
+                    String::push_str(__local_9, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                    String::push(__local_9, 58);
                     __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
                     __local_29 = __local_10;
                     i32::fmt_decimal(29, __local_29);
-                    String::append(__local_9, String { repr: array.new_data<u8>("
+                    String::push_str(__local_9, String { repr: array.new_data<u8>("
 condition: parsed[\"x\"] == 1
 "), used: 29 });
-                    String::append(__local_9, String { repr: array.new_data<u8>("parsed[\"x\"]: "), used: 13 });
+                    String::push_str(__local_9, String { repr: array.new_data<u8>("parsed[\"x\"]: "), used: 13 });
                     __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
                     __local_34 = __local_10;
                     i32::fmt_decimal(__v0_5, __local_34);
-                    String::append_char(__local_9, 10);
+                    String::push(__local_9, 10);
                     break __tmpl: __local_9;
                 });
                 unreachable;
@@ -825,25 +825,25 @@ condition: parsed[\"x\"] == 1
             if __cond_8 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_11 = String { repr: builtin::array_new<u8>(132), used: 0 };
-                    String::append(__local_11, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_11, String { repr: array.new_data<u8>("__test_1_treemap_roundtrip"), used: 26 });
-                    String::append_char(__local_11, 32);
-                    String::append_char(__local_11, 97);
-                    String::append_char(__local_11, 116);
-                    String::append_char(__local_11, 32);
-                    String::append(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                    String::append_char(__local_11, 58);
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("__test_1_treemap_roundtrip"), used: 26 });
+                    String::push(__local_11, 32);
+                    String::push(__local_11, 97);
+                    String::push(__local_11, 116);
+                    String::push(__local_11, 32);
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                    String::push(__local_11, 58);
                     __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
                     __local_40 = __local_12;
                     i32::fmt_decimal(30, __local_40);
-                    String::append(__local_11, String { repr: array.new_data<u8>("
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("
 condition: parsed[\"y\"] == 2
 "), used: 29 });
-                    String::append(__local_11, String { repr: array.new_data<u8>("parsed[\"y\"]: "), used: 13 });
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("parsed[\"y\"]: "), used: 13 });
                     __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
                     __local_45 = __local_12;
                     i32::fmt_decimal(__v0_7, __local_45);
-                    String::append_char(__local_11, 10);
+                    String::push(__local_11, 10);
                     break __tmpl: __local_11;
                 });
                 unreachable;
@@ -882,26 +882,26 @@ fn __test_2_treemap_empty() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(117), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_2_treemap_empty"), used: 22 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_2_treemap_empty"), used: 22 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_16 = __local_6;
                 i32::fmt_decimal(43, __local_16);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: s == `\\{\\}`
 "), used: 24 });
-                String::append_char(__local_5, 115);
-                String::append_char(__local_5, 58);
-                String::append_char(__local_5, 32);
+                String::push(__local_5, 115);
+                String::push(__local_5, 58);
+                String::push(__local_5, 32);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -943,29 +943,29 @@ fn __test_3_treemap_empty_roundtrip() {
         if __cond_4 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_9 = String { repr: builtin::array_new<u8>(123), used: 0 };
-                String::append(__local_9, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_9, String { repr: array.new_data<u8>("__test_3_treemap_empty_roundtrip"), used: 32 });
-                String::append_char(__local_9, 32);
-                String::append_char(__local_9, 97);
-                String::append_char(__local_9, 116);
-                String::append_char(__local_9, 32);
-                String::append(__local_9, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_9, 58);
+                String::push_str(__local_9, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_9, String { repr: array.new_data<u8>("__test_3_treemap_empty_roundtrip"), used: 32 });
+                String::push(__local_9, 32);
+                String::push(__local_9, 97);
+                String::push(__local_9, 116);
+                String::push(__local_9, 32);
+                String::push_str(__local_9, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_9, 58);
                 __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
                 __local_23 = __local_10;
                 i32::fmt_decimal(53, __local_23);
-                String::append(__local_9, String { repr: array.new_data<u8>("
+                String::push_str(__local_9, String { repr: array.new_data<u8>("
 condition: json == `\\{\\}`
 "), used: 27 });
-                String::append_char(__local_9, 106);
-                String::append_char(__local_9, 115);
-                String::append_char(__local_9, 111);
-                String::append_char(__local_9, 110);
-                String::append_char(__local_9, 58);
-                String::append_char(__local_9, 32);
+                String::push(__local_9, 106);
+                String::push(__local_9, 115);
+                String::push(__local_9, 111);
+                String::push(__local_9, 110);
+                String::push(__local_9, 58);
+                String::push(__local_9, 32);
                 __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
                 String^Inspect::inspect(__v0_3, __local_10);
-                String::append_char(__local_9, 10);
+                String::push(__local_9, 10);
                 break __tmpl: __local_9;
             });
             unreachable;
@@ -981,25 +981,25 @@ condition: json == `\\{\\}`
             if __cond_8 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_11 = String { repr: builtin::array_new<u8>(134), used: 0 };
-                    String::append(__local_11, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_11, String { repr: array.new_data<u8>("__test_3_treemap_empty_roundtrip"), used: 32 });
-                    String::append_char(__local_11, 32);
-                    String::append_char(__local_11, 97);
-                    String::append_char(__local_11, 116);
-                    String::append_char(__local_11, 32);
-                    String::append(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                    String::append_char(__local_11, 58);
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("__test_3_treemap_empty_roundtrip"), used: 32 });
+                    String::push(__local_11, 32);
+                    String::push(__local_11, 97);
+                    String::push(__local_11, 116);
+                    String::push(__local_11, 32);
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                    String::push(__local_11, 58);
                     __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
                     __local_31 = __local_12;
                     i32::fmt_decimal(56, __local_31);
-                    String::append(__local_11, String { repr: array.new_data<u8>("
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("
 condition: parsed.len() == 0
 "), used: 30 });
-                    String::append(__local_11, String { repr: array.new_data<u8>("parsed.len(): "), used: 14 });
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("parsed.len(): "), used: 14 });
                     __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
                     __local_36 = __local_12;
                     i32::fmt_decimal(__v0_7, __local_36);
-                    String::append_char(__local_11, 10);
+                    String::push(__local_11, 10);
                     break __tmpl: __local_11;
                 });
                 unreachable;
@@ -1041,26 +1041,26 @@ fn __test_4_treemap_single_entry() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(126), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_4_treemap_single_entry"), used: 29 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_4_treemap_single_entry"), used: 29 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_19 = __local_6;
                 i32::fmt_decimal(70, __local_19);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: s == `\\{\"only\":42\\}`
 "), used: 33 });
-                String::append_char(__local_5, 115);
-                String::append_char(__local_5, 58);
-                String::append_char(__local_5, 32);
+                String::push(__local_5, 115);
+                String::push(__local_5, 58);
+                String::push(__local_5, 32);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -1105,26 +1105,26 @@ fn __test_5_treemap_with_string_values() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(156), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_5_treemap_with_string_values"), used: 35 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_5_treemap_with_string_values"), used: 35 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_22 = __local_6;
                 i32::fmt_decimal(82, __local_22);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: s == `\\{\"greeting\":\"hello\",\"farewell\":\"goodbye\"\\}`
 "), used: 63 });
-                String::append_char(__local_5, 115);
-                String::append_char(__local_5, 58);
-                String::append_char(__local_5, 32);
+                String::push(__local_5, 115);
+                String::push(__local_5, 58);
+                String::push(__local_5, 32);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -1165,26 +1165,26 @@ fn __test_6_treemap_with_bool_values() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(145), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_6_treemap_with_bool_values"), used: 33 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_6_treemap_with_bool_values"), used: 33 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_22 = __local_6;
                 i32::fmt_decimal(94, __local_22);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: s == `\\{\"enabled\":true,\"debug\":false\\}`
 "), used: 52 });
-                String::append_char(__local_5, 115);
-                String::append_char(__local_5, 58);
-                String::append_char(__local_5, 32);
+                String::push(__local_5, 115);
+                String::push(__local_5, 58);
+                String::push(__local_5, 32);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -1237,26 +1237,26 @@ fn __test_7_treemap_with_nested_array_values() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_7 = String { repr: builtin::array_new<u8>(148), used: 0 };
-                String::append(__local_7, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_7, String { repr: array.new_data<u8>("__test_7_treemap_with_nested_array_values"), used: 41 });
-                String::append_char(__local_7, 32);
-                String::append_char(__local_7, 97);
-                String::append_char(__local_7, 116);
-                String::append_char(__local_7, 32);
-                String::append(__local_7, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_7, 58);
+                String::push_str(__local_7, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_7, String { repr: array.new_data<u8>("__test_7_treemap_with_nested_array_values"), used: 41 });
+                String::push(__local_7, 32);
+                String::push(__local_7, 97);
+                String::push(__local_7, 116);
+                String::push(__local_7, 32);
+                String::push_str(__local_7, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_7, 58);
                 __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
                 __local_40 = __local_8;
                 i32::fmt_decimal(106, __local_40);
-                String::append(__local_7, String { repr: array.new_data<u8>("
+                String::push_str(__local_7, String { repr: array.new_data<u8>("
 condition: s == `\\{\"scores\":[10,20,30],\"ids\":[1,2]\\}`
 "), used: 55 });
-                String::append_char(__local_7, 115);
-                String::append_char(__local_7, 58);
-                String::append_char(__local_7, 32);
+                String::push(__local_7, 115);
+                String::push(__local_7, 58);
+                String::push(__local_7, 32);
                 __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
                 String^Inspect::inspect(__v0, __local_8);
-                String::append_char(__local_7, 10);
+                String::push(__local_7, 10);
                 break __tmpl: __local_7;
             });
             unreachable;
@@ -1301,26 +1301,26 @@ fn __test_8_treemap_with_option_values() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(143), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_8_treemap_with_option_values"), used: 35 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_8_treemap_with_option_values"), used: 35 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_22 = __local_6;
                 i32::fmt_decimal(118, __local_22);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: s == `\\{\"present\":42,\"absent\":null\\}`
 "), used: 50 });
-                String::append_char(__local_5, 115);
-                String::append_char(__local_5, 58);
-                String::append_char(__local_5, 32);
+                String::push(__local_5, 115);
+                String::push(__local_5, 58);
+                String::push(__local_5, 32);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -1375,25 +1375,25 @@ fn __test_9_treemap_keys_with_special_chars() {
             if __cond_6 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_9 = String { repr: builtin::array_new<u8>(160), used: 0 };
-                    String::append(__local_9, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_9, String { repr: array.new_data<u8>("__test_9_treemap_keys_with_special_chars"), used: 40 });
-                    String::append_char(__local_9, 32);
-                    String::append_char(__local_9, 97);
-                    String::append_char(__local_9, 116);
-                    String::append_char(__local_9, 32);
-                    String::append(__local_9, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                    String::append_char(__local_9, 58);
+                    String::push_str(__local_9, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_9, String { repr: array.new_data<u8>("__test_9_treemap_keys_with_special_chars"), used: 40 });
+                    String::push(__local_9, 32);
+                    String::push(__local_9, 97);
+                    String::push(__local_9, 116);
+                    String::push(__local_9, 32);
+                    String::push_str(__local_9, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                    String::push(__local_9, 58);
                     __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
                     __local_29 = __local_10;
                     i32::fmt_decimal(133, __local_29);
-                    String::append(__local_9, String { repr: array.new_data<u8>("
+                    String::push_str(__local_9, String { repr: array.new_data<u8>("
 condition: parsed[\"key with spaces\"] == 1
 "), used: 43 });
-                    String::append(__local_9, String { repr: array.new_data<u8>("parsed[\"key with spaces\"]: "), used: 27 });
+                    String::push_str(__local_9, String { repr: array.new_data<u8>("parsed[\"key with spaces\"]: "), used: 27 });
                     __local_10 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
                     __local_34 = __local_10;
                     i32::fmt_decimal(__v0_5, __local_34);
-                    String::append_char(__local_9, 10);
+                    String::push(__local_9, 10);
                     break __tmpl: __local_9;
                 });
                 unreachable;
@@ -1403,25 +1403,25 @@ condition: parsed[\"key with spaces\"] == 1
             if __cond_8 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_11 = String { repr: builtin::array_new<u8>(164), used: 0 };
-                    String::append(__local_11, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_11, String { repr: array.new_data<u8>("__test_9_treemap_keys_with_special_chars"), used: 40 });
-                    String::append_char(__local_11, 32);
-                    String::append_char(__local_11, 97);
-                    String::append_char(__local_11, 116);
-                    String::append_char(__local_11, 32);
-                    String::append(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                    String::append_char(__local_11, 58);
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("__test_9_treemap_keys_with_special_chars"), used: 40 });
+                    String::push(__local_11, 32);
+                    String::push(__local_11, 97);
+                    String::push(__local_11, 116);
+                    String::push(__local_11, 32);
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                    String::push(__local_11, 58);
                     __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
                     __local_40 = __local_12;
                     i32::fmt_decimal(134, __local_40);
-                    String::append(__local_11, String { repr: array.new_data<u8>("
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("
 condition: parsed[\"key\\\"with\\\"quotes\"] == 2
 "), used: 45 });
-                    String::append(__local_11, String { repr: array.new_data<u8>("parsed[\"key\\\"with\\\"quotes\"]: "), used: 29 });
+                    String::push_str(__local_11, String { repr: array.new_data<u8>("parsed[\"key\\\"with\\\"quotes\"]: "), used: 29 });
                     __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
                     __local_45 = __local_12;
                     i32::fmt_decimal(__v0_7, __local_45);
-                    String::append_char(__local_11, 10);
+                    String::push(__local_11, 10);
                     break __tmpl: __local_11;
                 });
                 unreachable;
@@ -1469,26 +1469,26 @@ fn __test_10_treemap_preserves_insertion_order() {
         if __cond == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_5 = String { repr: builtin::array_new<u8>(134), used: 0 };
-                String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_5, String { repr: array.new_data<u8>("__test_10_treemap_preserves_insertion_order"), used: 43 });
-                String::append_char(__local_5, 32);
-                String::append_char(__local_5, 97);
-                String::append_char(__local_5, 116);
-                String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_5, 58);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_5, String { repr: array.new_data<u8>("__test_10_treemap_preserves_insertion_order"), used: 43 });
+                String::push(__local_5, 32);
+                String::push(__local_5, 97);
+                String::push(__local_5, 116);
+                String::push(__local_5, 32);
+                String::push_str(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_5, 58);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 __local_25 = __local_6;
                 i32::fmt_decimal(151, __local_25);
-                String::append(__local_5, String { repr: array.new_data<u8>("
+                String::push_str(__local_5, String { repr: array.new_data<u8>("
 condition: s == `\\{\"c\":3,\"a\":1,\"b\":2\\}`
 "), used: 41 });
-                String::append_char(__local_5, 115);
-                String::append_char(__local_5, 58);
-                String::append_char(__local_5, 32);
+                String::push(__local_5, 115);
+                String::push(__local_5, 58);
+                String::push(__local_5, 32);
                 __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
                 String^Inspect::inspect(__v0, __local_6);
-                String::append_char(__local_5, 10);
+                String::push(__local_5, 10);
                 break __tmpl: __local_5;
             });
             unreachable;
@@ -1540,9 +1540,9 @@ fn __test_11_treemap_many_entries_roundtrip() {
                 };
                 key = __tmpl: block -> ref String {
                     __local_12 = String { repr: builtin::array_new<u8>(19), used: 0 };
-                    String::append_char(__local_12, 107);
-                    String::append_char(__local_12, 101);
-                    String::append_char(__local_12, 121);
+                    String::push(__local_12, 107);
+                    String::push(__local_12, 101);
+                    String::push(__local_12, 121);
                     __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                     i32::fmt_decimal(i, __local_13);
                     break __tmpl: __local_12;
@@ -1571,25 +1571,25 @@ fn __test_11_treemap_many_entries_roundtrip() {
             if __cond_7 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_14 = String { repr: builtin::array_new<u8>(135), used: 0 };
-                    String::append(__local_14, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_14, String { repr: array.new_data<u8>("__test_11_treemap_many_entries_roundtrip"), used: 40 });
-                    String::append_char(__local_14, 32);
-                    String::append_char(__local_14, 97);
-                    String::append_char(__local_14, 116);
-                    String::append_char(__local_14, 32);
-                    String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                    String::append_char(__local_14, 58);
+                    String::push_str(__local_14, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_14, String { repr: array.new_data<u8>("__test_11_treemap_many_entries_roundtrip"), used: 40 });
+                    String::push(__local_14, 32);
+                    String::push(__local_14, 97);
+                    String::push(__local_14, 116);
+                    String::push(__local_14, 32);
+                    String::push_str(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                    String::push(__local_14, 58);
                     __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
                     __local_40 = __local_15;
                     i32::fmt_decimal(166, __local_40);
-                    String::append(__local_14, String { repr: array.new_data<u8>("
+                    String::push_str(__local_14, String { repr: array.new_data<u8>("
 condition: parsed.len() == 10
 "), used: 31 });
-                    String::append(__local_14, String { repr: array.new_data<u8>("parsed.len(): "), used: 14 });
+                    String::push_str(__local_14, String { repr: array.new_data<u8>("parsed.len(): "), used: 14 });
                     __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
                     __local_45 = __local_15;
                     i32::fmt_decimal(__v0_6, __local_45);
-                    String::append_char(__local_14, 10);
+                    String::push(__local_14, 10);
                     break __tmpl: __local_14;
                 });
                 unreachable;
@@ -1599,25 +1599,25 @@ condition: parsed.len() == 10
             if __cond_9 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_16 = String { repr: builtin::array_new<u8>(138), used: 0 };
-                    String::append(__local_16, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_16, String { repr: array.new_data<u8>("__test_11_treemap_many_entries_roundtrip"), used: 40 });
-                    String::append_char(__local_16, 32);
-                    String::append_char(__local_16, 97);
-                    String::append_char(__local_16, 116);
-                    String::append_char(__local_16, 32);
-                    String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                    String::append_char(__local_16, 58);
+                    String::push_str(__local_16, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_16, String { repr: array.new_data<u8>("__test_11_treemap_many_entries_roundtrip"), used: 40 });
+                    String::push(__local_16, 32);
+                    String::push(__local_16, 97);
+                    String::push(__local_16, 116);
+                    String::push(__local_16, 32);
+                    String::push_str(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                    String::push(__local_16, 58);
                     __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
                     __local_51 = __local_17;
                     i32::fmt_decimal(167, __local_51);
-                    String::append(__local_16, String { repr: array.new_data<u8>("
+                    String::push_str(__local_16, String { repr: array.new_data<u8>("
 condition: parsed[\"key0\"] == 0
 "), used: 32 });
-                    String::append(__local_16, String { repr: array.new_data<u8>("parsed[\"key0\"]: "), used: 16 });
+                    String::push_str(__local_16, String { repr: array.new_data<u8>("parsed[\"key0\"]: "), used: 16 });
                     __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
                     __local_56 = __local_17;
                     i32::fmt_decimal(__v0_8, __local_56);
-                    String::append_char(__local_16, 10);
+                    String::push(__local_16, 10);
                     break __tmpl: __local_16;
                 });
                 unreachable;
@@ -1627,25 +1627,25 @@ condition: parsed[\"key0\"] == 0
             if __cond_11 == 0 {
                 "core:internal/panic"(__tmpl: block -> ref String {
                     __local_18 = String { repr: builtin::array_new<u8>(138), used: 0 };
-                    String::append(__local_18, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                    String::append(__local_18, String { repr: array.new_data<u8>("__test_11_treemap_many_entries_roundtrip"), used: 40 });
-                    String::append_char(__local_18, 32);
-                    String::append_char(__local_18, 97);
-                    String::append_char(__local_18, 116);
-                    String::append_char(__local_18, 32);
-                    String::append(__local_18, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                    String::append_char(__local_18, 58);
+                    String::push_str(__local_18, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                    String::push_str(__local_18, String { repr: array.new_data<u8>("__test_11_treemap_many_entries_roundtrip"), used: 40 });
+                    String::push(__local_18, 32);
+                    String::push(__local_18, 97);
+                    String::push(__local_18, 116);
+                    String::push(__local_18, 32);
+                    String::push_str(__local_18, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                    String::push(__local_18, 58);
                     __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
                     __local_62 = __local_19;
                     i32::fmt_decimal(168, __local_62);
-                    String::append(__local_18, String { repr: array.new_data<u8>("
+                    String::push_str(__local_18, String { repr: array.new_data<u8>("
 condition: parsed[\"key9\"] == 9
 "), used: 32 });
-                    String::append(__local_18, String { repr: array.new_data<u8>("parsed[\"key9\"]: "), used: 16 });
+                    String::push_str(__local_18, String { repr: array.new_data<u8>("parsed[\"key9\"]: "), used: 16 });
                     __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
                     __local_67 = __local_19;
                     i32::fmt_decimal(__v0_10, __local_67);
-                    String::append_char(__local_18, 10);
+                    String::push(__local_18, 10);
                     break __tmpl: __local_18;
                 });
                 unreachable;
@@ -1697,25 +1697,25 @@ fn __test_12_treemap_deserialize_from_any_key_order() {
         if __cond_3 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_10 = String { repr: builtin::array_new<u8>(126), used: 0 };
-                String::append(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_10, String { repr: array.new_data<u8>("__test_12_treemap_deserialize_from_any_key_order"), used: 48 });
-                String::append_char(__local_10, 32);
-                String::append_char(__local_10, 97);
-                String::append_char(__local_10, 116);
-                String::append_char(__local_10, 32);
-                String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_10, 58);
+                String::push_str(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_10, String { repr: array.new_data<u8>("__test_12_treemap_deserialize_from_any_key_order"), used: 48 });
+                String::push(__local_10, 32);
+                String::push(__local_10, 97);
+                String::push(__local_10, 116);
+                String::push(__local_10, 32);
+                String::push_str(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_10, 58);
                 __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
                 __local_23 = __local_11;
                 i32::fmt_decimal(182, __local_23);
-                String::append(__local_10, String { repr: array.new_data<u8>("
+                String::push_str(__local_10, String { repr: array.new_data<u8>("
 condition: map[\"a\"] == 1
 "), used: 26 });
-                String::append(__local_10, String { repr: array.new_data<u8>("map[\"a\"]: "), used: 10 });
+                String::push_str(__local_10, String { repr: array.new_data<u8>("map[\"a\"]: "), used: 10 });
                 __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
                 __local_28 = __local_11;
                 i32::fmt_decimal(__v0_2, __local_28);
-                String::append_char(__local_10, 10);
+                String::push(__local_10, 10);
                 break __tmpl: __local_10;
             });
             unreachable;
@@ -1725,25 +1725,25 @@ condition: map[\"a\"] == 1
         if __cond_5 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_12 = String { repr: builtin::array_new<u8>(126), used: 0 };
-                String::append(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_12, String { repr: array.new_data<u8>("__test_12_treemap_deserialize_from_any_key_order"), used: 48 });
-                String::append_char(__local_12, 32);
-                String::append_char(__local_12, 97);
-                String::append_char(__local_12, 116);
-                String::append_char(__local_12, 32);
-                String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_12, 58);
+                String::push_str(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_12, String { repr: array.new_data<u8>("__test_12_treemap_deserialize_from_any_key_order"), used: 48 });
+                String::push(__local_12, 32);
+                String::push(__local_12, 97);
+                String::push(__local_12, 116);
+                String::push(__local_12, 32);
+                String::push_str(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_12, 58);
                 __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                 __local_34 = __local_13;
                 i32::fmt_decimal(183, __local_34);
-                String::append(__local_12, String { repr: array.new_data<u8>("
+                String::push_str(__local_12, String { repr: array.new_data<u8>("
 condition: map[\"b\"] == 2
 "), used: 26 });
-                String::append(__local_12, String { repr: array.new_data<u8>("map[\"b\"]: "), used: 10 });
+                String::push_str(__local_12, String { repr: array.new_data<u8>("map[\"b\"]: "), used: 10 });
                 __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                 __local_39 = __local_13;
                 i32::fmt_decimal(__v0_4, __local_39);
-                String::append_char(__local_12, 10);
+                String::push(__local_12, 10);
                 break __tmpl: __local_12;
             });
             unreachable;
@@ -1753,25 +1753,25 @@ condition: map[\"b\"] == 2
         if __cond_7 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_14 = String { repr: builtin::array_new<u8>(126), used: 0 };
-                String::append(__local_14, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_14, String { repr: array.new_data<u8>("__test_12_treemap_deserialize_from_any_key_order"), used: 48 });
-                String::append_char(__local_14, 32);
-                String::append_char(__local_14, 97);
-                String::append_char(__local_14, 116);
-                String::append_char(__local_14, 32);
-                String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_14, 58);
+                String::push_str(__local_14, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_14, String { repr: array.new_data<u8>("__test_12_treemap_deserialize_from_any_key_order"), used: 48 });
+                String::push(__local_14, 32);
+                String::push(__local_14, 97);
+                String::push(__local_14, 116);
+                String::push(__local_14, 32);
+                String::push_str(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_14, 58);
                 __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
                 __local_45 = __local_15;
                 i32::fmt_decimal(184, __local_45);
-                String::append(__local_14, String { repr: array.new_data<u8>("
+                String::push_str(__local_14, String { repr: array.new_data<u8>("
 condition: map[\"c\"] == 3
 "), used: 26 });
-                String::append(__local_14, String { repr: array.new_data<u8>("map[\"c\"]: "), used: 10 });
+                String::push_str(__local_14, String { repr: array.new_data<u8>("map[\"c\"]: "), used: 10 });
                 __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
                 __local_50 = __local_15;
                 i32::fmt_decimal(__v0_6, __local_50);
-                String::append_char(__local_14, 10);
+                String::push(__local_14, 10);
                 break __tmpl: __local_14;
             });
             unreachable;
@@ -1781,25 +1781,25 @@ condition: map[\"c\"] == 3
         if __cond_9 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_16 = String { repr: builtin::array_new<u8>(128), used: 0 };
-                String::append(__local_16, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-                String::append(__local_16, String { repr: array.new_data<u8>("__test_12_treemap_deserialize_from_any_key_order"), used: 48 });
-                String::append_char(__local_16, 32);
-                String::append_char(__local_16, 97);
-                String::append_char(__local_16, 116);
-                String::append_char(__local_16, 32);
-                String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
-                String::append_char(__local_16, 58);
+                String::push_str(__local_16, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+                String::push_str(__local_16, String { repr: array.new_data<u8>("__test_12_treemap_deserialize_from_any_key_order"), used: 48 });
+                String::push(__local_16, 32);
+                String::push(__local_16, 97);
+                String::push(__local_16, 116);
+                String::push(__local_16, 32);
+                String::push_str(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
+                String::push(__local_16, 58);
                 __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
                 __local_57 = __local_17;
                 i32::fmt_decimal(185, __local_57);
-                String::append(__local_16, String { repr: array.new_data<u8>("
+                String::push_str(__local_16, String { repr: array.new_data<u8>("
 condition: map.len() == 3
 "), used: 27 });
-                String::append(__local_16, String { repr: array.new_data<u8>("map.len(): "), used: 11 });
+                String::push_str(__local_16, String { repr: array.new_data<u8>("map.len(): "), used: 11 });
                 __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
                 __local_62 = __local_17;
                 i32::fmt_decimal(__v0_8, __local_62);
-                String::append_char(__local_16, 10);
+                String::push(__local_16, 10);
                 break __tmpl: __local_16;
             });
             unreachable;
@@ -2480,7 +2480,7 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
     let code: i32;
     let hi: i32;
     let lo: i32;
-    String::append_char(buf, 34);
+    String::push(buf, 34);
     __iter_2 = StrCharIter { repr: s.repr, used: s.used, byte_index: 0 };
     b130: block {
         l131: loop {
@@ -2490,32 +2490,32 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 34);
+                    String::push(buf, 92);
+                    String::push(buf, 34);
                 } else if c == 92 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 92);
+                    String::push(buf, 92);
+                    String::push(buf, 92);
                 } else if c == 10 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 110);
+                    String::push(buf, 92);
+                    String::push(buf, 110);
                 } else if c == 13 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 114);
+                    String::push(buf, 92);
+                    String::push(buf, 114);
                 } else if c == 9 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 116);
+                    String::push(buf, 92);
+                    String::push(buf, 116);
                 } else if c <u 32 {
-                    String::append_char(buf, 92);
-                    String::append_char(buf, 117);
-                    String::append_char(buf, 48);
-                    String::append_char(buf, 48);
+                    String::push(buf, 92);
+                    String::push(buf, 117);
+                    String::push(buf, 48);
+                    String::push(buf, 48);
                     code = c;
                     hi = (code >> 4) & 15;
                     lo = code & 15;
-                    String::append_char(buf, "core:json/hex_digit"(hi));
-                    String::append_char(buf, "core:json/hex_digit"(lo));
+                    String::push(buf, "core:json/hex_digit"(hi));
+                    String::push(buf, "core:json/hex_digit"(lo));
                 } else {
-                    String::append_char(buf, c);
+                    String::push(buf, c);
                 };
             } else {
                 break b130;
@@ -2523,7 +2523,7 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
             continue l131;
         };
     };
-    String::append_char(buf, 34);
+    String::push(buf, 34);
 }
 
 fn char::from_u32(value) {
@@ -2565,10 +2565,10 @@ fn char^Display::fmt(self, f) {
     let c: char;
     if f.width <= 0 {
         c = self;
-        String::append_char(f.buf, c);
+        String::push(f.buf, c);
     } else {
         s = String { repr: builtin::array_new<u8>(4), used: 0 };
-        String::append_char(s, self);
+        String::push(s, self);
         Formatter::pad(f, s);
     };
 }
@@ -2607,7 +2607,7 @@ fn String::internal_reserve_uninit(self, n) {
     return start;
 }
 
-fn String::append(self, other) {
+fn String::push_str(self, other) {
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -2738,7 +2738,7 @@ fn StrCharIter^Iterator::next(self) {
     return 0; code_10;
 }
 
-fn String::append_char(self, c) {
+fn String::push(self, c) {
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
@@ -2782,7 +2782,7 @@ fn TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
     entries = TreeMap<String,Option<i32>>::entries(self);
     map_r = __inline_JsonSerializer_Serializer__begin_map_0: block -> ref Result<JsonMapSerializer,SerializeError> {
         __local_20 = entries.used;
-        String::append_char(s, 123);
+        String::push(s, 123);
         break __inline_JsonSerializer_Serializer__begin_map_0: Result<JsonMapSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonMapSerializer" { buf: s, count: 0, need_value: 0 } };
     };
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(map_r) {
@@ -2811,7 +2811,7 @@ fn TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
             };
         };
         return __inline_JsonMapSerializer_SerializeMap__end_3: block -> ref null "core:serde/SerializeError" {
-            String::append_char(m.buf, 125);
+            String::push(m.buf, 125);
             break __inline_JsonMapSerializer_SerializeMap__end_3: ref.null none;
         };
     };
@@ -2838,10 +2838,10 @@ fn JsonMapSerializer^SerializeMap::value<Option<i32>>(self, value) {
             break __inline_Option_i32__Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_i32"(__local_5.buf, __local_11);
         };
         __inline_JsonSerializer_Serializer__serialize_null_2: block -> ref null "core:serde/SerializeError" {
-            String::append_char(__local_5.buf, 110);
-            String::append_char(__local_5.buf, 117);
-            String::append_char(__local_5.buf, 108);
-            String::append_char(__local_5.buf, 108);
+            String::push(__local_5.buf, 110);
+            String::push(__local_5.buf, 117);
+            String::push(__local_5.buf, 108);
+            String::push(__local_5.buf, 108);
             break __inline_JsonSerializer_Serializer__serialize_null_2: ref.null none;
         };
         break __inline_Option_i32__Serialize__serialize_JsonSerializer__0;
@@ -2856,7 +2856,7 @@ fn JsonMapSerializer^SerializeMap::key<String>(self, key) {
     let ser: ref "core:json/JsonSerializer";
     let r: ref null "core:serde/SerializeError";
     if self.count > 0 {
-        String::append_char(self.buf, 44);
+        String::push(self.buf, 44);
     };
     ser = "core:json/JsonSerializer" { buf: self.buf };
     r = __inline_JsonSerializer_Serializer__serialize_string_1: block -> ref null "core:serde/SerializeError" {
@@ -2864,7 +2864,7 @@ fn JsonMapSerializer^SerializeMap::key<String>(self, key) {
         break __inline_JsonSerializer_Serializer__serialize_string_1: ref.null none;
     };
     self.buf = ser.buf;
-    String::append_char(self.buf, 58);
+    String::push(self.buf, 58);
     self.need_value = 1;
     return r;
 }
@@ -2900,7 +2900,7 @@ fn TreeMap<String,Option<i32>>::entries(self) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = value_copy "core:allocator/TreeMapEntry<String,Option<i32>>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
-                    Array<Tuple<String,Option<i32>>>::append(result, "tuple/[String, Option<i32>]" { 0: entry.key, 1: entry.value });
+                    Array<Tuple<String,Option<i32>>>::push(result, "tuple/[String, Option<i32>]" { 0: entry.key, 1: entry.value });
                 };
             } else {
                 break b178;
@@ -2911,7 +2911,7 @@ fn TreeMap<String,Option<i32>>::entries(self) {
     return result;
 }
 
-fn Array<Tuple<String,Option<i32>>>::append(self, value) {
+fn Array<Tuple<String,Option<i32>>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -2986,7 +2986,7 @@ fn TreeMap<String,Option<i32>>::insert(self, key, value) {
         break __inline_Array_TreeMapEntry_String_Option_i32_____len_1: __local_8.used;
     };
     entry = "core:allocator/TreeMapEntry<String,Option<i32>>" { key: key, value: value, deleted: 0 };
-    Array<TreeMapEntry<String,Option<i32>>>::append(self.entries, entry);
+    Array<TreeMapEntry<String,Option<i32>>>::push(self.entries, entry);
     self.root = TreeMap<String,Option<i32>>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
@@ -3060,7 +3060,7 @@ fn TreeMap<String,Option<i32>>::skew(self, node) {
     return ref.null none;
 }
 
-fn Array<TreeMapEntry<String,Option<i32>>>::append(self, value) {
+fn Array<TreeMapEntry<String,Option<i32>>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -3166,7 +3166,7 @@ fn TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
     entries = TreeMap<String,Array<i32>>::entries(self);
     map_r = __inline_JsonSerializer_Serializer__begin_map_0: block -> ref Result<JsonMapSerializer,SerializeError> {
         __local_20 = entries.used;
-        String::append_char(s, 123);
+        String::push(s, 123);
         break __inline_JsonSerializer_Serializer__begin_map_0: Result<JsonMapSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonMapSerializer" { buf: s, count: 0, need_value: 0 } };
     };
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(map_r) {
@@ -3196,7 +3196,7 @@ fn TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
             };
         };
         return __inline_JsonMapSerializer_SerializeMap__end_3: block -> ref null "core:serde/SerializeError" {
-            String::append_char(m.buf, 125);
+            String::push(m.buf, 125);
             break __inline_JsonMapSerializer_SerializeMap__end_3: ref.null none;
         };
     };
@@ -3230,7 +3230,7 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
     let __local_16: ref Array<i32>;
     seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref Result<JsonSeqSerializer,SerializeError> {
         __local_14 = self.used;
-        String::append_char(s, 91);
+        String::push(s, 91);
         break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonSeqSerializer" { buf: s, count: 0 } };
     };
     if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(seq_2) {
@@ -3257,7 +3257,7 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
             };
         };
         return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref null "core:serde/SerializeError" {
-            String::append_char(seq_3.buf, 93);
+            String::push(seq_3.buf, 93);
             break __inline_JsonSeqSerializer_SerializeSeq__end_3: ref.null none;
         };
     };
@@ -3272,7 +3272,7 @@ fn JsonSeqSerializer^SerializeSeq::element<i32>(self, value) {
     let ser: ref "core:json/JsonSerializer";
     let r: ref null "core:serde/SerializeError";
     if self.count > 0 {
-        String::append_char(self.buf, 44);
+        String::push(self.buf, 44);
     };
     ser = "core:json/JsonSerializer" { buf: self.buf };
     r = "core:json/JsonSerializer^Serializer::serialize_i32"(ser.buf, value);
@@ -3322,7 +3322,7 @@ fn TreeMap<String,Array<i32>>::entries(self) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = value_copy "core:allocator/TreeMapEntry<String,Array<i32>>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
-                    Array<Tuple<String,Array<i32>>>::append(result, "tuple/[String, Array<i32>]" { 0: entry.key, 1: entry.value });
+                    Array<Tuple<String,Array<i32>>>::push(result, "tuple/[String, Array<i32>]" { 0: entry.key, 1: entry.value });
                 };
             } else {
                 break b226;
@@ -3333,7 +3333,7 @@ fn TreeMap<String,Array<i32>>::entries(self) {
     return result;
 }
 
-fn Array<Tuple<String,Array<i32>>>::append(self, value) {
+fn Array<Tuple<String,Array<i32>>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -3385,7 +3385,7 @@ fn ArrayIter<TreeMapEntry<String,Array<i32>>>^Iterator::next(self) {
     return item;
 }
 
-fn Array<i32>::append(self, value) {
+fn Array<i32>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -3450,7 +3450,7 @@ fn TreeMap<String,Array<i32>>::insert(self, key, value) {
         break __inline_Array_TreeMapEntry_String_Array_i32_____len_1: __local_8.used;
     };
     entry = "core:allocator/TreeMapEntry<String,Array<i32>>" { key: key, value: value, deleted: 0 };
-    Array<TreeMapEntry<String,Array<i32>>>::append(self.entries, entry);
+    Array<TreeMapEntry<String,Array<i32>>>::push(self.entries, entry);
     self.root = TreeMap<String,Array<i32>>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
@@ -3524,7 +3524,7 @@ fn TreeMap<String,Array<i32>>::skew(self, node) {
     return ref.null none;
 }
 
-fn Array<TreeMapEntry<String,Array<i32>>>::append(self, value) {
+fn Array<TreeMapEntry<String,Array<i32>>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -3629,7 +3629,7 @@ fn TreeMap<String,bool>^Serialize::serialize<JsonSerializer>(self, s) {
     entries = TreeMap<String,bool>::entries(self);
     map_r = __inline_JsonSerializer_Serializer__begin_map_0: block -> ref Result<JsonMapSerializer,SerializeError> {
         __local_20 = entries.used;
-        String::append_char(s, 123);
+        String::push(s, 123);
         break __inline_JsonSerializer_Serializer__begin_map_0: Result<JsonMapSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonMapSerializer" { buf: s, count: 0, need_value: 0 } };
     };
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(map_r) {
@@ -3658,7 +3658,7 @@ fn TreeMap<String,bool>^Serialize::serialize<JsonSerializer>(self, s) {
             };
         };
         return __inline_JsonMapSerializer_SerializeMap__end_3: block -> ref null "core:serde/SerializeError" {
-            String::append_char(m.buf, 125);
+            String::push(m.buf, 125);
             break __inline_JsonMapSerializer_SerializeMap__end_3: ref.null none;
         };
     };
@@ -3712,7 +3712,7 @@ fn TreeMap<String,bool>::entries(self) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = value_copy "core:allocator/TreeMapEntry<String,bool>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
-                    Array<Tuple<String,bool>>::append(result, "tuple/[String, bool]" { 0: entry.key, 1: entry.value });
+                    Array<Tuple<String,bool>>::push(result, "tuple/[String, bool]" { 0: entry.key, 1: entry.value });
                 };
             } else {
                 break b270;
@@ -3723,7 +3723,7 @@ fn TreeMap<String,bool>::entries(self) {
     return result;
 }
 
-fn Array<Tuple<String,bool>>::append(self, value) {
+fn Array<Tuple<String,bool>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -3798,7 +3798,7 @@ fn TreeMap<String,bool>::insert(self, key, value) {
         break __inline_Array_TreeMapEntry_String_bool____len_1: __local_8.used;
     };
     entry = "core:allocator/TreeMapEntry<String,bool>" { key: key, value: value, deleted: 0 };
-    Array<TreeMapEntry<String,bool>>::append(self.entries, entry);
+    Array<TreeMapEntry<String,bool>>::push(self.entries, entry);
     self.root = TreeMap<String,bool>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
@@ -3872,7 +3872,7 @@ fn TreeMap<String,bool>::skew(self, node) {
     return ref.null none;
 }
 
-fn Array<TreeMapEntry<String,bool>>::append(self, value) {
+fn Array<TreeMapEntry<String,bool>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -3978,7 +3978,7 @@ fn TreeMap<String,String>^Serialize::serialize<JsonSerializer>(self, s) {
     entries = TreeMap<String,String>::entries(self);
     map_r = __inline_JsonSerializer_Serializer__begin_map_0: block -> ref Result<JsonMapSerializer,SerializeError> {
         __local_20 = entries.used;
-        String::append_char(s, 123);
+        String::push(s, 123);
         break __inline_JsonSerializer_Serializer__begin_map_0: Result<JsonMapSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonMapSerializer" { buf: s, count: 0, need_value: 0 } };
     };
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(map_r) {
@@ -4008,7 +4008,7 @@ fn TreeMap<String,String>^Serialize::serialize<JsonSerializer>(self, s) {
             };
         };
         return __inline_JsonMapSerializer_SerializeMap__end_3: block -> ref null "core:serde/SerializeError" {
-            String::append_char(m.buf, 125);
+            String::push(m.buf, 125);
             break __inline_JsonMapSerializer_SerializeMap__end_3: ref.null none;
         };
     };
@@ -4065,7 +4065,7 @@ fn TreeMap<String,String>::entries(self) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = value_copy "core:allocator/TreeMapEntry<String,String>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
-                    Array<Tuple<String,String>>::append(result, "tuple/[String, String]" { 0: entry.key, 1: entry.value });
+                    Array<Tuple<String,String>>::push(result, "tuple/[String, String]" { 0: entry.key, 1: entry.value });
                 };
             } else {
                 break b310;
@@ -4076,7 +4076,7 @@ fn TreeMap<String,String>::entries(self) {
     return result;
 }
 
-fn Array<Tuple<String,String>>::append(self, value) {
+fn Array<Tuple<String,String>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -4151,7 +4151,7 @@ fn TreeMap<String,String>::insert(self, key, value) {
         break __inline_Array_TreeMapEntry_String_String____len_1: __local_8.used;
     };
     entry = "core:allocator/TreeMapEntry<String,String>" { key: key, value: value, deleted: 0 };
-    Array<TreeMapEntry<String,String>>::append(self.entries, entry);
+    Array<TreeMapEntry<String,String>>::push(self.entries, entry);
     self.root = TreeMap<String,String>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
@@ -4225,7 +4225,7 @@ fn TreeMap<String,String>::skew(self, node) {
     return ref.null none;
 }
 
-fn Array<TreeMapEntry<String,String>>::append(self, value) {
+fn Array<TreeMapEntry<String,String>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -4322,7 +4322,7 @@ fn TreeMap<String,i32>^IndexValue::index_value(self, key) {
     if index < 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_3 = String { repr: builtin::array_new<u8>(31), used: 0 };
-            String::append(__local_3, String { repr: array.new_data<u8>("key not found: "), used: 15 });
+            String::push_str(__local_3, String { repr: array.new_data<u8>("key not found: "), used: 15 });
             __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
             String^Inspect::inspect(key, __local_4);
             break __tmpl: __local_3;
@@ -4479,7 +4479,7 @@ fn TreeMap<String,i32>::insert(self, key, value) {
         break __inline_Array_TreeMapEntry_String_i32____len_1: __local_8.used;
     };
     entry = "core:allocator/TreeMapEntry<String,i32>" { key: key, value: value, deleted: 0 };
-    Array<TreeMapEntry<String,i32>>::append(self.entries, entry);
+    Array<TreeMapEntry<String,i32>>::push(self.entries, entry);
     self.root = TreeMap<String,i32>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
@@ -4553,7 +4553,7 @@ fn TreeMap<String,i32>::skew(self, node) {
     return ref.null none;
 }
 
-fn Array<TreeMapEntry<String,i32>>::append(self, value) {
+fn Array<TreeMapEntry<String,i32>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -4612,7 +4612,7 @@ fn TreeMap<String,i32>^Serialize::serialize<JsonSerializer>(self, s) {
     entries = TreeMap<String,i32>::entries(self);
     map_r = __inline_JsonSerializer_Serializer__begin_map_0: block -> ref Result<JsonMapSerializer,SerializeError> {
         __local_20 = entries.used;
-        String::append_char(s, 123);
+        String::push(s, 123);
         break __inline_JsonSerializer_Serializer__begin_map_0: Result<JsonMapSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonMapSerializer" { buf: s, count: 0, need_value: 0 } };
     };
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(map_r) {
@@ -4641,7 +4641,7 @@ fn TreeMap<String,i32>^Serialize::serialize<JsonSerializer>(self, s) {
             };
         };
         return __inline_JsonMapSerializer_SerializeMap__end_3: block -> ref null "core:serde/SerializeError" {
-            String::append_char(m.buf, 125);
+            String::push(m.buf, 125);
             break __inline_JsonMapSerializer_SerializeMap__end_3: ref.null none;
         };
     };
@@ -4695,7 +4695,7 @@ fn TreeMap<String,i32>::entries(self) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = value_copy "core:allocator/TreeMapEntry<String,i32>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
-                    Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: entry.key, 1: entry.value });
+                    Array<Tuple<String,i32>>::push(result, "tuple/[String, i32]" { 0: entry.key, 1: entry.value });
                 };
             } else {
                 break b385;
@@ -4706,7 +4706,7 @@ fn TreeMap<String,i32>::entries(self) {
     return result;
 }
 
-fn Array<Tuple<String,i32>>::append(self, value) {
+fn Array<Tuple<String,i32>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -4761,7 +4761,7 @@ fn ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(self) {
 fn "core:json/JsonSerializer^Serializer::serialize_i32"(self, v) {  // from core:json
     let __local_2: ref String;
     let __local_3: ref Formatter;
-    String::append(self, __tmpl: block -> ref String {
+    String::push_str(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         i32::fmt_decimal(v, __local_3);
@@ -4772,16 +4772,16 @@ fn "core:json/JsonSerializer^Serializer::serialize_i32"(self, v) {  // from core
 
 fn "core:json/JsonSerializer^Serializer::serialize_bool"(self, v) {  // from core:json
     if v {
-        String::append_char(self, 116);
-        String::append_char(self, 114);
-        String::append_char(self, 117);
-        String::append_char(self, 101);
+        String::push(self, 116);
+        String::push(self, 114);
+        String::push(self, 117);
+        String::push(self, 101);
     } else {
-        String::append_char(self, 102);
-        String::append_char(self, 97);
-        String::append_char(self, 108);
-        String::append_char(self, 115);
-        String::append_char(self, 101);
+        String::push(self, 102);
+        String::push(self, 97);
+        String::push(self, 108);
+        String::push(self, 115);
+        String::push(self, 101);
     };
     return ref.null none;
 }
@@ -4861,13 +4861,13 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {  // from core:json
         return ref.as_non_null(__inline_DeserializeError__malformed_6: block -> ref "core:serde/DeserializeError" {
             __local_12 = __tmpl: block -> ref String {
                 __local_3 = String { repr: builtin::array_new<u8>(53), used: 0 };
-                String::append(__local_3, String { repr: array.new_data<u8>("expected '"), used: 10 });
+                String::push_str(__local_3, String { repr: array.new_data<u8>("expected '"), used: 10 });
                 __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
                 char^Display::fmt(c & 255, __local_4);
-                String::append(__local_3, String { repr: array.new_data<u8>("', found '"), used: 10 });
+                String::push_str(__local_3, String { repr: array.new_data<u8>("', found '"), used: 10 });
                 __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
                 char^Display::fmt(b & 255, __local_4);
-                String::append_char(__local_3, 39);
+                String::push(__local_3, 39);
                 break __tmpl: __local_3;
             };
             __local_13 = builtin::i64_extend_i32_s(self.pos);
@@ -5118,21 +5118,21 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     break __inline_String__get_byte_18: builtin::array_get_u8(__local_68.repr, __local_69);
                 };
                 if esc == 34 {
-                    String::append_char(result_8, 34);
+                    String::push(result_8, 34);
                 } else if esc == 92 {
-                    String::append_char(result_8, 92);
+                    String::push(result_8, 92);
                 } else if esc == 47 {
-                    String::append_char(result_8, 47);
+                    String::push(result_8, 47);
                 } else if esc == 110 {
-                    String::append_char(result_8, 10);
+                    String::push(result_8, 10);
                 } else if esc == 114 {
-                    String::append_char(result_8, 13);
+                    String::push(result_8, 13);
                 } else if esc == 116 {
-                    String::append_char(result_8, 9);
+                    String::push(result_8, 9);
                 } else if esc == 98 {
-                    String::append_char(result_8, 8);
+                    String::push(result_8, 8);
                 } else if esc == 102 {
-                    String::append_char(result_8, 12);
+                    String::push(result_8, 12);
                 } else if esc == 117 {
                     self.pos = _hfs_pos_98;
                     let __sroa_r_discriminant: i32;
@@ -5142,7 +5142,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     _hfs_pos_98 = self.pos;
                     if __sroa_r_discriminant == 0 {
                         c_14 = __sroa_r_case0_payload_0;
-                        String::append_char(result_8, c_14);
+                        String::push(result_8, c_14);
                     };
                     if __sroa_r_discriminant == 1 {
                         e = __sroa_r_case1_payload_0;
@@ -5154,10 +5154,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__malformed_21: block -> ref "core:serde/DeserializeError" {
                         __local_72 = __tmpl: block -> ref String {
                             __local_32 = String { repr: builtin::array_new<u8>(34), used: 0 };
-                            String::append(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
+                            String::push_str(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
                             __local_33 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_32 };
                             char^Display::fmt(esc & 255, __local_33);
-                            String::append_char(__local_32, 39);
+                            String::push(__local_32, 39);
                             self.pos = _hfs_pos_98;
                             break __tmpl: __local_32;
                         };
@@ -5182,7 +5182,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     });
                 };
                 if seq_len == 1 {
-                    String::append_char(result_8, b & 255);
+                    String::push(result_8, b & 255);
                 } else if seq_len == 2 {
                     b0_17 = b;
                     b1_18 = __inline_String__get_byte_24: block -> u8 {
@@ -5197,7 +5197,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     multivalue_bind [__sroa___pattern_temp_2_discriminant, __sroa___pattern_temp_2_payload_0] = char::from_u32(code_19);
                     if __sroa___pattern_temp_2_discriminant == 0 {
                         c_20 = __sroa___pattern_temp_2_payload_0;
-                        String::append_char(result_8, c_20);
+                        String::push(result_8, c_20);
                     };
                 } else if seq_len == 3 {
                     b0_21 = b;
@@ -5219,7 +5219,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     multivalue_bind [__sroa___pattern_temp_3_discriminant, __sroa___pattern_temp_3_payload_0] = char::from_u32(code_24);
                     if __sroa___pattern_temp_3_discriminant == 0 {
                         c_25 = __sroa___pattern_temp_3_payload_0;
-                        String::append_char(result_8, c_25);
+                        String::push(result_8, c_25);
                     };
                 } else {
                     b0_26 = b;
@@ -5247,7 +5247,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     multivalue_bind [__sroa___pattern_temp_4_discriminant, __sroa___pattern_temp_4_payload_0] = char::from_u32(code_30);
                     if __sroa___pattern_temp_4_discriminant == 0 {
                         c_31 = __sroa___pattern_temp_4_payload_0;
-                        String::append_char(result_8, c_31);
+                        String::push(result_8, c_31);
                     };
                 };
                 _hfs_pos_98 = _hfs_pos_98 + seq_len;
@@ -5682,7 +5682,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l499;
             };
@@ -5702,7 +5702,7 @@ fn Formatter::pad(self, content) {
     } else {
         content_len >= self.width;
     } {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         return;
     };
     padding = self.width - content_len;
@@ -5710,17 +5710,17 @@ fn Formatter::pad(self, content) {
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, padding);
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
         Formatter::write_char_n(self, self.fill, right_pad);
     } else {
         Formatter::write_char_n(self, self.fill, padding);
-        String::append(self.buf, content);
+        String::push_str(self.buf, content);
     };
 }
 
@@ -5750,20 +5750,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -5773,10 +5773,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -5786,10 +5786,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -5797,10 +5797,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::push_str(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::push_str(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
@@ -5812,7 +5812,7 @@ fn String^Inspect::inspect(self, f) {
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
     let _licm_buf_33: ref String;
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
     __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
@@ -5829,22 +5829,22 @@ fn String^Inspect::inspect(self, f) {
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 34);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 110);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 114);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::append_char(_licm_buf_33, 92);
-                    String::append_char(_licm_buf_33, 116);
+                    String::push(_licm_buf_33, 92);
+                    String::push(_licm_buf_33, 116);
                 } else {
-                    String::append_char(_licm_buf_33, c);
+                    String::push(_licm_buf_33, c);
                 };
             } else {
                 break b522;
@@ -5852,7 +5852,7 @@ fn String^Inspect::inspect(self, f) {
             continue l523;
         };
     };
-    String::append_char(f.buf, 34);
+    String::push(f.buf, 34);
 }
 
 export fn __cm_export____test_0_treemap_serialize_string_keys as "__test_0_treemap_serialize_string_keys"
