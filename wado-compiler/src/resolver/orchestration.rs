@@ -514,11 +514,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     cache.insert(name.clone());
                 }
             }
-            for m in all_resource_types.values() {
-                for name in m.keys() {
-                    cache.insert(name.clone());
-                }
-            }
             for name in crate::tir::PrimitiveType::all_primitive_names() {
                 cache.insert(name.to_string());
             }
@@ -529,7 +524,19 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // At this point all type names from all modules are known, so any unrecognized
         // Named type is truly undefined. This catches undefined types that would silently
         // become UNKNOWN in static pre-resolution.
-        Self::validate_type_definitions(modules, &global_known_type_names, logger)?;
+        // Resource type names are kept separate from global_known_type_names because
+        // adding them would break is_known_type_name() used in impl block type parameter
+        // inference (e.g., `impl Request { ... }` would stop recognizing Request's methods).
+        let resource_type_names: IndexSet<String> = all_resource_types
+            .values()
+            .flat_map(|m| m.keys().cloned())
+            .collect();
+        Self::validate_type_definitions(
+            modules,
+            &global_known_type_names,
+            &resource_type_names,
+            logger,
+        )?;
 
         // Second pass: resolve each module with per-module function_return_types and imports
         let _span = logger.span("resolve/modules");
@@ -1040,6 +1047,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     fn validate_type_definitions(
         modules: &IndexMap<ModuleSource, Module>,
         known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
         logger: &Logger<'_, H>,
     ) -> Result<(), Bail> {
         for (module_source, module) in modules {
@@ -1056,6 +1064,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             Self::validate_ast_type_names(
                                 &field.ty,
                                 known_type_names,
+                                resource_type_names,
                                 &type_params,
                                 logger,
                             )?;
@@ -1072,6 +1081,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 Self::validate_ast_type_names(
                                     payload_ty,
                                     known_type_names,
+                                    resource_type_names,
                                     &type_params,
                                     logger,
                                 )?;
@@ -1087,6 +1097,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         Self::validate_ast_type_names(
                             &newtype_decl.ty,
                             known_type_names,
+                            resource_type_names,
                             &type_params,
                             logger,
                         )?;
@@ -1106,6 +1117,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     fn validate_ast_type_names(
         ty: &Type,
         known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
         type_params: &[&str],
         logger: &Logger<'_, H>,
     ) -> Result<(), Bail> {
@@ -1120,6 +1132,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 if known_type_names.contains(&named.name) {
                     return Ok(());
                 }
+                if resource_type_names.contains(&named.name) {
+                    return Ok(());
+                }
                 logger.error(TypeError::UnknownType {
                     name: named.name.clone(),
                     span: named.span,
@@ -1128,32 +1143,63 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
             Type::Generic(generic) => {
                 for arg in &generic.args {
-                    Self::validate_ast_type_names(arg, known_type_names, type_params, logger)?;
+                    Self::validate_ast_type_names(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
                 }
                 Ok(())
             }
             Type::NamespacedGeneric(ng) => {
                 for arg in &ng.args {
-                    Self::validate_ast_type_names(arg, known_type_names, type_params, logger)?;
+                    Self::validate_ast_type_names(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
                 }
                 Ok(())
             }
             Type::Reference(inner) | Type::MutReference(inner) => {
-                Self::validate_ast_type_names(inner, known_type_names, type_params, logger)
+                Self::validate_ast_type_names(
+                    inner,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )
             }
             Type::Tuple(elems) => {
                 for elem in elems {
-                    Self::validate_ast_type_names(elem, known_type_names, type_params, logger)?;
+                    Self::validate_ast_type_names(
+                        elem,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
                 }
                 Ok(())
             }
             Type::Function(ft) => {
                 for param in &ft.params {
-                    Self::validate_ast_type_names(param, known_type_names, type_params, logger)?;
+                    Self::validate_ast_type_names(
+                        param,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
                 }
                 Self::validate_ast_type_names(
                     &ft.return_type,
                     known_type_names,
+                    resource_type_names,
                     type_params,
                     logger,
                 )
