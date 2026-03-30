@@ -1543,9 +1543,7 @@ pub fn flatten_param_type(
                     return result;
                 }
                 // WASI struct (record): concatenation of all field flat types
-                if let Some(fields) =
-                    wasi_registry.get_struct_fields_with_wado_names(name)
-                {
+                if let Some(fields) = wasi_registry.get_struct_fields_with_wado_names(name) {
                     return fields
                         .iter()
                         .flat_map(|(_, _, ft)| flatten_param_type(ft, wasi_registry))
@@ -1751,8 +1749,7 @@ fn synthesize_lower_option_to_memory(
     )));
 
     // Compute payload offset (aligned to payload alignment)
-    let payload_align =
-        crate::component_model::cm_align_with_registry(inner_type, wasi_registry);
+    let payload_align = crate::component_model::cm_align_with_registry(inner_type, wasi_registry);
     let payload_offset = crate::cm_abi::align_to(1, payload_align);
 
     let payload_addr = if payload_offset == 0 {
@@ -1766,8 +1763,11 @@ fn synthesize_lower_option_to_memory(
         let mut tt = type_table.borrow_mut();
         wasi_type_to_type_id_with_registry(inner_type, &mut tt, Some(wasi_registry))
     };
-    let payload_expr =
-        variant_payload(local_ref(value_local, "__opt_val", value_type_id), 0, inner_type_id);
+    let payload_expr = variant_payload(
+        local_ref(value_local, "__opt_val", value_type_id),
+        0,
+        inner_type_id,
+    );
 
     let case_stmts = synthesize_lower_wasi_type_to_memory(
         inner_type,
@@ -1815,11 +1815,7 @@ fn synthesize_flatten_value_to_flat_args(
                 &format!("{prefix}_packed"),
                 packed_local,
                 TypeTable::I64,
-                internal_call(
-                    "cm_lower_string",
-                    vec![value],
-                    TypeTable::I64,
-                ),
+                internal_call("cm_lower_string", vec![value], TypeTable::I64),
             ));
             // ptr = packed as i32 (low 32 bits)
             flat_args.push(cast(
@@ -1845,15 +1841,14 @@ fn synthesize_flatten_value_to_flat_args(
         Type::Named(n) if wasi_registry.is_variant(&n.name) => {
             let vt = value.type_id;
             let val_local = alloc_local(next_local, local_types, vt);
-            stmts.push(let_stmt(
-                &format!("{prefix}_val"),
-                val_local,
-                vt,
-                value,
-            ));
+            stmts.push(let_stmt(&format!("{prefix}_val"), val_local, vt, value));
 
             // Push discriminant
-            flat_args.push(variant_tag(local_ref(val_local, &format!("{prefix}_val"), vt)));
+            flat_args.push(variant_tag(local_ref(
+                val_local,
+                &format!("{prefix}_val"),
+                vt,
+            )));
 
             // Compute max flat payload count across all cases (the "join")
             let cases = wasi_registry.get_variant_cases(&n.name).unwrap_or(&[]);
@@ -1981,7 +1976,11 @@ fn synthesize_flatten_option_to_flat_args(
             "Some",
         ),
     ));
-    flat_args.push(local_ref(disc_local, &format!("{prefix}_disc"), TypeTable::I32));
+    flat_args.push(local_ref(
+        disc_local,
+        &format!("{prefix}_disc"),
+        TypeTable::I32,
+    ));
 
     // Compute inner flat types
     let inner_flat_types = flatten_param_type(inner_type, wasi_registry);
@@ -1997,12 +1996,7 @@ fn synthesize_flatten_option_to_flat_args(
             TypeTable::I64 => i64_const(0),
             _ => i32_const(0),
         };
-        stmts.push(let_mut_stmt(
-            &format!("{prefix}_inner{i}"),
-            local,
-            ft,
-            zero,
-        ));
+        stmts.push(let_mut_stmt(&format!("{prefix}_inner{i}"), local, ft, zero));
         inner_locals.push((local, ft));
     }
 
@@ -7627,7 +7621,8 @@ fn rewrite_calls_in_expr(
                 for (i, arg) in args.iter().enumerate() {
                     if i < adapter.params.len() && adapter.params[i].type_id != arg.expr.type_id {
                         let is_gc_passthrough = wasi_func.is_some_and(|f| {
-                            i < f.params.len() && is_gc_passthrough_param(&f.params[i].2, wasi_registry)
+                            i < f.params.len()
+                                && is_gc_passthrough_param(&f.params[i].2, wasi_registry)
                         });
                         if is_streaming && adapter.params[i].type_id == TypeTable::I32 {
                             // Streaming: keep adapter param as i32, cast the arg instead
@@ -7768,7 +7763,10 @@ fn rewrite_calls_in_expr(
                         let wasi_param_idx = i + 1;
                         let is_gc_passthrough = method_func.is_some_and(|f| {
                             wasi_param_idx < f.params.len()
-                                && is_gc_passthrough_param(&f.params[wasi_param_idx].2, wasi_registry)
+                                && is_gc_passthrough_param(
+                                    &f.params[wasi_param_idx].2,
+                                    wasi_registry,
+                                )
                         });
                         if is_streaming && adapter.params[param_idx].type_id == TypeTable::I32 {
                             // Streaming: keep adapter param as i32, cast the arg instead
