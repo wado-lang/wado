@@ -49,14 +49,14 @@ Wado intentionally omits Rust concepts tied to ownership and lifetimes (`as_str(
 | `reverse()`              | `reverse()`                               | NEW                                  |
 | `dedup()`                | —                                         | use `TreeSet`                        |
 | `dedup_by(f)`            | —                                         | use `TreeSet`                        |
-| `retain(pred)`           | `retain(pred)`                            | NEW                                  |
+| `retain(pred)`           | —                                         | use `.iter().filter().collect()`     |
 | `windows(n)`             | `windows(n)`                              | NEW                                  |
 | `chunks(n)`              | `chunks(n)`                               | NEW                                  |
 | `repeat(n)`              | `repeat(n)`                               | NEW                                  |
 | `concat()` / `join(sep)` | `join(sep)`                               | NEW                                  |
 | `split_at(i)`            | —                                         | use `slice` + `truncate`             |
 | `split_off(i)`           | —                                         | use `slice` + `truncate`             |
-| `drain(..)`              | —                                         | complex; use `retain` or manual loop |
+| `drain(..)`              | —                                         | complex; use iterator                |
 | `rotate_left(n)`         | —                                         | niche                                |
 | `rotate_right(n)`        | —                                         | niche                                |
 | `resize(n, val)`         | —                                         | use `truncate` + `extend`            |
@@ -106,7 +106,6 @@ impl<T> Array<T> {
     pub fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I);
     pub fn reverse(&mut self);
     pub fn repeat(&self, n: i32) -> Array<T>;
-    pub fn retain(&mut self, pred: fn(&T) -> bool);
     pub fn windows(&self, size: i32) -> WindowsIter<T>;
     pub fn chunks(&self, size: i32) -> ChunksIter<T>;
 }
@@ -178,7 +177,7 @@ impl<T: Display> Array<T> {
 | `reserve(n)`                         | `reserve(n)`                          | NEW                                     |
 | `shrink_to_fit()`                    | `shrink_to_fit()`                     | NEW                                     |
 | `drain(..)`                          | —                                     | complex                                 |
-| `retain(pred)`                       | `retain(pred)`                        | NEW                                     |
+| `retain(pred)`                       | —                                     | use `.chars().filter().collect()`       |
 | `split_off(i)`                       | —                                     | niche                                   |
 | `encode_utf16()`                     | —                                     | not needed for Wasm/WASI                |
 
@@ -243,7 +242,6 @@ impl String {
     pub fn to_lowercase(&self) -> String;
     pub fn to_uppercase(&self) -> String;
     pub fn repeat(&self, n: i32) -> String;
-    pub fn retain(&mut self, pred: fn(&char) -> bool);
     pub fn char_indices(&self) -> StrCharIndicesIter;        // Iterator<Item = [i32, char]>
 }
 ```
@@ -297,7 +295,7 @@ These have no direct Rust counterpart but are useful in Wado:
    - `String::split`, `String::replace`, `String::find`
    - `Array::join`, `Array::contains`
 2. **Medium**:
-   - `insert`, `remove`, `reverse`, `extend`, `retain`
+   - `insert`, `remove`, `reverse`, `extend`
    - `String::lines`, `String::split_whitespace`, `String::repeat`
    - `Array::first`, `Array::repeat`
 3. **Lower**:
