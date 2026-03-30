@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774877096603,
+  "lastUpdate": 1774882381457,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35555,6 +35555,180 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_parse (-O3)",
             "value": 4014,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ffd2800339b002bdcf938ec033af6f877bef9923",
+          "message": "Merge pull request #737 from wado-lang/claude/fix-e2e-todos-os4F9\n\nFix WASI HTTP E2E TODO tests",
+          "timestamp": "2026-03-30T23:50:02+09:00",
+          "tree_id": "ded8214201f97b6f03ea7a09c083dd5c461d03b4",
+          "url": "https://github.com/wado-lang/wado/commit/ffd2800339b002bdcf938ec033af6f877bef9923"
+        },
+        "date": 1774882381208,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime (-O1)",
+            "value": 3736,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O1)",
+            "value": 162,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O1)",
+            "value": 170,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O1)",
+            "value": 125,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 589,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 180,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O1)",
+            "value": 19,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O1)",
+            "value": 78,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O1)",
+            "value": 50,
+            "unit": "ms"
+          },
+          {
+            "name": "sqlite_parse (-O1)",
+            "value": 3973,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O2)",
+            "value": 3733,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O2)",
+            "value": 162,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O2)",
+            "value": 60,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O2)",
+            "value": 56,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 253,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 106,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O2)",
+            "value": 18,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O2)",
+            "value": 76,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O2)",
+            "value": 50,
+            "unit": "ms"
+          },
+          {
+            "name": "sqlite_parse (-O2)",
+            "value": 3879,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O3)",
+            "value": 3733,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O3)",
+            "value": 162,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O3)",
+            "value": 59,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O3)",
+            "value": 56,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 254,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 98,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O3)",
+            "value": 18,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O3)",
+            "value": 89,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O3)",
+            "value": 49,
+            "unit": "ms"
+          },
+          {
+            "name": "sqlite_parse (-O3)",
+            "value": 4076,
             "unit": "ms"
           }
         ]
