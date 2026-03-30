@@ -1451,10 +1451,15 @@ fn replace_in_block(
         //
         // `break <label>` in a for-loop desugars to a labeled block exit that
         // skips post-loop write-back statements placed inside the labeled block.
-        if matches!(
-            stmt.kind,
-            TirStmtKind::Return { .. } | TirStmtKind::Break { .. }
-        ) {
+        //
+        // Exception: breaks targeting inlined labeled blocks (label starts with
+        // `__inline_`) are value-returning exits within the same scope — the
+        // containing block's own exit will handle the write-back, so we skip
+        // inserting redundant stores here.
+        if matches!(stmt.kind, TirStmtKind::Return { .. })
+            || matches!(&stmt.kind, TirStmtKind::Break { label, .. }
+                if !label.as_ref().is_some_and(|l| l.starts_with("__inline_")))
+        {
             replace_in_stmt(&mut stmt, candidates, &ctx);
             new_stmts.extend(make_write_back_stmts(candidates, span));
             new_stmts.push(stmt);
