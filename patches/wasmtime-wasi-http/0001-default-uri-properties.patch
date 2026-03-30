@@ -1,0 +1,31 @@
+Default authority to "localhost" and path to "/" for HTTP/HTTPS requests.
+
+When a guest creates an outgoing HTTP request without setting authority or
+path_with_query, the URI builder fails because HTTP/HTTPS URIs require an
+authority component. This is not a regression — it has been this way since
+the initial p3 implementation — but it is inconsistent with
+default_send_request(), which already defaults path_with_query to "/".
+
+--- a/src/p3/request.rs
++++ b/src/p3/request.rs
+@@ -224,13 +224,17 @@
+             Some(scheme) if hooks.is_supported_scheme(&scheme) => scheme,
+             Some(..) => return Err(ErrorCode::HttpProtocolError.into()),
+         };
+-        let mut uri = Uri::builder().scheme(scheme);
++        let mut uri = Uri::builder().scheme(scheme.clone());
+         if let Some(authority) = authority {
+             uri = uri.authority(authority)
+-        };
++        } else if scheme == Scheme::HTTP || scheme == Scheme::HTTPS {
++            uri = uri.authority("localhost");
++        }
+         if let Some(path_with_query) = path_with_query {
+             uri = uri.path_and_query(path_with_query)
+-        };
++        } else {
++            uri = uri.path_and_query("/");
++        }
+         let uri = uri.build().map_err(|err| {
+             debug!(?err, "failed to build request URI");
+             ErrorCode::HttpRequestUriInvalid
