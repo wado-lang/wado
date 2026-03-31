@@ -1,0 +1,251 @@
+use { ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind } from "./ir.wado";
+use { LitToken } from "./lexer_gen.wado";
+use { array_contains_str, literal_const_name } from "./gen_util.wado";
+use { TreeMap } from "core:collections";
+
+pub struct GenContext {
+    pub parser_rules: Array<ParserRule>,
+    pub lit_tokens: Array<LitToken>,
+    rule_index: TreeMap<String, i32>,
+    first_cache: TreeMap<String, Array<String>>,
+    single_token_cache: TreeMap<String, bool>,
+}
+
+impl GenContext {
+    pub fn new(parser_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> GenContext {
+        let mut rule_index = TreeMap::<String, i32>::new();
+        for let mut i = 0; i < parser_rules.len(); i += 1 {
+            rule_index[parser_rules[i].name] = i;
+        }
+        return GenContext {
+            parser_rules: *parser_rules,
+            lit_tokens: *lit_tokens,
+            rule_index,
+            first_cache: TreeMap::<String, Array<String>>::new(),
+            single_token_cache: TreeMap::<String, bool>::new(),
+        };
+    }
+
+    pub fn find_rule(&self, name: &String) -> Option<&ParserRule> {
+        let idx = self.rule_index.get(*name);
+        if let Some(i) = idx {
+            return Option::Some(&self.parser_rules[i]);
+        }
+        return null;
+    }
+
+    pub fn first_of_rule(&mut self, name: &String, visiting: &mut Array<String>) -> Array<String> {
+        let cached = self.first_cache.get(*name);
+        if let Some(result) = cached {
+            return result;
+        }
+
+        if array_contains_str(visiting, name) {
+            return [];
+        }
+
+        let is_top_level = visiting.is_empty();
+        visiting.append(*name);
+
+        let mut result: Array<String> = [];
+        let rule = self.find_rule(name);
+        if let Some(rule) = rule {
+            for let alt of &rule.alternatives {
+                let af = self.first_of_alt(alt, visiting);
+                extend_dedup(&mut result, &af);
+            }
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if is_top_level {
+            self.first_cache[*name] = result;
+        }
+
+        return result;
+    }
+
+    pub fn first_of_element(&mut self, elem: &Element, visiting: &mut Array<String>) -> Array<String> {
+        if let TokenRef(name) = *elem {
+            return [`TK_{name}`];
+        }
+        if let Literal(text) = *elem {
+            return [literal_const_name(&text)];
+        }
+        if let RuleRef(name) = *elem {
+            return self.first_of_rule(&name, visiting);
+        }
+        if let Group(alts) = *elem {
+            let mut result: Array<String> = [];
+            for let alt of alts {
+                let af = self.first_of_alt(&alt, visiting);
+                extend_dedup(&mut result, &af);
+            }
+            return result;
+        }
+        if let Repeat(rep) = *elem {
+            return self.first_of_element(&rep.element, visiting);
+        }
+        if let Label(lab) = *elem {
+            return self.first_of_element(&lab.element, visiting);
+        }
+        return [];
+    }
+
+    pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut Array<String>) -> Array<String> {
+        let mut result: Array<String> = [];
+        for let elem of &alt.elements {
+            let elem_first = self.first_of_element(elem, visiting);
+            extend_dedup(&mut result, &elem_first);
+            if !is_nullable(elem) {
+                break;
+            }
+        }
+        return result;
+    }
+
+    pub fn first_of_elements_from(&mut self, elements: &Array<Element>, start: i32) -> Array<String> {
+        let mut result: Array<String> = [];
+        for let mut i = start; i < elements.len(); i += 1 {
+            let mut visiting: Array<String> = [];
+            let elem_first = self.first_of_element(&elements[i], &mut visiting);
+            extend_dedup(&mut result, &elem_first);
+            if !is_nullable(&elements[i]) {
+                break;
+            }
+        }
+        return result;
+    }
+
+    pub fn alt_position_first_sets(&mut self, alt: &Alternative, max_depth: i32) -> Array<Array<String>> {
+        let mut result: Array<Array<String>> = [];
+        let mut start = 0;
+        while result.len() < max_depth && start < alt.elements.len() {
+            if result.len() > 0 && is_nullable(&alt.elements[start]) {
+                break;
+            }
+
+            let first = self.first_of_elements_from(&alt.elements, start);
+            if first.len() == 0 {
+                break;
+            }
+            result.append(first);
+            let mut skipped_nullable = false;
+            while start < alt.elements.len() {
+                let was_nullable = is_nullable(&alt.elements[start]);
+                if was_nullable {
+                    skipped_nullable = true;
+                }
+                start += 1;
+                if !was_nullable {
+                    break;
+                }
+            }
+            if skipped_nullable {
+                break;
+            }
+        }
+        return result;
+    }
+
+    pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
+        let cached = self.single_token_cache.get(*name);
+        if let Some(val) = cached {
+            return val;
+        }
+
+        if array_contains_str(visiting, name) {
+            return false;
+        }
+
+        let is_top_level = visiting.is_empty();
+        visiting.append(*name);
+
+        let mut result = false;
+        let rule = self.find_rule(name);
+        if let Some(rule) = rule {
+            let mut all_alts_ok = true;
+            for let alt of &rule.alternatives {
+                let mut non_nullable_count = 0;
+                let mut single_ok = false;
+                for let elem of &alt.elements {
+                    if is_nullable(elem) {
+                        continue;
+                    }
+                    non_nullable_count += 1;
+                    if non_nullable_count > 1 {
+                        break;
+                    }
+                    if let TokenRef(_) | Literal(_) = *elem {
+                        single_ok = true;
+                    } else if let RuleRef(r) = *elem {
+                        single_ok = self.rule_is_single_token(&r, visiting);
+                    }
+                }
+                if non_nullable_count != 1 || !single_ok {
+                    all_alts_ok = false;
+                    break;
+                }
+            }
+            result = all_alts_ok;
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if is_top_level {
+            self.single_token_cache[*name] = result;
+        }
+
+        return result;
+    }
+}
+
+pub fn is_nullable(elem: &Element) -> bool {
+    if let Repeat(rep) = *elem {
+        if let Star | Optional = rep.kind {
+            return true;
+        }
+    }
+    return false;
+}
+
+pub fn sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
+    for let x of a {
+        if array_contains_str(b, x) {
+            return true;
+        }
+    }
+    return false;
+}
+
+pub fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
+    for let alt of alts {
+        if alt.elements.len() != 1 {
+            return false;
+        }
+        let elem = &alt.elements[0];
+        if let TokenRef(_) | Literal(_) = *elem {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+fn extend_dedup(target: &mut Array<String>, source: &Array<String>) {
+    for let item of source {
+        if !array_contains_str(target, item) {
+            target.append(*item);
+        }
+    }
+}
+
+fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
+    let mut new_arr: Array<String> = [];
+    for let v of visiting {
+        if *v != *name {
+            new_arr.append(*v);
+        }
+    }
+    *visiting = new_arr;
+}
