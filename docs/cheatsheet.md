@@ -5,8 +5,7 @@ Quick reference for Wado syntax.
 ## Shebang
 
 ```wado
-#!/usr/bin/env wado
-// Shebang is only valid on the first line and is ignored by the compiler.
+#!/usr/bin/env wado run
 ```
 
 ## Comments
@@ -19,14 +18,29 @@ Quick reference for Wado syntax.
 /// Doc comment
 ```
 
+## Imports
+
+```wado
+use { println, eprintln } from "core:cli";
+use { Stdout, Stdout::{write_via_stream} } from "wasi:cli";
+use utils from "./utils.wado";                // namespace import
+use { foo as bar } from "./mod.wado";         // rename
+pub use { foo, bar } from "./internal.wado";  // re-export
+```
+
+Namespace imports make all pub symbols from the source module directly available:
+
+```wado
+use geo from "./geo.wado";
+let p = geo::Point::new(1, 2);  // access via namespace
+```
+
 ## Literals
 
 ```wado
 // Numbers
 42              // integer literal (defaults to i32 without type context)
-42 as i64       // i64 via cast
 3.14            // float literal (defaults to f64 without type context)
-3.14 as f32     // f32 via cast
 1_000_000       // underscores for readability
 0xFF            // hex
 0b1010          // binary
@@ -42,7 +56,7 @@ foo(100);                      // integer literal coerced to i64
 
 // Strings
 "Hello"         // String
-`Hello, {name}` // Template string
+`Hello, {name}` // Template string (see Strings for details)
 `\{"key"\}`     // Escaped braces in template string → {"key"}
 "Hello,
 world!"         // Multi-line string
@@ -94,6 +108,12 @@ fn example() {
 ```
 
 Global variables map directly to WebAssembly globals. Constant expressions are evaluated at instantiation; non-constant expressions use lazy initialization.
+
+## Value Semantics
+
+See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+
+Wado uses GC-based memory management (Wasm GC). There is no borrow checker or lifetime annotations. Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
 ## Types
 
@@ -170,6 +190,7 @@ let n = arr.len();                       // get length
 let empty = arr.is_empty();              // check if empty
 let first = arr[0];                      // index access (read)
 arr[0] = 100;                            // index assignment (write, requires mut)
+// Note: there is no iter_mut(); mutate elements via index access
 
 // Sorting
 let mut nums: Array<i32> = [5, 3, 8, 1];
@@ -183,8 +204,6 @@ nums.sort_by(|a: &i32, b: &i32| { ... });  // sort with custom Ordering comparat
 `String` is a prelude struct with a literal syntax.
 
 ```wado
-let s = "hello";                         // String literal
-
 // Template strings (interpolation)
 let name = "Alice";
 let greeting = `Hello, {name}!`;         // "Hello, Alice!"
@@ -266,6 +285,12 @@ let { x: horizontal, y: vertical } = p;  // renaming
 let { name, .. } = person;            // ignore remaining fields
 let mut { x, y } = p;                 // mutable
 
+// Recursive types (no Box needed — GC handles indirection)
+struct Node {
+    value: i32,
+    next: Option<Node>,
+}
+
 // Nested destructuring
 let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
 
@@ -276,6 +301,8 @@ for let { x, y } of points {
 ```
 
 ### Enums
+
+Wado has three distinct type kinds for Component Model alignment: enums (no payload), variants (with payload), and flags (bitmask).
 
 Enums are discriminated values without payloads (i32 discriminant):
 
@@ -294,8 +321,6 @@ let name = match c {
     Green => "green",
     Blue => "blue",
 };
-
-if c matches { Red } { println("it's red"); }
 ```
 
 ### Variants
@@ -328,17 +353,9 @@ let err_val: Result<i32, String> = Result::Err("fail");
 // Explicit turbofish (required when inference is insufficient)
 let opt = Option::<i32>::Some(42);
 let res = Result::<i32, String>::Ok(42);
-
-// Pattern matching
-match ome_val {
-    Some(x) => println(`Got value: {x}`);
-    None    => println(`Got null`);
-}
-
-if let Number(n) = parse_result {
-    println(`Got: {n}`);
-}
 ```
+
+See Control Flow for pattern matching with `match`, `if let`, and `matches`.
 
 ### Flags
 
@@ -361,7 +378,207 @@ let all  = Perms::all();   // 7 (all bits set)
 assert rw as u32 == 3;     // cast to/from u32
 ```
 
-## Function, Methods, and Closures
+## References
+
+```wado
+let x = 42;
+let r = &x;           // immutable reference
+let v = *r;           // dereference
+
+let mut y = 0;
+let mr = &mut y;      // mutable reference
+*mr = 10;             // assign through reference
+
+let rr = &r;          // &&i32
+let val = **rr;       // double dereference
+
+// &mut to & coercion (automatic)
+fn read(r: &i32) { ... }
+read(&mut y);         // OK: &mut i32 coerced to &i32
+```
+
+Key differences from Rust (see Value Semantics):
+
+- No borrow checker: multiple mutable references allowed
+- Can return references to local variables (GC keeps them alive)
+- No lifetime annotations needed
+
+## Operators
+
+See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-precedence.md) and [WEP: Operator Overloading](./wep-2026-01-18-operator-overloading.md).
+
+```wado
+// Arithmetic
++ - * / %
+
+// Comparison (can be chained: a < b < c → a < b && b < c)
+== != < <= > >=
+
+// Logical
+&& || !
+
+// Bitwise
+& | ^ ~ << >>
+
+// Assignment
+= += -= *= /= %= &= |= ^= <<= >>=
+
+// Type cast
+42 as f64
+'A' as i32              // char -> i32: 65
+// 65 as char           // compile error: use char::from_u32()
+
+// Pattern testing (returns bool)
+opt matches { Some(_) }
+```
+
+## Control Flow
+
+```wado
+// If / else if / else
+if x > 0 {
+    println("positive");
+} else if x < 0 {
+    println("negative");
+} else {
+    println("zero");
+}
+
+// If expression
+let abs = if x < 0 { -x } else { x };
+
+// If let pattern matching
+if let Some(x) = opt {
+    println(`Got: {x}`);
+}
+
+// Mutable pattern bindings
+if let Some(mut x) = opt {
+    x += 10;
+}
+
+// Match ergonomics: &T scrutinees match against inner type
+let ro = &opt;                   // &Option<i32>
+if let Some(x) = ro {           // x: &i32
+    println(`Got: {*x}`);
+}
+
+// While
+while i < 10 { i += 1; }
+
+// While let
+while let Some(x) = iter.next() { println(`{x}`); }
+
+// C-style for
+for let mut i = 0; i < 10; i += 1 {
+    println(`{i}`);
+}
+
+// For-of (any IntoIterator type)
+for let item of items {
+    println(`{item}`);
+}
+
+// Tuple for-of (compile-time expansion, each element may have a different type)
+let t = [42, "hello", true];
+for let v of t {
+    println(`{v}`);
+}
+// break, continue, and return are not allowed inside tuple for-of
+
+// Infinite loop
+loop {
+    if done { break; }
+    continue;
+}
+
+// Labeled block — all blocks require a label (Wado has no unlabeled blocks)
+scope: {
+    let x = 20;  // new scope
+}
+
+// Labeled break — exit a named block early
+outer: {
+    if condition {
+        break outer;  // jump past the block
+    }
+    // skipped if break taken
+}
+
+// Match expression
+let result = match opt {
+    Some(x) => x * 2,
+    None => 0,
+};
+
+// Or patterns
+match color {
+    Red | Blue => "cool",
+    Green => "warm",
+}
+
+// Or patterns with bindings (all alternatives must bind the same names)
+match expr {
+    Num(n) | Neg(n) => use(n),
+    Zero => 0,
+}
+
+// Or patterns in matches operator
+if shape matches { Circle(_) | Square(_) } { ... }
+// Note: matches bindings don't escape — use guard instead
+// if opt matches { Some(x) } && x > 0 { ... }  // Error: x not in scope
+if opt matches { Some(x) && x > 0 } { ... }     // OK: guard inside braces
+
+// Match with guard
+let label = match value {
+    Some(x) && x > 100 => "large",
+    Some(x) && x > 10 => "medium",
+    Some(_) => "small",
+    None => "none",
+};
+
+// Match with block body
+let desc = match value {
+    Some(n) => {
+        let doubled = n * 2;
+        `value is {doubled}`
+    },
+    None => "no value",
+};
+
+// Nested sub-patterns in tuples/structs
+match [a, b] {
+    [Some(x), Some(y)] => x + y,
+    [None, _] => 0,
+}
+match [x, y] {
+    [0, 0] => "origin",
+    _ => "other",
+}
+if let { x: 0, y: 0 } = point { println("origin") }
+```
+
+Semicolons do not have particular semantics; they are just separators to statements. Convention in `wado format`: single-line block does not use semicolon.
+
+```wado
+let a = if true { 1 } else { 2 };   // either 1 or 2
+let b = if true { 1; } else { 2; }; // ditto
+
+let y = if true {
+    1; // ok - semicolon doesn't have particular semantics
+} else {
+    2;
+};
+```
+
+## Assert
+
+```wado
+assert x > 0;
+assert x > 0, "x must be positive";
+```
+
+## Functions, Methods, and Closures
 
 ### Functions
 
@@ -384,7 +601,7 @@ pub fn api_function() -> i32 {
 export fn run() { ... }
 ```
 
-A function must have `return` if it returns a value.
+A function must have `return` if it returns a value. See Visibility for `pub` and `export` details.
 
 ### Methods
 
@@ -409,7 +626,6 @@ let mut p = Point { x: 1, y: 2 };
 let s = p.sum();
 p.reset();
 let origin = Point::origin();
-let arr = Array::<i32>::with_capacity(10);  // turbofish for generic statics
 ```
 
 Note: bare `self` (by value) is not allowed. Use `&self` or `&mut self`.
@@ -462,6 +678,45 @@ let double = |mut n: i32| { n *= 2; return n; };
 
 // Without mut, assignment is a compile error
 // fn bad(n: i32) { n = 0; }  // Error: cannot assign to immutable variable 'n'
+```
+
+### Generics
+
+```wado
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+impl Container {
+    fn transform<T, U>(&self, a: T, b: U) -> T {
+        return a;
+    }
+}
+
+// Turbofish syntax (explicit type arguments)
+let x = identity::<i32>(42);
+let y = container.transform::<i32, i64>(10, 20 as i64);
+let arr = Array::<i32>::with_capacity(10);  // turbofish for generic statics
+
+// Variadic type packs: operate on tuples of any arity
+fn variadic_identity<..T>(x: [..T]) -> [..T] {
+    return x;
+}
+let t = variadic_identity([1, "hello", true]); // t: [i32, String, bool]
+
+// Mixed scalar + pack parameters
+fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
+    return [a, ..rest];  // value spread: splice rest into tuple
+}
+
+// Value spread (works with any tuple, not just packs)
+let a = [1, "hello"];
+let b = [..a, true];   // [i32, String, bool]
+
+// Type pack expansion: call a static method on each type in the pack
+fn make_defaults<..T: Default>() -> [..T] {
+    return [..T::default()];   // expands to [T_0::default(), T_1::default(), ...]
+}
 ```
 
 ### Reference Storage
@@ -560,9 +815,6 @@ Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
 ### Prelude Traits
 
 ```wado
-// Ordering enum
-enum Ordering { Less, Equal, Greater }
-
 // For == and != operators
 trait Eq { fn eq(&self, other: &Self) -> bool; }
 
@@ -660,312 +912,44 @@ i32::min(a, b)  i32::max(a, b)
 // char classification and conversion
 let code = 'A' as i32;                // 65
 let c = char::from_u32(65);           // Option::<char>::Some('A')
-let d = char::from_u32_unchecked(65); // if you already validates the u32 value
+let d = char::from_u32_unchecked(65); // if you have already validated the u32 value
 'A'.is_ascii_uppercase()              // true
 'a'.is_ascii_lowercase()              // true
 'A'.to_ascii_lowercase()              // 'a'
 'a'.to_ascii_uppercase()              // 'A'
 ```
 
-## Control Flow
+## Iterators
+
+See [WEP: Iterator Traits Design](./wep-2026-01-24-iterator-traits.md).
+
+`Iterator` provides `next()`. `IntoIterator` converts a collection into an iterator. Every `Iterator` automatically implements `IntoIterator` via a blanket impl, so all iterators work with `for-of`.
 
 ```wado
-// If / else if / else
-if x > 0 {
-    println("positive");
-} else if x < 0 {
-    println("negative");
-} else {
-    println("zero");
-}
+// Array iteration
+let arr: Array<i32> = [1, 2, 3, 4, 5];
+for let x of arr { println(`{x}`); }
 
-// If expression
-let abs = if x < 0 { -x } else { x };
+// Explicit iterator
+let mut iter = arr.iter();
+iter.next();                              // Option<i32>
+let rest = iter.collect();                // Array<i32>
 
-// If let pattern matching
-if let Some(x) = opt {
-    println(`Got: {x}`);
-}
+// Combinators
+let doubled = arr.iter().map(|x: i32| x * 2).collect();       // [2, 4, 6, 8, 10]
+let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect(); // [2, 4]
+let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);     // 15
 
-// Mutable pattern bindings
-if let Some(mut x) = opt {
-    x += 10;
-}
-
-// Match ergonomics: &T scrutinees match against inner type
-let ro = &opt;                   // &Option<i32>
-if let Some(x) = ro {           // x: &i32
-    println(`Got: {*x}`);
-}
-
-// While
-while i < 10 { i += 1; }
-
-// While let
-while let Some(x) = iter.next() { println(`{x}`); }
-
-// C-style for
-for let mut i = 0; i < 10; i += 1 {
-    println(`{i}`);
-}
-
-// For-of (any IntoIterator type)
-for let item of items {
-    println(`{item}`);
-}
-
-// Tuple for-of (compile-time expansion, each element may have a different type)
-let t = [42, "hello", true];
-for let v of t {
-    println(`{v}`);
-}
-// break, continue, and return are not allowed inside tuple for-of
-
-// Infinite loop
-loop {
-    if done { break; }
-    continue;
-}
-
-// Labeled block — all blocks require a label (Wado has no unlabeled blocks)
-scope: {
-    let x = 20;  // new scope
-}
-
-// Labeled break — exit a named block early
-outer: {
-    if condition {
-        break outer;  // jump past the block
-    }
-    // skipped if break taken
-}
-
-// Match expression
-let result = match opt {
-    Some(x) => x * 2,
-    None => 0,
-};
-
-// Or patterns
-match color {
-    Red | Blue => "cool",
-    Green => "warm",
-}
-
-// Or patterns with bindings (all alternatives must bind the same names)
-match expr {
-    Num(n) | Neg(n) => use(n),
-    Zero => 0,
-}
-
-// Or patterns in matches operator
-if shape matches { Circle(_) | Square(_) } { ... }
-
-// Match with guard
-let label = match value {
-    Some(x) && x > 100 => "large",
-    Some(x) && x > 10 => "medium",
-    Some(_) => "small",
-    None => "none",
-};
-
-// Match with block body
-let desc = match value {
-    Some(n) => {
-        let doubled = n * 2;
-        `value is {doubled}`
-    },
-    None => "no value",
-};
-
-// Nested sub-patterns in tuples/structs
-match [a, b] {
-    [Some(x), Some(y)] => x + y,
-    [None, _] => 0,
-}
-match [x, y] {
-    [0, 0] => "origin",
-    _ => "other",
-}
-if let { x: 0, y: 0 } = point { println("origin") }
+// Chaining
+let result = arr.iter()
+    .filter(|x: i32| x > 2)
+    .map(|x: i32| x * 10)
+    .collect();  // [30, 40, 50]
 ```
 
-## Semicolons
+### Custom Iterables
 
-Semicolons does not have particular semantics; they are just separators to statements.
-
-Convention in `wado format`: single-line block does not use semicolon.
-
-```wado
-let a = if true { 1 } else { 2 };   // either 1 or 2
-let b = if true { 1; } else { 2; }; // ditto
-
-lf y = if true {
-    1; // ok - semicolon doesn't have particular semantics
-} else {
-    2;
-}
-```
-
-## Operators
-
-See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-precedence.md) and [WEP: Operator Overloading](./wep-2026-01-18-operator-overloading.md).
-
-```wado
-// Arithmetic
-+ - * / %
-
-// Comparison (can be chained: a < b < c → a < b && b < c)
-== != < <= > >=
-
-// Logical
-&& || !
-
-// Bitwise
-& | ^ ~ << >>
-
-// Assignment
-= += -= *= /= %= &= |= ^= <<= >>=
-
-// Type cast
-42 as f64
-'A' as i32              // char -> i32: 65
-// 65 as char           // compile error: use char::from_u32()
-
-// Pattern testing (returns bool)
-opt matches { Some(_) }
-
-// Reference and Dereference
-&x              // create reference
-*ref            // dereference
-```
-
-## References
-
-```wado
-let x = 42;
-let r = &x;           // immutable reference
-let v = *r;           // dereference
-
-let mut y = 0;
-let mr = &mut y;      // mutable reference
-*mr = 10;             // assign through reference
-
-let rr = &r;          // &&i32
-let val = **rr;       // double dereference
-
-// &mut to & coercion (automatic)
-fn read(r: &i32) { ... }
-read(&mut y);         // OK: &mut i32 coerced to &i32
-```
-
-Key differences from Rust (GC-based memory model):
-
-- No borrow checker: multiple mutable references allowed
-- Can return references to local variables (GC keeps them alive)
-- No lifetime annotations needed
-
-## Generic Functions and Methods
-
-```wado
-fn identity<T>(x: T) -> T {
-    return x;
-}
-
-impl Container {
-    fn transform<T, U>(&self, a: T, b: U) -> T {
-        return a;
-    }
-}
-
-// Turbofish syntax (explicit type arguments)
-let x = identity::<i32>(42);
-let y = container.transform::<i32, i64>(10, 20 as i64);
-
-// Variadic type packs: operate on tuples of any arity
-fn variadic_identity<..T>(x: [..T]) -> [..T] {
-    return x;
-}
-let t = variadic_identity([1, "hello", true]); // t: [i32, String, bool]
-
-// Mixed scalar + pack parameters
-fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
-    return [a, ..rest];  // value spread: splice rest into tuple
-}
-
-// Value spread (works with any tuple, not just packs)
-let a = [1, "hello"];
-let b = [..a, true];   // [i32, String, bool]
-
-// Type pack expansion: call a static method on each type in the pack
-fn make_defaults<..T: Default>() -> [..T] {
-    return [..T::default()];   // expands to [T_0::default(), T_1::default(), ...]
-}
-```
-
-## Assert
-
-```wado
-assert x > 0;
-assert x > 0, "x must be positive";
-```
-
-## Imports
-
-```wado
-use { println, eprintln } from "core:cli";
-use { Stdout, Stdout::{write_via_stream} } from "wasi:cli";
-use utils from "./utils.wado";                // namespace import
-use { foo as bar } from "./mod.wado";         // rename
-pub use { foo, bar } from "./internal.wado";  // re-export
-```
-
-Namespace imports make all pub symbols from the source module directly available:
-
-```wado
-use geo from "./geo.wado";
-let p = geo::Point::new(1, 2);  // access via namespace
-```
-
-## Value Semantics
-
-See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
-
-Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
-
-## Test Blocks
-
-Test blocks compile to the `test` world. Files with test blocks are discovered and executed by `wado test`:
-
-```sh
-wado test                            # discover and run *_test.wado files
-wado test file.wado                  # run specific file
-wado test --filter pattern           # filter tests by name
-wado compile --world test file.wado  # compile with test world
-```
-
-```wado
-test {
-    assert fib(10) == 55;
-}
-
-test "addition works" {
-    assert 1 + 1 == 2;
-}
-
-// Expect-trap test: passes when the body traps
-#[expect_trap]
-test "panics on invalid input" {
-    panic("bad input");
-}
-
-// TODO test: reported on a separate axis from pass/fail.
-// Pending (traps) = expected. Resolved (passes) = must remove #[TODO].
-#[TODO]
-test "not yet implemented" {
-    panic("TODO: implement this");
-}
-```
+Implement `IntoIterator` to make custom types work with `for-of`. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md) for trait definitions.
 
 ## Effects
 
@@ -1041,6 +1025,40 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 `task return expr;` delivers the function's result to the CM runtime without terminating the function. Valid only inside `export async fn`. Regular `return` is forbidden in `async fn` bodies.
 
+## Test Blocks
+
+Test blocks compile to the `test` world. Files with test blocks are discovered and executed by `wado test`:
+
+```sh
+wado test                            # discover and run *_test.wado files
+wado test file.wado                  # run specific file
+wado test --filter pattern           # filter tests by name
+wado compile --world test file.wado  # compile with test world
+```
+
+```wado
+test {
+    assert fib(10) == 55;
+}
+
+test "addition works" {
+    assert 1 + 1 == 2;
+}
+
+// Expect-trap test: passes when the body traps
+#[expect_trap]
+test "panics on invalid input" {
+    panic("bad input");
+}
+
+// TODO test: reported on a separate axis from pass/fail.
+// Pending (traps) = expected. Resolved (passes) = must remove #[TODO].
+#[TODO]
+test "not yet implemented" {
+    panic("TODO: implement this");
+}
+```
+
 ## Standard Library
 
 For full API reference, see:
@@ -1067,42 +1085,6 @@ let opt = map.get("key"); // fallible access returns Option<V>
 let set = ["foo", "bar", "baz"] as TreeSet<String>;
 assert set.contains("foo");
 ```
-
-## Iterators
-
-See [WEP: Iterator Traits Design](./wep-2026-01-24-iterator-traits.md).
-
-`Iterator` provides `next()`. `IntoIterator` converts a collection into an iterator. Every `Iterator` automatically implements `IntoIterator` via a blanket impl, so all iterators work with `for-of`.
-
-```wado
-// Array iteration
-let arr: Array<i32> = [1, 2, 3, 4, 5];
-for let x of arr { println(`{x}`); }
-
-// Explicit iterator
-let mut iter = arr.iter();
-iter.next();                              // Option<i32>
-let rest = iter.collect();                // Array<i32>
-
-// Combinators
-let doubled = arr.iter().map(|x: i32| x * 2).collect();       // [2, 4, 6, 8, 10]
-let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect(); // [2, 4]
-let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);     // 15
-
-// Chaining
-let result = arr.iter()
-    .filter(|x: i32| x > 2)
-    .map(|x: i32| x * 10)
-    .collect();  // [30, 40, 50]
-```
-
-### Custom Iterables
-
-Implement `IntoIterator` to make custom types work with `for-of`. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md) for trait definitions.
-
-## Serialization and Deserialization
-
-See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
 ## Compile-Time Literals
 
@@ -1135,13 +1117,13 @@ struct Foo {
 #[inline(never)]           // never inline
 ```
 
-## Macros
+## Serialization and Deserialization
 
-Wado intentionally does not support macros.
+Wado supports automatic serialization/deserialization via `core:serde`. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
 ## SIMD
 
-See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for design and rationale. Includes Relaxed SIMD.
+Wado supports 128-bit SIMD operations including Relaxed SIMD. See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md).
 
 ## See Also
 
@@ -1149,3 +1131,5 @@ See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for design and rationale. In
 - [Core Standard Library Reference](./cheatsheet-stdlib-core.md) - Core stdlib quick reference
 - [WASI Standard Library Reference](./cheatsheet-stdlib-wasi.md) - WASI stdlib quick reference
 - [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures) - E2E test fixtures
+
+Note: Wado intentionally does not support macros.
