@@ -432,11 +432,6 @@ pub struct BeginStmtNode {
     pub k_transaction_transaction_name: Option<KTransactionTransactionNameItem>,
 }
 
-pub struct KTransactionTransactionNameItem {
-    pub k_transaction: Token,
-    pub transaction_name: Option<TransactionNameNode>,
-}
-
 pub struct CommitStmtNode {
     pub span: Span,
     pub k_commit_or_k_end: Token,
@@ -485,11 +480,6 @@ pub struct KIfKNotKExistsItem {
     pub k_exists: Token,
 }
 
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
-}
-
 pub struct CommaIndexedColumnItem {
     pub comma: Token,
     pub indexed_column: IndexedColumnNode,
@@ -517,17 +507,6 @@ pub struct CreateIndexStmtNode {
     pub k_where_expr: Option<KWhereExprItem>,
 }
 
-pub struct KIfKNotKExistsItem {
-    pub k_if: Token,
-    pub k_not: Token,
-    pub k_exists: Token,
-}
-
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
-}
-
 pub struct CreateTableStmtNode {
     pub span: Span,
     pub k_create: Token,
@@ -536,22 +515,6 @@ pub struct CreateTableStmtNode {
     pub k_if_k_not_k_exists: Option<KIfKNotKExistsItem>,
     pub database_name_dot: Option<DatabaseNameDotItem>,
     pub table_name: TableNameNode,
-}
-
-pub struct KIfKNotKExistsItem {
-    pub k_if: Token,
-    pub k_not: Token,
-    pub k_exists: Token,
-}
-
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
-}
-
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
 }
 
 pub struct KForKEachKRowItem {
@@ -595,17 +558,6 @@ pub struct CreateTriggerStmtNode {
     pub k_end: Token,
 }
 
-pub struct KIfKNotKExistsItem {
-    pub k_if: Token,
-    pub k_not: Token,
-    pub k_exists: Token,
-}
-
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
-}
-
 pub struct CreateViewStmtNode {
     pub span: Span,
     pub k_create: Token,
@@ -616,17 +568,6 @@ pub struct CreateViewStmtNode {
     pub view_name: ViewNameNode,
     pub k_as: Token,
     pub select_stmt: SelectStmtNode,
-}
-
-pub struct KIfKNotKExistsItem {
-    pub k_if: Token,
-    pub k_not: Token,
-    pub k_exists: Token,
-}
-
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
 }
 
 pub struct CommaModuleArgumentItem {
@@ -654,11 +595,6 @@ pub struct CreateVirtualTableStmtNode {
     pub lparen_module_argument_item_rparen: Option<LparenModuleArgumentItemRparenItem>,
 }
 
-pub struct KWhereExprItem {
-    pub k_where: Token,
-    pub expr: ExprNode,
-}
-
 pub struct DeleteStmtNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
@@ -666,28 +602,6 @@ pub struct DeleteStmtNode {
     pub k_from: Token,
     pub qualified_table_name: QualifiedTableNameNode,
     pub k_where_expr: Option<KWhereExprItem>,
-}
-
-pub struct KWhereExprItem {
-    pub k_where: Token,
-    pub expr: ExprNode,
-}
-
-pub struct CommaOrderingTermItem {
-    pub comma: Token,
-    pub ordering_term: OrderingTermNode,
-}
-
-pub struct KOrderKByOrderingTermItemItem {
-    pub k_order: Token,
-    pub k_by: Token,
-    pub ordering_term: OrderingTermNode,
-    pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
-}
-
-pub struct ItemExprItem {
-    pub k_offset_or_comma: Token,
-    pub expr: ExprNode,
 }
 
 pub struct ItemKLimitExprItemItem {
@@ -719,11 +633,6 @@ pub struct KIfKExistsItem {
     pub k_exists: Token,
 }
 
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
-}
-
 pub struct DropIndexStmtNode {
     pub span: Span,
     pub k_drop: Token,
@@ -731,16 +640,6 @@ pub struct DropIndexStmtNode {
     pub k_if_k_exists: Option<KIfKExistsItem>,
     pub database_name_dot: Option<DatabaseNameDotItem>,
     pub index_name: IndexNameNode,
-}
-
-pub struct KIfKExistsItem {
-    pub k_if: Token,
-    pub k_exists: Token,
-}
-
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
 }
 
 pub struct DropTableStmtNode {
@@ -752,16 +651,6 @@ pub struct DropTableStmtNode {
     pub table_name: TableNameNode,
 }
 
-pub struct KIfKExistsItem {
-    pub k_if: Token,
-    pub k_exists: Token,
-}
-
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
-}
-
 pub struct DropTriggerStmtNode {
     pub span: Span,
     pub k_drop: Token,
@@ -769,16 +658,6 @@ pub struct DropTriggerStmtNode {
     pub k_if_k_exists: Option<KIfKExistsItem>,
     pub database_name_dot: Option<DatabaseNameDotItem>,
     pub trigger_name: TriggerNameNode,
-}
-
-pub struct KIfKExistsItem {
-    pub k_if: Token,
-    pub k_exists: Token,
-}
-
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
 }
 
 pub struct DropViewStmtNode {
@@ -795,29 +674,6 @@ pub struct CompoundOperatorSelectCoreItem {
     pub select_core: SelectCoreNode,
 }
 
-pub struct CommaOrderingTermItem {
-    pub comma: Token,
-    pub ordering_term: OrderingTermNode,
-}
-
-pub struct KOrderKByOrderingTermItemItem {
-    pub k_order: Token,
-    pub k_by: Token,
-    pub ordering_term: OrderingTermNode,
-    pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
-}
-
-pub struct ItemExprItem {
-    pub k_offset_or_comma: Token,
-    pub expr: ExprNode,
-}
-
-pub struct KLimitExprItemItem {
-    pub k_limit: Token,
-    pub expr: ExprNode,
-    pub item_expr: Option<ItemExprItem>,
-}
-
 pub struct FactoredSelectStmtNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
@@ -825,11 +681,6 @@ pub struct FactoredSelectStmtNode {
     pub compound_operator_select_core_list: Array<CompoundOperatorSelectCoreItem>,
     pub k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem>,
     pub k_limit_expr_item: Option<KLimitExprItemItem>,
-}
-
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
 }
 
 pub struct CommaColumnNameItem {
@@ -853,11 +704,6 @@ pub struct InsertStmtNode {
     pub lparen_column_name_item_rparen: Option<LparenColumnNameItemRparenItem>,
 }
 
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
-}
-
 pub struct PragmaStmtNode {
     pub span: Span,
     pub k_pragma: Token,
@@ -875,11 +721,6 @@ pub struct ReleaseStmtNode {
     pub k_release: Token,
     pub k_savepoint: Option<Token>,
     pub savepoint_name: SavepointNameNode,
-}
-
-pub struct KTransactionTransactionNameItem {
-    pub k_transaction: Token,
-    pub transaction_name: Option<TransactionNameNode>,
 }
 
 pub struct KToKSavepointSavepointNameItem {
@@ -901,29 +742,6 @@ pub struct SavepointStmtNode {
     pub savepoint_name: SavepointNameNode,
 }
 
-pub struct CommaOrderingTermItem {
-    pub comma: Token,
-    pub ordering_term: OrderingTermNode,
-}
-
-pub struct KOrderKByOrderingTermItemItem {
-    pub k_order: Token,
-    pub k_by: Token,
-    pub ordering_term: OrderingTermNode,
-    pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
-}
-
-pub struct ItemExprItem {
-    pub k_offset_or_comma: Token,
-    pub expr: ExprNode,
-}
-
-pub struct KLimitExprItemItem {
-    pub k_limit: Token,
-    pub expr: ExprNode,
-    pub item_expr: Option<ItemExprItem>,
-}
-
 pub struct SimpleSelectStmtNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
@@ -935,29 +753,6 @@ pub struct SimpleSelectStmtNode {
 pub struct CompoundOperatorSelectOrValuesItem {
     pub compound_operator: CompoundOperatorNode,
     pub select_or_values: SelectOrValuesNode,
-}
-
-pub struct CommaOrderingTermItem {
-    pub comma: Token,
-    pub ordering_term: OrderingTermNode,
-}
-
-pub struct KOrderKByOrderingTermItemItem {
-    pub k_order: Token,
-    pub k_by: Token,
-    pub ordering_term: OrderingTermNode,
-    pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
-}
-
-pub struct ItemExprItem {
-    pub k_offset_or_comma: Token,
-    pub expr: ExprNode,
-}
-
-pub struct KLimitExprItemItem {
-    pub k_limit: Token,
-    pub expr: ExprNode,
-    pub item_expr: Option<ItemExprItem>,
 }
 
 pub struct SelectStmtNode {
@@ -981,11 +776,6 @@ pub struct CommaResultColumnItem {
 
 pub struct KFromItemItem {
     pub k_from: Token,
-}
-
-pub struct KWhereExprItem {
-    pub k_where: Token,
-    pub expr: ExprNode,
 }
 
 pub struct CommaExprItem {
@@ -1017,16 +807,6 @@ pub struct SelectOrValuesAlt0 {
     pub k_group_k_by_expr_item_item: Option<KGroupKByExprItemItemItem>,
 }
 
-pub struct CommaExprItem {
-    pub comma: Token,
-    pub expr: ExprNode,
-}
-
-pub struct CommaExprItem {
-    pub comma: Token,
-    pub expr: ExprNode,
-}
-
 pub struct CommaLparenExprItemRparenItem {
     pub comma: Token,
     pub lparen: Token,
@@ -1052,11 +832,6 @@ pub struct CommaColumnNameEqExprItem {
     pub expr: ExprNode,
 }
 
-pub struct KWhereExprItem {
-    pub k_where: Token,
-    pub expr: ExprNode,
-}
-
 pub struct UpdateStmtNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
@@ -1068,42 +843,6 @@ pub struct UpdateStmtNode {
     pub expr: ExprNode,
     pub comma_column_name_eq_expr_list: Array<CommaColumnNameEqExprItem>,
     pub k_where_expr: Option<KWhereExprItem>,
-}
-
-pub struct CommaColumnNameEqExprItem {
-    pub comma: Token,
-    pub column_name: ColumnNameNode,
-    pub eq: Token,
-    pub expr: ExprNode,
-}
-
-pub struct KWhereExprItem {
-    pub k_where: Token,
-    pub expr: ExprNode,
-}
-
-pub struct CommaOrderingTermItem {
-    pub comma: Token,
-    pub ordering_term: OrderingTermNode,
-}
-
-pub struct KOrderKByOrderingTermItemItem {
-    pub k_order: Token,
-    pub k_by: Token,
-    pub ordering_term: OrderingTermNode,
-    pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
-}
-
-pub struct ItemExprItem {
-    pub k_offset_or_comma: Token,
-    pub expr: ExprNode,
-}
-
-pub struct ItemKLimitExprItemItem {
-    pub k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem>,
-    pub k_limit: Token,
-    pub expr: ExprNode,
-    pub item_expr: Option<ItemExprItem>,
 }
 
 pub struct UpdateStmtLimitedNode {
@@ -1193,11 +932,6 @@ pub struct ExprAlt0 {
 pub struct ExprAlt1 {
     pub span: Span,
     pub bind_parameter: Token,
-}
-
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
 }
 
 pub struct ItemTableNameDotItem {
@@ -1387,18 +1121,6 @@ pub struct ExprAlt23 {
     pub raise_function: RaiseFunctionNode,
 }
 
-pub struct CommaColumnNameItem {
-    pub comma: Token,
-    pub column_name: ColumnNameNode,
-}
-
-pub struct LparenColumnNameItemRparenItem {
-    pub lparen: Token,
-    pub column_name: ColumnNameNode,
-    pub comma_column_name_list: Array<CommaColumnNameItem>,
-    pub rparen: Token,
-}
-
 pub struct KNotKDeferrableItemItem {
     pub k_not: Option<Token>,
     pub k_deferrable: Token,
@@ -1431,11 +1153,6 @@ pub struct IndexedColumnNode {
     pub k_asc_or_k_desc: Option<Token>,
 }
 
-pub struct KConstraintNameItem {
-    pub k_constraint: Token,
-    pub name: NameNode,
-}
-
 pub struct TableConstraintNode {
     pub span: Span,
     pub k_constraint_name: Option<KConstraintNameItem>,
@@ -1454,20 +1171,10 @@ pub struct WithClauseNode {
     pub comma_common_table_expression_list: Array<CommaCommonTableExpressionItem>,
 }
 
-pub struct DatabaseNameDotItem {
-    pub database_name: DatabaseNameNode,
-    pub dot: Token,
-}
-
 pub struct QualifiedTableNameNode {
     pub span: Span,
     pub database_name_dot: Option<DatabaseNameDotItem>,
     pub table_name: TableNameNode,
-}
-
-pub struct KCollateCollationNameItem {
-    pub k_collate: Token,
-    pub collation_name: CollationNameNode,
 }
 
 pub struct OrderingTermNode {
@@ -1496,18 +1203,6 @@ pub struct PragmaValueAlt1 {
 pub struct PragmaValueAlt2 {
     pub span: Span,
     pub string_literal: Token,
-}
-
-pub struct CommaColumnNameItem {
-    pub comma: Token,
-    pub column_name: ColumnNameNode,
-}
-
-pub struct LparenColumnNameItemRparenItem {
-    pub lparen: Token,
-    pub column_name: ColumnNameNode,
-    pub comma_column_name_list: Array<CommaColumnNameItem>,
-    pub rparen: Token,
 }
 
 pub struct CommonTableExpressionNode {
@@ -1573,24 +1268,9 @@ pub struct TableOrSubqueryAlt0 {
     pub k_as_table_alias: Option<KAsTableAliasItem>,
 }
 
-pub struct SchemaNameDotItem {
-    pub schema_name: SchemaNameNode,
-    pub dot: Token,
-}
-
-pub struct CommaExprItem {
-    pub comma: Token,
-    pub expr: ExprNode,
-}
-
 pub struct ExprItemItem {
     pub expr: ExprNode,
     pub comma_expr_list: Array<CommaExprItem>,
-}
-
-pub struct KAsTableAliasItem {
-    pub k_as: Option<Token>,
-    pub table_alias: TableAliasNode,
 }
 
 pub struct TableOrSubqueryAlt1 {
@@ -1607,11 +1287,6 @@ pub struct TableOrSubqueryAlt2 {
     pub span: Span,
     pub lparen: Token,
     pub rparen: Token,
-}
-
-pub struct KAsTableAliasItem {
-    pub k_as: Option<Token>,
-    pub table_alias: TableAliasNode,
 }
 
 pub struct TableOrSubqueryAlt3 {
@@ -1659,38 +1334,6 @@ pub variant SelectCoreNode {
     Alt1(SelectCoreAlt1),
 }
 
-pub struct CommaResultColumnItem {
-    pub comma: Token,
-    pub result_column: ResultColumnNode,
-}
-
-pub struct KFromItemItem {
-    pub k_from: Token,
-}
-
-pub struct KWhereExprItem {
-    pub k_where: Token,
-    pub expr: ExprNode,
-}
-
-pub struct CommaExprItem {
-    pub comma: Token,
-    pub expr: ExprNode,
-}
-
-pub struct KHavingExprItem {
-    pub k_having: Token,
-    pub expr: ExprNode,
-}
-
-pub struct KGroupKByExprItemItemItem {
-    pub k_group: Token,
-    pub k_by: Token,
-    pub expr: ExprNode,
-    pub comma_expr_list: Array<CommaExprItem>,
-    pub k_having_expr: Option<KHavingExprItem>,
-}
-
 pub struct SelectCoreAlt0 {
     pub span: Span,
     pub k_select: Token,
@@ -1700,24 +1343,6 @@ pub struct SelectCoreAlt0 {
     pub k_from_item: Option<KFromItemItem>,
     pub k_where_expr: Option<KWhereExprItem>,
     pub k_group_k_by_expr_item_item: Option<KGroupKByExprItemItemItem>,
-}
-
-pub struct CommaExprItem {
-    pub comma: Token,
-    pub expr: ExprNode,
-}
-
-pub struct CommaExprItem {
-    pub comma: Token,
-    pub expr: ExprNode,
-}
-
-pub struct CommaLparenExprItemRparenItem {
-    pub comma: Token,
-    pub lparen: Token,
-    pub expr: ExprNode,
-    pub comma_expr_list: Array<CommaExprItem>,
-    pub rparen: Token,
 }
 
 pub struct SelectCoreAlt1 {

@@ -47,15 +47,16 @@ fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
 }
 
 fn gen_cst_types(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
+    let mut emitted: Array<String> = [];
     for let rule of parser_rules {
-        gen_parser_rule_type(w, rule);
+        gen_parser_rule_type(w, rule, &mut emitted);
     }
 }
 
-fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule) {
+fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule, emitted: &mut Array<String>) {
     let type_name = rule_type_name(&rule.name);
     if rule.alternatives.len() == 1 {
-        gen_struct_for_alt(w, &type_name, &rule.alternatives[0]);
+        gen_struct_for_alt(w, &type_name, &rule.alternatives[0], emitted);
     } else {
         let all_labeled = all_alternatives_labeled(&rule.alternatives);
         let base = strip_suffix(&type_name, "Node");
@@ -74,13 +75,13 @@ fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule) {
             let alt = &rule.alternatives[i];
             let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{i}` };
             let struct_name = `{base}{case_name}`;
-            gen_struct_for_alt(w, &struct_name, alt);
+            gen_struct_for_alt(w, &struct_name, alt, emitted);
         }
     }
 }
 
-fn gen_struct_for_alt(w: &mut CodeWriter, type_name: &String, alt: &Alternative) {
-    gen_group_variant_types(w, &alt.elements);
+fn gen_struct_for_alt(w: &mut CodeWriter, type_name: &String, alt: &Alternative, emitted: &mut Array<String>) {
+    gen_group_variant_types(w, &alt.elements, emitted);
     let fields = collect_fields(&alt.elements);
     let mut s = StructSpec::new(type_name);
     s.set_pub();
@@ -117,17 +118,34 @@ fn repeat_inner_field(elem: &Element) -> Option<Field> {
     return element_to_field(elem);
 }
 
-fn gen_group_variant_types(w: &mut CodeWriter, elements: &Array<Element>) {
+fn gen_group_variant_types(w: &mut CodeWriter, elements: &Array<Element>, emitted: &mut Array<String>) {
     for let elem of elements {
         let alts = extract_group_alts(&elem);
         if let Some(group_alts) = alts {
             if is_simple_cst_group(group_alts) {
-                gen_group_variant_type(w, group_alts);
+                let type_name = group_variant_type_name(group_alts);
+                if !has_emitted(emitted, &type_name) {
+                    emitted.append(type_name);
+                    gen_group_variant_type(w, group_alts);
+                }
             } else if is_single_alt_group(group_alts) {
-                gen_single_alt_group_struct(w, &group_alts[0]);
+                let type_name = single_alt_group_type_name(&group_alts[0]);
+                if !has_emitted(emitted, &type_name) {
+                    emitted.append(type_name);
+                    gen_single_alt_group_struct(w, &group_alts[0], emitted);
+                }
             }
         }
     }
+}
+
+fn has_emitted(emitted: &Array<String>, name: &String) -> bool {
+    for let e of emitted {
+        if *e == *name {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn extract_group_alts(elem: &Element) -> Option<&Array<Alternative>> {
@@ -157,8 +175,8 @@ fn gen_group_variant_type(w: &mut CodeWriter, alts: &Array<Alternative>) {
     w.blank();
 }
 
-fn gen_single_alt_group_struct(w: &mut CodeWriter, alt: &Alternative) {
-    gen_group_variant_types(w, &alt.elements);
+fn gen_single_alt_group_struct(w: &mut CodeWriter, alt: &Alternative, emitted: &mut Array<String>) {
+    gen_group_variant_types(w, &alt.elements, emitted);
     let type_name = single_alt_group_type_name(alt);
     let fields = collect_fields(&alt.elements);
     let mut s = StructSpec::new(&type_name);
