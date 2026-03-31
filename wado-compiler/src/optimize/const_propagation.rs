@@ -9,7 +9,7 @@ use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{TirExpr, TirExprKind};
 
-use super::visitor::{TirVisitor, visit_project_functions, walk_expr};
+use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, visit_project_functions};
 
 #[derive(Debug, Clone)]
 enum ConstValue {
@@ -81,7 +81,7 @@ struct ConstPropVisitor<'a> {
     constants: &'a IndexMap<GlobalKey, ConstValue>,
 }
 
-impl TirVisitor for ConstPropVisitor<'_> {
+impl TirOptVisitor for ConstPropVisitor<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         if let TirExprKind::GlobalVarGet {
             module_source,
@@ -94,6 +94,6 @@ impl TirVisitor for ConstPropVisitor<'_> {
                 return true;
             }
         }
-        walk_expr(self, expr)
+        opt_walk_expr(self, expr)
     }
 }

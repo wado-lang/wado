@@ -12,7 +12,7 @@
 //! and inclusive `<=` guard patterns.
 
 use crate::hashmap::IndexMap;
-use crate::optimize::visitor::{TirVisitor, walk_expr, walk_stmt};
+use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::project::Project;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
@@ -584,7 +584,7 @@ struct ConditionEliminator<'a> {
     defs: &'a DefMap,
 }
 
-impl TirVisitor for ConditionEliminator<'_> {
+impl TirOptVisitor for ConditionEliminator<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
         // Check if this statement is a bounds check that can be eliminated.
         if let TirStmtKind::If {
@@ -627,7 +627,7 @@ impl TirVisitor for ConditionEliminator<'_> {
             return changed;
         }
 
-        walk_stmt(self, stmt)
+        opt_walk_stmt(self, stmt)
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
@@ -651,7 +651,7 @@ impl TirVisitor for ConditionEliminator<'_> {
             }
             return changed;
         }
-        walk_expr(self, expr)
+        opt_walk_expr(self, expr)
     }
 }
 
@@ -663,7 +663,7 @@ struct BitmaskEliminator<'a> {
     defs: &'a DefMap,
 }
 
-impl TirVisitor for BitmaskEliminator<'_> {
+impl TirOptVisitor for BitmaskEliminator<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
         if let TirStmtKind::If {
             condition,
@@ -682,7 +682,7 @@ impl TirVisitor for BitmaskEliminator<'_> {
             };
             return true;
         }
-        walk_stmt(self, stmt)
+        opt_walk_stmt(self, stmt)
     }
 }
 

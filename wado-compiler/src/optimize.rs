@@ -26,7 +26,6 @@ mod select_lowering;
 mod sroa;
 mod store_load_forward;
 mod tmpl_hoist;
-pub(crate) mod visitor;
 
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::prune_constant_branches;

@@ -3,7 +3,7 @@
 //! This module provides function inlining for small functions.
 //! It uses labeled block expressions for cleaner value handling.
 
-use super::visitor::block_has_break_to;
+use crate::tir_visitor::block_has_break_to;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;

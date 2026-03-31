@@ -38,7 +38,7 @@
 //! This eliminates the GC-allocated `temp: Option<T>` entirely. Subsequent passes
 //! (copy propagation, DCE) clean up the remaining `break '__fused_L;` bookkeeping.
 
-use super::visitor::expr_has_break_to;
+use crate::tir_visitor::expr_has_break_to;
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId};
 

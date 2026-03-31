@@ -16,7 +16,7 @@ use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmtKind};
 
-use super::visitor::{TirVisitor, walk_block, walk_expr};
+use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_expr};
 
 type GlobalKey = (ModuleSource, String);
 
@@ -89,7 +89,7 @@ struct PromotionCollector<'a> {
     promotions: IndexMap<GlobalKey, TirExprKind>,
 }
 
-impl TirVisitor for PromotionCollector<'_> {
+impl TirOptVisitor for PromotionCollector<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         if let TirExprKind::GlobalVarSet {
             module_source,
@@ -104,7 +104,7 @@ impl TirVisitor for PromotionCollector<'_> {
                     .or_insert_with(|| value.kind.clone());
             }
         }
-        walk_expr(self, expr)
+        opt_walk_expr(self, expr)
     }
 }
 
@@ -112,10 +112,10 @@ struct PromotionRemover<'a> {
     promotions: &'a IndexMap<GlobalKey, TirExprKind>,
 }
 
-impl TirVisitor for PromotionRemover<'_> {
+impl TirOptVisitor for PromotionRemover<'_> {
     fn visit_block(&mut self, block: &mut TirBlock) -> bool {
         // Recurse into nested blocks first
-        walk_block(self, block);
+        opt_walk_block(self, block);
         // Then remove promoted GlobalVarSet stmts at this level
         let before = block.stmts.len();
         block.stmts.retain(|stmt| {

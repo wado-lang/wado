@@ -4,9 +4,9 @@ use crate::name::LocalMethodName;
 use crate::name::MethodName;
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
-    TirExprKind, TirModule, TirStmt, TirStmtKind, TirTemplatePart, TypeId, TypeTable,
+    TirExprKind, TirModule, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
-use crate::tir_visitor::TirMutVisitor;
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use super::generic_function_key;
 use super::state::Monomorphizer;
@@ -38,173 +38,55 @@ impl Monomorphizer {
         }
     }
 
-    /// Sync `local_types` array from Let statements that may have been updated
+    /// Sync `local_types` array from Let statements that may have been updated.
+    ///
+    /// Only walks into statement-level blocks (If/Loop/LabeledBlock/IfLet), not
+    /// into expression blocks, since closures have their own local scope.
     fn sync_local_types_from_lets(block: &TirBlock, local_types: &mut [TypeId]) {
-        for stmt in &block.stmts {
-            match &stmt.kind {
-                TirStmtKind::Let {
+        struct SyncVisitor<'a> {
+            local_types: &'a mut [TypeId],
+        }
+        impl TirRefVisitor for SyncVisitor<'_> {
+            fn visit_stmt(&mut self, stmt: &TirStmt) {
+                if let TirStmtKind::Let {
                     local_index,
                     type_id,
                     ..
-                } => {
-                    if let Some(local_type) = local_types.get_mut(*local_index as usize) {
+                } = &stmt.kind
+                {
+                    if let Some(local_type) = self.local_types.get_mut(*local_index as usize) {
                         *local_type = *type_id;
                     }
                 }
-                TirStmtKind::If {
-                    then_block,
-                    else_block,
-                    ..
-                } => {
-                    Self::sync_local_types_from_lets(then_block, local_types);
-                    if let Some(else_blk) = else_block {
-                        Self::sync_local_types_from_lets(else_blk, local_types);
-                    }
-                }
-                TirStmtKind::Loop { body } => {
-                    Self::sync_local_types_from_lets(body, local_types);
-                }
-                _ => {}
+                self.walk_stmt(stmt);
+            }
+            fn visit_expr(&mut self, _expr: &TirExpr) {
+                // Don't recurse into expressions — only statement-level blocks matter
             }
         }
+        SyncVisitor { local_types }.visit_block(block);
     }
 
     /// Update all Local expression types based on `local_types` array
     fn update_local_expr_types(block: &mut TirBlock, local_types: &[TypeId]) {
-        for stmt in &mut block.stmts {
-            Self::update_local_expr_types_in_stmt(stmt, local_types);
+        struct LocalTypeUpdater<'a> {
+            local_types: &'a [TypeId],
         }
-    }
-
-    fn update_local_expr_types_in_stmt(stmt: &mut TirStmt, local_types: &[TypeId]) {
-        match &mut stmt.kind {
-            TirStmtKind::Let { value, .. } => {
-                Self::update_local_expr_types_in_expr(value, local_types);
-            }
-            TirStmtKind::Expr(expr) => {
-                Self::update_local_expr_types_in_expr(expr, local_types);
-            }
-            TirStmtKind::Return { value } => {
-                if let Some(expr) = value {
-                    Self::update_local_expr_types_in_expr(expr, local_types);
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                Self::update_local_expr_types_in_expr(condition, local_types);
-                Self::update_local_expr_types(then_block, local_types);
-                if let Some(else_blk) = else_block {
-                    Self::update_local_expr_types(else_blk, local_types);
-                }
-            }
-            TirStmtKind::Loop { body } => {
-                Self::update_local_expr_types(body, local_types);
-            }
-            _ => {}
-        }
-    }
-
-    fn update_local_expr_types_in_expr(expr: &mut TirExpr, local_types: &[TypeId]) {
-        match &mut expr.kind {
-            TirExprKind::Local { index, .. } => {
-                if let Some(&local_type) = local_types.get(*index as usize) {
-                    expr.type_id = local_type;
-                }
-            }
-            TirExprKind::Call { args, .. } => {
-                for arg in args {
-                    Self::update_local_expr_types_in_expr(&mut arg.expr, local_types);
-                }
-            }
-            TirExprKind::CmRawCall { args, .. } => {
-                for arg in args {
-                    Self::update_local_expr_types_in_expr(arg, local_types);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                Self::update_local_expr_types_in_expr(receiver, local_types);
-                for arg in args {
-                    Self::update_local_expr_types_in_expr(&mut arg.expr, local_types);
-                }
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                Self::update_local_expr_types_in_expr(left, local_types);
-                Self::update_local_expr_types_in_expr(right, local_types);
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            } => {
-                Self::update_local_expr_types_in_expr(inner, local_types);
-            }
-            TirExprKind::Block(block) => {
-                Self::update_local_expr_types(block, local_types);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                Self::update_local_expr_types_in_expr(condition, local_types);
-                Self::update_local_expr_types(then_branch, local_types);
-                if let Some(else_blk) = else_branch {
-                    Self::update_local_expr_types(else_blk, local_types);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    Self::update_local_expr_types_in_expr(elem, local_types);
-                }
-            }
-            TirExprKind::Index { expr, index } => {
-                Self::update_local_expr_types_in_expr(expr, local_types);
-                Self::update_local_expr_types_in_expr(index, local_types);
-            }
-            TirExprKind::Assign { target, value } => {
-                Self::update_local_expr_types_in_expr(target, local_types);
-                Self::update_local_expr_types_in_expr(value, local_types);
-            }
-            TirExprKind::Match { expr, arms } => {
-                Self::update_local_expr_types_in_expr(expr, local_types);
-                for arm in arms {
-                    if let Some(guard) = &mut arm.guard {
-                        Self::update_local_expr_types_in_expr(guard, local_types);
+        impl TirMutVisitor for LocalTypeUpdater<'_> {
+            fn visit_expr(&mut self, expr: &mut TirExpr) {
+                if let TirExprKind::Local { index, .. } = &expr.kind {
+                    if let Some(&local_type) = self.local_types.get(*index as usize) {
+                        expr.type_id = local_type;
                     }
-                    Self::update_local_expr_types_in_expr(&mut arm.body, local_types);
                 }
-            }
-            TirExprKind::Closure { .. } => {
                 // Closures have their own local scope, don't update with parent's local_types
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    Self::update_local_expr_types_in_expr(&mut field.value, local_types);
+                if matches!(expr.kind, TirExprKind::Closure { .. }) {
+                    return;
                 }
+                self.walk_expr(expr);
             }
-            TirExprKind::IndirectCall { callee, args } => {
-                Self::update_local_expr_types_in_expr(callee, local_types);
-                for arg in args {
-                    Self::update_local_expr_types_in_expr(arg, local_types);
-                }
-            }
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                Self::update_local_expr_types_in_expr(functor, local_types);
-            }
-            TirExprKind::TemplateString { parts } => {
-                for part in parts {
-                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                        Self::update_local_expr_types_in_expr(inner, local_types);
-                    }
-                }
-            }
-            _ => {}
         }
+        LocalTypeUpdater { local_types }.visit_block(block);
     }
     fn rewrite_call_expr(&self, expr: &mut TirExpr, type_table: &TypeTable) {
         if let TirExprKind::Call {
