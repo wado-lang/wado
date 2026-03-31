@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774918830609,
+  "lastUpdate": 1774948315329,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9071,6 +9071,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4498e070ac5cc9c9947f2cf53088820331a4a0b2"
         },
         "date": 1774918830374,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "74bf359e0de630c6d721ec14bda9d297050dee39",
+          "message": "Merge pull request #741 from wado-lang/claude/investigate-package-gale-tests-lUJS8\n\nMemoize FIRST set computation in package-gale with GenContext",
+          "timestamp": "2026-03-31T18:09:05+09:00",
+          "tree_id": "9ebd6708f9b3429325d0dea68be369c0154be8e5",
+          "url": "https://github.com/wado-lang/wado/commit/74bf359e0de630c6d721ec14bda9d297050dee39"
+        },
+        "date": 1774948315117,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
