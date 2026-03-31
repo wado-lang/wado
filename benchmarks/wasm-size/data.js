@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774948452427,
+  "lastUpdate": 1774961123486,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9149,6 +9149,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a83aa8a2d6c391438c7eae9547eddb2179903e11"
         },
         "date": 1774948452259,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "806a15f588a204eb6e56b8ffa3196405dbb44316",
+          "message": "Merge pull request #743 from wado-lang/claude/unified-visitor-pattern-d2hW2\n\nAdd unified WIR visitor traits and migrate optimization passes",
+          "timestamp": "2026-03-31T21:42:31+09:00",
+          "tree_id": "075d085467eb237a2e5441ed1816192608edf719",
+          "url": "https://github.com/wado-lang/wado/commit/806a15f588a204eb6e56b8ffa3196405dbb44316"
+        },
+        "date": 1774961123286,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
