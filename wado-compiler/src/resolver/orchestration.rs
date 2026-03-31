@@ -1165,15 +1165,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
                 Ok(())
             }
-            Type::Reference(inner) | Type::MutReference(inner) => {
-                Self::validate_ast_type_names(
-                    inner,
-                    known_type_names,
-                    resource_type_names,
-                    type_params,
-                    logger,
-                )
-            }
+            Type::Reference(inner) | Type::MutReference(inner) => Self::validate_ast_type_names(
+                inner,
+                known_type_names,
+                resource_type_names,
+                type_params,
+                logger,
+            ),
             Type::Tuple(elems) => {
                 for elem in elems {
                     Self::validate_ast_type_names(
