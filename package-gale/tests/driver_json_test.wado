@@ -108,3 +108,27 @@ test "unparse_xml for string" {
     let expected = "<json><value><STRING>\"hello\"</STRING></value><Eof></Eof></json>";
     assert xml == expected, `got: {xml}`;
 }
+
+test "unparse_xml for object with multiple pairs" {
+    let root = json::parse(&"{\"a\":1,\"b\":2}").unwrap();
+    let tree = json::to_tree(&root);
+    let xml = unparse_xml(&tree);
+    // The key test: commas and subsequent pairs must appear in the CST
+    assert xml.len() > 0, "empty xml";
+    let has_b = false;
+    for let c of xml.chars() {
+        // Check that the string contains "b" key
+    }
+    // Full expected output: both pairs and comma separator must be in the tree
+    let expected = "<json><value><obj><TK_LIT_LBRACE>{</TK_LIT_LBRACE><pair><STRING>\"a\"</STRING><TK_LIT_COLON>:</TK_LIT_COLON><value><NUMBER>1</NUMBER></value></pair><TK_LIT_COMMA>,</TK_LIT_COMMA><pair><STRING>\"b\"</STRING><TK_LIT_COLON>:</TK_LIT_COLON><value><NUMBER>2</NUMBER></value></pair><TK_LIT_RBRACE>}</TK_LIT_RBRACE></obj></value><Eof></Eof></json>";
+    assert xml == expected, `\nexpected: {expected}\ngot:      {xml}`;
+}
+
+test "unparse_xml for array with multiple values" {
+    let root = json::parse(&"[1,2,3]").unwrap();
+    let tree = json::to_tree(&root);
+    let xml = unparse_xml(&tree);
+    // All values and comma separators must appear
+    let expected = "<json><value><arr><TK_LIT_LBRACKET>[</TK_LIT_LBRACKET><value><NUMBER>1</NUMBER></value><TK_LIT_COMMA>,</TK_LIT_COMMA><value><NUMBER>2</NUMBER></value><TK_LIT_COMMA>,</TK_LIT_COMMA><value><NUMBER>3</NUMBER></value><TK_LIT_RBRACKET>]</TK_LIT_RBRACKET></arr></value><Eof></Eof></json>";
+    assert xml == expected, `\nexpected: {expected}\ngot:      {xml}`;
+}

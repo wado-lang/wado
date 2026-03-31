@@ -205,6 +205,86 @@ pub fn group_case_name(alt: &Alternative) -> String {
 }
 
 
+/// A token-only group: multiple alternatives, each with a single TokenRef or Literal.
+/// Example: (K_INSERT | K_REPLACE)
+pub fn is_token_only_group(alts: &Array<Alternative>) -> bool {
+    if alts.len() < 2 { return false; }
+    for let alt of alts {
+        if alt.elements.len() != 1 { return false; }
+        if let TokenRef(_) | Literal(_) = alt.elements[0] {
+            // ok
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// A single-alternative multi-element group: exactly 1 alt with 2+ elements.
+/// Example: (',' pair), (';'+ sql_stmt)
+pub fn is_single_alt_group(alts: &Array<Alternative>) -> bool {
+    if alts.len() != 1 { return false; }
+    return alts[0].elements.len() >= 2;
+}
+
+/// Check if a group has any storable pattern (simple, token-only, or single-alt).
+pub fn is_storable_group(alts: &Array<Alternative>) -> bool {
+    return is_simple_cst_group(alts) || is_token_only_group(alts) || is_single_alt_group(alts);
+}
+
+/// Get a field name for the elements in a single-alt group's element.
+fn element_base_name(elem: &Element) -> String {
+    if let RuleRef(name) = *elem {
+        return to_snake_case(&name);
+    }
+    if let TokenRef(name) = *elem {
+        return to_lower(&name);
+    }
+    if let Literal(text) = *elem {
+        return literal_field_name(&text);
+    }
+    if let Repeat(rep) = *elem {
+        return element_base_name(&rep.element);
+    }
+    if let Label(lab) = *elem {
+        return to_snake_case(&lab.name);
+    }
+    return "item";
+}
+
+/// Generate a struct type name for a single-alt group from its elements.
+/// (',' pair) -> "CommaPairItem"
+pub fn single_alt_group_type_name(alt: &Alternative) -> String {
+    let mut result = String::with_capacity(64);
+    for let elem of &alt.elements {
+        result.append(&to_pascal_case(&element_base_name(&elem)));
+    }
+    result.append("Item");
+    return result;
+}
+
+/// Generate a field base name for a single-alt group.
+/// (',' pair) -> "comma_pair"
+pub fn single_alt_group_field_name(alt: &Alternative) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        if i > 0 { result.append("_"); }
+        result.append(&element_base_name(&alt.elements[i]));
+    }
+    return result;
+}
+
+/// Generate a field base name for a token-only group.
+/// (K_INSERT | K_REPLACE) -> "k_insert_or_k_replace"
+pub fn token_group_field_name(alts: &Array<Alternative>) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 { result.append("_or_"); }
+        result.append(&element_base_name(&alts[i].elements[0]));
+    }
+    return result;
+}
+
 pub fn literal_const_name(text: &String) -> String {
     let mut result = String::with_capacity(text.len() + 8);
     result.append("TK_LIT_");

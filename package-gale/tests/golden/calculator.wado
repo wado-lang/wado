@@ -193,19 +193,37 @@ pub struct EquationNode {
     pub eof: Token,
 }
 
+pub struct ItemMultiplyingExpressionItem {
+    pub plus_or_minus: Token,
+    pub multiplying_expression: MultiplyingExpressionNode,
+}
+
 pub struct ExpressionNode {
     pub span: Span,
     pub multiplying_expression: MultiplyingExpressionNode,
+    pub item_multiplying_expression_list: Array<ItemMultiplyingExpressionItem>,
+}
+
+pub struct ItemPowExpressionItem {
+    pub times_or_div: Token,
+    pub pow_expression: PowExpressionNode,
 }
 
 pub struct MultiplyingExpressionNode {
     pub span: Span,
     pub pow_expression: PowExpressionNode,
+    pub item_pow_expression_list: Array<ItemPowExpressionItem>,
+}
+
+pub struct PowSignedAtomItem {
+    pub pow: Token,
+    pub signed_atom: SignedAtomNode,
 }
 
 pub struct PowExpressionNode {
     pub span: Span,
     pub signed_atom: SignedAtomNode,
+    pub pow_signed_atom_list: Array<PowSignedAtomItem>,
 }
 
 pub variant SignedAtomNode {
@@ -297,11 +315,17 @@ pub struct VariableNode {
     pub variable: Token,
 }
 
+pub struct CommaExpressionItem {
+    pub comma: Token,
+    pub expression: ExpressionNode,
+}
+
 pub struct FuncNode {
     pub span: Span,
     pub funcname: FuncnameNode,
     pub lparen: Token,
     pub expression: ExpressionNode,
+    pub comma_expression_list: Array<CommaExpressionItem>,
     pub rparen: Token,
 }
 
@@ -1043,49 +1067,60 @@ fn parse_equation(p: &mut Parser) -> Result<EquationNode, ParseError> {
 fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let multiplying_expression = parse_multiplying_expression(p)?;
+    let mut item_multiplying_expression_list: Array<ItemMultiplyingExpressionItem> = [];
     while p.peek_kind() == TK_PLUS || p.peek_kind() == TK_MINUS {
-        let grp_kind = p.peek_kind();
-        if grp_kind == TK_PLUS {
-            let plus = p.expect(TK_PLUS, "PLUS")?;
-        } else if grp_kind == TK_MINUS {
-            let minus = p.expect(TK_MINUS, "MINUS")?;
-        }
+        let plus_or_minus = p.consume();
         let multiplying_expression = parse_multiplying_expression(p)?;
+        let item_multiplying_expression = ItemMultiplyingExpressionItem {
+            plus_or_minus,
+            multiplying_expression,
+        };
+        item_multiplying_expression_list.append(item_multiplying_expression);
     }
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode {
         span: Span::new(start, p.last_end()),
         multiplying_expression,
+        item_multiplying_expression_list,
     });
 }
 
 fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let pow_expression = parse_pow_expression(p)?;
+    let mut item_pow_expression_list: Array<ItemPowExpressionItem> = [];
     while p.peek_kind() == TK_TIMES || p.peek_kind() == TK_DIV {
-        let grp_kind = p.peek_kind();
-        if grp_kind == TK_TIMES {
-            let times = p.expect(TK_TIMES, "TIMES")?;
-        } else if grp_kind == TK_DIV {
-            let div = p.expect(TK_DIV, "DIV")?;
-        }
+        let times_or_div = p.consume();
         let pow_expression = parse_pow_expression(p)?;
+        let item_pow_expression = ItemPowExpressionItem {
+            times_or_div,
+            pow_expression,
+        };
+        item_pow_expression_list.append(item_pow_expression);
     }
     return Result::<MultiplyingExpressionNode, ParseError>::Ok(MultiplyingExpressionNode {
         span: Span::new(start, p.last_end()),
         pow_expression,
+        item_pow_expression_list,
     });
 }
 
 fn parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let signed_atom = parse_signed_atom(p)?;
+    let mut pow_signed_atom_list: Array<PowSignedAtomItem> = [];
     while p.peek_kind() == TK_POW {
         let pow = p.expect(TK_POW, "POW")?;
         let signed_atom = parse_signed_atom(p)?;
+        let pow_signed_atom = PowSignedAtomItem {
+            pow,
+            signed_atom,
+        };
+        pow_signed_atom_list.append(pow_signed_atom);
     }
     return Result::<PowExpressionNode, ParseError>::Ok(PowExpressionNode {
         span: Span::new(start, p.last_end()),
         signed_atom,
+        pow_signed_atom_list,
     });
 }
 
@@ -1227,9 +1262,15 @@ fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
     let funcname = parse_funcname(p)?;
     let lparen = p.expect(TK_LPAREN, "LPAREN")?;
     let expression = parse_expression(p)?;
+    let mut comma_expression_list: Array<CommaExpressionItem> = [];
     while p.peek_kind() == TK_COMMA {
         let comma = p.expect(TK_COMMA, "COMMA")?;
         let expression = parse_expression(p)?;
+        let comma_expression = CommaExpressionItem {
+            comma,
+            expression,
+        };
+        comma_expression_list.append(comma_expression);
     }
     let rparen = p.expect(TK_RPAREN, "RPAREN")?;
     return Result::<FuncNode, ParseError>::Ok(FuncNode {
@@ -1237,6 +1278,7 @@ fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
         funcname,
         lparen,
         expression,
+        comma_expression_list,
         rparen,
     });
 }
@@ -1363,18 +1405,30 @@ pub fn walk_equation<V: Visitor>(v: &mut V, node: &EquationNode) {
 pub fn walk_expression<V: Visitor>(v: &mut V, node: &ExpressionNode) {
     v.enter_rule(&"expression", &node.span);
     walk_multiplyingExpression(v, &node.multiplying_expression);
+    for let item of &node.item_multiplying_expression_list {
+        v.visit_token(&item.plus_or_minus);
+        walk_multiplyingExpression(v, &item.multiplying_expression);
+    }
     v.exit_rule(&"expression", &node.span);
 }
 
 pub fn walk_multiplyingExpression<V: Visitor>(v: &mut V, node: &MultiplyingExpressionNode) {
     v.enter_rule(&"multiplyingExpression", &node.span);
     walk_powExpression(v, &node.pow_expression);
+    for let item of &node.item_pow_expression_list {
+        v.visit_token(&item.times_or_div);
+        walk_powExpression(v, &item.pow_expression);
+    }
     v.exit_rule(&"multiplyingExpression", &node.span);
 }
 
 pub fn walk_powExpression<V: Visitor>(v: &mut V, node: &PowExpressionNode) {
     v.enter_rule(&"powExpression", &node.span);
     walk_signedAtom(v, &node.signed_atom);
+    for let item of &node.pow_signed_atom_list {
+        v.visit_token(&item.pow);
+        walk_signedAtom(v, &item.signed_atom);
+    }
     v.exit_rule(&"powExpression", &node.span);
 }
 
@@ -1469,6 +1523,10 @@ pub fn walk_func_<V: Visitor>(v: &mut V, node: &FuncNode) {
     walk_funcname(v, &node.funcname);
     v.visit_token(&node.lparen);
     walk_expression(v, &node.expression);
+    for let item of &node.comma_expression_list {
+        v.visit_token(&item.comma);
+        walk_expression(v, &item.expression);
+    }
     v.visit_token(&node.rparen);
     v.exit_rule(&"func_", &node.span);
 }

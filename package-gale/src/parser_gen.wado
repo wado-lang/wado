@@ -9,9 +9,15 @@ use {
     escape_string,
     literal_const_name,
     is_simple_cst_group,
+    is_token_only_group,
+    is_single_alt_group,
+    is_storable_group,
     group_variant_type_name,
     group_field_base_name,
     group_case_name,
+    single_alt_group_type_name,
+    single_alt_group_field_name,
+    token_group_field_name,
     str_set_from,
     str_set_insert_all,
 } from "./gen_util.wado";
@@ -1344,6 +1350,10 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     if let Group(alts) = *elem {
         if is_simple_cst_group(&alts) {
             gen_consume_group_store_optional(w, &alts, ctx, name_counts);
+        } else if is_token_only_group(&alts) {
+            gen_consume_token_group(w, &alts, ctx, name_counts);
+        } else if is_single_alt_group(&alts) {
+            gen_consume_single_alt_group(w, &alts[0], ctx, name_counts);
         } else {
             gen_consume_group(w, &alts, ctx, name_counts);
         }
@@ -1369,7 +1379,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
             w.begin(`while {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
             if is_group_store {
-                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, ctx, &mut nc); }
+                gen_group_store_any(w, inner, ctx, &mut nc);
             } else {
                 gen_element(w, inner, ctx, &mut nc);
             }
@@ -1379,7 +1389,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
         if let Plus = rep.kind {
             let mut nc: Array<[String, i32]> = [];
             if is_group_store {
-                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, ctx, &mut nc); }
+                gen_group_store_any(w, inner, ctx, &mut nc);
             } else {
                 gen_element(w, inner, ctx, &mut nc);
             }
@@ -1388,7 +1398,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
             w.begin(`while {first_check_str(&first)}`);
             let mut nc2: Array<[String, i32]> = [];
             if is_group_store {
-                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, ctx, &mut nc2); }
+                gen_group_store_any(w, inner, ctx, &mut nc2);
             } else {
                 gen_element(w, inner, ctx, &mut nc2);
             }
@@ -1401,7 +1411,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
             w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
             if is_group_store {
-                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, ctx, &mut nc); }
+                gen_group_store_any(w, inner, ctx, &mut nc);
             } else {
                 gen_element(w, inner, ctx, &mut nc);
             }
@@ -1922,7 +1932,7 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext
 
 fn is_group_with_store(elem: &Element) -> bool {
     if let Group(alts) = *elem {
-        return is_simple_cst_group(&alts);
+        return is_storable_group(&alts);
     }
     return false;
 }
@@ -1935,7 +1945,7 @@ fn has_field(elem: &Element) -> bool {
         return has_field(&lab.element);
     }
     if let Group(alts) = *elem {
-        return is_simple_cst_group(&alts);
+        return is_storable_group(&alts);
     }
     return false;
 }
@@ -1956,6 +1966,12 @@ fn element_field_info(elem: &Element) -> [String, String] {
     if let Group(alts) = *elem {
         if is_simple_cst_group(&alts) {
             return [group_field_base_name(&alts), group_variant_type_name(&alts)];
+        }
+        if is_token_only_group(&alts) {
+            return [token_group_field_name(&alts), "Token"];
+        }
+        if is_single_alt_group(&alts) {
+            return [single_alt_group_field_name(&alts[0]), single_alt_group_type_name(&alts[0])];
         }
     }
     return ["_", "Token"];
@@ -2010,6 +2026,12 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
         if is_simple_cst_group(&alts) {
             let field_name = dedup_name(&group_field_base_name(&alts), name_counts);
             w.line(`{field_name},`);
+        } else if is_token_only_group(&alts) {
+            let field_name = dedup_name(&token_group_field_name(&alts), name_counts);
+            w.line(`{field_name},`);
+        } else if is_single_alt_group(&alts) {
+            let field_name = dedup_name(&single_alt_group_field_name(&alts[0]), name_counts);
+            w.line(`{field_name},`);
         }
         return;
     }
@@ -2051,6 +2073,10 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) 
     if let Group(alts) = *elem {
         if is_simple_cst_group(&alts) {
             dedup_name(&group_field_base_name(&alts), name_counts);
+        } else if is_token_only_group(&alts) {
+            dedup_name(&token_group_field_name(&alts), name_counts);
+        } else if is_single_alt_group(&alts) {
+            dedup_name(&single_alt_group_field_name(&alts[0]), name_counts);
         }
         return;
     }
@@ -2304,6 +2330,40 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
     w.end(); // if/else if chain
 
     w.line(`let {var_name} = {inner_var};`);
+}
+
+fn gen_group_store_any(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    if let Group(alts) = *inner {
+        if is_simple_cst_group(&alts) {
+            gen_consume_group_store(w, &alts, ctx, name_counts);
+        } else if is_token_only_group(&alts) {
+            gen_consume_token_group(w, &alts, ctx, name_counts);
+        } else if is_single_alt_group(&alts) {
+            gen_consume_single_alt_group(w, &alts[0], ctx, name_counts);
+        }
+    }
+}
+
+fn gen_consume_token_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let var_name = dedup_name(&token_group_field_name(alts), name_counts);
+    w.line(`let {var_name} = p.consume();`);
+}
+
+fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let type_name = single_alt_group_type_name(alt);
+    let field_name = dedup_name(&single_alt_group_field_name(alt), name_counts);
+    let mut inner_nc: Array<[String, i32]> = [];
+    for let elem of &alt.elements {
+        gen_element(w, &elem, ctx, &mut inner_nc);
+    }
+    w.line(`let {field_name} = {type_name} \{`);
+    w.indent();
+    let mut assign_nc: Array<[String, i32]> = [];
+    for let elem of &alt.elements {
+        gen_field_assignment(w, &elem, &mut assign_nc);
+    }
+    w.dedent();
+    w.line("};");
 }
 
 fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
