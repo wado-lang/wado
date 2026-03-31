@@ -1060,9 +1060,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     Item::Use(use_decl) => {
                         for use_item in &use_decl.items {
                             if let ast::UseItem::Simple { name, alias, .. } = use_item {
-                                module_known_names.insert(
-                                    alias.as_ref().unwrap_or(name).clone(),
-                                );
+                                module_known_names.insert(alias.as_ref().unwrap_or(name).clone());
                             }
                         }
                     }
@@ -1124,11 +1122,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         )?;
                     }
                     Item::Function(func) => {
-                        let type_params: Vec<&str> = func
-                            .type_params
-                            .iter()
-                            .map(|p| p.name.as_str())
-                            .collect();
+                        let type_params: Vec<&str> =
+                            func.type_params.iter().map(|p| p.name.as_str()).collect();
                         for param in &func.params {
                             Self::validate_ast_type_names(
                                 &param.ty,
@@ -1167,12 +1162,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         // (e.g., `impl Option<T>` without `impl<T>`)
                         if let Type::Generic(g) = &impl_block.ty {
                             for arg in &g.args {
-                                if let Type::Named(n) = arg {
-                                    if !module_known_names.contains(&n.name)
-                                        && !resource_type_names.contains(&n.name)
-                                    {
-                                        type_params.push(&n.name);
-                                    }
+                                if let Type::Named(n) = arg
+                                    && !module_known_names.contains(&n.name)
+                                    && !resource_type_names.contains(&n.name)
+                                {
+                                    type_params.push(&n.name);
                                 }
                             }
                         }
