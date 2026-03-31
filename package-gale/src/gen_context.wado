@@ -1,6 +1,6 @@
 use { ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
-use { array_contains_str, literal_const_name } from "./gen_util.wado";
+use { literal_const_name, str_set_from } from "./gen_util.wado";
 use { TreeMap } from "core:collections";
 
 pub struct GenContext {
@@ -40,7 +40,8 @@ impl GenContext {
             return result;
         }
 
-        if array_contains_str(visiting, name) {
+        let visiting_set = str_set_from(visiting);
+        if visiting_set.contains(*name) {
             return [];
         }
 
@@ -48,6 +49,7 @@ impl GenContext {
         visiting.append(*name);
 
         let mut result: Array<String> = [];
+
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
             for let alt of &rule.alternatives {
@@ -77,6 +79,7 @@ impl GenContext {
         }
         if let Group(alts) = *elem {
             let mut result: Array<String> = [];
+    
             for let alt of alts {
                 let af = self.first_of_alt(&alt, visiting);
                 extend_dedup(&mut result, &af);
@@ -94,6 +97,7 @@ impl GenContext {
 
     pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut Array<String>) -> Array<String> {
         let mut result: Array<String> = [];
+
         for let elem of &alt.elements {
             let elem_first = self.first_of_element(elem, visiting);
             extend_dedup(&mut result, &elem_first);
@@ -106,6 +110,7 @@ impl GenContext {
 
     pub fn first_of_elements_from(&mut self, elements: &Array<Element>, start: i32) -> Array<String> {
         let mut result: Array<String> = [];
+
         for let mut i = start; i < elements.len(); i += 1 {
             let mut visiting: Array<String> = [];
             let elem_first = self.first_of_element(&elements[i], &mut visiting);
@@ -154,7 +159,8 @@ impl GenContext {
             return val;
         }
 
-        if array_contains_str(visiting, name) {
+        let visiting_set = str_set_from(visiting);
+        if visiting_set.contains(*name) {
             return false;
         }
 
@@ -210,8 +216,9 @@ pub fn is_nullable(elem: &Element) -> bool {
 }
 
 pub fn sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
+    let b_set = str_set_from(b);
     for let x of a {
-        if array_contains_str(b, x) {
+        if b_set.contains(*x) {
             return true;
         }
     }
@@ -234,10 +241,19 @@ pub fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
 
 fn extend_dedup(target: &mut Array<String>, source: &Array<String>) {
     for let item of source {
-        if !array_contains_str(target, item) {
+        if !arr_contains(target, item) {
             target.append(*item);
         }
     }
+}
+
+fn arr_contains(arr: &Array<String>, value: &String) -> bool {
+    for let item of arr {
+        if *item == *value {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {

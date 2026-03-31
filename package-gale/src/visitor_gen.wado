@@ -7,7 +7,7 @@ use {
     LabelElement,
     RepeatKind,
 } from "./ir.wado";
-use { to_snake_case, to_lower, to_pascal_case, rule_type_name, literal_field_name, strip_suffix, is_simple_cst_group, group_variant_type_name, group_field_base_name, group_case_name } from "./gen_util.wado";
+use { to_snake_case, to_lower, to_pascal_case, rule_type_name, literal_field_name, strip_suffix, is_simple_cst_group, is_token_only_group, is_single_alt_group, group_variant_type_name, group_field_base_name, group_case_name, token_group_field_name, single_alt_group_field_name, single_alt_group_type_name } from "./gen_util.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
 /// Generate Visitor walk functions and to_tree for a grammar.
@@ -56,29 +56,30 @@ fn gen_walk_field(w: &mut CodeWriter, field: &WalkField, var: &String) {
     let name = &field.name;
     match field.wrapper {
         Direct => {
-            match &field.action {
-                VisitToken => w.line(`v.visit_token(&{var}.{name});`),
-                WalkRule(rule_name) => w.line(`walk_{rule_name}(v, &{var}.{name});`),
-                WalkGroup(cases) => gen_walk_group_match(w, `&{var}.{name}`, cases),
-            }
+            gen_walk_action(w, &field.action, `&{var}.{name}`);
         },
         ArrayWrap => {
             w.begin(`for let item of &{var}.{name}`);
-            match &field.action {
-                VisitToken => w.line("v.visit_token(item);"),
-                WalkRule(rule_name) => w.line(`walk_{rule_name}(v, item);`),
-                WalkGroup(cases) => gen_walk_group_match(w, "item", cases),
-            }
+            gen_walk_action(w, &field.action, "item");
             w.end();
         },
         OptionalWrap => {
             w.begin(`if let Some(item) = &{var}.{name}`);
-            match &field.action {
-                VisitToken => w.line("v.visit_token(item);"),
-                WalkRule(rule_name) => w.line(`walk_{rule_name}(v, item);`),
-                WalkGroup(cases) => gen_walk_group_match(w, "item", cases),
-            }
+            gen_walk_action(w, &field.action, "item");
             w.end();
+        },
+    }
+}
+
+fn gen_walk_action(w: &mut CodeWriter, action: &WalkAction, expr: &String) {
+    match action {
+        VisitToken => w.line(`v.visit_token({expr});`),
+        WalkRule(rule_name) => w.line(`walk_{rule_name}(v, {expr});`),
+        WalkGroup(cases) => gen_walk_group_match(w, expr, cases),
+        WalkStruct(fields) => {
+            for let f of fields {
+                gen_walk_field(w, f, expr);
+            }
         },
     }
 }
@@ -98,6 +99,20 @@ fn repeat_inner_walk_field(elem: &Element) -> Option<WalkField> {
             return Option::Some(WalkField {
                 name: group_field_base_name(&alts),
                 action: WalkAction::WalkGroup(cases),
+                wrapper: WalkWrapper::Direct,
+            });
+        }
+        if is_token_only_group(&alts) {
+            return Option::Some(WalkField {
+                name: token_group_field_name(&alts),
+                action: WalkAction::VisitToken,
+                wrapper: WalkWrapper::Direct,
+            });
+        }
+        if is_single_alt_group(&alts) {
+            return Option::Some(WalkField {
+                name: single_alt_group_field_name(&alts[0]),
+                action: build_struct_walk_action(&alts[0]),
                 wrapper: WalkWrapper::Direct,
             });
         }
@@ -138,6 +153,7 @@ variant WalkAction {
     VisitToken,
     WalkRule(String),
     WalkGroup(Array<GroupCaseInfo>),
+    WalkStruct(Array<WalkField>),
 }
 
 enum WalkWrapper {
@@ -238,9 +254,28 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
                 wrapper: WalkWrapper::OptionalWrap,
             });
         }
+        if is_token_only_group(&alts) {
+            return Option::Some(WalkField {
+                name: token_group_field_name(&alts),
+                action: WalkAction::VisitToken,
+                wrapper: WalkWrapper::Direct,
+            });
+        }
+        if is_single_alt_group(&alts) {
+            return Option::Some(WalkField {
+                name: single_alt_group_field_name(&alts[0]),
+                action: build_struct_walk_action(&alts[0]),
+                wrapper: WalkWrapper::OptionalWrap,
+            });
+        }
         return null;
     }
     return null;
+}
+
+fn build_struct_walk_action(alt: &Alternative) -> WalkAction {
+    let fields = collect_walk_fields(&alt.elements);
+    return WalkAction::WalkStruct(fields);
 }
 
 fn get_name_count(counts: &Array<[String, i32]>, name: &String) -> i32 {

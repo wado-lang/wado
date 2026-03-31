@@ -1,4 +1,5 @@
 use { Alternative } from "./ir.wado";
+use { TreeSet } from "core:collections";
 
 pub fn to_pascal_case(name: &String) -> String {
     let mut result = String::with_capacity(name.len());
@@ -38,51 +39,48 @@ pub fn to_lower(name: &String) -> String {
     return name.to_ascii_lowercase();
 }
 
+fn escape_control(c: char) -> Option<String> {
+    return match c {
+        '\\' => Option::Some("\\\\"),
+        '\n' => Option::Some("\\n"),
+        '\r' => Option::Some("\\r"),
+        '\t' => Option::Some("\\t"),
+        _ => null,
+    };
+}
+
+fn append_escaped_body(result: &mut String, c: char) {
+    if let Some(esc) = escape_control(c) {
+        result.append(&esc);
+    } else {
+        let code = c as i32;
+        if code >= 32 && code < 127 {
+            result.append_char(c);
+        } else {
+            result.append(`\\u\{{code:x}\}`);
+        }
+    }
+}
+
 pub fn escape_char(c: char) -> String {
     if c == '\'' {
         return "'\\''";
     }
-    if c == '\\' {
-        return "'\\\\'";
-    }
-    if c == '\n' {
-        return "'\\n'";
-    }
-    if c == '\r' {
-        return "'\\r'";
-    }
-    if c == '\t' {
-        return "'\\t'";
-    }
-    let code = c as i32;
-    if code >= 32 && code < 127 {
-        let mut s = String::with_capacity(3);
-        s.append_char('\'');
-        s.append_char(c);
-        s.append_char('\'');
-        return s;
-    }
-    return `'\\u\{{code:x}\}'`;
+    let mut s = String::with_capacity(6);
+    s.append_char('\'');
+    append_escaped_body(&mut s, c);
+    s.append_char('\'');
+    return s;
 }
 
 pub fn escape_string(s: &String) -> String {
     let mut result = String::with_capacity(s.len() + 2);
     result.append_char('"');
     for let c of s.chars() {
-        match c {
-            '"' => result.append("\\\""),
-            '\\' => result.append("\\\\"),
-            '\n' => result.append("\\n"),
-            '\r' => result.append("\\r"),
-            '\t' => result.append("\\t"),
-            _ => {
-                let code = c as i32;
-                if code >= 32 && code < 127 {
-                    result.append_char(c);
-                } else {
-                    result.append(`\\u\{{code:x}\}`);
-                }
-            },
+        if c == '"' {
+            result.append("\\\"");
+        } else {
+            append_escaped_body(&mut result, c);
         }
     }
     result.append_char('"');
@@ -95,79 +93,45 @@ pub fn rule_type_name(name: &String) -> String {
     return result;
 }
 
+fn symbol_char_names(c: char) -> Option<[String, String]> {
+    return match c {
+        '+' => Option::Some(["plus", "PLUS"]),
+        '-' => Option::Some(["minus", "MINUS"]),
+        '*' => Option::Some(["star", "STAR"]),
+        '/' => Option::Some(["slash", "SLASH"]),
+        '%' => Option::Some(["percent", "PERCENT"]),
+        '=' => Option::Some(["eq", "EQ"]),
+        '!' => Option::Some(["bang", "BANG"]),
+        '<' => Option::Some(["lt", "LT"]),
+        '>' => Option::Some(["gt", "GT"]),
+        '&' => Option::Some(["amp", "AMP"]),
+        '|' => Option::Some(["pipe", "PIPE"]),
+        '^' => Option::Some(["caret", "CARET"]),
+        '~' => Option::Some(["tilde", "TILDE"]),
+        '.' => Option::Some(["dot", "DOT"]),
+        ',' => Option::Some(["comma", "COMMA"]),
+        ':' => Option::Some(["colon", "COLON"]),
+        ';' => Option::Some(["semicolon", "SEMI"]),
+        '(' => Option::Some(["lparen", "LPAREN"]),
+        ')' => Option::Some(["rparen", "RPAREN"]),
+        '{' => Option::Some(["lbrace", "LBRACE"]),
+        '}' => Option::Some(["rbrace", "RBRACE"]),
+        '[' => Option::Some(["lbracket", "LBRACKET"]),
+        ']' => Option::Some(["rbracket", "RBRACKET"]),
+        _ => null,
+    };
+}
+
 pub fn literal_field_name(text: &String) -> String {
-    if *text == "+" {
-        return "plus";
-    }
-    if *text == "-" {
-        return "minus";
-    }
-    if *text == "*" {
-        return "star";
-    }
-    if *text == "/" {
-        return "slash";
-    }
-    if *text == "%" {
-        return "percent";
-    }
-    if *text == "=" {
-        return "eq";
-    }
-    if *text == "!" {
-        return "bang";
-    }
-    if *text == "<" {
-        return "lt";
-    }
-    if *text == ">" {
-        return "gt";
-    }
-    if *text == "&" {
-        return "amp";
-    }
-    if *text == "|" {
-        return "pipe";
-    }
-    if *text == "^" {
-        return "caret";
-    }
-    if *text == "~" {
-        return "tilde";
-    }
-    if *text == "." {
-        return "dot";
-    }
-    if *text == "," {
-        return "comma";
-    }
-    if *text == ":" {
-        return "colon";
-    }
-    if *text == ";" {
-        return "semicolon";
-    }
-    if *text == "(" {
-        return "lparen";
-    }
-    if *text == ")" {
-        return "rparen";
-    }
-    if *text == "{" {
-        return "lbrace";
-    }
-    if *text == "}" {
-        return "rbrace";
-    }
-    if *text == "[" {
-        return "lbracket";
-    }
-    if *text == "]" {
-        return "rbracket";
+    let chars: Array<char> = text.chars().collect();
+    if chars.len() == 1 {
+        if let Some(names) = symbol_char_names(chars[0]) {
+            return names.0;
+        }
     }
     let mut result = String::with_capacity(text.len() + 4);
     result.append("lit_");
-    for let c of text.chars() {
+    for let c of chars {
         if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
             result.append_char(c.to_ascii_lowercase());
         } else {
@@ -240,13 +204,85 @@ pub fn group_case_name(alt: &Alternative) -> String {
     return "Unknown";
 }
 
-pub fn array_contains_str(arr: &Array<String>, value: &String) -> bool {
-    for let item of arr {
-        if *item == *value {
-            return true;
+
+/// A token-only group: multiple alternatives, each with a single TokenRef or Literal.
+/// Example: (K_INSERT | K_REPLACE)
+pub fn is_token_only_group(alts: &Array<Alternative>) -> bool {
+    if alts.len() < 2 { return false; }
+    for let alt of alts {
+        if alt.elements.len() != 1 { return false; }
+        if let TokenRef(_) | Literal(_) = alt.elements[0] {
+            // ok
+        } else {
+            return false;
         }
     }
-    return false;
+    return true;
+}
+
+/// A single-alternative multi-element group: exactly 1 alt with 2+ elements.
+/// Example: (',' pair), (';'+ sql_stmt)
+pub fn is_single_alt_group(alts: &Array<Alternative>) -> bool {
+    if alts.len() != 1 { return false; }
+    return alts[0].elements.len() >= 2;
+}
+
+/// Check if a group has any storable pattern (simple, token-only, or single-alt).
+pub fn is_storable_group(alts: &Array<Alternative>) -> bool {
+    return is_simple_cst_group(alts) || is_token_only_group(alts) || is_single_alt_group(alts);
+}
+
+/// Get a field name for the elements in a single-alt group's element.
+fn element_base_name(elem: &Element) -> String {
+    if let RuleRef(name) = *elem {
+        return to_snake_case(&name);
+    }
+    if let TokenRef(name) = *elem {
+        return to_lower(&name);
+    }
+    if let Literal(text) = *elem {
+        return literal_field_name(&text);
+    }
+    if let Repeat(rep) = *elem {
+        return element_base_name(&rep.element);
+    }
+    if let Label(lab) = *elem {
+        return to_snake_case(&lab.name);
+    }
+    return "item";
+}
+
+/// Generate a struct type name for a single-alt group from its elements.
+/// (',' pair) -> "CommaPairItem"
+pub fn single_alt_group_type_name(alt: &Alternative) -> String {
+    let mut result = String::with_capacity(64);
+    for let elem of &alt.elements {
+        result.append(&to_pascal_case(&element_base_name(&elem)));
+    }
+    result.append("Item");
+    return result;
+}
+
+/// Generate a field base name for a single-alt group.
+/// (',' pair) -> "comma_pair"
+pub fn single_alt_group_field_name(alt: &Alternative) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        if i > 0 { result.append("_"); }
+        result.append(&element_base_name(&alt.elements[i]));
+    }
+    return result;
+}
+
+/// Generate a field base name for a token-only group.
+/// (K_INSERT | K_REPLACE) -> "k_insert_or_k_replace"
+pub fn token_group_field_name(alts: &Array<Alternative>) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 { result.append("_or_"); }
+        result.append(&element_base_name(&alts[i].elements[0]));
+    }
+    return result;
 }
 
 pub fn literal_const_name(text: &String) -> String {
@@ -257,33 +293,25 @@ pub fn literal_const_name(text: &String) -> String {
             result.append_char(c.to_ascii_uppercase());
         } else if c.is_ascii_uppercase() || c >= '0' && c <= '9' {
             result.append_char(c);
+        } else if let Some(names) = symbol_char_names(c) {
+            result.append(&names.1);
         } else {
-            match c {
-                '{' => result.append("LBRACE"),
-                '}' => result.append("RBRACE"),
-                '[' => result.append("LBRACKET"),
-                ']' => result.append("RBRACKET"),
-                '(' => result.append("LPAREN"),
-                ')' => result.append("RPAREN"),
-                ':' => result.append("COLON"),
-                ',' => result.append("COMMA"),
-                '.' => result.append("DOT"),
-                ';' => result.append("SEMI"),
-                '+' => result.append("PLUS"),
-                '-' => result.append("MINUS"),
-                '*' => result.append("STAR"),
-                '/' => result.append("SLASH"),
-                '=' => result.append("EQ"),
-                '<' => result.append("LT"),
-                '>' => result.append("GT"),
-                '!' => result.append("BANG"),
-                '&' => result.append("AMP"),
-                '|' => result.append("PIPE"),
-                '^' => result.append("CARET"),
-                '~' => result.append("TILDE"),
-                _ => result.append_char('_'),
-            }
+            result.append_char('_');
         }
     }
     return result;
+}
+
+pub fn str_set_from(arr: &Array<String>) -> TreeSet<String> {
+    let mut set = TreeSet::<String>::new();
+    for let item of arr {
+        set.insert(*item);
+    }
+    return set;
+}
+
+pub fn str_set_insert_all(set: &mut TreeSet<String>, arr: &Array<String>) {
+    for let item of arr {
+        set.insert(*item);
+    }
 }

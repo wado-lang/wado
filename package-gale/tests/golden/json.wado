@@ -172,10 +172,16 @@ pub variant ObjNode {
     Alt1(ObjAlt1),
 }
 
+pub struct CommaPairItem {
+    pub comma: Token,
+    pub pair: PairNode,
+}
+
 pub struct ObjAlt0 {
     pub span: Span,
     pub lbrace: Token,
     pub pair: PairNode,
+    pub comma_pair_list: Array<CommaPairItem>,
     pub rbrace: Token,
 }
 
@@ -197,10 +203,16 @@ pub variant ArrNode {
     Alt1(ArrAlt1),
 }
 
+pub struct CommaValueItem {
+    pub comma: Token,
+    pub value: ValueNode,
+}
+
 pub struct ArrAlt0 {
     pub span: Span,
     pub lbracket: Token,
     pub value: ValueNode,
+    pub comma_value_list: Array<CommaValueItem>,
     pub rbracket: Token,
 }
 
@@ -672,15 +684,22 @@ fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let start = p.peek().span.start;
     let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
     let pair = parse_pair(p)?;
+    let mut comma_pair_list: Array<CommaPairItem> = [];
     while p.peek_kind() == TK_LIT_COMMA {
         let comma = p.expect(TK_LIT_COMMA, "','")?;
         let pair = parse_pair(p)?;
+        let comma_pair = CommaPairItem {
+            comma,
+            pair,
+        };
+        comma_pair_list.append(comma_pair);
     }
     let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
     return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt0(ObjAlt0 {
         span: Span::new(start, p.last_end()),
         lbrace,
         pair,
+        comma_pair_list,
         rbrace,
     }));
 }
@@ -703,15 +722,22 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
         let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
         if p.peek_kind() == TK_STRING {
             let pair = parse_pair(p)?;
+            let mut comma_pair_list: Array<CommaPairItem> = [];
             while p.peek_kind() == TK_LIT_COMMA {
                 let comma = p.expect(TK_LIT_COMMA, "','")?;
                 let pair = parse_pair(p)?;
+                let comma_pair = CommaPairItem {
+                    comma,
+                    pair,
+                };
+                comma_pair_list.append(comma_pair);
             }
             let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
             return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt0(ObjAlt0 {
                 span: Span::new(start, p.last_end()),
                 lbrace,
                 pair,
+                comma_pair_list,
                 rbrace,
             }));
         } else if p.peek_kind() == TK_LIT_RBRACE {
@@ -747,15 +773,22 @@ fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let start = p.peek().span.start;
     let lbracket = p.expect(TK_LIT_LBRACKET, "'['")?;
     let value = parse_value(p)?;
+    let mut comma_value_list: Array<CommaValueItem> = [];
     while p.peek_kind() == TK_LIT_COMMA {
         let comma = p.expect(TK_LIT_COMMA, "','")?;
         let value = parse_value(p)?;
+        let comma_value = CommaValueItem {
+            comma,
+            value,
+        };
+        comma_value_list.append(comma_value);
     }
     let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
     return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt0(ArrAlt0 {
         span: Span::new(start, p.last_end()),
         lbracket,
         value,
+        comma_value_list,
         rbracket,
     }));
 }
@@ -778,15 +811,22 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
         let lbracket = p.expect(TK_LIT_LBRACKET, "'['")?;
         if p.peek_kind() == TK_STRING || p.peek_kind() == TK_NUMBER || p.peek_kind() == TK_LIT_LBRACE || p.peek_kind() == TK_LIT_LBRACKET || p.peek_kind() == TK_LIT_TRUE || p.peek_kind() == TK_LIT_FALSE || p.peek_kind() == TK_LIT_NULL {
             let value = parse_value(p)?;
+            let mut comma_value_list: Array<CommaValueItem> = [];
             while p.peek_kind() == TK_LIT_COMMA {
                 let comma = p.expect(TK_LIT_COMMA, "','")?;
                 let value = parse_value(p)?;
+                let comma_value = CommaValueItem {
+                    comma,
+                    value,
+                };
+                comma_value_list.append(comma_value);
             }
             let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
             return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt0(ArrAlt0 {
                 span: Span::new(start, p.last_end()),
                 lbracket,
                 value,
+                comma_value_list,
                 rbracket,
             }));
         } else if p.peek_kind() == TK_LIT_RBRACKET {
@@ -883,6 +923,10 @@ pub fn walk_obj<V: Visitor>(v: &mut V, node: &ObjNode) {
             v.enter_rule(&"obj", &n.span);
             v.visit_token(&n.lbrace);
             walk_pair(v, &n.pair);
+            for let item of &n.comma_pair_list {
+                v.visit_token(&item.comma);
+                walk_pair(v, &item.pair);
+            }
             v.visit_token(&n.rbrace);
             v.exit_rule(&"obj", &n.span);
         }
@@ -909,6 +953,10 @@ pub fn walk_arr<V: Visitor>(v: &mut V, node: &ArrNode) {
             v.enter_rule(&"arr", &n.span);
             v.visit_token(&n.lbracket);
             walk_value(v, &n.value);
+            for let item of &n.comma_value_list {
+                v.visit_token(&item.comma);
+                walk_value(v, &item.value);
+            }
             v.visit_token(&n.rbracket);
             v.exit_rule(&"arr", &n.span);
         }
