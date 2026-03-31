@@ -243,118 +243,26 @@ fn apply_dae(module: &mut WirModule, confirmed: &[(u32, DaeCandidate)]) {
 
 fn rewrite_dae_call_sites(instrs: &mut [WirInstr], dae_map: &IndexMap<u32, &Vec<bool>>) {
     for instr in instrs.iter_mut() {
-        match instr {
-            WirInstr::Call { func_id, args } => {
-                if let Some(dead_params) = dae_map.get(&func_id.index()) {
-                    let old_args = std::mem::take(args);
-                    *args = old_args
-                        .into_iter()
-                        .enumerate()
-                        .filter(|(i, _)| *i >= dead_params.len() || !dead_params[*i])
-                        .map(|(_, arg)| arg)
-                        .collect();
-                }
-                // Recurse into remaining args (they may contain nested calls).
-                for arg in args {
-                    rewrite_dae_call_sites_instr(arg, dae_map);
-                }
-            }
-            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-                rewrite_dae_call_sites(body, dae_map);
-            }
-            WirInstr::If {
-                condition,
-                then_body,
-                else_body,
-                ..
-            } => {
-                rewrite_dae_call_sites_instr(condition, dae_map);
-                rewrite_dae_call_sites(then_body, dae_map);
-                if let Some(eb) = else_body {
-                    rewrite_dae_call_sites(eb, dae_map);
-                }
-            }
-            _ => {
-                rewrite_dae_call_sites_instr(instr, dae_map);
-            }
-        }
+        rewrite_dae_call_sites_instr(instr, dae_map);
     }
 }
 
 fn rewrite_dae_call_sites_instr(instr: &mut WirInstr, dae_map: &IndexMap<u32, &Vec<bool>>) {
-    match instr {
-        WirInstr::Call { func_id, args } => {
-            if let Some(dead_params) = dae_map.get(&func_id.index()) {
-                let old_args = std::mem::take(args);
-                *args = old_args
-                    .into_iter()
-                    .enumerate()
-                    .filter(|(i, _)| *i >= dead_params.len() || !dead_params[*i])
-                    .map(|(_, arg)| arg)
-                    .collect();
-            }
-            for arg in args {
-                rewrite_dae_call_sites_instr(arg, dae_map);
-            }
-        }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            rewrite_dae_call_sites(body, dae_map);
-        }
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            rewrite_dae_call_sites_instr(condition, dae_map);
-            rewrite_dae_call_sites(then_body, dae_map);
-            if let Some(eb) = else_body {
-                rewrite_dae_call_sites(eb, dae_map);
-            }
-        }
-        _ => {
-            // Walk other instruction variants for nested Calls.
-            // Since there's no for_each_child_mut, handle the common cases.
-            match instr {
-                WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. } => {
-                    rewrite_dae_call_sites_instr(value, dae_map);
-                }
-                WirInstr::Drop(inner)
-                | WirInstr::RefAsNonNull(inner)
-                | WirInstr::RefIsNull(inner)
-                | WirInstr::StructGet { expr: inner, .. }
-                | WirInstr::RefCast { expr: inner, .. }
-                | WirInstr::RefTest { expr: inner, .. }
-                | WirInstr::ValueCopy { expr: inner, .. } => {
-                    rewrite_dae_call_sites_instr(inner, dae_map);
-                }
-                WirInstr::StructNew { fields, .. }
-                | WirInstr::ArrayNewFixed {
-                    elements: fields, ..
-                } => {
-                    for f in fields {
-                        rewrite_dae_call_sites_instr(f, dae_map);
-                    }
-                }
-                WirInstr::StructSet { expr, value, .. } => {
-                    rewrite_dae_call_sites_instr(expr, dae_map);
-                    rewrite_dae_call_sites_instr(value, dae_map);
-                }
-                WirInstr::MultiValueLocalBind { instr: inner, .. }
-                | WirInstr::MultiValueStructNew { instr: inner, .. } => {
-                    rewrite_dae_call_sites_instr(inner, dae_map);
-                }
-                WirInstr::Return { value: Some(v) } => {
-                    rewrite_dae_call_sites_instr(v, dae_map);
-                }
-                WirInstr::CallRef { args, func_ref, .. } => {
-                    rewrite_dae_call_sites_instr(func_ref, dae_map);
-                    for arg in args {
-                        rewrite_dae_call_sites_instr(arg, dae_map);
-                    }
-                }
-                _ => {}
-            }
-        }
+    // Rewrite this Call if it targets a DAE candidate.
+    if let WirInstr::Call { func_id, args } = instr
+        && let Some(dead_params) = dae_map.get(&func_id.index())
+    {
+        let old_args = std::mem::take(args);
+        *args = old_args
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| *i >= dead_params.len() || !dead_params[*i])
+            .map(|(_, arg)| arg)
+            .collect();
     }
+
+    // Recurse into all children (covers every WirInstr variant).
+    instr.for_each_boxed_child_mut(&mut |child| {
+        rewrite_dae_call_sites_instr(child, dae_map);
+    });
 }
