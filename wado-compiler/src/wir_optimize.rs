@@ -15,6 +15,7 @@
 //! | `string`          | Short string append simplification          |
 //! | `peephole`        | Constant folding, copy elision, MV elision  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
+//! | `dae`             | Dead argument elimination                   |
 //! | `drve`            | Dead return value elimination               |
 //! | `elide_local`     | Write-only local elimination                |
 //! | `init_guard`      | Trivial init-guard global removal           |
@@ -23,6 +24,7 @@
 mod array;
 mod cleanup;
 mod const_forward;
+mod dae;
 mod dce;
 mod drve;
 mod elide_local;
@@ -46,6 +48,7 @@ use array::{
 };
 use cleanup::cleanup;
 use const_forward::forward_struct_field_constants;
+use dae::eliminate_dead_arguments;
 use drve::eliminate_dead_return_values;
 use elide_local::elide_write_only_locals;
 use elide_struct::{
@@ -141,9 +144,9 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel, profiler: &dyn 
 
     // Phase 6: Dead value elimination
     //
-    // Eliminate functions whose return value is always dropped, then clean up
-    // write-only locals left behind.
+    // Eliminate dead arguments, dead return values, and write-only locals.
     profiler.span_start("wir/phase6_dead_value_elim");
+    eliminate_dead_arguments(module);
     eliminate_dead_return_values(module);
     elide_write_only_locals(module);
     cleanup(module);

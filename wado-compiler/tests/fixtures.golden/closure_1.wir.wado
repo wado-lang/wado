@@ -26,8 +26,6 @@ struct Formatter {
     mut buf: ref String,
 }
 
-struct __Closure_8 {}
-
 struct __Closure_1 {
     mut __capture_0: i32,
 }
@@ -146,8 +144,6 @@ type "functype/__cm_export____test_16_closure_struct_literal_return" = fn();
 
 type "functype/__cm_export____test_17_closure_function_factory" = fn();
 
-type "functype/for_each_item$__Closure_8" = fn(ref Array<i32>, ref __Closure_8) -> ref Array<i32>;
-
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
 type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
@@ -205,6 +201,8 @@ type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 type "functype/__Closure_0::__call" = fn(i32, i32) -> i32;
 
 type "functype/__Closure_1::__call" = fn(i32, i32) -> i32;
+
+type "functype/for_each_item$__Closure_8" = fn(ref Array<i32>) -> ref Array<i32>;
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -305,7 +303,7 @@ fn __test_5_closure_fn_param_effectful() {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
     };
-    result = for_each_item$__Closure_8(items, __Closure_8 {  });
+    result = for_each_item$__Closure_8(items);
     __v0_3 = __inline_Array_i32__IndexValue__index_value_8: block -> i32 {
         if 0 >= result.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -766,7 +764,7 @@ fn __cm_export____test_17_closure_function_factory() {
     "wasi/task-return"(0);
 }
 
-fn for_each_item$__Closure_8(items, f) {
+fn for_each_item$__Closure_8(items) {
     let __local_2: ref Array<i32>;
     let result: ref Array<i32>;
     let __iter_4: ref "core:allocator/ArrayIter<i32>";

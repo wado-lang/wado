@@ -141,10 +141,6 @@ type "functype/TreeMap<String,Value>::insert" = fn(ref "./sub/cross_module_treem
 
 type "functype/TreeMap<String,Value>::insert_node" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>", ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>", ref String, i32) -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
 
-type "functype/TreeMap<String,Value>::split" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>", ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>") -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
-
-type "functype/TreeMap<String,Value>::skew" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>", ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>") -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
-
 type "functype/Array<TreeMapEntry<String,Value>>::push" = fn(ref Array<TreeMapEntry<String,Value>>, ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>");
 
 type "functype/Array<TreeMapEntry<String,Value>>::grow" = fn(ref Array<TreeMapEntry<String,Value>>);
@@ -158,6 +154,10 @@ type "functype/wasi/stream-new" = fn() -> i64;
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/./sub/cross_module_treemap_variant_helper.wado/stringify" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/Value") -> ref String;
+
+type "functype/TreeMap<String,Value>::split" = fn(ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>") -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
+
+type "functype/TreeMap<String,Value>::skew" = fn(ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>") -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -634,14 +634,14 @@ fn TreeMap<String,Value>::insert_node(self, node, key, index) {
         } else {
             n.right = TreeMap<String,Value>::insert_node(self, n.right, key, index);
         };
-        after_skew = TreeMap<String,Value>::skew(self, n);
-        return TreeMap<String,Value>::split(self, after_skew);
+        after_skew = TreeMap<String,Value>::skew(n);
+        return TreeMap<String,Value>::split(after_skew);
     };
     new_node = "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
     return new_node;
 }
 
-fn TreeMap<String,Value>::split(self, node) {
+fn TreeMap<String,Value>::split(node) {
     let n: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
     let right: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
     let rr: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
@@ -668,7 +668,7 @@ fn TreeMap<String,Value>::split(self, node) {
     return ref.null none;
 }
 
-fn TreeMap<String,Value>::skew(self, node) {
+fn TreeMap<String,Value>::skew(node) {
     let n: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
     let left: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";
     let __pattern_temp_1: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>";

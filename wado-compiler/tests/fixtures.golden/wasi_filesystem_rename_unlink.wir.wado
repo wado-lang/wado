@@ -353,7 +353,7 @@ fn run() with Stdout, Stderr, Preopens {
     };
     old_result = __cm_binding__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("rename_src.txt"), used: 14 }, 0, 1);
     if ref.test Result<Descriptor,ErrorCode>::Err(old_result) {
-        err_11 = value_copy "wasi:filesystem/types.wado/ErrorCode"(ref.cast Result<Descriptor,ErrorCode>::Err(old_result).payload_0);
+        err_11 = ref.cast Result<Descriptor,ErrorCode>::Err(old_result).payload_0;
         let __match_scrut_0: ref "wasi:filesystem/types.wado/ErrorCode";
         __match_scrut_0 = err_11;
         if __match_scrut_0.discriminant == 19 {
@@ -369,7 +369,7 @@ fn run() with Stdout, Stderr, Preopens {
         dst_file = ref.cast Result<Descriptor,ErrorCode>::Ok(dst_result).payload_0;
         stat_result = __cm_binding__Descriptor_stat(dst_file);
         if ref.test Result<DescriptorStat,ErrorCode>::Ok(stat_result) {
-            stat = value_copy "wasi:filesystem/types.wado/DescriptorStat"(ref.cast Result<DescriptorStat,ErrorCode>::Ok(stat_result).payload_0);
+            stat = ref.cast Result<DescriptorStat,ErrorCode>::Ok(stat_result).payload_0;
             if stat.size == 6_i64 {
                 "core:cli/println"(String { repr: array.new_data<u8>("rename: destination has correct size (correct)"), used: 46 });
             } else {
@@ -395,7 +395,7 @@ fn run() with Stdout, Stderr, Preopens {
     };
     gone_result = __cm_binding__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("rename_dst.txt"), used: 14 }, 0, 1);
     if ref.test Result<Descriptor,ErrorCode>::Err(gone_result) {
-        err_19 = value_copy "wasi:filesystem/types.wado/ErrorCode"(ref.cast Result<Descriptor,ErrorCode>::Err(gone_result).payload_0);
+        err_19 = ref.cast Result<Descriptor,ErrorCode>::Err(gone_result).payload_0;
         let __match_scrut_1: ref "wasi:filesystem/types.wado/ErrorCode";
         __match_scrut_1 = err_19;
         if __match_scrut_1.discriminant == 19 {

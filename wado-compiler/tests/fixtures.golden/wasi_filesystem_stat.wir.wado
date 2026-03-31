@@ -280,7 +280,7 @@ fn run() with Stdout, Stderr, Preopens {
     }.0;
     stat_result = __cm_binding__Descriptor_stat_at(dir, 0, String { repr: array.new_data<u8>("hello.txt"), used: 9 });
     if ref.test Result<DescriptorStat,ErrorCode>::Ok(stat_result) {
-        stat = value_copy "wasi:filesystem/types.wado/DescriptorStat"(ref.cast Result<DescriptorStat,ErrorCode>::Ok(stat_result).payload_0);
+        stat = ref.cast Result<DescriptorStat,ErrorCode>::Ok(stat_result).payload_0;
         let __match_scrut_0: ref "wasi:filesystem/types.wado/DescriptorType";
         __match_scrut_0 = stat.type;
         if __match_scrut_0.discriminant == 5 {
@@ -310,7 +310,7 @@ fn run() with Stdout, Stderr, Preopens {
         file = ref.cast Result<Descriptor,ErrorCode>::Ok(open_result).payload_0;
         fstat_result = __cm_binding__Descriptor_stat(file);
         if ref.test Result<DescriptorStat,ErrorCode>::Ok(fstat_result) {
-            fstat = value_copy "wasi:filesystem/types.wado/DescriptorStat"(ref.cast Result<DescriptorStat,ErrorCode>::Ok(fstat_result).payload_0);
+            fstat = ref.cast Result<DescriptorStat,ErrorCode>::Ok(fstat_result).payload_0;
             let __match_scrut_1: ref "wasi:filesystem/types.wado/DescriptorType";
             __match_scrut_1 = fstat.type;
             if __match_scrut_1.discriminant == 5 {

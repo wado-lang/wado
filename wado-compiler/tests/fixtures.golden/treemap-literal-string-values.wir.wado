@@ -131,10 +131,6 @@ type "functype/TreeMap<String,String>::insert" = fn(ref "core:allocator/TreeMap<
 
 type "functype/TreeMap<String,String>::insert_node" = fn(ref "core:allocator/TreeMap<String,String>", ref null "core:allocator/TreeMapNode<String>", ref String, i32) -> ref null "core:allocator/TreeMapNode<String>";
 
-type "functype/TreeMap<String,String>::split" = fn(ref "core:allocator/TreeMap<String,String>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
-
-type "functype/TreeMap<String,String>::skew" = fn(ref "core:allocator/TreeMap<String,String>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
-
 type "functype/Array<TreeMapEntry<String,String>>::push" = fn(ref Array<TreeMapEntry<String,String>>, ref "core:allocator/TreeMapEntry<String,String>");
 
 type "functype/Array<TreeMapEntry<String,String>>::grow" = fn(ref Array<TreeMapEntry<String,String>>);
@@ -154,6 +150,10 @@ type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
+type "functype/TreeMap<String,String>::split" = fn(ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
+
+type "functype/TreeMap<String,String>::skew" = fn(ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -841,14 +841,14 @@ fn TreeMap<String,String>::insert_node(self, node, key, index) {
         } else {
             n.right = TreeMap<String,String>::insert_node(self, n.right, key, index);
         };
-        after_skew = TreeMap<String,String>::skew(self, n);
-        return TreeMap<String,String>::split(self, after_skew);
+        after_skew = TreeMap<String,String>::skew(n);
+        return TreeMap<String,String>::split(after_skew);
     };
     new_node = "core:allocator/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
     return new_node;
 }
 
-fn TreeMap<String,String>::split(self, node) {
+fn TreeMap<String,String>::split(node) {
     let n: ref "core:allocator/TreeMapNode<String>";
     let right: ref "core:allocator/TreeMapNode<String>";
     let rr: ref "core:allocator/TreeMapNode<String>";
@@ -875,7 +875,7 @@ fn TreeMap<String,String>::split(self, node) {
     return ref.null none;
 }
 
-fn TreeMap<String,String>::skew(self, node) {
+fn TreeMap<String,String>::skew(node) {
     let n: ref "core:allocator/TreeMapNode<String>";
     let left: ref "core:allocator/TreeMapNode<String>";
     let __pattern_temp_1: ref null "core:allocator/TreeMapNode<String>";

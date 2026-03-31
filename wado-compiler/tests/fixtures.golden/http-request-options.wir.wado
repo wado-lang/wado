@@ -257,8 +257,6 @@ type "functype/wasi/wasi:http/RequestOptions::get_between_bytes_timeout" = fn(i3
 
 type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
-type "functype/handle" = fn(i32);
-
 type "functype/__cm_binding__RequestOptions_new" = fn() -> i32;
 
 type "functype/__cm_binding__RequestOptions_get_connect_timeout" = fn(i32) -> ref Option<u64>;
@@ -317,6 +315,8 @@ type "functype/__cm_binding__Response_new" = fn(i32, ref Option<Stream<u8>>, i32
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
+type "functype/handle" = fn();
+
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
 import fn task-return from "wasi/task-return";
@@ -338,7 +338,7 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn handle(request) {
+fn handle() {
     let opts: i32;
     let connect: ref Option<u64>;
     let __cond_3: bool;
@@ -667,7 +667,7 @@ condition: between matches { None }
             __tv_6 = __opt_inner_1_53;
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestBodySize"(__err_val) {
-            __case_payload_57 = value_copy Option<u64>(ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestBodySize"(__err_val).payload_0);
+            __case_payload_57 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestBodySize"(__err_val).payload_0;
             __opt_disc_59 = ref.test Option<u64>::Some(__case_payload_57);
             __opt_inner_0_60 = 0_i64;
             if __opt_disc_59 != 0 {
@@ -678,7 +678,7 @@ condition: between matches { None }
             __tv_3 = __opt_inner_0_60;
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize"(__err_val) {
-            __case_payload_62 = value_copy Option<u32>(ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize"(__err_val).payload_0);
+            __case_payload_62 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_64 = ref.test Option<u32>::Some(__case_payload_62);
             __opt_inner_0_65 = 0;
             if __opt_disc_64 != 0 {
@@ -730,7 +730,7 @@ condition: between matches { None }
             __tv_7 = __opt_inner_4;
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize"(__err_val) {
-            __case_payload_87 = value_copy Option<u32>(ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize"(__err_val).payload_0);
+            __case_payload_87 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_89 = ref.test Option<u32>::Some(__case_payload_87);
             __opt_inner_0_90 = 0;
             if __opt_disc_89 != 0 {
@@ -767,7 +767,7 @@ condition: between matches { None }
             __tv_6 = __opt_inner_0_103;
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize"(__err_val) {
-            __case_payload_105 = value_copy Option<u32>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize"(__err_val).payload_0);
+            __case_payload_105 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_107 = ref.test Option<u32>::Some(__case_payload_105);
             __opt_inner_0_108 = 0;
             if __opt_disc_107 != 0 {
@@ -804,7 +804,7 @@ condition: between matches { None }
             __tv_6 = __opt_inner_0_121;
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseBodySize"(__err_val) {
-            __case_payload_123 = value_copy Option<u64>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseBodySize"(__err_val).payload_0);
+            __case_payload_123 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseBodySize"(__err_val).payload_0;
             __opt_disc_125 = ref.test Option<u64>::Some(__case_payload_123);
             __opt_inner_0_126 = 0_i64;
             if __opt_disc_125 != 0 {
@@ -815,7 +815,7 @@ condition: between matches { None }
             __tv_3 = __opt_inner_0_126;
         };
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize"(__err_val) {
-            __case_payload_128 = value_copy Option<u32>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize"(__err_val).payload_0);
+            __case_payload_128 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_130 = ref.test Option<u32>::Some(__case_payload_128);
             __opt_inner_0_131 = 0;
             if __opt_disc_130 != 0 {
@@ -996,7 +996,7 @@ fn __cm_binding__Response_new(headers, contents, trailers) {
 }
 
 fn __cm_export__handle(request) {
-    handle(request);
+    handle();
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal

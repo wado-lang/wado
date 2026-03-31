@@ -181,6 +181,7 @@ After parameter SROA, substitutes `StructGet(LocalGet(x), field)` with the inner
 
 ### Phase 6: Dead Value Elimination
 
+- **Dead argument elimination (DAE)** — removes unused function parameters and corresponding arguments at call sites when all dead-position arguments are side-effect-free
 - **Dead return value elimination (DRVE)** — converts functions whose return value is always dropped to void return
 - **Write-only local elimination** — removes `LocalSet(x, expr)` when local `x` is never read. Runs iteratively.
 
@@ -205,12 +206,16 @@ After parameter SROA, substitutes `StructGet(LocalGet(x), field)` with the inner
 - **Return Scalarization via Multi-Value Returns** — for user-defined functions (already done for builtins)
 - **Function Specialization** — specialize for known constant arguments
 - **Argument Promotion** — promote `&T` fields to scalar parameters
-- **Dead Argument Elimination**
 - **Jump Threading**
 - **Reassociation** — reorder associative operations to group constants
 - **SimplifyCFG** — general control flow graph simplification
 - **Tail Call Optimization** — emit `return_call` for tail-recursive calls
 - **Bounds Check Elimination (outside loops)** — redundant consecutive checks (loop-guarded bounds checks are handled by `condition_implication`)
+
+## Tried and Found Ineffective
+
+- **Empty array singleton for struct field defaults** — sharing a single `array.new<u8>(0)` global across all default String initializations in serde `Deserialize` impls. Measured no performance improvement; the GC allocator handles tiny zero-length arrays efficiently enough that the overhead is negligible compared to other costs.
+- **`array.copy` for Array grow** — replacing the element-by-element copy loop in `Array::grow` with the Wasm `array.copy` instruction. Was several times _slower_ than the loop implementation, likely due to poor JIT optimization of `array.copy` in current runtimes.
 
 ## Testing Strategy
 
