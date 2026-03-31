@@ -15,16 +15,9 @@ Fixing these requires either:
 
 ## Code Quality
 
-### gen_context.wado
-
-- **O(n) rule lookup in hot paths**: `first_of_rule` and `rule_is_single_token` do linear scans over `parser_rules` to find a rule by name. Add a `TreeMap<String, usize>` index (or `rule_by_name()` helper) to GenContext for O(log n) lookup.
-- **Repeated O(n²) dedup pattern**: Multiple methods (`first_of_rule`, `first_of_element`, `first_of_alt`, `first_of_elements_from`) use `array_contains_str` loops to deduplicate FIRST sets. Consider a `TreeSet`-based accumulator or a shared helper.
-- **Redundant `found` variable in `rule_is_single_token`**: The `found` variable is set to `true` then used in `result = found && all_alts_ok`, but since `found` is always `true` at that point (we're inside the `if rule.name == *name` block), it's redundant.
-- **Inconsistent visiting cleanup**: `first_of_rule` rebuilds the visiting array inline; `rule_is_single_token` calls `remove_from_visiting`. Unify on one approach.
-
 ### parser_gen.wado
 
-- **Linear rule lookups**: Many functions iterate `ctx.parser_rules` to find a rule by name (e.g., `gen_parser_rule`, `build_sll_node`, `sll_advance`). Would benefit from the `rule_by_name()` index mentioned above.
+- **Linear rule lookups**: Many functions iterate `ctx.parser_rules` to find a rule by name (e.g., `gen_parser_rule`, `build_sll_node`, `sll_advance`). Could use `ctx.find_rule()` for O(log n) lookup.
 - **Duplicated branch merge logic**: SLL prediction tree building has similar merge/dedup patterns in multiple places. Could be consolidated.
 - **Double rule lookup** (~lines 201-233): `gen_parser_rule` looks up the rule, then `gen_single_alt_parser` may look it up again.
 - **Unused function**: `_sll_closure_unused` is dead code (prefixed with `_` to suppress warnings).

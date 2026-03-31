@@ -6,18 +6,32 @@ use { TreeMap } from "core:collections";
 pub struct GenContext {
     pub parser_rules: Array<ParserRule>,
     pub lit_tokens: Array<LitToken>,
+    rule_index: TreeMap<String, i32>,
     first_cache: TreeMap<String, Array<String>>,
     single_token_cache: TreeMap<String, bool>,
 }
 
 impl GenContext {
     pub fn new(parser_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> GenContext {
+        let mut rule_index = TreeMap::<String, i32>::new();
+        for let mut i = 0; i < parser_rules.len(); i += 1 {
+            rule_index[parser_rules[i].name] = i;
+        }
         return GenContext {
             parser_rules: *parser_rules,
             lit_tokens: *lit_tokens,
+            rule_index,
             first_cache: TreeMap::<String, Array<String>>::new(),
             single_token_cache: TreeMap::<String, bool>::new(),
         };
+    }
+
+    pub fn find_rule(&self, name: &String) -> Option<&ParserRule> {
+        let idx = self.rule_index.get(*name);
+        if let Some(i) = idx {
+            return Option::Some(&self.parser_rules[i]);
+        }
+        return null;
     }
 
     pub fn first_of_rule(&mut self, name: &String, visiting: &mut Array<String>) -> Array<String> {
@@ -34,27 +48,15 @@ impl GenContext {
         visiting.append(*name);
 
         let mut result: Array<String> = [];
-        for let rule of &self.parser_rules {
-            if rule.name == *name {
-                for let alt of &rule.alternatives {
-                    let af = self.first_of_alt(alt, visiting);
-                    for let tk of af {
-                        if !array_contains_str(&result, &tk) {
-                            result.append(tk);
-                        }
-                    }
-                }
-                break;
+        let rule = self.find_rule(name);
+        if let Some(rule) = rule {
+            for let alt of &rule.alternatives {
+                let af = self.first_of_alt(alt, visiting);
+                extend_dedup(&mut result, &af);
             }
         }
 
-        let mut new_visiting: Array<String> = [];
-        for let v of visiting {
-            if *v != *name {
-                new_visiting.append(*v);
-            }
-        }
-        *visiting = new_visiting;
+        remove_from_visiting(visiting, name);
 
         if is_top_level {
             self.first_cache[*name] = result;
@@ -77,11 +79,7 @@ impl GenContext {
             let mut result: Array<String> = [];
             for let alt of alts {
                 let af = self.first_of_alt(&alt, visiting);
-                for let tk of af {
-                    if !array_contains_str(&result, &tk) {
-                        result.append(tk);
-                    }
-                }
+                extend_dedup(&mut result, &af);
             }
             return result;
         }
@@ -98,11 +96,7 @@ impl GenContext {
         let mut result: Array<String> = [];
         for let elem of &alt.elements {
             let elem_first = self.first_of_element(elem, visiting);
-            for let tk of elem_first {
-                if !array_contains_str(&result, &tk) {
-                    result.append(tk);
-                }
-            }
+            extend_dedup(&mut result, &elem_first);
             if !is_nullable(elem) {
                 break;
             }
@@ -115,11 +109,7 @@ impl GenContext {
         for let mut i = start; i < elements.len(); i += 1 {
             let mut visiting: Array<String> = [];
             let elem_first = self.first_of_element(&elements[i], &mut visiting);
-            for let tk of elem_first {
-                if !array_contains_str(&result, &tk) {
-                    result.append(tk);
-                }
-            }
+            extend_dedup(&mut result, &elem_first);
             if !is_nullable(&elements[i]) {
                 break;
             }
@@ -172,12 +162,8 @@ impl GenContext {
         visiting.append(*name);
 
         let mut result = false;
-        let mut found = false;
-        for let rule of &self.parser_rules {
-            if rule.name != *name {
-                continue;
-            }
-            found = true;
+        let rule = self.find_rule(name);
+        if let Some(rule) = rule {
             let mut all_alts_ok = true;
             for let alt of &rule.alternatives {
                 let mut non_nullable_count = 0;
@@ -201,8 +187,7 @@ impl GenContext {
                     break;
                 }
             }
-            result = found && all_alts_ok;
-            break;
+            result = all_alts_ok;
         }
 
         remove_from_visiting(visiting, name);
@@ -245,6 +230,14 @@ pub fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
         return false;
     }
     return true;
+}
+
+fn extend_dedup(target: &mut Array<String>, source: &Array<String>) {
+    for let item of source {
+        if !array_contains_str(target, item) {
+            target.append(*item);
+        }
+    }
 }
 
 fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
