@@ -507,6 +507,21 @@ pub struct CreateIndexStmtNode {
     pub k_where_expr: Option<KWhereExprItem>,
 }
 
+pub struct CommaColumnDefItem {
+    pub comma: Token,
+    pub column_def: ColumnDefNode,
+}
+
+pub struct CommaTableConstraintItem {
+    pub comma: Token,
+    pub table_constraint: TableConstraintNode,
+}
+
+pub struct KWithoutIdentifierItem {
+    pub k_without: Token,
+    pub identifier: Token,
+}
+
 pub struct CreateTableStmtNode {
     pub span: Span,
     pub k_create: Token,
@@ -515,6 +530,17 @@ pub struct CreateTableStmtNode {
     pub k_if_k_not_k_exists: Option<KIfKNotKExistsItem>,
     pub database_name_dot: Option<DatabaseNameDotItem>,
     pub table_name: TableNameNode,
+}
+
+pub struct CommaColumnNameItem {
+    pub comma: Token,
+    pub column_name: ColumnNameNode,
+}
+
+pub struct KOfColumnNameItemItem {
+    pub k_of: Token,
+    pub column_name: ColumnNameNode,
+    pub comma_column_name_list: Array<CommaColumnNameItem>,
 }
 
 pub struct KForKEachKRowItem {
@@ -683,15 +709,23 @@ pub struct FactoredSelectStmtNode {
     pub k_limit_expr_item: Option<KLimitExprItemItem>,
 }
 
-pub struct CommaColumnNameItem {
-    pub comma: Token,
-    pub column_name: ColumnNameNode,
-}
-
 pub struct LparenColumnNameItemRparenItem {
     pub lparen: Token,
     pub column_name: ColumnNameNode,
     pub comma_column_name_list: Array<CommaColumnNameItem>,
+    pub rparen: Token,
+}
+
+pub struct CommaExprItem {
+    pub comma: Token,
+    pub expr: ExprNode,
+}
+
+pub struct CommaLparenExprItemRparenItem {
+    pub comma: Token,
+    pub lparen: Token,
+    pub expr: ExprNode,
+    pub comma_expr_list: Array<CommaExprItem>,
     pub rparen: Token,
 }
 
@@ -709,6 +743,11 @@ pub struct PragmaStmtNode {
     pub k_pragma: Token,
     pub database_name_dot: Option<DatabaseNameDotItem>,
     pub pragma_name: PragmaNameNode,
+}
+
+pub variant TableNameOrIndexNameGroup {
+    TableName(TableNameNode),
+    IndexName(IndexNameNode),
 }
 
 pub struct ReindexStmtNode {
@@ -774,13 +813,13 @@ pub struct CommaResultColumnItem {
     pub result_column: ResultColumnNode,
 }
 
-pub struct KFromItemItem {
-    pub k_from: Token,
+pub struct CommaTableOrSubqueryItem {
+    pub comma: Token,
+    pub table_or_subquery: TableOrSubqueryNode,
 }
 
-pub struct CommaExprItem {
-    pub comma: Token,
-    pub expr: ExprNode,
+pub struct KFromItemItem {
+    pub k_from: Token,
 }
 
 pub struct KHavingExprItem {
@@ -805,14 +844,6 @@ pub struct SelectOrValuesAlt0 {
     pub k_from_item: Option<KFromItemItem>,
     pub k_where_expr: Option<KWhereExprItem>,
     pub k_group_k_by_expr_item_item: Option<KGroupKByExprItemItemItem>,
-}
-
-pub struct CommaLparenExprItemRparenItem {
-    pub comma: Token,
-    pub lparen: Token,
-    pub expr: ExprNode,
-    pub comma_expr_list: Array<CommaExprItem>,
-    pub rparen: Token,
 }
 
 pub struct SelectOrValuesAlt1 {

@@ -120,22 +120,41 @@ fn repeat_inner_field(elem: &Element) -> Option<Field> {
 
 fn gen_group_variant_types(w: &mut CodeWriter, elements: &Array<Element>, emitted: &mut Array<String>) {
     for let elem of elements {
-        let alts = extract_group_alts(&elem);
-        if let Some(group_alts) = alts {
-            if is_simple_cst_group(group_alts) {
-                let type_name = group_variant_type_name(group_alts);
-                if !has_emitted(emitted, &type_name) {
-                    emitted.append(type_name);
-                    gen_group_variant_type(w, group_alts);
-                }
-            } else if is_single_alt_group(group_alts) {
-                let type_name = single_alt_group_type_name(&group_alts[0]);
-                if !has_emitted(emitted, &type_name) {
-                    emitted.append(type_name);
-                    gen_single_alt_group_struct(w, &group_alts[0], emitted);
-                }
+        gen_element_variant_types(w, &elem, emitted);
+    }
+}
+
+fn gen_element_variant_types(w: &mut CodeWriter, elem: &Element, emitted: &mut Array<String>) {
+    let alts = extract_group_alts(elem);
+    if let Some(group_alts) = alts {
+        if is_simple_cst_group(group_alts) {
+            let type_name = group_variant_type_name(group_alts);
+            if !has_emitted(emitted, &type_name) {
+                emitted.append(type_name);
+                gen_group_variant_type(w, group_alts);
+            }
+        } else if is_single_alt_group(group_alts) {
+            let type_name = single_alt_group_type_name(&group_alts[0]);
+            if !has_emitted(emitted, &type_name) {
+                emitted.append(type_name);
+                gen_single_alt_group_struct(w, &group_alts[0], emitted);
+            }
+        } else {
+            // Recurse into multi-alt groups to find nested storable groups
+            for let alt of group_alts {
+                gen_group_variant_types(w, &alt.elements, emitted);
             }
         }
+        return;
+    }
+    // Recurse into repeat elements (non-group inner)
+    if let Repeat(rep) = elem {
+        gen_element_variant_types(w, &rep.element, emitted);
+        return;
+    }
+    // Recurse into label elements
+    if let Label(lab) = elem {
+        gen_element_variant_types(w, &lab.element, emitted);
     }
 }
 
