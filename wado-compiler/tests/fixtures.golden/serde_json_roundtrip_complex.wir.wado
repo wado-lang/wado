@@ -739,10 +739,6 @@ type "functype/TreeMap<String,i32>::insert" = fn(ref "core:allocator/TreeMap<Str
 
 type "functype/TreeMap<String,i32>::insert_node" = fn(ref "core:allocator/TreeMap<String,i32>", ref null "core:allocator/TreeMapNode<String>", ref String, i32) -> ref null "core:allocator/TreeMapNode<String>";
 
-type "functype/TreeMap<String,i32>::split" = fn(ref "core:allocator/TreeMap<String,i32>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
-
-type "functype/TreeMap<String,i32>::skew" = fn(ref "core:allocator/TreeMap<String,i32>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
-
 type "functype/Array<TreeMapEntry<String,i32>>::push" = fn(ref Array<TreeMapEntry<String,i32>>, ref "core:allocator/TreeMapEntry<String,i32>");
 
 type "functype/Array<TreeMapEntry<String,i32>>::grow" = fn(ref Array<TreeMapEntry<String,i32>>);
@@ -780,10 +776,6 @@ type "functype/TreeMap<String,String>::find_index" = fn(ref "core:allocator/Tree
 type "functype/TreeMap<String,String>::insert" = fn(ref "core:allocator/TreeMap<String,String>", ref String, ref String);
 
 type "functype/TreeMap<String,String>::insert_node" = fn(ref "core:allocator/TreeMap<String,String>", ref null "core:allocator/TreeMapNode<String>", ref String, i32) -> ref null "core:allocator/TreeMapNode<String>";
-
-type "functype/TreeMap<String,String>::split" = fn(ref "core:allocator/TreeMap<String,String>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
-
-type "functype/TreeMap<String,String>::skew" = fn(ref "core:allocator/TreeMap<String,String>", ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
 
 type "functype/Array<TreeMapEntry<String,String>>::push" = fn(ref Array<TreeMapEntry<String,String>>, ref "core:allocator/TreeMapEntry<String,String>");
 
@@ -827,14 +819,6 @@ type "functype/JsonSeqSerializer^SerializeSeq::element<String>" = fn(ref "core:j
 
 type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:serde/ArrayIter<String>") -> ref null String;
 
-type "functype/__Closure_0::__call" = fn(ref __Closure_0, ref String, i32, i32) -> ref Option<i32>;
-
-type "functype/__Closure_1::__call" = fn(ref __Closure_1, ref String, i32, i32) -> ref Option<i32>;
-
-type "functype/__Closure_2::__call" = fn(ref __Closure_2, ref String, i32, i32) -> ref Option<i32>;
-
-type "functype/__Closure_3::__call" = fn(ref __Closure_3, ref String, i32, i32) -> ref Option<i32>;
-
 type "functype/core:json/JsonDeserializer::skip_whitespace" = fn(ref "core:json/JsonDeserializer");
 
 type "functype/core:json/JsonDeserializer::expect_char" = fn(ref "core:json/JsonDeserializer", i32) -> ref null "core:serde/DeserializeError";
@@ -856,8 +840,6 @@ type "functype/core:json/JsonDeserializer::skip_value" = fn(ref "core:json/JsonD
 type "functype/core:json/JsonStructAccess^DeserializeStruct::next_field" = fn(ref "core:json/JsonStructAccess") -> ref Result<Option<i32>,DeserializeError>;
 
 type "functype/core:json/JsonDeserializer^Deserializer::deserialize_bool" = fn(ref "core:json/JsonDeserializer") -> ref Result<bool,DeserializeError>;
-
-type "functype/core:json/JsonDeserializer^Deserializer::begin_variant" = fn(ref "core:json/JsonDeserializer", ref String, i32) -> ref Result<JsonVariantAccess,DeserializeError>;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -975,8 +957,6 @@ type "functype/core:json/JsonDeserializer^Deserializer::begin_seq" = fn(ref "cor
 
 type "functype/core:json/JsonDeserializer^Deserializer::begin_map" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null "core:json/JsonMapAccess", ref null "core:serde/DeserializeError"];
 
-type "functype/core:json/JsonDeserializer^Deserializer::begin_struct" = fn(ref "core:json/JsonDeserializer", ref String, i32, ref struct) -> [i32, ref null "core:json/JsonStructAccess", ref null "core:serde/DeserializeError"];
-
 type "functype/core/json/to_string<Option<Array<i32>>>" = fn(ref null Array<i32>) -> [i32, ref null String, ref null "core:serde/SerializeError"];
 
 type "functype/core/json/to_string<Config>" = fn(ref "core:allocator/TreeMap<String,i32>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
@@ -1010,8 +990,6 @@ type "functype/TreeMap<String,i32>^Serialize::serialize<JsonSerializer>" = fn(re
 type "functype/JsonMapSerializer^SerializeMap::value<i32>" = fn(ref "core:json/JsonMapSerializer", i32) -> ref null "core:serde/SerializeError";
 
 type "functype/Shape^Serialize::serialize<JsonSerializer>" = fn(ref Shape, ref String) -> ref null "core:serde/SerializeError";
-
-type "functype/core:json/JsonSerializer^Serializer::begin_variant" = fn(ref String, ref String, ref String, i32) -> [i32, ref null "core:json/JsonVariantSerializer", ref null "core:serde/SerializeError"];
 
 type "functype/Inner^Serialize::serialize<JsonSerializer>" = fn(ref Inner, ref String) -> ref null "core:serde/SerializeError";
 
@@ -1048,6 +1026,28 @@ type "functype/Array<String>^Serialize::serialize<JsonSerializer>" = fn(ref Arra
 type "functype/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref "core:json/JsonStructSerializer", ref String, bool) -> ref null "core:serde/SerializeError";
 
 type "functype/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref "core:json/JsonStructSerializer", ref String, f64) -> ref null "core:serde/SerializeError";
+
+type "functype/TreeMap<String,i32>::split" = fn(ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
+
+type "functype/TreeMap<String,i32>::skew" = fn(ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
+
+type "functype/TreeMap<String,String>::split" = fn(ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
+
+type "functype/TreeMap<String,String>::skew" = fn(ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
+
+type "functype/__Closure_0::__call" = fn(ref String, i32, i32) -> ref Option<i32>;
+
+type "functype/__Closure_1::__call" = fn(ref String, i32, i32) -> ref Option<i32>;
+
+type "functype/__Closure_2::__call" = fn(ref String, i32, i32) -> ref Option<i32>;
+
+type "functype/__Closure_3::__call" = fn(ref String, i32, i32) -> ref Option<i32>;
+
+type "functype/core:json/JsonSerializer^Serializer::begin_variant" = fn(ref String, ref String) -> [i32, ref null "core:json/JsonVariantSerializer", ref null "core:serde/SerializeError"];
+
+type "functype/core:json/JsonDeserializer^Deserializer::begin_struct" = fn(ref "core:json/JsonDeserializer", ref struct) -> [i32, ref null "core:json/JsonStructAccess", ref null "core:serde/DeserializeError"];
+
+type "functype/core:json/JsonDeserializer^Deserializer::begin_variant" = fn(ref "core:json/JsonDeserializer") -> ref Result<JsonVariantAccess,DeserializeError>;
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -1378,7 +1378,7 @@ condition: p.tags[1] == \"lead\"
             };
             __pattern_temp_2 = p.address;
             if ref.is_null(__pattern_temp_2) == 0 {
-                addr = value_copy String(ref.as_non_null(__pattern_temp_2));
+                addr = ref.as_non_null(__pattern_temp_2);
                 __v0_21 = addr;
                 __cond_22 = String^Eq::eq(__v0_21, String { repr: array.new_data<u8>("123 Main St"), used: 11 });
                 if __cond_22 == 0 {
@@ -2351,7 +2351,7 @@ condition: json == `\\{\"Err\":\"not found\"\\}`
         if __sroa_parsed_r_discriminant == 0 {
             result = __sroa_parsed_r_case0_payload_0;
             if ref.test Result<i32,String>::Err(result) {
-                msg = value_copy String(ref.cast Result<i32,String>::Err(result).payload_0);
+                msg = ref.cast Result<i32,String>::Err(result).payload_0;
                 __v0_8 = msg;
                 __cond_9 = String^Eq::eq(__v0_8, String { repr: array.new_data<u8>("not found"), used: 9 });
                 if __cond_9 == 0 {
@@ -7323,7 +7323,7 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
     let __sroa___result_discriminant: i32;
     let __sroa___result_case0_payload_0: ref null "core:json/JsonStructAccess";
     let __sroa___result_case1_payload_0: ref null "core:serde/DeserializeError";
-    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Config"), used: 6 }, 1, "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_0") });
+    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_0") });
     if __sroa___result_discriminant == 0 {
         sd = __sroa___result_case0_payload_0;
         seen = 0;
@@ -7404,7 +7404,7 @@ fn TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(d) {
                 if __sroa_key_r_discriminant == 0 {
                     key_opt = __sroa_key_r_case0_payload_0;
                     if ref.is_null(key_opt) == 0 {
-                        key = value_copy String(ref.as_non_null(key_opt));
+                        key = ref.as_non_null(key_opt);
                         val_r = __inline_i32_Deserialize__deserialize_JsonDeserializer__5: block -> ref Result<i32,DeserializeError> {
                             __local_27 = ma.de;
                             break __inline_i32_Deserialize__deserialize_JsonDeserializer__5: "core:json/JsonDeserializer::parse_i32_direct"(__local_27);
@@ -7485,14 +7485,14 @@ fn TreeMap<String,i32>::insert_node(self, node, key, index) {
         } else {
             n.right = TreeMap<String,i32>::insert_node(self, n.right, key, index);
         };
-        after_skew = TreeMap<String,i32>::skew(self, n);
-        return TreeMap<String,i32>::split(self, after_skew);
+        after_skew = TreeMap<String,i32>::skew(n);
+        return TreeMap<String,i32>::split(after_skew);
     };
     new_node = "core:allocator/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
     return new_node;
 }
 
-fn TreeMap<String,i32>::split(self, node) {
+fn TreeMap<String,i32>::split(node) {
     let n: ref "core:allocator/TreeMapNode<String>";
     let right: ref "core:allocator/TreeMapNode<String>";
     let rr: ref "core:allocator/TreeMapNode<String>";
@@ -7519,7 +7519,7 @@ fn TreeMap<String,i32>::split(self, node) {
     return ref.null none;
 }
 
-fn TreeMap<String,i32>::skew(self, node) {
+fn TreeMap<String,i32>::skew(node) {
     let n: ref "core:allocator/TreeMapNode<String>";
     let left: ref "core:allocator/TreeMapNode<String>";
     let __pattern_temp_1: ref null "core:allocator/TreeMapNode<String>";
@@ -7849,7 +7849,7 @@ fn Shape^Deserialize::deserialize<JsonDeserializer>(d) {
     let __pattern_temp_6: ref Result<Inner,DeserializeError>;
     let __local_24: ref "core:json/JsonDeserializer";
     let __local_31: ref "core:json/JsonDeserializer";
-    __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Shape"), used: 5 }, 3);
+    __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d);
     __pattern_temp_0 = __va_r;
     if ref.test Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0) {
         va = ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0;
@@ -7980,7 +7980,7 @@ fn Inner^Deserialize::deserialize<JsonDeserializer>(d) {
     let __sroa___result_discriminant: i32;
     let __sroa___result_case0_payload_0: ref null "core:json/JsonStructAccess";
     let __sroa___result_case1_payload_0: ref null "core:serde/DeserializeError";
-    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Inner"), used: 5 }, 2, "canonical/CanonicalClosure_0" { env: __Closure_1 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_1") });
+    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, "canonical/CanonicalClosure_0" { env: __Closure_1 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_1") });
     if __sroa___result_discriminant == 0 {
         sd = __sroa___result_case0_payload_0;
         seen = 0;
@@ -8058,7 +8058,7 @@ fn Shape^Serialize::serialize<JsonSerializer>(self, s) {
         let __sroa___local_3_discriminant: i32;
         let __sroa___local_3_case0_payload_0: ref null "core:json/JsonVariantSerializer";
         let __sroa___local_3_case1_payload_0: ref null "core:serde/SerializeError";
-        multivalue_bind [__sroa___local_3_discriminant, __sroa___local_3_case0_payload_0, __sroa___local_3_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Shape"), used: 5 }, String { repr: array.new_data<u8>("Circle"), used: 6 }, 0);
+        multivalue_bind [__sroa___local_3_discriminant, __sroa___local_3_case0_payload_0, __sroa___local_3_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Circle"), used: 6 });
         if __sroa___local_3_discriminant == 0 {
             __local_4 = __sroa___local_3_case0_payload_0;
             drop(JsonVariantSerializer^SerializeVariant::payload<f64>(__local_4, __local_2));
@@ -8076,7 +8076,7 @@ fn Shape^Serialize::serialize<JsonSerializer>(self, s) {
         let __sroa___local_6_discriminant: i32;
         let __sroa___local_6_case0_payload_0: ref null "core:json/JsonVariantSerializer";
         let __sroa___local_6_case1_payload_0: ref null "core:serde/SerializeError";
-        multivalue_bind [__sroa___local_6_discriminant, __sroa___local_6_case0_payload_0, __sroa___local_6_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Shape"), used: 5 }, String { repr: array.new_data<u8>("Rectangle"), used: 9 }, 1);
+        multivalue_bind [__sroa___local_6_discriminant, __sroa___local_6_case0_payload_0, __sroa___local_6_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Rectangle"), used: 9 });
         if __sroa___local_6_discriminant == 0 {
             __local_7 = __sroa___local_6_case0_payload_0;
             drop(JsonVariantSerializer^SerializeVariant::payload<Inner>(__local_7, __local_5));
@@ -8216,7 +8216,7 @@ fn Direction^Deserialize::deserialize<JsonDeserializer>(d) {
     let __name: ref String;
     let __pattern_temp_0: ref Result<JsonVariantAccess,DeserializeError>;
     let __pattern_temp_2: ref Result<String,DeserializeError>;
-    __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Direction"), used: 9 }, 4);
+    __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d);
     __pattern_temp_0 = __va_r;
     if ref.test Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0) {
         va = ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0;
@@ -8484,7 +8484,7 @@ fn TreeMap<String,String>^Deserialize::deserialize<JsonDeserializer>(d) {
                 if __sroa_key_r_discriminant == 0 {
                     key_opt = __sroa_key_r_case0_payload_0;
                     if ref.is_null(key_opt) == 0 {
-                        key = value_copy String(ref.as_non_null(key_opt));
+                        key = ref.as_non_null(key_opt);
                         val_r = __inline_String_Deserialize__deserialize_JsonDeserializer__5: block -> ref Result<String,DeserializeError> {
                             __local_27 = ma.de;
                             break __inline_String_Deserialize__deserialize_JsonDeserializer__5: "core:json/JsonDeserializer::read_json_string"(__local_27);
@@ -8565,14 +8565,14 @@ fn TreeMap<String,String>::insert_node(self, node, key, index) {
         } else {
             n.right = TreeMap<String,String>::insert_node(self, n.right, key, index);
         };
-        after_skew = TreeMap<String,String>::skew(self, n);
-        return TreeMap<String,String>::split(self, after_skew);
+        after_skew = TreeMap<String,String>::skew(n);
+        return TreeMap<String,String>::split(after_skew);
     };
     new_node = "core:allocator/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
     return new_node;
 }
 
-fn TreeMap<String,String>::split(self, node) {
+fn TreeMap<String,String>::split(node) {
     let n: ref "core:allocator/TreeMapNode<String>";
     let right: ref "core:allocator/TreeMapNode<String>";
     let rr: ref "core:allocator/TreeMapNode<String>";
@@ -8599,7 +8599,7 @@ fn TreeMap<String,String>::split(self, node) {
     return ref.null none;
 }
 
-fn TreeMap<String,String>::skew(self, node) {
+fn TreeMap<String,String>::skew(node) {
     let n: ref "core:allocator/TreeMapNode<String>";
     let left: ref "core:allocator/TreeMapNode<String>";
     let __pattern_temp_1: ref null "core:allocator/TreeMapNode<String>";
@@ -8849,7 +8849,7 @@ fn Result<i32,String>^Deserialize::deserialize<JsonDeserializer>(d) {
     let __local_17: ref String;
     let __local_30: ref "core:json/JsonDeserializer";
     let __local_33: ref "core:json/JsonDeserializer";
-    va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Result"), used: 6 }, 2);
+    va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d);
     if ref.test Result<JsonVariantAccess,DeserializeError>::Ok(va_r) {
         va = value_copy "core:json/JsonVariantAccess"(ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(va_r).payload_0);
         name_r = Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: va.variant };
@@ -8940,7 +8940,7 @@ fn Result<i32,String>^Serialize::serialize<JsonSerializer>(self, s) {
         let __sroa_var_3_discriminant: i32;
         let __sroa_var_3_case0_payload_0: ref null "core:json/JsonVariantSerializer";
         let __sroa_var_3_case1_payload_0: ref null "core:serde/SerializeError";
-        multivalue_bind [__sroa_var_3_discriminant, __sroa_var_3_case0_payload_0, __sroa_var_3_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Result"), used: 6 }, String { repr: array.new_data<u8>("Ok"), used: 2 }, 0);
+        multivalue_bind [__sroa_var_3_discriminant, __sroa_var_3_case0_payload_0, __sroa_var_3_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Ok"), used: 2 });
         if __sroa_var_3_discriminant == 0 {
             vs_4 = __sroa_var_3_case0_payload_0;
             r_5 = JsonVariantSerializer^SerializeVariant::payload<i32>(vs_4, ref.cast Result<i32,String>::Ok(__pattern_temp_0).payload_0);
@@ -8964,7 +8964,7 @@ fn Result<i32,String>^Serialize::serialize<JsonSerializer>(self, s) {
         let __sroa_var_9_discriminant: i32;
         let __sroa_var_9_case0_payload_0: ref null "core:json/JsonVariantSerializer";
         let __sroa_var_9_case1_payload_0: ref null "core:serde/SerializeError";
-        multivalue_bind [__sroa_var_9_discriminant, __sroa_var_9_case0_payload_0, __sroa_var_9_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Result"), used: 6 }, String { repr: array.new_data<u8>("Err"), used: 3 }, 1);
+        multivalue_bind [__sroa_var_9_discriminant, __sroa_var_9_case0_payload_0, __sroa_var_9_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Err"), used: 3 });
         if __sroa_var_9_discriminant == 0 {
             vs_10 = __sroa_var_9_case0_payload_0;
             r_11 = JsonVariantSerializer^SerializeVariant::payload<String>(vs_10, v_8);
@@ -9274,7 +9274,7 @@ fn Outer^Deserialize::deserialize<JsonDeserializer>(d) {
     let __sroa___result_discriminant: i32;
     let __sroa___result_case0_payload_0: ref null "core:json/JsonStructAccess";
     let __sroa___result_case1_payload_0: ref null "core:serde/DeserializeError";
-    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Outer"), used: 5 }, 2, "canonical/CanonicalClosure_0" { env: __Closure_2 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_2") });
+    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, "canonical/CanonicalClosure_0" { env: __Closure_2 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_2") });
     if __sroa___result_discriminant == 0 {
         sd = __sroa___result_case0_payload_0;
         seen = 0;
@@ -9406,7 +9406,7 @@ fn FullStruct^Deserialize::deserialize<JsonDeserializer>(d) {
     let __sroa___result_discriminant: i32;
     let __sroa___result_case0_payload_0: ref null "core:json/JsonStructAccess";
     let __sroa___result_case1_payload_0: ref null "core:serde/DeserializeError";
-    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("FullStruct"), used: 10 }, 7, "canonical/CanonicalClosure_0" { env: __Closure_3 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_3") });
+    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, "canonical/CanonicalClosure_0" { env: __Closure_3 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_3") });
     if __sroa___result_discriminant == 0 {
         sd = __sroa___result_case0_payload_0;
         seen = 0;
@@ -9953,19 +9953,19 @@ fn JsonStructSerializer^SerializeStruct::field<f64>(self, name, value) {
     return r;
 }
 
-fn __Closure_0::__call(self, __input, __start, __end) {
+fn __Closure_0::__call(__input, __start, __end) {
     return _config_field_lookup(__input, __start, __end);
 }
 
-fn __Closure_1::__call(self, __input, __start, __end) {
+fn __Closure_1::__call(__input, __start, __end) {
     return _inner_field_lookup(__input, __start, __end);
 }
 
-fn __Closure_2::__call(self, __input, __start, __end) {
+fn __Closure_2::__call(__input, __start, __end) {
     return _outer_field_lookup(__input, __start, __end);
 }
 
-fn __Closure_3::__call(self, __input, __start, __end) {
+fn __Closure_3::__call(__input, __start, __end) {
     return _fullstruct_field_lookup(__input, __start, __end);
 }
 
@@ -10023,7 +10023,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_bool"(self, v) {  // from cor
     return ref.null none;
 }
 
-fn "core:json/JsonSerializer^Serializer::begin_variant"(self, type_name, variant_name, disc) {  // from core:json
+fn "core:json/JsonSerializer^Serializer::begin_variant"(self, variant_name) {  // from core:json
     String::push(self, 123);
     "core:json/write_escaped_string"(self, variant_name);
     String::push(self, 58);
@@ -12020,7 +12020,7 @@ fn "core:json/JsonDeserializer^Deserializer::begin_map"(self) {  // from core:js
     return 0; "core:json/JsonMapAccess" { de: self, first: 1 }; ref.null none;
 }
 
-fn "core:json/JsonDeserializer^Deserializer::begin_struct"(self, name, num_fields, lookup) {  // from core:json
+fn "core:json/JsonDeserializer^Deserializer::begin_struct"(self, lookup) {  // from core:json
     let r: ref null "core:serde/DeserializeError";
     let e: ref "core:serde/DeserializeError";
     r = "core:json/JsonDeserializer::expect_char"(self, 123);
@@ -12031,7 +12031,7 @@ fn "core:json/JsonDeserializer^Deserializer::begin_struct"(self, name, num_field
     return 0; "core:json/JsonStructAccess" { de: self, lookup: lookup, first: 1 }; ref.null none;
 }
 
-fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self, type_name, num_cases) {  // from core:json
+fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self) {  // from core:json
     let b: i32;
     let r_4: ref Result<String,DeserializeError>;
     let name_5: ref String;
@@ -12406,27 +12406,19 @@ fn String^Inspect::inspect(self, f) {
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_0"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref __Closure_0;
-    __typed_env = ref.cast __Closure_0(__env);
-    return __Closure_0::__call(__typed_env, __p0, __p1, __p2);
+    return __Closure_0::__call(__p0, __p1, __p2);
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_1"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref __Closure_1;
-    __typed_env = ref.cast __Closure_1(__env);
-    return __Closure_1::__call(__typed_env, __p0, __p1, __p2);
+    return __Closure_1::__call(__p0, __p1, __p2);
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_2"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref __Closure_2;
-    __typed_env = ref.cast __Closure_2(__env);
-    return __Closure_2::__call(__typed_env, __p0, __p1, __p2);
+    return __Closure_2::__call(__p0, __p1, __p2);
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__closure_wrapper_3"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref __Closure_3;
-    __typed_env = ref.cast __Closure_3(__env);
-    return __Closure_3::__call(__typed_env, __p0, __p1, __p2);
+    return __Closure_3::__call(__p0, __p1, __p2);
 }
 
 export fn __cm_export____test_0_full_struct_roundtrip_with_all_fields as "__test_0_full_struct_roundtrip_with_all_fields"

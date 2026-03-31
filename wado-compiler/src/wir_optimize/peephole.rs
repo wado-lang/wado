@@ -401,12 +401,31 @@ fn elide_value_copies_cross_scope(
         // Track local definitions: record only single-definition fresh values.
         // Use is_fresh_via_defs to trace through LocalGet chains (e.g.,
         // `__local_70 = opt2` where `opt2` is already known to be fresh).
-        if let WirInstr::LocalSet { name, value } = &instrs[i] {
-            if is_fresh_via_defs(value, &defs) {
-                defs.insert(name.clone(), FreshDef::Fresh);
-            } else {
-                defs.insert(name.clone(), FreshDef::NotFresh);
+        match &instrs[i] {
+            WirInstr::LocalSet { name, value } => {
+                if is_fresh_via_defs(value, &defs) {
+                    defs.insert(name.clone(), FreshDef::Fresh);
+                } else {
+                    defs.insert(name.clone(), FreshDef::NotFresh);
+                }
             }
+            // MultiValueLocalBind distributes a multi-value return into locals.
+            // When the source instruction is fresh (e.g. a function call),
+            // all bound locals are fresh.
+            WirInstr::MultiValueLocalBind { instr, locals } => {
+                let fresh = is_fresh_via_defs(instr, &defs);
+                for local in locals.iter().flatten() {
+                    defs.insert(
+                        local.clone(),
+                        if fresh {
+                            FreshDef::Fresh
+                        } else {
+                            FreshDef::NotFresh
+                        },
+                    );
+                }
+            }
+            _ => {}
         }
 
         // Recurse into all nested instruction bodies (including inside LocalSet values).
@@ -434,7 +453,7 @@ fn elide_value_copies_in_instr(
                 // Safety check: only elide if the destination local is never
                 // mutated (no StructSet, no mutable call args, etc.).
                 // Otherwise skipping the copy creates an alias that could be
-                // corrupted by mutation.
+                // corrupted by mutation, violating Wado's value semantics.
                 if remaining
                     .iter()
                     .all(|i| uses_of_var_are_reads_only(i, name))

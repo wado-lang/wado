@@ -194,8 +194,6 @@ type "functype/TreeMap<String,i32>::insert" = fn(ref TreeMap<String,i32>, ref St
 
 type "functype/TreeMap<String,i32>::insert_non_full" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>, ref String, i32);
 
-type "functype/TreeMap<String,i32>::sort_node_entries" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>);
-
 type "functype/TreeMap<String,i32>::split_child" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>, i32);
 
 type "functype/Array<BTreeNode<String,i32>>::push" = fn(ref Array<BTreeNode<String,i32>>, ref BTreeNode<String,i32>);
@@ -219,6 +217,8 @@ type "functype/wasi/stream-new" = fn() -> i64;
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
+type "functype/TreeMap<String,i32>::sort_node_entries" = fn(ref BTreeNode<String,i32>);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -1571,7 +1571,7 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
         Array<String>::push(node.keys, key);
         Array<i32>::push(node.values, value);
         Array<bool>::push(node.deleted, 0);
-        TreeMap<String,i32>::sort_node_entries(self, node);
+        TreeMap<String,i32>::sort_node_entries(node);
         self.size = self.size + 1;
     } else {
         pos_5 = 0;
@@ -1632,7 +1632,7 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
     };
 }
 
-fn TreeMap<String,i32>::sort_node_entries(self, node) {
+fn TreeMap<String,i32>::sort_node_entries(node) {
     let i: i32;
     let j: i32;
     let temp_k: ref String;
@@ -1927,7 +1927,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
     Array<i32>::push(parent.values, promoted_value);
     Array<bool>::push(parent.deleted, promoted_deleted);
     Array<BTreeNode<String,i32>>::push(parent.children, new_sibling);
-    TreeMap<String,i32>::sort_node_entries(self, parent);
+    TreeMap<String,i32>::sort_node_entries(parent);
 }
 
 fn Array<BTreeNode<String,i32>>::push(self, value) {

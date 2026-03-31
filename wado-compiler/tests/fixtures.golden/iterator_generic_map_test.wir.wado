@@ -141,10 +141,6 @@ type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
-type "functype/__Closure_0::__call" = fn(ref __Closure_0, i32) -> i32;
-
-type "functype/__Closure_1::__call" = fn(ref __Closure_1, i32) -> char;
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
@@ -158,6 +154,10 @@ type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
+type "functype/__Closure_0::__call" = fn(i32) -> i32;
+
+type "functype/__Closure_1::__call" = fn(i32) -> char;
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -743,11 +743,11 @@ fn Array<i32>::grow(self) {
     self.repr = new_repr;
 }
 
-fn __Closure_0::__call(self, x) {
+fn __Closure_0::__call(x) {
     return x * 2;
 }
 
-fn __Closure_1::__call(self, x) {
+fn __Closure_1::__call(x) {
     let __local_2: u32;
     return __inline_char__from_u32_unchecked_0: block -> char {
         __local_2 = x;
@@ -857,15 +857,11 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
 }
 
 fn "closure/wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref __Closure_0;
-    __typed_env = ref.cast __Closure_0(__env);
-    return __Closure_0::__call(__typed_env, __p0);
+    return __Closure_0::__call(__p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__closure_wrapper_1"(__env, __p0) {
-    let __typed_env: ref __Closure_1;
-    __typed_env = ref.cast __Closure_1(__env);
-    return __Closure_1::__call(__typed_env, __p0);
+    return __Closure_1::__call(__p0);
 }
 
 export fn __cm_export____test_0_generic_map_iterator_doubles_values as "__test_0_generic_map_iterator_doubles_values"

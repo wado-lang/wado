@@ -257,8 +257,6 @@ type "functype/wasi/wasi:http/RequestOptions::get_between_bytes_timeout" = fn(i3
 
 type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
-type "functype/handle" = fn(i32);
-
 type "functype/__cm_binding__RequestOptions_new" = fn() -> i32;
 
 type "functype/__cm_binding__RequestOptions_get_connect_timeout" = fn(i32) -> ref Option<u64>;
@@ -317,6 +315,8 @@ type "functype/__cm_binding__Response_new" = fn(i32, ref Option<Stream<u8>>, i32
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
+type "functype/handle" = fn();
+
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
 import fn task-return from "wasi/task-return";
@@ -338,7 +338,7 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn handle(request) {
+fn handle() {
     let opts: i32;
     let connect: ref Option<u64>;
     let __cond_3: bool;
@@ -996,7 +996,7 @@ fn __cm_binding__Response_new(headers, contents, trailers) {
 }
 
 fn __cm_export__handle(request) {
-    handle(request);
+    handle();
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal

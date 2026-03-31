@@ -63,9 +63,9 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref String, ref String, ref String, i32) -> ref null SerializeError;
-
 type "functype/Color^Serialize::serialize<JsonSerializer>" = fn(enum:Color, ref String) -> ref null SerializeError;
+
+type "functype/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref String, ref String) -> ref null SerializeError;
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -225,7 +225,7 @@ fn String::push_str(self, other) {
     self.used = new_used;
 }
 
-fn JsonSerializer^Serializer::serialize_unit_variant(self, type_name, variant_name, disc) {
+fn JsonSerializer^Serializer::serialize_unit_variant(self, variant_name) {
     let __local_4: ref String;
     String::push_str(self, __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(18), used: 0 };
@@ -239,11 +239,11 @@ fn JsonSerializer^Serializer::serialize_unit_variant(self, type_name, variant_na
 
 fn Color^Serialize::serialize<JsonSerializer>(self, s) {
     return let __match_scrut_0: enum:Color; __match_scrut_0 = self; if __match_scrut_0 == 0 -> ref null SerializeError {
-        JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Color"), used: 5 }, String { repr: array.new_data<u8>("Red"), used: 3 }, 0);
+        JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Red"), used: 3 });
     } else if __match_scrut_0 == 1 -> ref null SerializeError {
-        JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Color"), used: 5 }, String { repr: array.new_data<u8>("Green"), used: 5 }, 1);
+        JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Green"), used: 5 });
     } else if __match_scrut_0 == 2 -> ref null SerializeError {
-        JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Color"), used: 5 }, String { repr: array.new_data<u8>("Blue"), used: 4 }, 2);
+        JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Blue"), used: 4 });
     } else {
         unreachable;
     };

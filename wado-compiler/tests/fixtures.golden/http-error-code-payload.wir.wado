@@ -210,19 +210,19 @@ type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32);
 
-type "functype/handle" = fn(i32);
-
 type "functype/__cm_export__handle" = fn(i32);
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
 type "functype/core:internal/cm_lower_string" = fn(ref String) -> i64;
 
+type "functype/handle" = fn();
+
 import fn realloc from "mem/realloc";
 import fn task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
-fn handle(request) {
+fn handle() {
     let __task_ret: ref Result<Response,ErrorCode>;
     let __tv_1: i32;
     let __tv_2: i32;
@@ -662,7 +662,7 @@ fn handle(request) {
 }
 
 fn __cm_export__handle(request) {
-    handle(request);
+    handle();
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal

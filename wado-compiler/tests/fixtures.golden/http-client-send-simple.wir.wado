@@ -262,8 +262,6 @@ type "functype/wasi/wasi:http/Request::set_scheme" = fn(i32, i32, i32, i32, i32)
 
 type "functype/wasi/wasi:http/Request::set_authority" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/handle" = fn(i32);
-
 type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_binding__Request_set_scheme" = fn(i32, ref null "wasi:http/types.wado/Scheme") -> ref Result<unit,unit>;
@@ -298,6 +296,8 @@ type "functype/__cm_binding__Request_new" = fn(i32, ref Option<Stream<u8>>, i32,
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];
 
+type "functype/handle" = fn();
+
 import fn realloc from "mem/realloc";
 import fn task-return from "wasi/task-return";
 import fn waitable-join from "wasi/waitable-join";
@@ -315,7 +315,7 @@ import fn waitable-set-new from "wasi/waitable-set-new";
 import fn subtask-drop from "wasi/subtask-drop";
 import fn waitable-set-drop from "wasi/waitable-set-drop";
 
-fn handle(request) {
+fn handle() {
     let headers: i32;
     let trailers_future: i32;
     let trailers_tx: i32;
@@ -1258,7 +1258,7 @@ fn __cm_binding__Client_send(request) {
 }
 
 fn __cm_export__handle(request) {
-    handle(request);
+    handle();
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal

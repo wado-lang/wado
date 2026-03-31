@@ -129,9 +129,9 @@ type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
-type "functype/__Closure_0::__call" = fn(ref __Closure_0, i32, i32) -> bool;
+type "functype/__Closure_0::__call" = fn(i32, i32) -> bool;
 
-type "functype/__Closure_1::__call" = fn(ref __Closure_1, i32, i32) -> bool;
+type "functype/__Closure_1::__call" = fn(i32, i32) -> bool;
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -1209,11 +1209,11 @@ fn Array<i32>::grow(self) {
     self.repr = new_repr;
 }
 
-fn __Closure_0::__call(self, a, b) {
+fn __Closure_0::__call(a, b) {
     return a < b;
 }
 
-fn __Closure_1::__call(self, a, b) {
+fn __Closure_1::__call(a, b) {
     return a > b;
 }
 
@@ -1319,15 +1319,11 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
 }
 
 fn "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_0"(__env, __p0, __p1) {
-    let __typed_env: ref __Closure_0;
-    __typed_env = ref.cast __Closure_0(__env);
-    return __Closure_0::__call(__typed_env, __p0.value, __p1.value);
+    return __Closure_0::__call(__p0.value, __p1.value);
 }
 
 fn "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_1"(__env, __p0, __p1) {
-    let __typed_env: ref __Closure_1;
-    __typed_env = ref.cast __Closure_1(__env);
-    return __Closure_1::__call(__typed_env, __p0.value, __p1.value);
+    return __Closure_1::__call(__p0.value, __p1.value);
 }
 
 export fn __cm_export____test_0_box_with_trait_method as "__test_0_box_with_trait_method"

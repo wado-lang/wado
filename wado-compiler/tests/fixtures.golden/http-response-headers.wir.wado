@@ -244,8 +244,6 @@ type "functype/wasi/wasi:http/Fields::append" = fn(i32, i32, i32, i32, i32, i32)
 
 type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
-type "functype/handle" = fn(i32);
-
 type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_binding__Fields_append" = fn(i32, ref String, ref Array<u8>) -> ref null "wasi:http/types.wado/HeaderError";
@@ -276,6 +274,8 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/__cm_binding__Response_new" = fn(i32, ref Option<Stream<u8>>, i32) -> [i32, i32];
 
+type "functype/handle" = fn();
+
 import fn realloc from "mem/realloc";
 import fn task-return from "wasi/task-return";
 import fn wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
@@ -288,7 +288,7 @@ import fn waitable-set-new from "wasi/waitable-set-new";
 import fn waitable-join from "wasi/waitable-join";
 import fn waitable-set-wait from "wasi/waitable-set-wait";
 
-fn handle(request) {
+fn handle() {
     let trailers_future: i32;
     let trailers_tx: i32;
     let headers: i32;
@@ -849,7 +849,7 @@ fn __cm_binding__Response_new(headers, contents, trailers) {
 }
 
 fn __cm_export__handle(request) {
-    handle(request);
+    handle();
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal

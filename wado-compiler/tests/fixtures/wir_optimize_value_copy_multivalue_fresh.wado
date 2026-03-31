@@ -1,0 +1,42 @@
+// Test that value_copy is elided when extracting a value from a multi-value
+// function return (SROA'd Result/Option) after a discriminant check.
+//
+// Pattern (after multi-value SROA):
+//   multivalue_bind [disc, payload_ok, payload_err] = Call(f);
+//   if disc == 0 {
+//     v = value_copy T(ref.as_non_null(payload_ok));  // should be elided
+//   }
+//
+// Since payload_ok comes from a fresh Call return, the value_copy is unnecessary.
+
+use { println } from "core:cli";
+
+struct Data {
+    x: i32,
+    y: i32,
+    name: String,
+}
+
+fn make_data(n: i32) -> Result<Data, String> {
+    if n > 0 {
+        return Result::<Data, String>::Ok(Data { x: n, y: n * 2, name: `item_{n}` });
+    }
+    return Result::<Data, String>::Err("negative");
+}
+
+export fn run() with Stdout {
+    let result = make_data(5);
+    if let Ok(data) = result {
+        println(`{data.x} {data.y} {data.name}`);
+    }
+    let result2 = make_data(10);
+    if let Ok(d) = result2 {
+        println(`{d.x} {d.y} {d.name}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "5 10 item_5\n10 20 item_10\n",
+    "wir_not_expect:O2": ["value_copy Data"]
+}

@@ -224,8 +224,6 @@ type "functype/wasi/wasi:http/Fields::new" = fn() -> i32;
 
 type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
-type "functype/handle" = fn(i32);
-
 type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_export__handle" = fn(i32);
@@ -240,6 +238,8 @@ type "functype/wasi/future-drop-writable" = fn(i32);
 
 type "functype/__cm_binding__Response_new" = fn(i32, ref Option<Stream<u8>>, i32) -> [i32, i32];
 
+type "functype/handle" = fn();
+
 import fn realloc from "mem/realloc";
 import fn task-return from "wasi/task-return";
 import fn wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
@@ -248,7 +248,7 @@ import memory (1) from "mem/memory";
 import fn future-new from "wasi/future-new";
 import fn future-drop-writable from "wasi/future-drop-writable";
 
-fn handle(request) {
+fn handle() {
     let trailers_future: i32;
     let trailers_tx: i32;
     let headers: i32;
@@ -725,7 +725,7 @@ fn __cm_binding__Response_new(headers, contents, trailers) {
 }
 
 fn __cm_export__handle(request) {
-    handle(request);
+    handle();
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal

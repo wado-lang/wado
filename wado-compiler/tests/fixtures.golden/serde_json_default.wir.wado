@@ -256,8 +256,6 @@ type "functype/Array<String>::push" = fn(ref Array<String>, ref String);
 
 type "functype/Array<String>::grow" = fn(ref Array<String>);
 
-type "functype/__Closure_0::__call" = fn(ref __Closure_0, ref String, i32, i32) -> ref Option<i32>;
-
 type "functype/core:json/JsonDeserializer::skip_whitespace" = fn(ref "core:json/JsonDeserializer");
 
 type "functype/core:json/JsonDeserializer::expect_char" = fn(ref "core:json/JsonDeserializer", i32) -> ref null "core:serde/DeserializeError";
@@ -312,11 +310,13 @@ type "functype/core:json/JsonDeserializer^Deserializer::is_null" = fn(ref "core:
 
 type "functype/core:json/JsonDeserializer^Deserializer::begin_seq" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null "core:json/JsonSeqAccess", ref null "core:serde/DeserializeError"];
 
-type "functype/core:json/JsonDeserializer^Deserializer::begin_struct" = fn(ref "core:json/JsonDeserializer", ref String, i32, ref struct) -> [i32, ref null "core:json/JsonStructAccess", ref null "core:serde/DeserializeError"];
-
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/char^Display::fmt" = fn(char, ref Formatter);
+
+type "functype/__Closure_0::__call" = fn(ref String, i32, i32) -> ref Option<i32>;
+
+type "functype/core:json/JsonDeserializer^Deserializer::begin_struct" = fn(ref "core:json/JsonDeserializer", ref struct) -> [i32, ref null "core:json/JsonStructAccess", ref null "core:serde/DeserializeError"];
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -681,7 +681,7 @@ condition: c.tags.len() == 1
         };
         __pattern_temp_1 = c.description;
         if ref.is_null(__pattern_temp_1) == 0 {
-            d = value_copy String(ref.as_non_null(__pattern_temp_1));
+            d = ref.as_non_null(__pattern_temp_1);
             __v0_11 = d;
             __cond_12 = String^Eq::eq(__v0_11, String { repr: array.new_data<u8>("test"), used: 4 });
             if __cond_12 == 0 {
@@ -1658,7 +1658,7 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
     let __sroa___result_discriminant: i32;
     let __sroa___result_case0_payload_0: ref null "core:json/JsonStructAccess";
     let __sroa___result_case1_payload_0: ref null "core:serde/DeserializeError";
-    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Config"), used: 6 }, 5, "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_json_default.wado/__closure_wrapper_0") });
+    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_json_default.wado/__closure_wrapper_0") });
     if __sroa___result_discriminant == 0 {
         sd = __sroa___result_case0_payload_0;
         seen = 0;
@@ -1971,7 +1971,7 @@ fn JsonSeqAccess^DeserializeSeq::next_element<String>(self) {
     unreachable;
 }
 
-fn __Closure_0::__call(self, __input, __start, __end) {
+fn __Closure_0::__call(__input, __start, __end) {
     return _config_field_lookup(__input, __start, __end);
 }
 
@@ -3629,7 +3629,7 @@ fn "core:json/JsonDeserializer^Deserializer::begin_seq"(self) {  // from core:js
     return 0; "core:json/JsonSeqAccess" { de: self, first: 1 }; ref.null none;
 }
 
-fn "core:json/JsonDeserializer^Deserializer::begin_struct"(self, name, num_fields, lookup) {  // from core:json
+fn "core:json/JsonDeserializer^Deserializer::begin_struct"(self, lookup) {  // from core:json
     let r: ref null "core:serde/DeserializeError";
     let e: ref "core:serde/DeserializeError";
     r = "core:json/JsonDeserializer::expect_char"(self, 123);
@@ -3825,9 +3825,7 @@ fn String^Inspect::inspect(self, f) {
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_json_default.wado/__closure_wrapper_0"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref __Closure_0;
-    __typed_env = ref.cast __Closure_0(__env);
-    return __Closure_0::__call(__typed_env, __p0, __p1, __p2);
+    return __Closure_0::__call(__p0, __p1, __p2);
 }
 
 export fn __cm_export____test_0_missing_default_fields_use_zero_values as "__test_0_missing_default_fields_use_zero_values"

@@ -26,8 +26,6 @@ struct Formatter {
     mut buf: ref String,
 }
 
-struct __Closure_1 {}
-
 struct Point {
     mut x: i32,
     mut y: i32,
@@ -110,8 +108,6 @@ type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
-type "functype/__Closure_1::__call" = fn(ref __Closure_1, i32) -> i32;
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
@@ -129,6 +125,8 @@ type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
+type "functype/__Closure_1::__call" = fn(i32) -> i32;
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -230,7 +228,6 @@ fn run() with Stdout {
     let __cond_52: bool;
     let __v0_68: i32;
     let __cond_69: bool;
-    let sum_to: ref __Closure_1;
     let __v0_74: i32;
     let __cond_75: bool;
     let __local_78: ref String;
@@ -1017,8 +1014,7 @@ condition: add_one(y) == 11
         });
         unreachable;
     };
-    sum_to = __Closure_1 {  };
-    __v0_74 = __Closure_1::__call(sum_to, 4);
+    __v0_74 = __Closure_1::__call(4);
     __cond_75 = __v0_74 == 10;
     if __cond_75 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1440,7 +1436,7 @@ fn Array<i32>::grow(self) {
     self.repr = new_repr;
 }
 
-fn __Closure_1::__call(self, n) {
+fn __Closure_1::__call(n) {
     let total: i32;
     total = 0;
     b65: block {
@@ -1607,9 +1603,7 @@ fn String^Inspect::inspect(self, f) {
 }
 
 fn "closure/wado-compiler/tests/fixtures/mut_param.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref __Closure_1;
-    __typed_env = ref.cast __Closure_1(__env);
-    return __Closure_1::__call(__typed_env, __p0);
+    return __Closure_1::__call(__p0);
 }
 
 export fn __cm_export__run as "run"

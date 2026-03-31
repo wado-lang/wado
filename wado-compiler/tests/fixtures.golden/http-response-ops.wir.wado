@@ -258,8 +258,6 @@ type "functype/wasi/wasi:http/Response::get_status_code" = fn(i32) -> i32;
 
 type "functype/wasi/wasi:http/Response::set_status_code" = fn(i32, i32) -> i32;
 
-type "functype/handle" = fn(i32);
-
 type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_binding__Response_get_status_code" = fn(i32) -> u16;
@@ -314,6 +312,8 @@ type "functype/__cm_binding__Response_new" = fn(i32, ref Option<Stream<u8>>, i32
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
+type "functype/handle" = fn();
+
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
 import fn task-return from "wasi/task-return";
@@ -333,7 +333,7 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn handle(request) {
+fn handle() {
     let trailers_future: i32;
     let trailers_tx: i32;
     let headers: i32;
@@ -931,7 +931,7 @@ fn __cm_binding__Response_set_status_code(self, status_code) {
 }
 
 fn __cm_export__handle(request) {
-    handle(request);
+    handle();
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal

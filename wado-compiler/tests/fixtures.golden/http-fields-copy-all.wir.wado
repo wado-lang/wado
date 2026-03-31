@@ -283,8 +283,6 @@ type "functype/wasi/wasi:http/Fields::copy_all" = fn(i32, i32);
 
 type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
-type "functype/handle" = fn(i32);
-
 type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
 type "functype/__cm_binding__Fields_append" = fn(i32, ref String, ref Array<u8>) -> ref null "wasi:http/types.wado/HeaderError";
@@ -349,6 +347,8 @@ type "functype/__cm_binding__Response_new" = fn(i32, ref Option<Stream<u8>>, i32
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
+type "functype/handle" = fn();
+
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
 import fn task-return from "wasi/task-return";
@@ -368,7 +368,7 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn handle(request) {
+fn handle() {
     let fields: i32;
     let __local_2: ref Array<u8>;
     let v1: ref Array<u8>;
@@ -1042,7 +1042,7 @@ fn __cm_binding__Response_new(headers, contents, trailers) {
 }
 
 fn __cm_export__handle(request) {
-    handle(request);
+    handle();
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal

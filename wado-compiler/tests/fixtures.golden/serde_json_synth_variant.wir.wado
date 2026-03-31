@@ -245,8 +245,6 @@ type "functype/core:json/JsonDeserializer::expect_char" = fn(ref "core:json/Json
 
 type "functype/core:json/JsonDeserializer::parse_f64_direct" = fn(ref "core:json/JsonDeserializer") -> ref Result<f64,DeserializeError>;
 
-type "functype/core:json/JsonDeserializer^Deserializer::begin_variant" = fn(ref "core:json/JsonDeserializer", ref String, i32) -> ref Result<JsonVariantAccess,DeserializeError>;
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::pad" = fn(ref Formatter, ref String);
@@ -303,11 +301,13 @@ type "functype/char^Display::fmt" = fn(char, ref Formatter);
 
 type "functype/Shape^Serialize::serialize<JsonSerializer>" = fn(ref Shape, ref String) -> ref null "core:serde/SerializeError";
 
-type "functype/core:json/JsonSerializer^Serializer::begin_variant" = fn(ref String, ref String, ref String, i32) -> [i32, ref null "core:json/JsonVariantSerializer", ref null "core:serde/SerializeError"];
-
 type "functype/JsonVariantSerializer^SerializeVariant::payload<f64>" = fn(ref "core:json/JsonVariantSerializer", f64) -> ref null "core:serde/SerializeError";
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_f64" = fn(ref String, f64) -> ref null "core:serde/SerializeError";
+
+type "functype/core:json/JsonSerializer^Serializer::begin_variant" = fn(ref String, ref String) -> [i32, ref null "core:json/JsonVariantSerializer", ref null "core:serde/SerializeError"];
+
+type "functype/core:json/JsonDeserializer^Deserializer::begin_variant" = fn(ref "core:json/JsonDeserializer") -> ref Result<JsonVariantAccess,DeserializeError>;
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -2292,7 +2292,7 @@ fn Shape^Deserialize::deserialize<JsonDeserializer>(d) {
     let __pattern_temp_4: ref Result<f64,DeserializeError>;
     let __local_18: ref "core:json/JsonDeserializer";
     let __local_23: ref "core:json/JsonDeserializer";
-    __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d, String { repr: array.new_data<u8>("Shape"), used: 5 }, 2);
+    __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d);
     __pattern_temp_0 = __va_r;
     if ref.test Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0) {
         va = ref.cast Result<JsonVariantAccess,DeserializeError>::Ok(__pattern_temp_0).payload_0;
@@ -2385,7 +2385,7 @@ fn Shape^Serialize::serialize<JsonSerializer>(self, s) {
         let __sroa___local_3_discriminant: i32;
         let __sroa___local_3_case0_payload_0: ref null "core:json/JsonVariantSerializer";
         let __sroa___local_3_case1_payload_0: ref null "core:serde/SerializeError";
-        multivalue_bind [__sroa___local_3_discriminant, __sroa___local_3_case0_payload_0, __sroa___local_3_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Shape"), used: 5 }, String { repr: array.new_data<u8>("Circle"), used: 6 }, 0);
+        multivalue_bind [__sroa___local_3_discriminant, __sroa___local_3_case0_payload_0, __sroa___local_3_case1_payload_0] = "core:json/JsonSerializer^Serializer::begin_variant"(s, String { repr: array.new_data<u8>("Circle"), used: 6 });
         if __sroa___local_3_discriminant == 0 {
             __local_4 = __sroa___local_3_case0_payload_0;
             drop(JsonVariantSerializer^SerializeVariant::payload<f64>(__local_4, __local_2));
@@ -2443,7 +2443,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core
     return ref.null none;
 }
 
-fn "core:json/JsonSerializer^Serializer::begin_variant"(self, type_name, variant_name, disc) {  // from core:json
+fn "core:json/JsonSerializer^Serializer::begin_variant"(self, variant_name) {  // from core:json
     String::push(self, 123);
     "core:json/write_escaped_string"(self, variant_name);
     String::push(self, 58);
@@ -3275,7 +3275,7 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {  // from core:json
     return Result<f64,DeserializeError>::Ok { discriminant: 0, payload_0: v_19 };
 }
 
-fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self, type_name, num_cases) {  // from core:json
+fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self) {  // from core:json
     let b: i32;
     let name_5: ref String;
     let e_6: ref "core:serde/DeserializeError";

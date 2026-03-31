@@ -244,8 +244,6 @@ type "functype/String::push" = fn(ref String, char);
 
 type "functype/core:json/JsonDeserializer::skip_whitespace" = fn(ref "core:json/JsonDeserializer");
 
-type "functype/core:json/JsonDeserializer::has_exp_or_dot" = fn(ref "core:json/JsonDeserializer", ref String) -> bool;
-
 type "functype/core:json/JsonDeserializer::parse_i64_from" = fn(ref "core:json/JsonDeserializer", ref String, i64) -> ref Result<i64,DeserializeError>;
 
 type "functype/core:json/JsonDeserializer::parse_u64_from" = fn(ref "core:json/JsonDeserializer", ref String, i64) -> ref Result<u64,DeserializeError>;
@@ -333,6 +331,8 @@ type "functype/f64::inspect_into" = fn(f64, ref Formatter);
 type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
 
 type "functype/char^Display::fmt" = fn(char, ref Formatter);
+
+type "functype/core:json/JsonDeserializer::has_exp_or_dot" = fn(ref String) -> bool;
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -4637,7 +4637,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
     });
 }
 
-fn "core:json/JsonDeserializer::has_exp_or_dot"(self, raw) {  // from core:json
+fn "core:json/JsonDeserializer::has_exp_or_dot"(raw) {  // from core:json
     let i: i32;
     let b: i32;
     let __local_6: i32;
@@ -4690,7 +4690,7 @@ fn "core:json/JsonDeserializer::parse_i64_from"(self, raw, start) {  // from cor
     let __local_23: i32;
     let __local_24: ref String;
     let _licm_repr_26: ref array<u8>;
-    has_exp = "core:json/JsonDeserializer::has_exp_or_dot"(self, raw);
+    has_exp = "core:json/JsonDeserializer::has_exp_or_dot"(raw);
     if has_exp {
         let __sroa_parsed_discriminant: i32;
         let __sroa_parsed_payload_0: f64;
@@ -4781,7 +4781,7 @@ fn "core:json/JsonDeserializer::parse_u64_from"(self, raw, start) {  // from cor
             break __inline_DeserializeError__overflow_2: "core:serde/DeserializeError" { kind: 5, message: __local_15, offset: start };
         }) };
     };
-    has_exp = "core:json/JsonDeserializer::has_exp_or_dot"(self, raw);
+    has_exp = "core:json/JsonDeserializer::has_exp_or_dot"(raw);
     if has_exp {
         let __sroa_parsed_discriminant: i32;
         let __sroa_parsed_payload_0: f64;

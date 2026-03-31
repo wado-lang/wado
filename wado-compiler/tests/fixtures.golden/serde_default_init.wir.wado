@@ -216,8 +216,6 @@ type "functype/String::push" = fn(ref String, char);
 
 type "functype/JsonStructSerializer^SerializeStruct::field<String>" = fn(ref "core:json/JsonStructSerializer", ref String, ref String) -> ref null "core:serde/SerializeError";
 
-type "functype/__Closure_0::__call" = fn(ref __Closure_0, ref String, i32, i32) -> ref Option<i32>;
-
 type "functype/core:json/JsonDeserializer::skip_whitespace" = fn(ref "core:json/JsonDeserializer");
 
 type "functype/core:json/JsonDeserializer::expect_char" = fn(ref "core:json/JsonDeserializer", i32) -> ref null "core:serde/DeserializeError";
@@ -268,8 +266,6 @@ type "functype/Config^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core
 
 type "functype/core:json/JsonDeserializer::read_unicode_escape" = fn(ref "core:json/JsonDeserializer") -> [i32, char, ref null "core:serde/DeserializeError"];
 
-type "functype/core:json/JsonDeserializer^Deserializer::begin_struct" = fn(ref "core:json/JsonDeserializer", ref String, i32, ref struct) -> [i32, ref null "core:json/JsonStructAccess", ref null "core:serde/DeserializeError"];
-
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/char^Display::fmt" = fn(char, ref Formatter);
@@ -283,6 +279,10 @@ type "functype/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref "core:
 type "functype/core:json/JsonSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref null "core:serde/SerializeError";
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_bool" = fn(ref String, bool) -> ref null "core:serde/SerializeError";
+
+type "functype/__Closure_0::__call" = fn(ref String, i32, i32) -> ref Option<i32>;
+
+type "functype/core:json/JsonDeserializer^Deserializer::begin_struct" = fn(ref "core:json/JsonDeserializer", ref struct) -> [i32, ref null "core:json/JsonStructAccess", ref null "core:serde/DeserializeError"];
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -1344,7 +1344,7 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
     let __sroa___result_discriminant: i32;
     let __sroa___result_case0_payload_0: ref null "core:json/JsonStructAccess";
     let __sroa___result_case1_payload_0: ref null "core:serde/DeserializeError";
-    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Config"), used: 6 }, 3, "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_default_init.wado/__closure_wrapper_0") });
+    multivalue_bind [__sroa___result_discriminant, __sroa___result_case0_payload_0, __sroa___result_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/serde_default_init.wado/__closure_wrapper_0") });
     if __sroa___result_discriminant == 0 {
         sd = __sroa___result_case0_payload_0;
         seen = 0;
@@ -1484,7 +1484,7 @@ fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
     return r;
 }
 
-fn __Closure_0::__call(self, __input, __start, __end) {
+fn __Closure_0::__call(__input, __start, __end) {
     return _config_field_lookup(__input, __start, __end);
 }
 
@@ -3108,7 +3108,7 @@ fn "core:json/JsonDeserializer^Deserializer::deserialize_bool"(self) {  // from 
     }) };
 }
 
-fn "core:json/JsonDeserializer^Deserializer::begin_struct"(self, name, num_fields, lookup) {  // from core:json
+fn "core:json/JsonDeserializer^Deserializer::begin_struct"(self, lookup) {  // from core:json
     let r: ref null "core:serde/DeserializeError";
     let e: ref "core:serde/DeserializeError";
     r = "core:json/JsonDeserializer::expect_char"(self, 123);
@@ -3304,9 +3304,7 @@ fn String^Inspect::inspect(self, f) {
 }
 
 fn "closure/wado-compiler/tests/fixtures/serde_default_init.wado/__closure_wrapper_0"(__env, __p0, __p1, __p2) {
-    let __typed_env: ref __Closure_0;
-    __typed_env = ref.cast __Closure_0(__env);
-    return __Closure_0::__call(__typed_env, __p0, __p1, __p2);
+    return __Closure_0::__call(__p0, __p1, __p2);
 }
 
 export fn __cm_export__run as "run"
