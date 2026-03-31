@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774911911598,
+  "lastUpdate": 1774915996072,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -8993,6 +8993,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/529cefcf03a7bed5c6012a502a4350febe74a77a"
         },
         "date": 1774911911368,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "63b19a02d98ea6339f5f03e331327c7bd52ae601",
+          "message": "Merge pull request #738 from wado-lang/claude/organize-package-gale-todos-qxph0\n\nAdd undefined type validation in type definitions",
+          "timestamp": "2026-03-31T09:10:15+09:00",
+          "tree_id": "b600231b74df59cae557b39977160be0a4de0723",
+          "url": "https://github.com/wado-lang/wado/commit/63b19a02d98ea6339f5f03e331327c7bd52ae601"
+        },
+        "date": 1774915995855,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
