@@ -53,10 +53,9 @@ impl Monomorphizer {
                     type_id,
                     ..
                 } = &stmt.kind
+                    && let Some(local_type) = self.local_types.get_mut(*local_index as usize)
                 {
-                    if let Some(local_type) = self.local_types.get_mut(*local_index as usize) {
-                        *local_type = *type_id;
-                    }
+                    *local_type = *type_id;
                 }
                 self.walk_stmt(stmt);
             }
@@ -74,10 +73,10 @@ impl Monomorphizer {
         }
         impl TirMutVisitor for LocalTypeUpdater<'_> {
             fn visit_expr(&mut self, expr: &mut TirExpr) {
-                if let TirExprKind::Local { index, .. } = &expr.kind {
-                    if let Some(&local_type) = self.local_types.get(*index as usize) {
-                        expr.type_id = local_type;
-                    }
+                if let TirExprKind::Local { index, .. } = &expr.kind
+                    && let Some(&local_type) = self.local_types.get(*index as usize)
+                {
+                    expr.type_id = local_type;
                 }
                 // Closures have their own local scope, don't update with parent's local_types
                 if matches!(expr.kind, TirExprKind::Closure { .. }) {

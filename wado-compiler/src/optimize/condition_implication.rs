@@ -12,11 +12,11 @@
 //! and inclusive `<=` guard patterns.
 
 use crate::hashmap::IndexMap;
-use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::project::Project;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
 };
+use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 
 struct LoopGuard {
     /// Local index of the induction variable (e.g., `i`)

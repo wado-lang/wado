@@ -3,7 +3,6 @@
 //! This module provides function inlining for small functions.
 //! It uses labeled block expressions for cleaner value handling.
 
-use crate::tir_visitor::block_has_break_to;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
@@ -12,6 +11,7 @@ use crate::tir::{
     CallArg, FunctionRef, InlineHint, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
+use crate::tir_visitor::block_has_break_to;
 
 // The inline threshold is based on expression count, which provides a more
 // accurate measure of function complexity than statement count.
