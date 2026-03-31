@@ -1,5 +1,4 @@
-use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind, LexerRule } from "./ir.wado";
-use { LitToken } from "./lexer_gen.wado";
+use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement } from "./ir.wado";
 use {
     to_lower,
     to_snake_case,
@@ -15,13 +14,9 @@ use {
     group_field_base_name,
     group_case_name,
 } from "./gen_util.wado";
+use { GenContext, is_nullable, sets_overlap, is_simple_token_group } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
-use { TreeMap } from "core:collections";
-
-// --- Memoization caches (cleared at gen_parser entry) ---
-global mut first_rule_cache: TreeMap<String, Array<String>> = TreeMap::<String, Array<String>>::new();
-global mut single_token_cache: TreeMap<String, bool> = TreeMap::<String, bool>::new();
 
 // --- Prediction Engine ---
 
@@ -47,7 +42,7 @@ struct PredictionBranch {
     child: PredictionNode,
 }
 
-fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>, alt_elements: &Array<Array<Element>>, depth: i32, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> PredictionNode {
+fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>, alt_elements: &Array<Array<Element>>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
     // Build initial SLL configs: one per alternative, at element position 0.
     let mut configs: Array<SllConfig> = [];
     for let mut i = 0; i < alt_indices.len(); i += 1 {
@@ -58,7 +53,7 @@ fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>,
             return_stack: [],
         });
     }
-    let tree = build_sll_node(&configs, 0, max_depth, all_rules, lit_tokens);
+    let tree = build_sll_node(&configs, 0, max_depth, ctx);
     return strip_dead_consume(tree);
 }
 
@@ -154,7 +149,7 @@ fn _sll_closure_unused(configs: &Array<SllConfig>) -> Array<SllConfig> {
 /// Compute FIRST set of the current position in a config.
 /// Includes tokens from nullable elements that were skipped by closure.
 /// When at end of elements with a return stack, pops and continues from caller.
-fn sll_config_first(c: &SllConfig, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<String> {
+fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> Array<String> {
     if c.pos < 0 {
         return [];
     }
@@ -163,18 +158,18 @@ fn sll_config_first(c: &SllConfig, all_rules: &Array<ParserRule>, lit_tokens: &A
             return [];
         }
         let popped = pop_return(c);
-        return sll_config_first(&popped, all_rules, lit_tokens);
+        return sll_config_first(&popped, ctx);
     }
-    return first_of_elements_from(&c.elements, c.pos, all_rules, lit_tokens);
+    return ctx.first_of_elements_from(&c.elements, c.pos);
 }
 
 /// Advance a config by one token. For terminals, advance pos.
 /// For RuleRef, expand into the rule's alternatives (entering the rule).
-fn sll_advance(c: &SllConfig, token: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<SllConfig> {
-    return sll_advance_inner(c, token, all_rules, lit_tokens, 0);
+fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext) -> Array<SllConfig> {
+    return sll_advance_inner(c, token, ctx, 0);
 }
 
-fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, inline_depth: i32) -> Array<SllConfig> {
+fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth: i32) -> Array<SllConfig> {
     // Limit inline expansion depth to prevent explosion from recursive rules.
     if inline_depth > 2 {
         return [];
@@ -188,7 +183,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
             return [];
         }
         let popped = pop_return(c);
-        return sll_advance_inner(&popped, token, all_rules, lit_tokens, inline_depth);
+        return sll_advance_inner(&popped, token, ctx, inline_depth);
     }
     let elem = &c.elements[c.pos];
 
@@ -196,16 +191,16 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
     if is_nullable(elem) {
         let mut results: Array<SllConfig> = [];
         let mut visiting: Array<String> = [];
-        if array_contains_str(&first_of_element(elem, all_rules, lit_tokens, &mut visiting), token) {
+        if array_contains_str(&ctx.first_of_element(elem, &mut visiting), token) {
             // Check if the inner element is a multi-token RuleRef.
             // If so, enter it via return stack instead of skipping to pos+1.
             let mut entered = false;
             if let Repeat(rep) = *elem {
                 if let RuleRef(inner_name) = rep.element {
                     let mut stv: Array<String> = [];
-                    if !rule_is_single_token(&inner_name, all_rules, &mut stv) && c.return_stack.len() < 1 {
+                    if !ctx.rule_is_single_token(&inner_name, &mut stv) && c.return_stack.len() < 1 {
                         let mut inner_alt_count = 0;
-                        for let rule of all_rules {
+                        for let rule of &ctx.parser_rules {
                             if rule.name == inner_name {
                                 inner_alt_count = rule.alternatives.len();
                                 break;
@@ -214,13 +209,13 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
                         if inner_alt_count <= 8 {
                             entered = true;
                             let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-                            for let rule of all_rules {
+                            for let rule of &ctx.parser_rules {
                                 if rule.name != inner_name {
                                     continue;
                                 }
                                 for let alt of rule.alternatives {
                                     let mut v2: Array<String> = [];
-                                    if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v2), token) {
+                                    if !array_contains_str(&ctx.first_of_alt(&alt, &mut v2), token) {
                                         continue;
                                     }
                                     let exp = SllConfig {
@@ -229,7 +224,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
                                         pos: 0,
                                         return_stack: new_stack,
                                     };
-                                    let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, inline_depth + 1);
+                                    let advanced = sll_advance_inner(&exp, token, ctx, inline_depth + 1);
                                     for let a of advanced {
                                         results.append(a);
                                     }
@@ -248,7 +243,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
         let mut skip_pos = c.pos + 1;
         while skip_pos < c.elements.len() && is_nullable(&c.elements[skip_pos]) {
             let mut v: Array<String> = [];
-            if array_contains_str(&first_of_element(&c.elements[skip_pos], all_rules, lit_tokens, &mut v), token) {
+            if array_contains_str(&ctx.first_of_element(&c.elements[skip_pos], &mut v), token) {
                 results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
             }
             skip_pos += 1;
@@ -265,9 +260,9 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
                 }
             } else if let RuleRef(name) = *skipped_elem {
                 let mut v: Array<String> = [];
-                if array_contains_str(&first_of_rule(&name, all_rules, lit_tokens, &mut v), token) {
+                if array_contains_str(&ctx.first_of_rule(&name, &mut v), token) {
                     let mut stv: Array<String> = [];
-                    if rule_is_single_token(&name, all_rules, &mut stv) {
+                    if ctx.rule_is_single_token(&name, &mut stv) {
                         results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                     } else {
                         results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: c.return_stack });
@@ -275,7 +270,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
                 }
             } else {
                 let mut v: Array<String> = [];
-                if array_contains_str(&first_of_element(skipped_elem, all_rules, lit_tokens, &mut v), token) {
+                if array_contains_str(&ctx.first_of_element(skipped_elem, &mut v), token) {
                     results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                 }
             }
@@ -302,12 +297,12 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
     // only when needed to resolve ambiguity.
     if let RuleRef(name) = *elem {
         let mut visiting: Array<String> = [];
-        let rule_first = first_of_rule(&name, all_rules, lit_tokens, &mut visiting);
+        let rule_first = ctx.first_of_rule(&name, &mut visiting);
         if !array_contains_str(&rule_first, token) {
             return [];
         }
         let mut st_visiting: Array<String> = [];
-        if rule_is_single_token(&name, all_rules, &mut st_visiting) {
+        if ctx.rule_is_single_token(&name, &mut st_visiting) {
             // Single-token rule: safe to advance, element position == token position.
             return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
         }
@@ -321,7 +316,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
         let mut group_first: Array<String> = [];
         for let alt of alts {
             let mut visiting: Array<String> = [];
-            let af = first_of_alt(&alt, all_rules, lit_tokens, &mut visiting);
+            let af = ctx.first_of_alt(&alt, &mut visiting);
             for let tk of af {
                 if !array_contains_str(&group_first, &tk) {
                     group_first.append(tk);
@@ -338,7 +333,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
     if let Repeat(rep) = *elem {
         let mut inner_first: Array<String> = [];
         let mut visiting: Array<String> = [];
-        inner_first = first_of_element(&rep.element, all_rules, lit_tokens, &mut visiting);
+        inner_first = ctx.first_of_element(&rep.element, &mut visiting);
         if array_contains_str(&inner_first, token) {
             // Advance past the repeat element (simplified: treat as consuming 1 token).
             return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
@@ -354,7 +349,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, all_rules: &Array<ParserRule
             pos: c.pos,
             return_stack: c.return_stack,
         };
-        return sll_advance_inner(&unwrapped, token, all_rules, lit_tokens, inline_depth);
+        return sll_advance_inner(&unwrapped, token, ctx, inline_depth);
     }
 
     return [];
@@ -398,7 +393,7 @@ fn sll_dedup_by_alt(configs: &Array<SllConfig>) -> Array<SllConfig> {
     return result;
 }
 
-fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> PredictionNode {
+fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
     let closed = sll_closure(configs);
 
     // Guard: if too many configs, fall back to backtracking to avoid explosion.
@@ -430,7 +425,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_ru
                 return_stack: c.return_stack,
             });
         }
-        let child = build_sll_node(&advanced, depth, max_depth, all_rules, lit_tokens);
+        let child = build_sll_node(&advanced, depth, max_depth, ctx);
         return PredictionNode::Consume(ConsumeNode { element: elem, child });
     }
 
@@ -438,7 +433,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_ru
     let mut all_tokens: Array<String> = [];
     let mut config_firsts: Array<Array<String>> = [];
     for let c of closed {
-        let first = sll_config_first(&c, all_rules, lit_tokens);
+        let first = sll_config_first(&c, ctx);
         config_firsts.append(first);
         for let tk of first {
             if !array_contains_str(&all_tokens, &tk) {
@@ -458,7 +453,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_ru
         let mut opaque_alts: Array<i32> = [];
         for let mut i = 0; i < closed.len(); i += 1 {
             if array_contains_str(&config_firsts[i], tk) {
-                let advanced = sll_advance(&closed[i], tk, all_rules, lit_tokens);
+                let advanced = sll_advance(&closed[i], tk, ctx);
                 for let a of advanced {
                     if a.pos == -1 {
                         // Opaque config: multi-token RuleRef, can't advance past.
@@ -507,14 +502,14 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_ru
             // Still ambiguous: recurse with deeper lookahead.
             // If opaque alts exist, try expanding them before giving up.
             let child = if opaque_alts.len() > 0 {
-                let expanded = try_expand_opaque(&closed, tk, &next_configs, opaque_alts, depth + 1, max_depth, all_rules, lit_tokens);
+                let expanded = try_expand_opaque(&closed, tk, &next_configs, opaque_alts, depth + 1, max_depth, ctx);
                 if let Some(node) = expanded {
                     node;
                 } else {
                     PredictionNode::Backtrack(next_alts);
                 }
             } else {
-                build_sll_node(&deduped, depth + 1, max_depth, all_rules, lit_tokens);
+                build_sll_node(&deduped, depth + 1, max_depth, ctx);
             };
             let mut merged = false;
             for let mut b = 0; b < branches.len(); b += 1 {
@@ -542,7 +537,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, all_ru
 /// Uses ATN-style expansion: enter referenced rules, advance by one token,
 /// then compute FIRST sets at the decision point's lookahead level.
 /// Builds a flat Dispatch — never calls build_sll_node on expanded configs.
-fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_opaque_configs: &Array<SllConfig>, opaque_alts: Array<i32>, depth: i32, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Option<PredictionNode> {
+fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_opaque_configs: &Array<SllConfig>, opaque_alts: Array<i32>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> Option<PredictionNode> {
     if depth >= max_depth {
         return null;
     }
@@ -575,7 +570,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         }
         if let RuleRef(name) = c.elements[c.pos] {
             let mut alt_count = 0;
-            for let rule of all_rules {
+            for let rule of &ctx.parser_rules {
                 if rule.name == name {
                     alt_count = rule.alternatives.len();
                     break;
@@ -585,14 +580,14 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
                 continue;
             }
             let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-            for let rule of all_rules {
+            for let rule of &ctx.parser_rules {
                 if rule.name != name {
                     continue;
                 }
                 for let alt of rule.alternatives {
                     // Pre-filter: skip alternatives whose FIRST doesn't contain the token.
                     let mut v: Array<String> = [];
-                    if !array_contains_str(&first_of_alt(&alt, all_rules, lit_tokens, &mut v), token) {
+                    if !array_contains_str(&ctx.first_of_alt(&alt, &mut v), token) {
                         continue;
                     }
                     let exp = SllConfig {
@@ -601,7 +596,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
                         pos: 0,
                         return_stack: new_stack,
                     };
-                    let advanced = sll_advance_inner(&exp, token, all_rules, lit_tokens, 0);
+                    let advanced = sll_advance_inner(&exp, token, ctx, 0);
                     for let a of advanced {
                         if a.pos != -1 {
                             expanded_configs.append(a);
@@ -629,7 +624,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
     let mut all_tokens: Array<String> = [];
     let mut config_firsts: Array<Array<String>> = [];
     for let c of all_configs {
-        let first = sll_config_first(&c, all_rules, lit_tokens);
+        let first = sll_config_first(&c, ctx);
         config_firsts.append(first);
         for let tk of first {
             if !array_contains_str(&all_tokens, &tk) {
@@ -797,10 +792,10 @@ fn elements_suffix(elements: &Array<Element>, start: i32) -> Array<Element> {
 }
 
 /// Compute first set of a sequence of elements.
-fn first_of_elements(elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, visiting: &mut Array<String>) -> Array<String> {
+fn first_of_elements(elements: &Array<Element>, ctx: &mut GenContext, visiting: &mut Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
     for let elem of elements {
-        let ef = first_of_element(&elem, all_rules, lit_tokens, visiting);
+        let ef = ctx.first_of_element(&elem, visiting);
         for let tk of ef {
             if !array_contains_str(&result, &tk) {
                 result.append(tk);
@@ -855,7 +850,7 @@ fn element_eq(a: &Element, b: &Element) -> bool {
     return false;
 }
 
-fn compute_deeper_first(elements: &Array<Element>, depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<String> {
+fn compute_deeper_first(elements: &Array<Element>, depth: i32, ctx: &mut GenContext) -> Array<String> {
     let mut pos = 0;
     let mut remaining = depth;
     while pos < elements.len() && remaining > 0 {
@@ -873,7 +868,7 @@ fn compute_deeper_first(elements: &Array<Element>, depth: i32, all_rules: &Array
         // so we can safely advance past it and look at the next element.
         if let RuleRef(name) = *elem {
             let mut visiting: Array<String> = [];
-            if rule_is_single_token(&name, all_rules, &mut visiting) {
+            if ctx.rule_is_single_token(&name, &mut visiting) {
                 remaining -= 1;
                 pos += 1;
                 continue;
@@ -881,76 +876,7 @@ fn compute_deeper_first(elements: &Array<Element>, depth: i32, all_rules: &Array
         }
         return [];
     }
-    return first_of_elements_from(elements, pos, all_rules, lit_tokens);
-}
-
-/// Check if a rule always consumes exactly one token.
-/// True when every alternative has exactly one non-nullable element
-/// that is either a terminal (TokenRef/Literal) or a single-token RuleRef.
-fn rule_is_single_token(name: &String, all_rules: &Array<ParserRule>, visiting: &mut Array<String>) -> bool {
-    let cached = single_token_cache.get(*name);
-    if let Some(val) = cached {
-        return val;
-    }
-
-    if array_contains_str(visiting, name) {
-        return false;
-    }
-
-    let is_top_level = visiting.is_empty();
-    visiting.append(*name);
-
-    let mut result = false;
-    let mut found = false;
-    for let rule of all_rules {
-        if rule.name != *name {
-            continue;
-        }
-        found = true;
-        let mut all_alts_ok = true;
-        for let alt of rule.alternatives {
-            let mut non_nullable_count = 0;
-            let mut single_ok = false;
-            for let elem of alt.elements {
-                if is_nullable(&elem) {
-                    continue;
-                }
-                non_nullable_count += 1;
-                if non_nullable_count > 1 {
-                    break;
-                }
-                if let TokenRef(_) | Literal(_) = elem {
-                    single_ok = true;
-                } else if let RuleRef(r) = elem {
-                    single_ok = rule_is_single_token(&r, all_rules, visiting);
-                }
-            }
-            if non_nullable_count != 1 || !single_ok {
-                all_alts_ok = false;
-                break;
-            }
-        }
-        result = found && all_alts_ok;
-        break;
-    }
-
-    remove_from_visiting(visiting, name);
-
-    if is_top_level {
-        single_token_cache[*name] = result;
-    }
-
-    return result;
-}
-
-fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
-    let mut new_arr: Array<String> = [];
-    for let v of visiting {
-        if *v != *name {
-            new_arr.append(*v);
-        }
-    }
-    *visiting = new_arr;
+    return ctx.first_of_elements_from(elements, pos);
 }
 
 fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
@@ -996,12 +922,10 @@ fn count_leaf_nodes(node: &PredictionNode) -> i32 {
     return 0;
 }
 
-pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
-    first_rule_cache = TreeMap::<String, Array<String>>::new();
-    single_token_cache = TreeMap::<String, bool>::new();
+pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
     gen_parser_struct(w);
     for let rule of grammar.parser_rules {
-        gen_parse_fn(w, &rule, &grammar.parser_rules, lit_tokens);
+        gen_parse_fn(w, &rule, ctx);
     }
     gen_parse_entry(w, &grammar.parser_rules);
 }
@@ -1092,7 +1016,7 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.blank();
 }
 
-fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
+fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
     let type_name = rule_type_name(&rule.name);
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
 
@@ -1102,7 +1026,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, all_rules: &Array<ParserR
         f.set_return_type(`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
         w.line("let start = p.peek().span.start;");
-        gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], all_rules, lit_tokens);
+        gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], ctx);
         w.end();
         w.blank();
         return;
@@ -1120,7 +1044,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, all_rules: &Array<ParserR
     let mut first_sets: Array<Array<String>> = [];
     for let idx of non_lr_indices {
         let mut visiting: Array<String> = [];
-        first_sets.append(first_of_alt(&rule.alternatives[idx], all_rules, lit_tokens, &mut visiting));
+        first_sets.append(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
     let mut groups = compute_overlap_groups(&first_sets);
     let needs_bt = has_multi_alt_groups(&groups);
@@ -1168,8 +1092,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, all_rules: &Array<ParserR
                         Option::<String>::Some(case_name),
                         Option::<String>::Some(sname),
                         alt,
-                        all_rules,
-                        lit_tokens,
+                        ctx,
                     );
                     w.end();
                     w.blank();
@@ -1194,14 +1117,14 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, all_rules: &Array<ParserR
         f.emit_begin(w);
         w.line("let start = p.peek().span.start;");
         if needs_bt {
-            gen_multi_alt_body_bt(w, rule, &type_name, all_rules, lit_tokens, &groups, &first_sets, &non_lr_indices);
+            gen_multi_alt_body_bt(w, rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
         } else {
-            gen_multi_alt_body(w, rule, &type_name, all_rules, lit_tokens);
+            gen_multi_alt_body(w, rule, &type_name, ctx);
         }
         w.end();
         w.blank();
 
-        gen_lr_suffix_helpers(w, rule, &type_name, &lr_indices, all_rules, lit_tokens);
+        gen_lr_suffix_helpers(w, rule, &type_name, &lr_indices, ctx);
 
         // Generate parse_rule_prec(p, min_prec) — the precedence-aware parser
         let prec_fn = `{fn_name}_prec`;
@@ -1212,7 +1135,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, all_rules: &Array<ParserR
         f2.emit_begin(w);
         w.line("let start = p.peek().span.start;");
         w.line(`let mut result = {fn_name}_atom(p)?;`);
-        gen_lr_suffix_dispatch(w, rule, &type_name, &lr_indices, all_rules, lit_tokens, true);
+        gen_lr_suffix_dispatch(w, rule, &type_name, &lr_indices, ctx, true);
         w.line(`return Result::<{type_name}, ParseError>::Ok(result);`);
         w.end();
         w.blank();
@@ -1232,17 +1155,17 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, all_rules: &Array<ParserR
         f.emit_begin(w);
         w.line("let start = p.peek().span.start;");
         if needs_bt {
-            gen_multi_alt_body_bt(w, rule, &type_name, all_rules, lit_tokens, &groups, &first_sets, &non_lr_indices);
+            gen_multi_alt_body_bt(w, rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
         } else {
-            gen_multi_alt_body(w, rule, &type_name, all_rules, lit_tokens);
+            gen_multi_alt_body(w, rule, &type_name, ctx);
         }
         w.end();
         w.blank();
     }
 }
 
-fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
-    gen_alt_elements(w, &alt.elements, all_rules, lit_tokens);
+fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, ctx: &mut GenContext) {
+    gen_alt_elements(w, &alt.elements, ctx);
 
     if let Some(case) = variant_case {
         let sname = struct_name.unwrap();
@@ -1262,7 +1185,7 @@ fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<Str
     }
 }
 
-fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, skip: i32) {
+fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, ctx: &mut GenContext, skip: i32) {
     // Parse elements from `skip` onward (prefix already consumed).
     // Replay name counter for consumed elements so dedup_name stays in sync.
     let mut name_counts: Array<[String, i32]> = [];
@@ -1274,20 +1197,20 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         if let Repeat(rep) = *elem {
             if let Optional = rep.kind {
                 if is_ruleref_optional(&rep.element) {
-                    let follow = first_of_elements_from(&alt.elements, i + 1, all_rules, lit_tokens);
-                    gen_repeat_with_follow(w, &rep, all_rules, lit_tokens, &follow, &mut name_counts);
+                    let follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+                    gen_repeat_with_follow(w, &rep, ctx, &follow, &mut name_counts);
                 } else {
-                    gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
+                    gen_repeat(w, &rep, ctx, &mut name_counts);
                 }
             } else if rep.non_greedy {
-                let follow = first_of_elements_from(&alt.elements, i + 1, all_rules, lit_tokens);
-                let follow_second = compute_follow_second(&alt.elements, i + 1, all_rules, lit_tokens);
-                gen_repeat_non_greedy(w, &rep, all_rules, lit_tokens, &follow, &follow_second, &mut name_counts);
+                let follow = ctx.first_of_elements_from(&alt.elements, i + 1);
+                let follow_second = compute_follow_second(&alt.elements, i + 1, ctx);
+                gen_repeat_non_greedy(w, &rep, ctx, &follow, &follow_second, &mut name_counts);
             } else {
-                gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
+                gen_repeat(w, &rep, ctx, &mut name_counts);
             }
         } else {
-            gen_element(w, elem, all_rules, lit_tokens, &mut name_counts);
+            gen_element(w, elem, ctx, &mut name_counts);
         }
     }
 
@@ -1309,13 +1232,13 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
     }
 }
 
-fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
+fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext) {
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
 
     let max_k = 5;
     let mut all_pos_sets: Array<Array<Array<String>>> = [];
     for let alt of rule.alternatives {
-        all_pos_sets.append(alt_position_first_sets(&alt, max_k, all_rules, lit_tokens));
+        all_pos_sets.append(ctx.alt_position_first_sets(&alt, max_k));
     }
     let depth = find_needed_depth(&all_pos_sets);
 
@@ -1342,53 +1265,52 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
             Option::<String>::Some(case_name),
             Option::<String>::Some(sname),
             alt,
-            all_rules,
-            lit_tokens,
+            ctx,
         );
         w.end();
     }
 
-    gen_error_fallback(w, rule, type_name, all_rules, lit_tokens);
+    gen_error_fallback(w, rule, type_name, ctx);
 }
 
-fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
+fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut GenContext) {
     let mut name_counts: Array<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         if let Repeat(rep) = *elem {
             if let Optional = rep.kind {
                 if is_ruleref_optional(&rep.element) {
-                    let follow = first_of_elements_from(elements, i + 1, all_rules, lit_tokens);
-                    gen_repeat_with_follow(w, &rep, all_rules, lit_tokens, &follow, &mut name_counts);
+                    let follow = ctx.first_of_elements_from(elements, i + 1);
+                    gen_repeat_with_follow(w, &rep, ctx, &follow, &mut name_counts);
                 } else {
-                    gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
+                    gen_repeat(w, &rep, ctx, &mut name_counts);
                 }
             } else if rep.non_greedy {
-                let follow = first_of_elements_from(elements, i + 1, all_rules, lit_tokens);
-                let follow_second = compute_follow_second(elements, i + 1, all_rules, lit_tokens);
-                gen_repeat_non_greedy(w, &rep, all_rules, lit_tokens, &follow, &follow_second, &mut name_counts);
+                let follow = ctx.first_of_elements_from(elements, i + 1);
+                let follow_second = compute_follow_second(elements, i + 1, ctx);
+                gen_repeat_non_greedy(w, &rep, ctx, &follow, &follow_second, &mut name_counts);
             } else {
-                gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
+                gen_repeat(w, &rep, ctx, &mut name_counts);
             }
         } else {
-            gen_element(w, elem, all_rules, lit_tokens, &mut name_counts);
+            gen_element(w, elem, ctx, &mut name_counts);
         }
     }
 }
 
-fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         if let Repeat(rep) = *elem {
             if rep.non_greedy {
-                let follow = first_of_elements_from(elements, i + 1, all_rules, lit_tokens);
-                let follow_second = compute_follow_second(elements, i + 1, all_rules, lit_tokens);
-                gen_repeat_non_greedy(w, &rep, all_rules, lit_tokens, &follow, &follow_second, name_counts);
+                let follow = ctx.first_of_elements_from(elements, i + 1);
+                let follow_second = compute_follow_second(elements, i + 1, ctx);
+                gen_repeat_non_greedy(w, &rep, ctx, &follow, &follow_second, name_counts);
             } else {
-                gen_element(w, elem, all_rules, lit_tokens, name_counts);
+                gen_element(w, elem, ctx, name_counts);
             }
         } else {
-            gen_element(w, elem, all_rules, lit_tokens, name_counts);
+            gen_element(w, elem, ctx, name_counts);
         }
     }
 }
@@ -1403,7 +1325,7 @@ fn is_ruleref_optional(elem: &Element) -> bool {
     return false;
 }
 
-fn gen_element(w: &mut CodeWriter, elem: &Element, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     if let TokenRef(name) = *elem {
         let const_name = `TK_{name}`;
         let field_name = dedup_name(&to_lower(&name), name_counts);
@@ -1424,27 +1346,27 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, all_rules: &Array<ParserRule>
         return;
     }
     if let Repeat(rep) = *elem {
-        gen_repeat(w, &rep, all_rules, lit_tokens, name_counts);
+        gen_repeat(w, &rep, ctx, name_counts);
         return;
     }
     if let Group(alts) = *elem {
         if is_simple_cst_group(&alts) {
-            gen_consume_group_store_optional(w, &alts, all_rules, lit_tokens, name_counts);
+            gen_consume_group_store_optional(w, &alts, ctx, name_counts);
         } else {
-            gen_consume_group(w, &alts, all_rules, lit_tokens, name_counts);
+            gen_consume_group(w, &alts, ctx, name_counts);
         }
         return;
     }
     if let Label(lab) = *elem {
-        gen_element(w, &lab.element, all_rules, lit_tokens, name_counts);
+        gen_element(w, &lab.element, ctx, name_counts);
         return;
     }
 }
 
-fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let inner = &rep.element;
     let mut visiting: Array<String> = [];
-    let first = first_of_element(inner, all_rules, lit_tokens, &mut visiting);
+    let first = ctx.first_of_element(inner, &mut visiting);
 
     if has_field(inner) {
         let field_info = element_field_info(inner);
@@ -1455,9 +1377,9 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserR
             w.begin(`while {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
             if is_group_store {
-                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc); }
+                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, ctx, &mut nc); }
             } else {
-                gen_element(w, inner, all_rules, lit_tokens, &mut nc);
+                gen_element(w, inner, ctx, &mut nc);
             }
             w.line(`{list_name}.append({field_info.0});`);
             w.end();
@@ -1465,18 +1387,18 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserR
         if let Plus = rep.kind {
             let mut nc: Array<[String, i32]> = [];
             if is_group_store {
-                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc); }
+                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, ctx, &mut nc); }
             } else {
-                gen_element(w, inner, all_rules, lit_tokens, &mut nc);
+                gen_element(w, inner, ctx, &mut nc);
             }
             let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
             w.line(`let mut {list_name}: Array<{field_info.1}> = [{field_info.0}];`);
             w.begin(`while {first_check_str(&first)}`);
             let mut nc2: Array<[String, i32]> = [];
             if is_group_store {
-                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc2); }
+                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, ctx, &mut nc2); }
             } else {
-                gen_element(w, inner, all_rules, lit_tokens, &mut nc2);
+                gen_element(w, inner, ctx, &mut nc2);
             }
             w.line(`{list_name}.append({field_info.0});`);
             w.end();
@@ -1487,9 +1409,9 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserR
             w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
             if is_group_store {
-                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, all_rules, lit_tokens, &mut nc); }
+                if let Group(alts) = *inner { gen_consume_group_store(w, &alts, ctx, &mut nc); }
             } else {
-                gen_element(w, inner, all_rules, lit_tokens, &mut nc);
+                gen_element(w, inner, ctx, &mut nc);
             }
             w.line(`Option::<{type_str}>::Some({field_info.0})`);
             w.else_begin("else");
@@ -1500,23 +1422,23 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserR
         if let Star = rep.kind {
             w.begin(`while {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
+            gen_element(w, inner, ctx, &mut nc);
             w.end();
         }
         if let Plus = rep.kind {
-            gen_element(w, inner, all_rules, lit_tokens, name_counts);
+            gen_element(w, inner, ctx, name_counts);
             w.begin(`while {first_check_str(&first)}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
+            gen_element(w, inner, ctx, &mut nc);
             w.end();
         }
         if let Optional = rep.kind {
-            gen_optional_with_backtrack(w, inner, all_rules, lit_tokens, &first, name_counts);
+            gen_optional_with_backtrack(w, inner, ctx, &first, name_counts);
         }
     }
 }
 
-fn compute_follow_second(elements: &Array<Element>, follow_start: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<String> {
+fn compute_follow_second(elements: &Array<Element>, follow_start: i32, ctx: &mut GenContext) -> Array<String> {
     // Compute first set of the 2nd token of the follow element.
     // For patterns like (',' table_constraint)*, the follow's inner group is [',' table_constraint].
     // We want first(table_constraint), not first(',').
@@ -1527,16 +1449,16 @@ fn compute_follow_second(elements: &Array<Element>, follow_start: i32, all_rules
     if let Repeat(rep) = *follow_elem {
         if let Group(alts) = rep.element {
             if alts.len() == 1 && alts[0].elements.len() >= 2 {
-                return first_of_elements_from(&alts[0].elements, 1, all_rules, lit_tokens);
+                return ctx.first_of_elements_from(&alts[0].elements, 1);
             }
         }
     }
     return [];
 }
 
-fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, follow_second: &Array<String>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> String {
+fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, follow_second: &Array<String>, ctx: &mut GenContext) -> String {
     let mut visiting: Array<String> = [];
-    let raw_first = first_of_element(inner, all_rules, lit_tokens, &mut visiting);
+    let raw_first = ctx.first_of_element(inner, &mut visiting);
     let continue_first = subtract_sets(&raw_first, follow_first);
 
     if continue_first.len() > 0 {
@@ -1544,7 +1466,7 @@ fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, f
         // For cases like `name+?` where name matches all keywords, lookahead can't
         // distinguish names from constraint keywords. Use minimum match (don't loop).
         let mut visiting2: Array<String> = [];
-        let inner_first_full = first_of_element(inner, all_rules, lit_tokens, &mut visiting2);
+        let inner_first_full = ctx.first_of_element(inner, &mut visiting2);
         if continue_first.len() > 20 && inner_first_full.len() > 20 {
             // Very broad first set — match minimum (1 for +?, 0 for *?)
             return "false";
@@ -1558,7 +1480,7 @@ fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, f
     //   peek(0) == ',' for both, peek(1) distinguishes column_def from table_constraint.
     if let Group(alts) = *inner {
         if alts.len() == 1 && alts[0].elements.len() >= 2 && follow_second.len() > 0 {
-            let inner_second_first = first_of_elements_from(&alts[0].elements, 1, all_rules, lit_tokens);
+            let inner_second_first = ctx.first_of_elements_from(&alts[0].elements, 1);
             let second_continue = subtract_sets(&inner_second_first, follow_second);
             if second_continue.len() > 0 {
                 let peek0_cond = first_check_str(&raw_first);
@@ -1572,26 +1494,26 @@ fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, f
     return "false";
 }
 
-fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, follow_first: &Array<String>, follow_second: &Array<String>, name_counts: &mut Array<[String, i32]>) {
+fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, follow_first: &Array<String>, follow_second: &Array<String>, name_counts: &mut Array<[String, i32]>) {
     let inner = &rep.element;
     let is_plus = if let Plus = rep.kind {
         true;
     } else {
         false;
     };
-    let while_cond = compute_non_greedy_condition(inner, follow_first, follow_second, all_rules, lit_tokens);
+    let while_cond = compute_non_greedy_condition(inner, follow_first, follow_second, ctx);
 
     if has_field(inner) {
         let field_info = element_field_info(inner);
         if is_plus {
             let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
+            gen_element(w, inner, ctx, &mut nc);
             let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
             w.line(`let mut {list_name}: Array<{field_info.1}> = [{field_info.0}];`);
             if while_cond != "false" {
                 w.begin(`while {while_cond}`);
                 let mut nc2: Array<[String, i32]> = [];
-                gen_element(w, inner, all_rules, lit_tokens, &mut nc2);
+                gen_element(w, inner, ctx, &mut nc2);
                 w.line(`{list_name}.append({field_info.0});`);
                 w.end();
             }
@@ -1601,19 +1523,19 @@ fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Ar
             if while_cond != "false" {
                 w.begin(`while {while_cond}`);
                 let mut nc: Array<[String, i32]> = [];
-                gen_element(w, inner, all_rules, lit_tokens, &mut nc);
+                gen_element(w, inner, ctx, &mut nc);
                 w.line(`{list_name}.append({field_info.0});`);
                 w.end();
             }
         }
     } else {
         if is_plus {
-            gen_element(w, inner, all_rules, lit_tokens, name_counts);
+            gen_element(w, inner, ctx, name_counts);
         }
         if while_cond != "false" {
             w.begin(`while {while_cond}`);
             let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
+            gen_element(w, inner, ctx, &mut nc);
             w.end();
         }
     }
@@ -1642,10 +1564,10 @@ fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
     return result;
 }
 
-fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, follow_first: &Array<String>, name_counts: &mut Array<[String, i32]>) {
+fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, follow_first: &Array<String>, name_counts: &mut Array<[String, i32]>) {
     let inner = &rep.element;
     let mut visiting: Array<String> = [];
-    let raw_first = first_of_element(inner, all_rules, lit_tokens, &mut visiting);
+    let raw_first = ctx.first_of_element(inner, &mut visiting);
     let first = subtract_sets(&raw_first, follow_first);
 
     if first.len() == 0 {
@@ -1665,13 +1587,13 @@ fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, all_rules: &A
         let opt_name = dedup_name(&field_info.0, name_counts);
         w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
         let mut nc: Array<[String, i32]> = [];
-        gen_element(w, inner, all_rules, lit_tokens, &mut nc);
+        gen_element(w, inner, ctx, &mut nc);
         w.line(`Option::<{type_str}>::Some({field_info.0})`);
         w.else_begin("else");
         w.line("null");
         w.end_with(";");
     } else {
-        gen_optional_with_backtrack(w, inner, all_rules, lit_tokens, &first, name_counts);
+        gen_optional_with_backtrack(w, inner, ctx, &first, name_counts);
     }
 }
 
@@ -1738,7 +1660,7 @@ fn compute_shapes(elements: &Array<Element>) -> Array<Array<i32>> {
     return shapes;
 }
 
-fn shape_lookahead_signature(shape: &Array<i32>, elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<Array<String>> {
+fn shape_lookahead_signature(shape: &Array<i32>, elements: &Array<Element>, ctx: &mut GenContext) -> Array<Array<String>> {
     let mut sig: Array<Array<String>> = [];
     for let mut si = 0; si < shape.len(); si += 1 {
         let idx = shape[si];
@@ -1749,14 +1671,14 @@ fn shape_lookahead_signature(shape: &Array<i32>, elements: &Array<Element>, all_
             if alts.len() == 1 {
                 for let mut j = 0; j < alts[0].elements.len(); j += 1 {
                     let mut visiting: Array<String> = [];
-                    sig.append(first_of_element(&alts[0].elements[j], all_rules, lit_tokens, &mut visiting));
+                    sig.append(ctx.first_of_element(&alts[0].elements[j], &mut visiting));
                 }
                 continue;
             }
         }
         // For simple elements (RuleRef, TokenRef, Literal), one position
         let mut visiting: Array<String> = [];
-        sig.append(first_of_element(actual, all_rules, lit_tokens, &mut visiting));
+        sig.append(ctx.first_of_element(actual, &mut visiting));
     }
     return sig;
 }
@@ -1791,13 +1713,13 @@ fn gen_lookahead_condition(sig: &Array<Array<String>>) -> String {
     return result;
 }
 
-fn gen_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+fn gen_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Element>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let shapes = compute_shapes(group_elements);
 
     let mut is_first = true;
     for let mut si = 0; si < shapes.len(); si += 1 {
         let shape = &shapes[si];
-        let sig = shape_lookahead_signature(shape, group_elements, all_rules, lit_tokens);
+        let sig = shape_lookahead_signature(shape, group_elements, ctx);
         if sig.len() == 0 {
             continue;
         }
@@ -1819,13 +1741,13 @@ fn gen_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Elemen
             if let Group(alts) = *actual {
                 if alts.len() == 1 {
                     for let mut j = 0; j < alts[0].elements.len(); j += 1 {
-                        gen_element(w, &alts[0].elements[j], all_rules, lit_tokens, &mut nc);
+                        gen_element(w, &alts[0].elements[j], ctx, &mut nc);
                     }
                 } else {
-                    gen_element(w, actual, all_rules, lit_tokens, &mut nc);
+                    gen_element(w, actual, ctx, &mut nc);
                 }
             } else {
-                gen_element(w, actual, all_rules, lit_tokens, &mut nc);
+                gen_element(w, actual, ctx, &mut nc);
             }
         }
     }
@@ -1898,10 +1820,10 @@ fn optional_lookahead_tokens(inner: &Element, max_depth: i32) -> Array<String> {
     return tokens;
 }
 
-fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, first: &Array<String>, name_counts: &mut Array<[String, i32]>) {
+fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, first: &Array<String>, name_counts: &mut Array<[String, i32]>) {
     if has_nested_optionals(inner) {
         if let Group(alts) = *inner {
-            gen_optional_with_lookahead(w, &alts[0].elements, all_rules, lit_tokens, name_counts);
+            gen_optional_with_lookahead(w, &alts[0].elements, ctx, name_counts);
             return;
         }
     }
@@ -1926,10 +1848,10 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, all_rules: &
         let mut nc: Array<[String, i32]> = [];
         if let Group(alts) = *inner {
             for let mut i = 0; i < alts[0].elements.len(); i += 1 {
-                gen_element(w, &alts[0].elements[i], all_rules, lit_tokens, &mut nc);
+                gen_element(w, &alts[0].elements[i], ctx, &mut nc);
             }
         } else {
-            gen_element(w, inner, all_rules, lit_tokens, &mut nc);
+            gen_element(w, inner, ctx, &mut nc);
         }
         w.end();
         return;
@@ -1946,20 +1868,20 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, all_rules: &
     if let Group(alts) = *inner {
         if alts.len() == 1 {
             for let elem of alts[0].elements {
-                gen_element_failable(w, &elem, all_rules, lit_tokens, &saved, &label, &mut bt_nc);
+                gen_element_failable(w, &elem, ctx, &saved, &label, &mut bt_nc);
             }
         } else {
-            gen_element(w, inner, all_rules, lit_tokens, &mut bt_nc);
+            gen_element(w, inner, ctx, &mut bt_nc);
         }
     } else {
-        gen_element_failable(w, inner, all_rules, lit_tokens, &saved, &label, &mut bt_nc);
+        gen_element_failable(w, inner, ctx, &saved, &label, &mut bt_nc);
     }
 
     w.end();  // label
     w.end();  // if
 }
 
-fn gen_element_failable(w: &mut CodeWriter, elem: &Element, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, saved_var: &String, label: &String, name_counts: &mut Array<[String, i32]>) {
+fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, saved_var: &String, label: &String, name_counts: &mut Array<[String, i32]>) {
     if let TokenRef(name) = *elem {
         let const_name = `TK_{name}`;
         let r_var = dedup_name(&"opt_r", name_counts);
@@ -1983,21 +1905,21 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, all_rules: &Array<Pa
         return;
     }
     if let Repeat(rep) = *elem {
-        gen_repeat(w, &rep, all_rules, lit_tokens, name_counts);
+        gen_repeat(w, &rep, ctx, name_counts);
         return;
     }
     if let Group(alts) = *elem {
         if alts.len() == 1 {
             for let inner_elem of alts[0].elements {
-                gen_element_failable(w, &inner_elem, all_rules, lit_tokens, saved_var, label, name_counts);
+                gen_element_failable(w, &inner_elem, ctx, saved_var, label, name_counts);
             }
         } else {
-            gen_consume_group(w, &alts, all_rules, lit_tokens, name_counts);
+            gen_consume_group(w, &alts, ctx, name_counts);
         }
         return;
     }
     if let Label(lab) = *elem {
-        gen_element_failable(w, &lab.element, all_rules, lit_tokens, saved_var, label, name_counts);
+        gen_element_failable(w, &lab.element, ctx, saved_var, label, name_counts);
         return;
     }
 }
@@ -2138,19 +2060,19 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) 
     }
 }
 
-fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     if alts.len() == 0 {
         return;
     }
     if alts.len() == 1 {
-        gen_elements_with_non_greedy(w, &alts[0].elements, all_rules, lit_tokens, name_counts);
+        gen_elements_with_non_greedy(w, &alts[0].elements, ctx, name_counts);
         return;
     }
 
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
         let mut visiting: Array<String> = [];
-        first_sets.append(first_of_alt(&alt, all_rules, lit_tokens, &mut visiting));
+        first_sets.append(ctx.first_of_alt(&alt, &mut visiting));
     }
     let groups = compute_overlap_groups(&first_sets);
 
@@ -2179,25 +2101,25 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &
         if group.len() == 1 {
             let alt_idx = group[0];
             let mut nc: Array<[String, i32]> = [];
-            gen_elements_with_non_greedy(w, &alts[alt_idx].elements, all_rules, lit_tokens, &mut nc);
+            gen_elements_with_non_greedy(w, &alts[alt_idx].elements, ctx, &mut nc);
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_element_count(&mut sorted_group, alts);
             let mut nc: Array<[String, i32]> = [];
-            gen_backtracking_body(w, &sorted_group, alts, all_rules, lit_tokens, &mut nc);
+            gen_backtracking_body(w, &sorted_group, alts, ctx, &mut nc);
         }
     }
     w.end();
 }
 
-fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let var_name = dedup_name(&group_field_base_name(alts), name_counts);
     let type_name = group_variant_type_name(alts);
 
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
         let mut visiting: Array<String> = [];
-        first_sets.append(first_of_alt(alt, all_rules, lit_tokens, &mut visiting));
+        first_sets.append(ctx.first_of_alt(alt, &mut visiting));
     }
 
     let groups = compute_overlap_groups(&first_sets);
@@ -2309,14 +2231,14 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, all_ru
     }
 }
 
-fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let var_name = dedup_name(&group_field_base_name(alts), name_counts);
     let type_name = group_variant_type_name(alts);
 
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
         let mut visiting: Array<String> = [];
-        first_sets.append(first_of_alt(alt, all_rules, lit_tokens, &mut visiting));
+        first_sets.append(ctx.first_of_alt(alt, &mut visiting));
     }
 
     let groups = compute_overlap_groups(&first_sets);
@@ -2400,7 +2322,7 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
     w.line(`let {var_name} = {inner_var};`);
 }
 
-fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
+fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     // Build prediction tree for the group alternatives.
     let mut pred_indices: Array<i32> = [];
     let mut pred_firsts: Array<Array<String>> = [];
@@ -2409,37 +2331,37 @@ fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Al
         let alt_idx = group[k];
         pred_indices.append(alt_idx);
         let mut visiting: Array<String> = [];
-        pred_firsts.append(first_of_alt(&alts[alt_idx], all_rules, lit_tokens, &mut visiting));
+        pred_firsts.append(ctx.first_of_alt(&alts[alt_idx], &mut visiting));
         pred_elements.append(alts[alt_idx].elements);
     }
-    let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, all_rules, lit_tokens);
-    gen_group_prediction_code(w, &tree, alts, all_rules, lit_tokens, name_counts);
+    let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, ctx);
+    gen_group_prediction_code(w, &tree, alts, ctx, name_counts);
 }
 
-fn gen_group_prediction_code(w: &mut CodeWriter, node: &PredictionNode, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>) {
-    gen_group_prediction_code_skip(w, node, alts, all_rules, lit_tokens, name_counts, 0);
+fn gen_group_prediction_code(w: &mut CodeWriter, node: &PredictionNode, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    gen_group_prediction_code_skip(w, node, alts, ctx, name_counts, 0);
 }
 
-fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alts: &Array<Alternative>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, name_counts: &mut Array<[String, i32]>, skip: i32) {
+fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, skip: i32) {
     if let Leaf(idx) = *node {
         let elems = &alts[idx].elements;
         for let mut i = skip; i < elems.len(); i += 1 {
             let elem = &elems[i];
             if let Repeat(rep) = *elem {
                 if rep.non_greedy {
-                    let follow = first_of_elements_from(elems, i + 1, all_rules, lit_tokens);
-                    let follow_second = compute_follow_second(elems, i + 1, all_rules, lit_tokens);
-                    gen_repeat_non_greedy(w, &rep, all_rules, lit_tokens, &follow, &follow_second, name_counts);
+                    let follow = ctx.first_of_elements_from(elems, i + 1);
+                    let follow_second = compute_follow_second(elems, i + 1, ctx);
+                    gen_repeat_non_greedy(w, &rep, ctx, &follow, &follow_second, name_counts);
                     continue;
                 }
             }
-            gen_element(w, &elem, all_rules, lit_tokens, name_counts);
+            gen_element(w, &elem, ctx, name_counts);
         }
         return;
     }
     if let Consume(c) = *node {
-        gen_element(w, &c.element, all_rules, lit_tokens, name_counts);
-        gen_group_prediction_code_skip(w, &c.child, alts, all_rules, lit_tokens, name_counts, skip + 1);
+        gen_element(w, &c.element, ctx, name_counts);
+        gen_group_prediction_code_skip(w, &c.child, alts, ctx, name_counts, skip + 1);
         return;
     }
     if let Backtrack(indices) = *node {
@@ -2457,7 +2379,7 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
                 w.begin(`if !{done_var}`);
                 let mut nc: Array<[String, i32]> = [];
                 for let mut i = skip; i < alt.elements.len(); i += 1 {
-                    gen_element(w, &alt.elements[i], all_rules, lit_tokens, &mut nc);
+                    gen_element(w, &alt.elements[i], ctx, &mut nc);
                 }
                 w.end();
             } else {
@@ -2466,7 +2388,7 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
                 w.begin(`{bt_label}:`);
                 let mut nc: Array<[String, i32]> = [];
                 for let mut i = skip; i < alt.elements.len(); i += 1 {
-                    gen_element_failable(w, &alt.elements[i], all_rules, lit_tokens, &saved_var, &bt_label, &mut nc);
+                    gen_element_failable(w, &alt.elements[i], ctx, &saved_var, &bt_label, &mut nc);
                 }
                 w.line(`{done_var} = true;`);
                 w.end();  // label
@@ -2485,13 +2407,13 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
             } else {
                 w.else_begin(`else if {cond}`);
             }
-            gen_group_prediction_code_skip(w, &branch.child, alts, all_rules, lit_tokens, name_counts, skip);
+            gen_group_prediction_code_skip(w, &branch.child, alts, ctx, name_counts, skip);
         }
         w.end();
     }
 }
 
-fn compute_lr_conflict_min_prec(alt: &Alternative, own_prec: i32, lr_indices: &Array<i32>, rule: &ParserRule, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, total_lr: i32) -> i32 {
+fn compute_lr_conflict_min_prec(alt: &Alternative, own_prec: i32, lr_indices: &Array<i32>, rule: &ParserRule, ctx: &mut GenContext, total_lr: i32) -> i32 {
     // Scan suffix for fixed tokens that are also LR suffix first tokens.
     // If found, compute min_prec = max(own_prec + 1, conflicting_alt_prec + 1).
     let mut min_prec = own_prec + 1;
@@ -2520,7 +2442,7 @@ fn compute_lr_conflict_min_prec(alt: &Alternative, own_prec: i32, lr_indices: &A
             continue;
         }
         let other_prec = total_lr - lr_pos;
-        let suffix_first = first_of_elements_from(&other.elements, 1, all_rules, lit_tokens);
+        let suffix_first = ctx.first_of_elements_from(&other.elements, 1);
         for let ft of fixed_tokens {
             if array_contains_str(&suffix_first, &ft) {
                 let candidate = other_prec + 1;
@@ -2534,7 +2456,7 @@ fn compute_lr_conflict_min_prec(alt: &Alternative, own_prec: i32, lr_indices: &A
     return min_prec;
 }
 
-fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
+fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext) {
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
     let prec_fn = `{fn_name}_prec`;
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
@@ -2560,8 +2482,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             own_prec,
             lr_indices,
             rule,
-            all_rules,
-            lit_tokens,
+            ctx,
             total_lr,
         );
 
@@ -2591,12 +2512,12 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                     let discard = dedup_name(&"op_tok", &mut name_counts);
                     w.line(`let {discard} = p.advance();`);
                 } else {
-                    gen_element(w, elem, all_rules, lit_tokens, &mut name_counts);
+                    gen_element(w, elem, ctx, &mut name_counts);
                 }
             } else if let Repeat(rep) = *elem {
-                gen_repeat(w, &rep, all_rules, lit_tokens, &mut name_counts);
+                gen_repeat(w, &rep, ctx, &mut name_counts);
             } else {
-                gen_element(w, elem, all_rules, lit_tokens, &mut name_counts);
+                gen_element(w, elem, ctx, &mut name_counts);
             }
         }
 
@@ -2619,7 +2540,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
     }
 }
 
-fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<String> {
+fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, ctx: &mut GenContext) -> Array<String> {
     // Find what token follows the shared_token in this alternative's suffix.
     // Walk suffix elements (starting at index 1) to find the shared token,
     // then return the first set of the next element.
@@ -2627,7 +2548,7 @@ fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, all
         let elem = &elements[i];
         // Check if this element contains the shared token
         let mut visiting: Array<String> = [];
-        let elem_first = first_of_element(elem, all_rules, lit_tokens, &mut visiting);
+        let elem_first = ctx.first_of_element(elem, &mut visiting);
         if !array_contains_str(&elem_first, shared_token) {
             continue;
         }
@@ -2637,7 +2558,7 @@ fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, all
             // The shared token is inside an optional (e.g. K_NOT?).
             // The "second token" is the next element after the optional.
             if i + 1 < elements.len() {
-                return first_of_elements_from(elements, i + 1, all_rules, lit_tokens);
+                return ctx.first_of_elements_from(elements, i + 1);
             }
         }
 
@@ -2651,16 +2572,16 @@ fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, all
                     continue;
                 }
                 let mut v2: Array<String> = [];
-                let alt_first = first_of_element(&alt.elements[0], all_rules, lit_tokens, &mut v2);
+                let alt_first = ctx.first_of_element(&alt.elements[0], &mut v2);
                 if array_contains_str(&alt_first, shared_token) && alt.elements.len() >= 2 {
-                    return first_of_elements_from(&alt.elements, 1, all_rules, lit_tokens);
+                    return ctx.first_of_elements_from(&alt.elements, 1);
                 }
             }
         }
 
         // Fallback: return next element's first set
         if i + 1 < elements.len() {
-            return first_of_elements_from(elements, i + 1, all_rules, lit_tokens);
+            return ctx.first_of_elements_from(elements, i + 1);
         }
     }
     return [];
@@ -2678,7 +2599,7 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32, use_
     }
 }
 
-fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, use_prec: bool) {
+fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext, use_prec: bool) {
     // For each token in the group, find which alternatives match it.
     // Unique token → dispatch directly. Shared token → sub-dispatch via peek_at(1).
     let mut emitted: Array<String> = [];
@@ -2761,7 +2682,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
                     w.end();
                 }
             } else {
-                let second = compute_lr_second_token(shared_tk, &alt.elements, all_rules, lit_tokens);
+                let second = compute_lr_second_token(shared_tk, &alt.elements, ctx);
                 let sub_cond = kind_check_str(&second, "p.peek_at(1)");
                 if sub_first {
                     w.begin(`if {sub_cond}`);
@@ -2779,7 +2700,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
     }
 }
 
-fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, use_prec: bool) {
+fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext, use_prec: bool) {
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
     let total_lr = lr_indices.len();
 
@@ -2794,7 +2715,7 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
             lr_position += 1;
             continue;
         }
-        let suffix_first = first_of_elements_from(&alt.elements, 1, all_rules, lit_tokens);
+        let suffix_first = ctx.first_of_elements_from(&alt.elements, 1);
         if suffix_first.len() == 0 {
             lr_position += 1;
             continue;
@@ -2854,8 +2775,7 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
                 &valid_lr_indices,
                 &lr_precs,
                 &suffix_first_sets,
-                all_rules,
-                lit_tokens,
+                ctx,
                 use_prec,
             );
         }
@@ -2871,12 +2791,12 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
     w.end();  // loop
 }
 
-fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
+fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, type_name: &String, ctx: &mut GenContext) {
     let mut nc: Array<[String, i32]> = [];
-    gen_prediction_code_inner(w, node, fn_name, alts, type_name, all_rules, lit_tokens, 0, &mut nc);
+    gen_prediction_code_inner(w, node, fn_name, alts, type_name, ctx, 0, &mut nc);
 }
 
-fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, skip: i32, name_counts: &mut Array<[String, i32]>) {
+fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut Array<[String, i32]>) {
     if let Leaf(idx) = *node {
         if skip == 0 {
             w.line(`return {*fn_name}_bt_{idx}(p);`);
@@ -2892,16 +2812,15 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                 Option::<String>::Some(case_name),
                 Option::<String>::Some(sname),
                 alt,
-                all_rules,
-                lit_tokens,
+                ctx,
                 skip,
             );
         }
         return;
     }
     if let Consume(c) = *node {
-        gen_element(w, &c.element, all_rules, lit_tokens, name_counts);
-        gen_prediction_code_inner(w, &c.child, fn_name, alts, type_name, all_rules, lit_tokens, skip + 1, name_counts);
+        gen_element(w, &c.element, ctx, name_counts);
+        gen_prediction_code_inner(w, &c.child, fn_name, alts, type_name, ctx, skip + 1, name_counts);
         return;
     }
     if let Backtrack(indices) = *node {
@@ -2947,8 +2866,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                 fn_name,
                 alts,
                 type_name,
-                all_rules,
-                lit_tokens,
+                ctx,
                 skip,
                 name_counts,
             );
@@ -2957,7 +2875,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
     }
 }
 
-fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
+fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
     let all_labeled = all_alternatives_labeled(&rule.alternatives);
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
     w.line("let kind = p.peek_kind();");
@@ -2987,8 +2905,7 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 Option::<String>::Some(case_name),
                 Option::<String>::Some(sname),
                 alt,
-                all_rules,
-                lit_tokens,
+                ctx,
             );
         } else {
             // Sort group by specificity before building prediction tree.
@@ -3004,16 +2921,16 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 pred_firsts.append(first_sets[idx]);
                 pred_elements.append(rule.alternatives[real_idx].elements);
             }
-            let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, all_rules, lit_tokens);
+            let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, ctx);
             let bt_count = count_backtrack_nodes(&tree);
 
-            gen_prediction_code(w, &tree, &fn_name, &rule.alternatives, type_name, all_rules, lit_tokens);
+            gen_prediction_code(w, &tree, &fn_name, &rule.alternatives, type_name, ctx);
         }
 
         w.end();
     }
 
-    gen_error_fallback(w, rule, type_name, all_rules, lit_tokens);
+    gen_error_fallback(w, rule, type_name, ctx);
 }
 
 fn gen_parse_entry(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
@@ -3077,11 +2994,11 @@ fn build_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> Str
     return cond;
 }
 
-fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
+fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext) {
     let mut expected: Array<String> = [];
     for let alt of rule.alternatives {
         let mut visiting: Array<String> = [];
-        let first = first_of_alt(&alt, all_rules, lit_tokens, &mut visiting);
+        let first = ctx.first_of_alt(&alt, &mut visiting);
         for let tk of first {
             if !array_contains_str(&expected, &tk) {
                 expected.append(tk);
@@ -3104,176 +3021,6 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
     w.write("],\n");
     w.dedent();
     w.line("));");
-}
-
-fn first_of_alt(alt: &Alternative, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, visiting: &mut Array<String>) -> Array<String> {
-    let mut result: Array<String> = [];
-    for let elem of alt.elements {
-        let elem_first = first_of_element(&elem, all_rules, lit_tokens, visiting);
-        for let tk of elem_first {
-            if !array_contains_str(&result, &tk) {
-                result.append(tk);
-            }
-        }
-        if !is_nullable(&elem) {
-            break;
-        }
-    }
-    return result;
-}
-
-fn first_of_element(elem: &Element, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, visiting: &mut Array<String>) -> Array<String> {
-    if let TokenRef(name) = *elem {
-        return [`TK_{name}`];
-    }
-    if let Literal(text) = *elem {
-        return [literal_const_name(&text)];
-    }
-    if let RuleRef(name) = *elem {
-        return first_of_rule(&name, all_rules, lit_tokens, visiting);
-    }
-    if let Group(alts) = *elem {
-        let mut result: Array<String> = [];
-        for let alt of alts {
-            let af = first_of_alt(&alt, all_rules, lit_tokens, visiting);
-            for let tk of af {
-                if !array_contains_str(&result, &tk) {
-                    result.append(tk);
-                }
-            }
-        }
-        return result;
-    }
-    if let Repeat(rep) = *elem {
-        return first_of_element(&rep.element, all_rules, lit_tokens, visiting);
-    }
-    if let Label(lab) = *elem {
-        return first_of_element(&lab.element, all_rules, lit_tokens, visiting);
-    }
-    return [];
-}
-
-fn first_of_rule(name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, visiting: &mut Array<String>) -> Array<String> {
-    let cached = first_rule_cache.get(*name);
-    if let Some(result) = cached {
-        return result;
-    }
-
-    if array_contains_str(visiting, name) {
-        return [];
-    }
-
-    let is_top_level = visiting.is_empty();
-    visiting.append(*name);
-
-    let mut result: Array<String> = [];
-    for let rule of all_rules {
-        if rule.name == *name {
-            for let alt of rule.alternatives {
-                let af = first_of_alt(&alt, all_rules, lit_tokens, visiting);
-                for let tk of af {
-                    if !array_contains_str(&result, &tk) {
-                        result.append(tk);
-                    }
-                }
-            }
-            break;
-        }
-    }
-
-    let mut new_visiting: Array<String> = [];
-    for let v of visiting {
-        if *v != *name {
-            new_visiting.append(*v);
-        }
-    }
-    *visiting = new_visiting;
-
-    if is_top_level {
-        first_rule_cache[*name] = result;
-    }
-
-    return result;
-}
-
-fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
-    for let alt of alts {
-        if alt.elements.len() != 1 {
-            return false;
-        }
-        let elem = &alt.elements[0];
-        if let TokenRef(_) | Literal(_) = *elem {
-            continue;
-        }
-        return false;
-    }
-    return true;
-}
-
-fn is_nullable(elem: &Element) -> bool {
-    if let Repeat(rep) = *elem {
-        if let Star | Optional = rep.kind {
-            return true;
-        }
-    }
-    return false;
-}
-
-fn alt_position_first_sets(alt: &Alternative, max_depth: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<Array<String>> {
-    let mut result: Array<Array<String>> = [];
-    let mut start = 0;
-    while result.len() < max_depth && start < alt.elements.len() {
-        if result.len() > 0 && is_nullable(&alt.elements[start]) {
-            break;
-        }
-
-        let first = first_of_elements_from(&alt.elements, start, all_rules, lit_tokens);
-        if first.len() == 0 {
-            break;
-        }
-        result.append(first);
-        let mut skipped_nullable = false;
-        while start < alt.elements.len() {
-            let was_nullable = is_nullable(&alt.elements[start]);
-            if was_nullable {
-                skipped_nullable = true;
-            }
-            start += 1;
-            if !was_nullable {
-                break;
-            }
-        }
-        if skipped_nullable {
-            break;
-        }
-    }
-    return result;
-}
-
-fn first_of_elements_from(elements: &Array<Element>, start: i32, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> Array<String> {
-    let mut result: Array<String> = [];
-    for let mut i = start; i < elements.len(); i += 1 {
-        let mut visiting: Array<String> = [];
-        let elem_first = first_of_element(&elements[i], all_rules, lit_tokens, &mut visiting);
-        for let tk of elem_first {
-            if !array_contains_str(&result, &tk) {
-                result.append(tk);
-            }
-        }
-        if !is_nullable(&elements[i]) {
-            break;
-        }
-    }
-    return result;
-}
-
-fn sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
-    for let x of a {
-        if array_contains_str(b, x) {
-            return true;
-        }
-    }
-    return false;
 }
 
 fn find_needed_depth(all_position_sets: &Array<Array<Array<String>>>) -> i32 {
