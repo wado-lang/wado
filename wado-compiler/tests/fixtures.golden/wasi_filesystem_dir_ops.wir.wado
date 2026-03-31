@@ -297,7 +297,7 @@ fn run() with Stdout, Stderr, Preopens {
     };
     mkdir_dup = __cm_binding__Descriptor_create_directory_at(dir, String { repr: array.new_data<u8>("test_newdir"), used: 11 });
     if ref.test Result<unit,ErrorCode>::Err(mkdir_dup) {
-        err = value_copy "wasi:filesystem/types.wado/ErrorCode"(ref.cast Result<unit,ErrorCode>::Err(mkdir_dup).payload_0);
+        err = ref.cast Result<unit,ErrorCode>::Err(mkdir_dup).payload_0;
         let __match_scrut_0: ref "wasi:filesystem/types.wado/ErrorCode";
         __match_scrut_0 = err;
         if __match_scrut_0.discriminant == 6 {

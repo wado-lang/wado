@@ -245,7 +245,7 @@ fn run() with Stdout, Stderr, Preopens {
             "core:cli/println"(String { repr: array.new_data<u8>("metadata_hash: got hash from file descriptor"), used: 44 });
             hash_at_result = __cm_binding__Descriptor_metadata_hash_at(dir, 0, String { repr: array.new_data<u8>("hello.txt"), used: 9 });
             if ref.test Result<MetadataHashValue,ErrorCode>::Ok(hash_at_result) {
-                hash_at = value_copy "wasi:filesystem/types.wado/MetadataHashValue"(ref.cast Result<MetadataHashValue,ErrorCode>::Ok(hash_at_result).payload_0);
+                hash_at = ref.cast Result<MetadataHashValue,ErrorCode>::Ok(hash_at_result).payload_0;
                 if if hash1.lower == hash_at.lower -> i32 {
                     hash1.upper == hash_at.upper;
                 } else {

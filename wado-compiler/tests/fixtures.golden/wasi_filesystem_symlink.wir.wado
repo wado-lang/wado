@@ -342,7 +342,7 @@ fn run() with Stdout, Stderr, Preopens {
     if sym_result.discriminant == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("symlink_at: created symlink"), used: 27 });
     } else if ref.test Result<unit,ErrorCode>::Err(sym_result) {
-        err = value_copy "wasi:filesystem/types.wado/ErrorCode"(ref.cast Result<unit,ErrorCode>::Err(sym_result).payload_0);
+        err = ref.cast Result<unit,ErrorCode>::Err(sym_result).payload_0;
         let __match_scrut_0: ref "wasi:filesystem/types.wado/ErrorCode";
         __match_scrut_0 = err;
         if __match_scrut_0.discriminant == 26 {
@@ -375,7 +375,7 @@ fn run() with Stdout, Stderr, Preopens {
         linked_file = ref.cast Result<Descriptor,ErrorCode>::Ok(open_via_link).payload_0;
         stat_result = __cm_binding__Descriptor_stat(linked_file);
         if ref.test Result<DescriptorStat,ErrorCode>::Ok(stat_result) {
-            stat = value_copy "wasi:filesystem/types.wado/DescriptorStat"(ref.cast Result<DescriptorStat,ErrorCode>::Ok(stat_result).payload_0);
+            stat = ref.cast Result<DescriptorStat,ErrorCode>::Ok(stat_result).payload_0;
             if if let __match_scrut_1: ref "wasi:filesystem/types.wado/DescriptorType"; __match_scrut_1 = stat.type; if __match_scrut_1.discriminant == 5 -> bool {
                 1;
             } else {
@@ -437,14 +437,14 @@ fn test_link_at(dir) with Stdout, Stderr {
         "core:cli/println"(String { repr: array.new_data<u8>("link_at: created hard link"), used: 26 });
         link_stat = __cm_binding__Descriptor_stat_at(dir, 0, String { repr: array.new_data<u8>("test_hardlink"), used: 13 });
         if ref.test Result<DescriptorStat,ErrorCode>::Ok(link_stat) {
-            stat = value_copy "wasi:filesystem/types.wado/DescriptorStat"(ref.cast Result<DescriptorStat,ErrorCode>::Ok(link_stat).payload_0);
+            stat = ref.cast Result<DescriptorStat,ErrorCode>::Ok(link_stat).payload_0;
             if stat.size == 14_i64 {
                 "core:cli/println"(String { repr: array.new_data<u8>("link_at: hard link has correct size (correct)"), used: 45 });
             };
         };
         drop(__cm_binding__Descriptor_unlink_file_at(dir, String { repr: array.new_data<u8>("test_hardlink"), used: 13 }));
     } else if ref.test Result<unit,ErrorCode>::Err(link_result) {
-        err = value_copy "wasi:filesystem/types.wado/ErrorCode"(ref.cast Result<unit,ErrorCode>::Err(link_result).payload_0);
+        err = ref.cast Result<unit,ErrorCode>::Err(link_result).payload_0;
         let __match_scrut_0: ref "wasi:filesystem/types.wado/ErrorCode";
         __match_scrut_0 = err;
         if __match_scrut_0.discriminant == 26 {

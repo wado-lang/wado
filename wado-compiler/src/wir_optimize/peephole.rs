@@ -538,8 +538,12 @@ fn uses_of_var_are_reads_only(instr: &WirInstr, var_name: &str) -> bool {
                 }
                 // LocalGet(var) stored into another local: creates alias but OK if read-only
                 WirInstr::LocalGet { name, .. } if name == var_name => true,
-                // RefAsNonNull(LocalGet(var)) — extraction, safe
-                WirInstr::RefAsNonNull(inner) if matches!(inner.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name) => {
+                // RefAsNonNull/RefCast/RefTest on var — type narrowing, safe
+                WirInstr::RefAsNonNull(inner)
+                | WirInstr::RefCast { expr: inner, .. }
+                | WirInstr::RefTest { expr: inner, .. }
+                    if matches!(inner.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name) =>
+                {
                     true
                 }
                 _ => !instr_contains_local_get(value, var_name),
@@ -557,16 +561,16 @@ fn uses_of_var_are_reads_only(instr: &WirInstr, var_name: &str) -> bool {
             else_body,
             ..
         } => {
-            // Bodies must always be read-only. Condition is allowed if it's
-            // either a safe use (null/discriminant check) or doesn't mention var.
+            // Bodies must always be read-only. Condition expressions are
+            // inherently read-only (they evaluate to a value for branching)
+            // unless the variable is passed to a Call that could mutate it.
             then_body
                 .iter()
                 .all(|i| uses_of_var_are_reads_only(i, var_name))
                 && else_body
                     .as_ref()
                     .is_none_or(|eb| eb.iter().all(|i| uses_of_var_are_reads_only(i, var_name)))
-                && (condition_is_safe_use(condition, var_name)
-                    || !instr_contains_local_get(condition, var_name))
+                && !condition_passes_var_to_call(condition, var_name)
         }
         // LocalGet: reading the variable is always safe.
         WirInstr::LocalGet { name, .. } if name == var_name => true,
@@ -582,35 +586,27 @@ fn uses_of_var_are_reads_only(instr: &WirInstr, var_name: &str) -> bool {
     }
 }
 
-/// Check if a condition expression is a safe use of var (null check, discriminant test).
-fn condition_is_safe_use(cond: &WirInstr, var_name: &str) -> bool {
-    match cond {
-        // ref.is_null(local_get var) == 0 → null check
-        WirInstr::I32Eq(lhs, rhs) | WirInstr::I32Ne(lhs, rhs) => {
-            let check_inner = |inner: &WirInstr| -> bool {
-                matches!(inner,
-                    WirInstr::RefIsNull(inner_inner)
-                    if matches!(inner_inner.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name)
-                ) || matches!(inner,
-                    WirInstr::RefTest { expr, .. }
-                    if matches!(expr.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name)
-                )
-            };
-            check_inner(lhs)
-                || check_inner(rhs)
-                || (!instr_contains_local_get(lhs, var_name)
-                    && !instr_contains_local_get(rhs, var_name))
+/// Returns `true` if the condition expression passes `var_name` as an
+/// argument to a `Call` or `CallRef`. Condition expressions are inherently
+/// read-only (StructGet, RefTest, RefIsNull, comparisons, etc.) — the only
+/// risk is when the variable reference is handed to a function that could
+/// mutate the underlying object.
+fn condition_passes_var_to_call(cond: &WirInstr, var_name: &str) -> bool {
+    if let WirInstr::Call { args, .. } | WirInstr::CallRef { args, .. } = cond {
+        if args
+            .iter()
+            .any(|arg| instr_contains_local_get(arg, var_name))
+        {
+            return true;
         }
-        WirInstr::RefIsNull(inner) => {
-            matches!(inner.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name)
-                || !instr_contains_local_get(inner, var_name)
-        }
-        WirInstr::RefTest { expr, .. } => {
-            matches!(expr.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name)
-                || !instr_contains_local_get(expr, var_name)
-        }
-        _ => !instr_contains_local_get(cond, var_name),
     }
+    let mut found = false;
+    cond.for_each_child(&mut |child| {
+        if !found {
+            found = condition_passes_var_to_call(child, var_name);
+        }
+    });
+    found
 }
 
 /// Check if a WIR expression is fresh by tracing `LocalGet` through definitions.
