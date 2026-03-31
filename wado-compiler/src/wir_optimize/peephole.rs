@@ -8,6 +8,7 @@
 //! - Multi-value struct elision (`MultiValueStructNew` + `StructGet` → `MultiValueLocalBind`)
 
 use crate::wir::{WirInstr, WirModule, WirTypeDef};
+use crate::wir_visitor::WirMutVisitor;
 use indexmap::IndexMap;
 
 /// Propagate trivial copies (`alias = source`) by replacing all uses of `alias`
@@ -24,26 +25,33 @@ pub(super) fn propagate_trivial_copies(module: &mut WirModule) {
 
 fn propagate_copies_in_body(instrs: &mut [WirInstr]) {
     // Recurse into nested blocks first (bottom-up)
-    for instr in instrs.iter_mut() {
-        match instr {
-            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-                propagate_copies_in_body(body);
-            }
-            WirInstr::If {
-                then_body,
-                else_body,
-                ..
-            } => {
-                propagate_copies_in_body(then_body);
-                if let Some(eb) = else_body {
-                    propagate_copies_in_body(eb);
-                }
-            }
-            WirInstr::Seq(body) => {
-                propagate_copies_in_body(body);
-            }
-            _ => {}
+    struct RecurseIntoBlocks;
+    impl WirMutVisitor for RecurseIntoBlocks {
+        fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
+            propagate_copies_in_body(body);
         }
+        // Only recurse into bodies (Block/Loop/If/Seq), not expression children.
+        fn visit_instr(&mut self, instr: &mut WirInstr) {
+            match instr {
+                WirInstr::Block { body, .. }
+                | WirInstr::Loop { body, .. }
+                | WirInstr::Seq(body) => self.visit_body(body),
+                WirInstr::If {
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    self.visit_body(then_body);
+                    if let Some(eb) = else_body {
+                        self.visit_body(eb);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    for instr in instrs.iter_mut() {
+        RecurseIntoBlocks.visit_instr(instr);
     }
 
     // Collect trivial copies: `LocalSet { alias, LocalGet { source } }`
@@ -212,31 +220,18 @@ fn fold_constant_comparisons(instrs: &mut [WirInstr]) {
 }
 
 fn fold_constant_comparisons_in_instr(instr: &mut WirInstr) {
-    // Recurse into children first (bottom-up folding)
-    match instr {
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            fold_constant_comparisons(body);
-        }
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            fold_constant_comparisons_in_instr(condition);
-            fold_constant_comparisons(then_body);
-            if let Some(eb) = else_body {
-                fold_constant_comparisons(eb);
-            }
-        }
-        _ => {
-            instr.for_each_boxed_child_mut(&mut |child| {
-                fold_constant_comparisons_in_instr(child);
-            });
+    struct FoldConstComparisons;
+    impl WirMutVisitor for FoldConstComparisons {
+        fn visit_instr(&mut self, instr: &mut WirInstr) {
+            self.walk_instr(instr);
+            try_fold_comparison(instr);
         }
     }
+    FoldConstComparisons.visit_instr(instr);
+}
 
-    // Then try to fold this instruction
+fn try_fold_comparison(instr: &mut WirInstr) {
+    // Try to fold this instruction
     let result = match instr {
         WirInstr::I32GeS(l, r) => match (l.as_ref(), r.as_ref()) {
             (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv >= *rv)),
@@ -304,29 +299,17 @@ fn fold_eqz_patterns(instrs: &mut [WirInstr]) {
 }
 
 fn fold_eqz_in_instr(instr: &mut WirInstr) {
-    // Recurse into children first (bottom-up)
-    match instr {
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            fold_eqz_patterns(body);
-        }
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            fold_eqz_in_instr(condition);
-            fold_eqz_patterns(then_body);
-            if let Some(eb) = else_body {
-                fold_eqz_patterns(eb);
-            }
-        }
-        _ => {
-            instr.for_each_boxed_child_mut(&mut |child| {
-                fold_eqz_in_instr(child);
-            });
+    struct FoldEqz;
+    impl WirMutVisitor for FoldEqz {
+        fn visit_instr(&mut self, instr: &mut WirInstr) {
+            self.walk_instr(instr);
+            try_fold_eqz(instr);
         }
     }
+    FoldEqz.visit_instr(instr);
+}
+
+fn try_fold_eqz(instr: &mut WirInstr) {
 
     // i32.eq(expr, 0) → i32.eqz(expr)
     // i32.eq(0, expr) → i32.eqz(expr)

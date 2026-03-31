@@ -8,6 +8,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirModule, WirTypeDef};
+use crate::wir_visitor::WirMutVisitor;
 
 pub(super) fn elide_single_field_struct_locals(module: &mut WirModule) {
     for func in &mut module.functions {
@@ -354,54 +355,36 @@ fn nop_local_set_of(instr: &mut WirInstr, name: &str) {
 /// This canonicalizes the pattern produced by the WIR builder for tuple destructuring,
 /// making it visible to downstream passes like multi-field struct local elision.
 pub(super) fn flatten_seq_assignments(module: &mut WirModule) {
+    let mut visitor = FlattenSeqAssignments;
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
-            flatten_seq_in_body(body);
+            visitor.visit_body(body);
         }
     }
 }
 
-fn flatten_seq_in_body(body: &mut Vec<WirInstr>) {
-    // First recurse into nested bodies.
-    for instr in body.iter_mut() {
-        flatten_seq_in_instr(instr);
-    }
-    // Then expand any LocalSet { value: Seq([..., final]) } at this level.
-    let old = std::mem::take(body);
-    for instr in old {
-        match instr {
-            WirInstr::LocalSet { name, value } if matches!(value.as_ref(), WirInstr::Seq(seq) if !seq.is_empty()) => {
-                if let WirInstr::Seq(mut seq) = *value {
-                    let final_val = seq.pop().unwrap();
-                    body.extend(seq);
-                    body.push(WirInstr::LocalSet {
-                        name,
-                        value: Box::new(final_val),
-                    });
+struct FlattenSeqAssignments;
+
+impl WirMutVisitor for FlattenSeqAssignments {
+    fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
+        // First recurse into nested bodies.
+        self.walk_body(body);
+        // Then expand any LocalSet { value: Seq([..., final]) } at this level.
+        let old = std::mem::take(body);
+        for instr in old {
+            match instr {
+                WirInstr::LocalSet { name, value } if matches!(value.as_ref(), WirInstr::Seq(seq) if !seq.is_empty()) => {
+                    if let WirInstr::Seq(mut seq) = *value {
+                        let final_val = seq.pop().unwrap();
+                        body.extend(seq);
+                        body.push(WirInstr::LocalSet {
+                            name,
+                            value: Box::new(final_val),
+                        });
+                    }
                 }
-            }
-            other => body.push(other),
-        }
-    }
-}
-
-fn flatten_seq_in_instr(instr: &mut WirInstr) {
-    match instr {
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            flatten_seq_in_body(body);
-        }
-        WirInstr::If {
-            then_body,
-            else_body,
-            condition,
-            ..
-        } => {
-            flatten_seq_in_instr(condition);
-            flatten_seq_in_body(then_body);
-            if let Some(eb) = else_body {
-                flatten_seq_in_body(eb);
+                other => body.push(other),
             }
         }
-        _ => {}
     }
 }
