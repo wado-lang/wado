@@ -1069,7 +1069,7 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let multiplying_expression = parse_multiplying_expression(p)?;
     let mut item_multiplying_expression_list: Array<ItemMultiplyingExpressionItem> = [];
     while p.peek_kind() == TK_PLUS || p.peek_kind() == TK_MINUS {
-        let plus_or_minus = p.consume();
+        let plus_or_minus = p.advance();
         let multiplying_expression = parse_multiplying_expression(p)?;
         let item_multiplying_expression = ItemMultiplyingExpressionItem {
             plus_or_minus,
@@ -1089,7 +1089,7 @@ fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionN
     let pow_expression = parse_pow_expression(p)?;
     let mut item_pow_expression_list: Array<ItemPowExpressionItem> = [];
     while p.peek_kind() == TK_TIMES || p.peek_kind() == TK_DIV {
-        let times_or_div = p.consume();
+        let times_or_div = p.advance();
         let pow_expression = parse_pow_expression(p)?;
         let item_pow_expression = ItemPowExpressionItem {
             times_or_div,

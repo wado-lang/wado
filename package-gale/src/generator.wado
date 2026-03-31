@@ -158,6 +158,7 @@ fn gen_group_variant_type(w: &mut CodeWriter, alts: &Array<Alternative>) {
 }
 
 fn gen_single_alt_group_struct(w: &mut CodeWriter, alt: &Alternative) {
+    gen_group_variant_types(w, &alt.elements);
     let type_name = single_alt_group_type_name(alt);
     let fields = collect_fields(&alt.elements);
     let mut s = StructSpec::new(&type_name);

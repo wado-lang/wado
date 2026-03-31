@@ -1387,20 +1387,17 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
             w.end();
         }
         if let Plus = rep.kind {
+            let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
+            let plus_flag = dedup_name(&"_plus_first", name_counts);
+            w.line(`let mut {list_name}: Array<{field_info.1}> = [];`);
+            w.line(`let mut {plus_flag} = true;`);
+            w.begin(`while {plus_flag} || {first_check_str(&first)}`);
+            w.line(`{plus_flag} = false;`);
             let mut nc: Array<[String, i32]> = [];
             if is_group_store {
                 gen_group_store_any(w, inner, ctx, &mut nc);
             } else {
                 gen_element(w, inner, ctx, &mut nc);
-            }
-            let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
-            w.line(`let mut {list_name}: Array<{field_info.1}> = [{field_info.0}];`);
-            w.begin(`while {first_check_str(&first)}`);
-            let mut nc2: Array<[String, i32]> = [];
-            if is_group_store {
-                gen_group_store_any(w, inner, ctx, &mut nc2);
-            } else {
-                gen_element(w, inner, ctx, &mut nc2);
             }
             w.line(`{list_name}.append({field_info.0});`);
             w.end();
@@ -2346,19 +2343,19 @@ fn gen_group_store_any(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext
 
 fn gen_consume_token_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let var_name = dedup_name(&token_group_field_name(alts), name_counts);
-    w.line(`let {var_name} = p.consume();`);
+    w.line(`let {var_name} = p.advance();`);
 }
 
 fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let type_name = single_alt_group_type_name(alt);
     let field_name = dedup_name(&single_alt_group_field_name(alt), name_counts);
-    let mut inner_nc: Array<[String, i32]> = [];
+    let nc_snapshot = *name_counts;
     for let elem of &alt.elements {
-        gen_element(w, &elem, ctx, &mut inner_nc);
+        gen_element(w, &elem, ctx, name_counts);
     }
     w.line(`let {field_name} = {type_name} \{`);
     w.indent();
-    let mut assign_nc: Array<[String, i32]> = [];
+    let mut assign_nc = nc_snapshot;
     for let elem of &alt.elements {
         gen_field_assignment(w, &elem, &mut assign_nc);
     }
@@ -2552,7 +2549,9 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                     w.line(`let {field_name} = {elem_fn}(p)?;`);
                 }
             } else if let Group(alts) = *elem {
-                if is_simple_token_group(&alts) {
+                if is_token_only_group(&alts) {
+                    gen_consume_token_group(w, &alts, ctx, &mut name_counts);
+                } else if is_simple_token_group(&alts) {
                     let discard = dedup_name(&"op_tok", &mut name_counts);
                     w.line(`let {discard} = p.advance();`);
                 } else {

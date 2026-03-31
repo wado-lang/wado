@@ -344,6 +344,11 @@ pub struct SqlStmtListNode {
     pub semicolon_list_2: Array<Token>,
 }
 
+pub struct KQueryKPlanItem {
+    pub k_query: Token,
+    pub k_plan: Token,
+}
+
 pub struct KExplainItemItem {
     pub k_explain: Token,
     pub k_query_k_plan: Option<KQueryKPlanItem>,
@@ -442,11 +447,21 @@ pub struct ItemSelectCoreItem {
     pub select_core: SelectCoreNode,
 }
 
+pub struct CommaOrderingTermItem {
+    pub comma: Token,
+    pub ordering_term: OrderingTermNode,
+}
+
 pub struct KOrderKByOrderingTermItemItem {
     pub k_order: Token,
     pub k_by: Token,
     pub ordering_term: OrderingTermNode,
     pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
+}
+
+pub struct ItemExprItem {
+    pub k_offset_or_comma: Token,
+    pub expr: ExprNode,
 }
 
 pub struct KLimitExprItemItem {
@@ -550,6 +565,13 @@ pub struct KWhenExprItem {
     pub expr: ExprNode,
 }
 
+pub variant UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup {
+    UpdateStmt(UpdateStmtNode),
+    InsertStmt(InsertStmtNode),
+    DeleteStmt(DeleteStmtNode),
+    SelectStmt(SelectStmtNode),
+}
+
 pub struct ItemSemicolonItem {
     pub update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt: Option<UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup>,
     pub semicolon: Token,
@@ -607,6 +629,11 @@ pub struct DatabaseNameDotItem {
     pub dot: Token,
 }
 
+pub struct CommaModuleArgumentItem {
+    pub comma: Token,
+    pub module_argument: ModuleArgumentNode,
+}
+
 pub struct LparenModuleArgumentItemRparenItem {
     pub lparen: Token,
     pub module_argument: ModuleArgumentNode,
@@ -643,6 +670,23 @@ pub struct DeleteStmtNode {
 
 pub struct KWhereExprItem {
     pub k_where: Token,
+    pub expr: ExprNode,
+}
+
+pub struct CommaOrderingTermItem {
+    pub comma: Token,
+    pub ordering_term: OrderingTermNode,
+}
+
+pub struct KOrderKByOrderingTermItemItem {
+    pub k_order: Token,
+    pub k_by: Token,
+    pub ordering_term: OrderingTermNode,
+    pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
+}
+
+pub struct ItemExprItem {
+    pub k_offset_or_comma: Token,
     pub expr: ExprNode,
 }
 
@@ -751,11 +795,21 @@ pub struct CompoundOperatorSelectCoreItem {
     pub select_core: SelectCoreNode,
 }
 
+pub struct CommaOrderingTermItem {
+    pub comma: Token,
+    pub ordering_term: OrderingTermNode,
+}
+
 pub struct KOrderKByOrderingTermItemItem {
     pub k_order: Token,
     pub k_by: Token,
     pub ordering_term: OrderingTermNode,
     pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
+}
+
+pub struct ItemExprItem {
+    pub k_offset_or_comma: Token,
+    pub expr: ExprNode,
 }
 
 pub struct KLimitExprItemItem {
@@ -776,6 +830,11 @@ pub struct FactoredSelectStmtNode {
 pub struct DatabaseNameDotItem {
     pub database_name: DatabaseNameNode,
     pub dot: Token,
+}
+
+pub struct CommaColumnNameItem {
+    pub comma: Token,
+    pub column_name: ColumnNameNode,
 }
 
 pub struct LparenColumnNameItemRparenItem {
@@ -842,11 +901,21 @@ pub struct SavepointStmtNode {
     pub savepoint_name: SavepointNameNode,
 }
 
+pub struct CommaOrderingTermItem {
+    pub comma: Token,
+    pub ordering_term: OrderingTermNode,
+}
+
 pub struct KOrderKByOrderingTermItemItem {
     pub k_order: Token,
     pub k_by: Token,
     pub ordering_term: OrderingTermNode,
     pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
+}
+
+pub struct ItemExprItem {
+    pub k_offset_or_comma: Token,
+    pub expr: ExprNode,
 }
 
 pub struct KLimitExprItemItem {
@@ -868,11 +937,21 @@ pub struct CompoundOperatorSelectOrValuesItem {
     pub select_or_values: SelectOrValuesNode,
 }
 
+pub struct CommaOrderingTermItem {
+    pub comma: Token,
+    pub ordering_term: OrderingTermNode,
+}
+
 pub struct KOrderKByOrderingTermItemItem {
     pub k_order: Token,
     pub k_by: Token,
     pub ordering_term: OrderingTermNode,
     pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
+}
+
+pub struct ItemExprItem {
+    pub k_offset_or_comma: Token,
+    pub expr: ExprNode,
 }
 
 pub struct KLimitExprItemItem {
@@ -909,6 +988,16 @@ pub struct KWhereExprItem {
     pub expr: ExprNode,
 }
 
+pub struct CommaExprItem {
+    pub comma: Token,
+    pub expr: ExprNode,
+}
+
+pub struct KHavingExprItem {
+    pub k_having: Token,
+    pub expr: ExprNode,
+}
+
 pub struct KGroupKByExprItemItemItem {
     pub k_group: Token,
     pub k_by: Token,
@@ -926,6 +1015,11 @@ pub struct SelectOrValuesAlt0 {
     pub k_from_item: Option<KFromItemItem>,
     pub k_where_expr: Option<KWhereExprItem>,
     pub k_group_k_by_expr_item_item: Option<KGroupKByExprItemItemItem>,
+}
+
+pub struct CommaExprItem {
+    pub comma: Token,
+    pub expr: ExprNode,
 }
 
 pub struct CommaExprItem {
@@ -985,6 +1079,23 @@ pub struct CommaColumnNameEqExprItem {
 
 pub struct KWhereExprItem {
     pub k_where: Token,
+    pub expr: ExprNode,
+}
+
+pub struct CommaOrderingTermItem {
+    pub comma: Token,
+    pub ordering_term: OrderingTermNode,
+}
+
+pub struct KOrderKByOrderingTermItemItem {
+    pub k_order: Token,
+    pub k_by: Token,
+    pub ordering_term: OrderingTermNode,
+    pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
+}
+
+pub struct ItemExprItem {
+    pub k_offset_or_comma: Token,
     pub expr: ExprNode,
 }
 
@@ -1082,6 +1193,11 @@ pub struct ExprAlt0 {
 pub struct ExprAlt1 {
     pub span: Span,
     pub bind_parameter: Token,
+}
+
+pub struct DatabaseNameDotItem {
+    pub database_name: DatabaseNameNode,
+    pub dot: Token,
 }
 
 pub struct ItemTableNameDotItem {
@@ -1271,6 +1387,11 @@ pub struct ExprAlt23 {
     pub raise_function: RaiseFunctionNode,
 }
 
+pub struct CommaColumnNameItem {
+    pub comma: Token,
+    pub column_name: ColumnNameNode,
+}
+
 pub struct LparenColumnNameItemRparenItem {
     pub lparen: Token,
     pub column_name: ColumnNameNode,
@@ -1377,6 +1498,11 @@ pub struct PragmaValueAlt2 {
     pub string_literal: Token,
 }
 
+pub struct CommaColumnNameItem {
+    pub comma: Token,
+    pub column_name: ColumnNameNode,
+}
+
 pub struct LparenColumnNameItemRparenItem {
     pub lparen: Token,
     pub column_name: ColumnNameNode,
@@ -1450,6 +1576,11 @@ pub struct TableOrSubqueryAlt0 {
 pub struct SchemaNameDotItem {
     pub schema_name: SchemaNameNode,
     pub dot: Token,
+}
+
+pub struct CommaExprItem {
+    pub comma: Token,
+    pub expr: ExprNode,
 }
 
 pub struct ExprItemItem {
@@ -1542,6 +1673,16 @@ pub struct KWhereExprItem {
     pub expr: ExprNode,
 }
 
+pub struct CommaExprItem {
+    pub comma: Token,
+    pub expr: ExprNode,
+}
+
+pub struct KHavingExprItem {
+    pub k_having: Token,
+    pub expr: ExprNode,
+}
+
 pub struct KGroupKByExprItemItemItem {
     pub k_group: Token,
     pub k_by: Token,
@@ -1559,6 +1700,11 @@ pub struct SelectCoreAlt0 {
     pub k_from_item: Option<KFromItemItem>,
     pub k_where_expr: Option<KWhereExprItem>,
     pub k_group_k_by_expr_item_item: Option<KGroupKByExprItemItemItem>,
+}
+
+pub struct CommaExprItem {
+    pub comma: Token,
+    pub expr: ExprNode,
 }
 
 pub struct CommaExprItem {
@@ -7012,9 +7158,10 @@ fn parse_sql_stmt_list(p: &mut Parser) -> Result<SqlStmtListNode, ParseError> {
     let sql_stmt = parse_sql_stmt(p)?;
     let mut semicolon_sql_stmt_list: Array<SemicolonSqlStmtItem> = [];
     while p.peek_kind() == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
-        let mut semicolon_list: Array<Token> = [semicolon];
-        while p.peek_kind() == TK_LIT_SEMI {
+        let mut semicolon_list: Array<Token> = [];
+        let mut _plus_first = true;
+        while _plus_first || p.peek_kind() == TK_LIT_SEMI {
+            _plus_first = false;
             let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
             semicolon_list.append(semicolon);
         }
@@ -7356,7 +7503,7 @@ fn parse_begin_stmt(p: &mut Parser) -> Result<BeginStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_begin = p.expect(TK_K_BEGIN, "K_BEGIN")?;
     let k_deferred_or_k_immediate_or_k_exclusive: Option<Token> = if p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_EXCLUSIVE {
-        let k_deferred_or_k_immediate_or_k_exclusive = p.consume();
+        let k_deferred_or_k_immediate_or_k_exclusive = p.advance();
         Option::<Token>::Some(k_deferred_or_k_immediate_or_k_exclusive)
     } else {
         null
@@ -7387,7 +7534,7 @@ fn parse_begin_stmt(p: &mut Parser) -> Result<BeginStmtNode, ParseError> {
 
 fn parse_commit_stmt(p: &mut Parser) -> Result<CommitStmtNode, ParseError> {
     let start = p.peek().span.start;
-    let k_commit_or_k_end = p.consume();
+    let k_commit_or_k_end = p.advance();
     let k_transaction_transaction_name: Option<KTransactionTransactionNameItem> = if p.peek_kind() == TK_K_TRANSACTION {
         let k_transaction = p.expect(TK_K_TRANSACTION, "K_TRANSACTION")?;
         let transaction_name: Option<TransactionNameNode> = if p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
@@ -7420,26 +7567,10 @@ fn parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, 
         null
     };
     let select_core = parse_select_core(p)?;
-    let grp_kind = p.peek_kind();
-    if grp_kind == TK_K_UNION {
-        let k_union = p.expect(TK_K_UNION, "K_UNION")?;
-        let k_all: Option<Token> = if p.peek_kind() == TK_K_ALL {
-            let k_all = p.expect(TK_K_ALL, "K_ALL")?;
-            Option::<Token>::Some(k_all)
-        } else {
-            null
-        };
-    } else if grp_kind == TK_K_INTERSECT {
-        let k_intersect = p.expect(TK_K_INTERSECT, "K_INTERSECT")?;
-    } else if grp_kind == TK_K_EXCEPT {
-        let k_except = p.expect(TK_K_EXCEPT, "K_EXCEPT")?;
-    }
-    let select_core = parse_select_core(p)?;
-    let item_select_core = ItemSelectCoreItem {
-        select_core,
-    };
-    let mut item_select_core_list: Array<ItemSelectCoreItem> = [item_select_core];
-    while p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_EXCEPT {
+    let mut item_select_core_list: Array<ItemSelectCoreItem> = [];
+    let mut _plus_first = true;
+    while _plus_first || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_EXCEPT {
+        _plus_first = false;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_UNION {
             let k_union = p.expect(TK_K_UNION, "K_UNION")?;
@@ -7488,7 +7619,7 @@ fn parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, 
         let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
         let expr = parse_expr(p)?;
         let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
-            let k_offset_or_comma = p.consume();
+            let k_offset_or_comma = p.advance();
             let expr = parse_expr(p)?;
             let item_expr = ItemExprItem {
                 k_offset_or_comma,
@@ -7600,7 +7731,7 @@ fn parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseE
     let start = p.peek().span.start;
     let k_create = p.expect(TK_K_CREATE, "K_CREATE")?;
     let k_temp_or_k_temporary: Option<Token> = if p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY {
-        let k_temp_or_k_temporary = p.consume();
+        let k_temp_or_k_temporary = p.advance();
         Option::<Token>::Some(k_temp_or_k_temporary)
     } else {
         null
@@ -7686,7 +7817,7 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
     let start = p.peek().span.start;
     let k_create = p.expect(TK_K_CREATE, "K_CREATE")?;
     let k_temp_or_k_temporary: Option<Token> = if p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY {
-        let k_temp_or_k_temporary = p.consume();
+        let k_temp_or_k_temporary = p.advance();
         Option::<Token>::Some(k_temp_or_k_temporary)
     } else {
         null
@@ -7799,48 +7930,10 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
         null
     };
     let k_begin = p.expect(TK_K_BEGIN, "K_BEGIN")?;
-    let mut update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt_inner: Option<UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup> = null;
-    let grp_kind = p.peek_kind();
-    if grp_kind == TK_K_WITH || grp_kind == TK_K_UPDATE || grp_kind == TK_K_INSERT || grp_kind == TK_K_REPLACE || grp_kind == TK_K_DELETE || grp_kind == TK_K_SELECT || grp_kind == TK_K_VALUES {
-        let saved_pos = p.pos;
-        let mut bt_done = false;
-        if !bt_done {
-            bt_try: {
-                let opt_r = parse_update_stmt(p);
-                if let Err(_) = opt_r { p.pos = saved_pos; break bt_try; }
-                update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt_inner = Option::<UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup>::Some(UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup::UpdateStmt(opt_r.unwrap()));
-                bt_done = true;
-            }
-        }
-        if !bt_done {
-            bt_try_2: {
-                let opt_r_2 = parse_insert_stmt(p);
-                if let Err(_) = opt_r_2 { p.pos = saved_pos; break bt_try_2; }
-                update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt_inner = Option::<UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup>::Some(UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup::InsertStmt(opt_r_2.unwrap()));
-                bt_done = true;
-            }
-        }
-        if !bt_done {
-            bt_try_3: {
-                let opt_r_3 = parse_delete_stmt(p);
-                if let Err(_) = opt_r_3 { p.pos = saved_pos; break bt_try_3; }
-                update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt_inner = Option::<UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup>::Some(UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup::DeleteStmt(opt_r_3.unwrap()));
-                bt_done = true;
-            }
-        }
-        if !bt_done {
-            let select_stmt = parse_select_stmt(p)?;
-            update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt_inner = Option::<UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup>::Some(UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup::SelectStmt(select_stmt));
-        }
-    }
-    let update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt = update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt_inner;
-    let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
-    let item_semicolon = ItemSemicolonItem {
-        update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt,
-        semicolon,
-    };
-    let mut item_semicolon_list: Array<ItemSemicolonItem> = [item_semicolon];
-    while p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_VALUES {
+    let mut item_semicolon_list: Array<ItemSemicolonItem> = [];
+    let mut _plus_first = true;
+    while _plus_first || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_VALUES {
+        _plus_first = false;
         let mut update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt_inner: Option<UpdateStmtOrInsertStmtOrDeleteStmtOrSelectStmtGroup> = null;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_WITH || grp_kind == TK_K_UPDATE || grp_kind == TK_K_INSERT || grp_kind == TK_K_REPLACE || grp_kind == TK_K_DELETE || grp_kind == TK_K_SELECT || grp_kind == TK_K_VALUES {
@@ -7907,7 +8000,7 @@ fn parse_create_view_stmt(p: &mut Parser) -> Result<CreateViewStmtNode, ParseErr
     let start = p.peek().span.start;
     let k_create = p.expect(TK_K_CREATE, "K_CREATE")?;
     let k_temp_or_k_temporary: Option<Token> = if p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY {
-        let k_temp_or_k_temporary = p.consume();
+        let k_temp_or_k_temporary = p.advance();
         Option::<Token>::Some(k_temp_or_k_temporary)
     } else {
         null
@@ -8105,7 +8198,7 @@ fn parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, Pa
         let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
         let expr = parse_expr(p)?;
         let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
-            let k_offset_or_comma = p.consume();
+            let k_offset_or_comma = p.advance();
             let expr = parse_expr(p)?;
             let item_expr = ItemExprItem {
                 k_offset_or_comma,
@@ -8349,7 +8442,7 @@ fn parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode, 
         let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
         let expr = parse_expr(p)?;
         let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
-            let k_offset_or_comma = p.consume();
+            let k_offset_or_comma = p.advance();
             let expr = parse_expr(p)?;
             let item_expr = ItemExprItem {
                 k_offset_or_comma,
@@ -8728,7 +8821,7 @@ fn parse_simple_select_stmt(p: &mut Parser) -> Result<SimpleSelectStmtNode, Pars
         let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
         let expr = parse_expr(p)?;
         let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
-            let k_offset_or_comma = p.consume();
+            let k_offset_or_comma = p.advance();
             let expr = parse_expr(p)?;
             let item_expr = ItemExprItem {
                 k_offset_or_comma,
@@ -8803,7 +8896,7 @@ fn parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
         let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
         let expr = parse_expr(p)?;
         let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
-            let k_offset_or_comma = p.consume();
+            let k_offset_or_comma = p.advance();
             let expr = parse_expr(p)?;
             let item_expr = ItemExprItem {
                 k_offset_or_comma,
@@ -8838,7 +8931,7 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
     if kind == TK_K_SELECT {
         let k_select = p.expect(TK_K_SELECT, "K_SELECT")?;
         let k_distinct_or_k_all: Option<Token> = if p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_ALL {
-            let k_distinct_or_k_all = p.consume();
+            let k_distinct_or_k_all = p.advance();
             Option::<Token>::Some(k_distinct_or_k_all)
         } else {
             null
@@ -9165,7 +9258,7 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
         let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
         let expr = parse_expr(p)?;
         let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
-            let k_offset_or_comma = p.consume();
+            let k_offset_or_comma = p.advance();
             let expr = parse_expr(p)?;
             let item_expr = ItemExprItem {
                 k_offset_or_comma,
@@ -9299,7 +9392,7 @@ fn parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, Parse
         let k_primary = p.expect(TK_K_PRIMARY, "K_PRIMARY")?;
         let k_key = p.expect(TK_K_KEY, "K_KEY")?;
         let k_asc_or_k_desc: Option<Token> = if p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_DESC {
-            let k_asc_or_k_desc = p.consume();
+            let k_asc_or_k_desc = p.advance();
             Option::<Token>::Some(k_asc_or_k_desc)
         } else {
             null
@@ -9372,7 +9465,7 @@ fn parse_conflict_clause(p: &mut Parser) -> Result<ConflictClauseNode, ParseErro
     let k_on_k_conflict_item: Option<KOnKConflictItemItem> = if p.peek_kind() == TK_K_ON {
         let k_on = p.expect(TK_K_ON, "K_ON")?;
         let k_conflict = p.expect(TK_K_CONFLICT, "K_CONFLICT")?;
-        let k_rollback_or_k_abort_or_k_fail_or_k_ignore_or_k_replace = p.consume();
+        let k_rollback_or_k_abort_or_k_fail_or_k_ignore_or_k_replace = p.advance();
         let k_on_k_conflict_item = KOnKConflictItemItem {
             k_on,
             k_conflict,
@@ -9429,18 +9522,10 @@ fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
     } else {
         null
     };
-    let k_when = p.expect(TK_K_WHEN, "K_WHEN")?;
-    let expr = parse_expr(p)?;
-    let k_then = p.expect(TK_K_THEN, "K_THEN")?;
-    let expr_2 = parse_expr(p)?;
-    let k_when_expr_k_then_expr = KWhenExprKThenExprItem {
-        k_when,
-        expr,
-        k_then,
-        expr_2,
-    };
-    let mut k_when_expr_k_then_expr_list: Array<KWhenExprKThenExprItem> = [k_when_expr_k_then_expr];
-    while p.peek_kind() == TK_K_WHEN {
+    let mut k_when_expr_k_then_expr_list: Array<KWhenExprKThenExprItem> = [];
+    let mut _plus_first = true;
+    while _plus_first || p.peek_kind() == TK_K_WHEN {
+        _plus_first = false;
         let k_when = p.expect(TK_K_WHEN, "K_WHEN")?;
         let expr = parse_expr(p)?;
         let k_then = p.expect(TK_K_THEN, "K_THEN")?;
@@ -9765,7 +9850,7 @@ fn parse_expr_lr_4(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 }
 
 fn parse_expr_lr_5(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
-    let op_tok = p.advance();
+    let star_or_slash_or_percent = p.advance();
     let expr_2 = parse_expr_prec(p, 14)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt5(ExprAlt5 {
         span: Span::new(start, p.last_end()),
@@ -9776,7 +9861,7 @@ fn parse_expr_lr_5(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 }
 
 fn parse_expr_lr_6(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
-    let op_tok = p.advance();
+    let plus_or_minus = p.advance();
     let expr_2 = parse_expr_prec(p, 13)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt6(ExprAlt6 {
         span: Span::new(start, p.last_end()),
@@ -9787,7 +9872,7 @@ fn parse_expr_lr_6(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 }
 
 fn parse_expr_lr_7(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
-    let op_tok = p.advance();
+    let lit____or_lit____or_amp_or_pipe = p.advance();
     let expr_2 = parse_expr_prec(p, 12)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt7(ExprAlt7 {
         span: Span::new(start, p.last_end()),
@@ -9798,7 +9883,7 @@ fn parse_expr_lr_7(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 }
 
 fn parse_expr_lr_8(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
-    let op_tok = p.advance();
+    let lt_or_lit____or_gt_or_lit___ = p.advance();
     let expr_2 = parse_expr_prec(p, 11)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt8(ExprAlt8 {
         span: Span::new(start, p.last_end()),
@@ -9809,7 +9894,7 @@ fn parse_expr_lr_8(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 }
 
 fn parse_expr_lr_9(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
-    let op_tok = p.advance();
+    let eq_or_lit____or_lit____or_lit___ = p.advance();
     let expr_2 = parse_expr_prec(p, 10)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt9(ExprAlt9 {
         span: Span::new(start, p.last_end()),
@@ -9962,7 +10047,7 @@ fn parse_expr_lr_17(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
     } else {
         null
     };
-    let op_tok = p.advance();
+    let k_like_or_k_glob_or_k_regexp_or_k_match = p.advance();
     let expr_2 = parse_expr_prec(p, 5)?;
     let k_escape_expr: Option<KEscapeExprItem> = if p.peek_kind() == TK_K_ESCAPE {
         let k_escape = p.expect(TK_K_ESCAPE, "K_ESCAPE")?;
@@ -10225,7 +10310,7 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_ON {
             let k_on = p.expect(TK_K_ON, "K_ON")?;
-            let k_delete_or_k_update = p.consume();
+            let k_delete_or_k_update = p.advance();
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_SET {
                 let k_set = p.expect(TK_K_SET, "K_SET")?;
@@ -10294,7 +10379,7 @@ fn parse_raise_function(p: &mut Parser) -> Result<RaiseFunctionNode, ParseError>
     if grp_kind == TK_K_IGNORE {
         let k_ignore = p.expect(TK_K_IGNORE, "K_IGNORE")?;
     } else if grp_kind == TK_K_ROLLBACK || grp_kind == TK_K_ABORT || grp_kind == TK_K_FAIL {
-        let k_rollback_or_k_abort_or_k_fail = p.consume();
+        let k_rollback_or_k_abort_or_k_fail = p.advance();
         let comma = p.expect(TK_LIT_COMMA, "','")?;
         let error_message = parse_error_message(p)?;
     }
@@ -10322,7 +10407,7 @@ fn parse_indexed_column(p: &mut Parser) -> Result<IndexedColumnNode, ParseError>
         null
     };
     let k_asc_or_k_desc: Option<Token> = if p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_DESC {
-        let k_asc_or_k_desc = p.consume();
+        let k_asc_or_k_desc = p.advance();
         Option::<Token>::Some(k_asc_or_k_desc)
     } else {
         null
@@ -10479,7 +10564,7 @@ fn parse_ordering_term(p: &mut Parser) -> Result<OrderingTermNode, ParseError> {
         null
     };
     let k_asc_or_k_desc: Option<Token> = if p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_DESC {
-        let k_asc_or_k_desc = p.consume();
+        let k_asc_or_k_desc = p.advance();
         Option::<Token>::Some(k_asc_or_k_desc)
     } else {
         null
@@ -10989,7 +11074,7 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
     if kind == TK_K_SELECT {
         let k_select = p.expect(TK_K_SELECT, "K_SELECT")?;
         let k_distinct_or_k_all: Option<Token> = if p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_ALL {
-            let k_distinct_or_k_all = p.consume();
+            let k_distinct_or_k_all = p.advance();
             Option::<Token>::Some(k_distinct_or_k_all)
         } else {
             null
@@ -11214,7 +11299,7 @@ fn parse_compound_operator(p: &mut Parser) -> Result<CompoundOperatorNode, Parse
 fn parse_signed_number(p: &mut Parser) -> Result<SignedNumberNode, ParseError> {
     let start = p.peek().span.start;
     let plus_or_minus: Option<Token> = if p.peek_kind() == TK_LIT_PLUS || p.peek_kind() == TK_LIT_MINUS {
-        let plus_or_minus = p.consume();
+        let plus_or_minus = p.advance();
         Option::<Token>::Some(plus_or_minus)
     } else {
         null
