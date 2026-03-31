@@ -1,0 +1,69 @@
+// Reproduce: &mut TreeSet<String> mutations lost when passed through recursive variant traversal
+// with two mutable ref params of different types (TreeSet + Array<struct>)
+use { println } from "core:cli";
+use { TreeSet } from "core:collections";
+
+variant Elem {
+    Tok(String),
+    Lit(String),
+    Ref(String),
+    Group(Array<Array<Elem>>),
+    Repeat(RepeatElem),
+}
+
+struct RepeatElem {
+    element: Elem,
+}
+
+struct LitToken {
+    text: String,
+    const_name: String,
+}
+
+fn collect_lits(elem: &Elem, seen: &mut TreeSet<String>, result: &mut Array<LitToken>) {
+    if let Lit(text) = elem {
+        if !seen.contains(*text) {
+            seen.insert(*text);
+            result.push(LitToken { text: *text, const_name: `TK_{text}` });
+        }
+    }
+    if let Group(alts) = elem {
+        for let alt of alts {
+            collect_lits_from_elements(&alt, seen, result);
+        }
+    }
+    if let Repeat(rep) = elem {
+        collect_lits(&rep.element, seen, result);
+    }
+}
+
+fn collect_lits_from_elements(elems: &Array<Elem>, seen: &mut TreeSet<String>, result: &mut Array<LitToken>) {
+    for let elem of elems {
+        collect_lits(&elem, seen, result);
+    }
+}
+
+export fn run() with Stdout {
+    let elems: Array<Elem> = [
+        Elem::Lit(","),
+        Elem::Group([
+            [Elem::Lit(","), Elem::Ref("foo")],
+            [Elem::Lit(";"), Elem::Ref("bar")],
+        ]),
+        Elem::Repeat(RepeatElem { element: Elem::Lit(",") }),
+        Elem::Lit(";"),
+    ];
+
+    let mut seen = TreeSet::<String>::new();
+    let mut result: Array<LitToken> = [];
+    collect_lits_from_elements(&elems, &mut seen, &mut result);
+
+    // Should have exactly [",", ";"] — no duplicates
+    assert result.len() == 2, `expected 2 lits, got {result.len()}`;
+    assert result[0].text == ",", `expected ',', got {result[0].text}`;
+    assert result[1].text == ";", `expected ';', got {result[1].text}`;
+    println("treeset dedup deep: ok");
+}
+
+__DATA__
+{"stdout": "treeset dedup deep: ok\n"}
