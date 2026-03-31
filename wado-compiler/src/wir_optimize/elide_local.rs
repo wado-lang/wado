@@ -60,7 +60,7 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
         // LocalSet only appears at body level, so expression children are skipped.
         match instr {
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-                self.visit_body(body)
+                self.visit_body(body);
             }
             WirInstr::If {
                 then_body,
