@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774948315329,
+  "lastUpdate": 1774948452427,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9110,6 +9110,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/74bf359e0de630c6d721ec14bda9d297050dee39"
         },
         "date": 1774948315117,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a83aa8a2d6c391438c7eae9547eddb2179903e11",
+          "message": "Merge pull request #742 from wado-lang/claude/optimize-json-twitter-77wIa\n\nOptimize json-twitter: DAE, value_copy elision improvements, and bug fixes",
+          "timestamp": "2026-03-31T18:11:14+09:00",
+          "tree_id": "3b196cc2fc7c53cf8fd2946ddc6d925598b57de3",
+          "url": "https://github.com/wado-lang/wado/commit/a83aa8a2d6c391438c7eae9547eddb2179903e11"
+        },
+        "date": 1774948452259,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
