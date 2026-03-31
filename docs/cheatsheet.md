@@ -5,7 +5,7 @@ Quick reference for Wado syntax.
 ## Shebang
 
 ```wado
-#!/usr/bin/env wado
+#!/usr/bin/env wado run
 ```
 
 ## Comments
