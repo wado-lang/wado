@@ -71,8 +71,7 @@ impl WirMutVisitor for PromoteConstantArrays<'_> {
             if let Some(Some(elem_type)) = self.array_elem_types.get(arr_type_idx)
                 && let Some(bytes) = try_pack_constant_elements(elem_type, elements)
             {
-                let data_index =
-                    u32::try_from(self.data.len()).expect("too many data segments");
+                let data_index = u32::try_from(self.data.len()).expect("too many data segments");
                 let len = i32::try_from(elements.len()).unwrap_or(0);
                 self.data.push(WirData {
                     bytes,

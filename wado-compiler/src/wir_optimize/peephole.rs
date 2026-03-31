@@ -310,7 +310,6 @@ fn fold_eqz_in_instr(instr: &mut WirInstr) {
 }
 
 fn try_fold_eqz(instr: &mut WirInstr) {
-
     // i32.eq(expr, 0) → i32.eqz(expr)
     // i32.eq(0, expr) → i32.eqz(expr)
     match instr {

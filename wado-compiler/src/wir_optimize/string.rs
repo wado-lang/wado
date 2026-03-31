@@ -74,9 +74,12 @@ impl WirMutVisitor for SimplifyShortAppends<'_> {
         // Scan for String::append calls with short constant string args.
         let mut i = 0;
         while i < body.len() {
-            if let Some(replacements) =
-                try_rewrite_short_string_append(&body[i], self.append_id, self.append_char_id, self.data)
-            {
+            if let Some(replacements) = try_rewrite_short_string_append(
+                &body[i],
+                self.append_id,
+                self.append_char_id,
+                self.data,
+            ) {
                 let n = replacements.len();
                 body.splice(i..=i, replacements);
                 i += n;

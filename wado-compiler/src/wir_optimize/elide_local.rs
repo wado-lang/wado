@@ -59,9 +59,9 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
         // Only recurse into bodies (Block/Loop/If/Seq), not expression children.
         // LocalSet only appears at body level, so expression children are skipped.
         match instr {
-            WirInstr::Block { body, .. }
-            | WirInstr::Loop { body, .. }
-            | WirInstr::Seq(body) => self.visit_body(body),
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+                self.visit_body(body)
+            }
             WirInstr::If {
                 then_body,
                 else_body,

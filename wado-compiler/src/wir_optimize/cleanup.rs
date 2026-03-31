@@ -62,11 +62,11 @@ struct NopUnusedDeclareLocals<'a> {
 
 impl WirMutVisitor for NopUnusedDeclareLocals<'_> {
     fn visit_instr(&mut self, instr: &mut WirInstr) {
-        if let WirInstr::DeclareLocal { name, .. } = instr {
-            if !self.used.contains(name.as_str()) {
-                *instr = WirInstr::Nop;
-                return;
-            }
+        if let WirInstr::DeclareLocal { name, .. } = instr
+            && !self.used.contains(name.as_str())
+        {
+            *instr = WirInstr::Nop;
+            return;
         }
         self.walk_instr(instr);
     }
@@ -80,10 +80,7 @@ impl WirMutVisitor for CleanupVisitor {
         // Remove nops.
         body.retain(|i| !matches!(i, WirInstr::Nop));
         // Truncate after first unreachable (dead code elimination).
-        if let Some(pos) = body
-            .iter()
-            .position(|i| matches!(i, WirInstr::Unreachable))
-        {
+        if let Some(pos) = body.iter().position(|i| matches!(i, WirInstr::Unreachable)) {
             body.truncate(pos + 1);
         }
     }

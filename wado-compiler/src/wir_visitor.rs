@@ -28,9 +28,7 @@ pub trait WirRefVisitor {
 
     fn walk_instr(&mut self, instr: &WirInstr) {
         match instr {
-            WirInstr::Block { body, .. }
-            | WirInstr::Loop { body, .. }
-            | WirInstr::Seq(body) => {
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
                 self.visit_body(body);
             }
             WirInstr::If {
@@ -75,9 +73,7 @@ pub trait WirMutVisitor {
 
     fn walk_instr(&mut self, instr: &mut WirInstr) {
         match instr {
-            WirInstr::Block { body, .. }
-            | WirInstr::Loop { body, .. }
-            | WirInstr::Seq(body) => {
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
                 self.visit_body(body);
             }
             WirInstr::If {
