@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774961123486,
+  "lastUpdate": 1774995294174,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9188,6 +9188,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/806a15f588a204eb6e56b8ffa3196405dbb44316"
         },
         "date": 1774961123286,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6d982f4c2b8af32b00037ae4bedc9920b6c786e7",
+          "message": "Merge pull request #744 from wado-lang/claude/implement-package-gale-todos-0eS2C\n\nImplement incomplete CST walker coverage and fix struct generation bugs in Gale",
+          "timestamp": "2026-04-01T07:11:42+09:00",
+          "tree_id": "3614d31b8f010f6609ad05dcf64bcf83c2b43011",
+          "url": "https://github.com/wado-lang/wado/commit/6d982f4c2b8af32b00037ae4bedc9920b6c786e7"
+        },
+        "date": 1774995293955,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
