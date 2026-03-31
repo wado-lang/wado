@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774995294174,
+  "lastUpdate": 1775000335983,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9227,6 +9227,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6d982f4c2b8af32b00037ae4bedc9920b6c786e7"
         },
         "date": 1774995293955,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7175f70d93d36d6d187196de27db320e60b10ef0",
+          "message": "Merge pull request #746 from wado-lang/claude/consolidate-tir-visitor-AoYPC\n\nConsolidate TIR visitor traits into tir_visitor.rs",
+          "timestamp": "2026-04-01T08:35:59+09:00",
+          "tree_id": "2fabdad7a723b6d8bd661c345b201185760793f6",
+          "url": "https://github.com/wado-lang/wado/commit/7175f70d93d36d6d187196de27db320e60b10ef0"
+        },
+        "date": 1775000335763,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
