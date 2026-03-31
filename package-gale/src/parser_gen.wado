@@ -1405,17 +1405,17 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
         if let Optional = rep.kind {
             let type_str = field_info.1;
             let opt_name = dedup_name(&field_info.0, name_counts);
-            w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
-            let mut nc: Array<[String, i32]> = [];
             if is_group_store {
-                gen_group_store_any(w, inner, ctx, &mut nc);
+                gen_storable_optional(w, inner, ctx, &first, name_counts, &type_str, &opt_name, &field_info.0);
             } else {
+                w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
+                let mut nc: Array<[String, i32]> = [];
                 gen_element(w, inner, ctx, &mut nc);
+                w.line(`Option::<{type_str}>::Some({field_info.0})`);
+                w.else_begin("else");
+                w.line("null");
+                w.end_with(";");
             }
-            w.line(`Option::<{type_str}>::Some({field_info.0})`);
-            w.else_begin("else");
-            w.line("null");
-            w.end_with(";");
         }
     } else {
         if let Star = rep.kind {
@@ -1923,6 +1923,180 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext
     }
     if let Label(lab) = *elem {
         gen_element_failable(w, &lab.element, ctx, saved_var, label, name_counts);
+        return;
+    }
+}
+
+/// Generate a storable optional group with proper backtracking.
+///
+/// For groups where leading fixed tokens provide sufficient lookahead
+/// (e.g. `(K_IF K_NOT K_EXISTS)?`), uses multi-token lookahead condition.
+/// For groups starting with rule refs (e.g. `(database_name '.')?`), uses
+/// backtracking to restore position on failure while still capturing fields.
+fn gen_storable_optional(
+    w: &mut CodeWriter,
+    inner: &Element,
+    ctx: &mut GenContext,
+    first: &Array<String>,
+    name_counts: &mut Array<[String, i32]>,
+    type_str: &String,
+    opt_name: &String,
+    field_name: &String,
+) {
+    let la_depth = optional_lookahead_depth(inner);
+    if la_depth >= 1 {
+        // Multi-token lookahead: safe to use ? since tokens are confirmed
+        let la_tokens = optional_lookahead_tokens(inner, la_depth);
+        let mut cond_parts: Array<String> = [];
+        for let mut d = 0; d < la_tokens.len(); d += 1 {
+            let check = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
+            cond_parts.append(`{check} == {la_tokens[d]}`);
+        }
+        let mut cond = String::with_capacity(128);
+        for let mut i = 0; i < cond_parts.len(); i += 1 {
+            if i > 0 {
+                cond.append(" && ");
+            }
+            cond.append(cond_parts[i]);
+        }
+        w.begin(`let {opt_name}: Option<{type_str}> = if {cond}`);
+        let mut nc: Array<[String, i32]> = [];
+        gen_group_store_any(w, inner, ctx, &mut nc);
+        w.line(`Option::<{type_str}>::Some({field_name})`);
+        w.else_begin("else");
+        w.line("null");
+        w.end_with(";");
+    } else {
+        // Backtracking: save position and restore on mid-sequence failure
+        gen_storable_optional_with_backtrack(w, inner, ctx, first, name_counts, type_str, opt_name, field_name);
+    }
+}
+
+/// Generate a storable optional with backtracking for struct capture.
+///
+/// Produces code like:
+///   let opt: Option<Type> = if first_check {
+///       let saved = p.pos;
+///       let mut result: Option<Type> = null;
+///       bt: {
+///           let r1 = parse_foo(p);
+///           if let Err(_) = r1 { p.pos = saved; break bt; }
+///           let foo = r1.unwrap();
+///           let r2 = p.expect(TK_DOT, "'.'");
+///           if let Err(_) = r2 { p.pos = saved; break bt; }
+///           let dot = r2.unwrap();
+///           result = Option::<Type>::Some(Type { foo, dot });
+///       }
+///       result
+///   } else { null };
+fn gen_storable_optional_with_backtrack(
+    w: &mut CodeWriter,
+    inner: &Element,
+    ctx: &mut GenContext,
+    first: &Array<String>,
+    name_counts: &mut Array<[String, i32]>,
+    type_str: &String,
+    opt_name: &String,
+    field_name: &String,
+) {
+    w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(first)}`);
+
+    let saved = dedup_name(&"opt_saved", name_counts);
+    let label = dedup_name(&"opt_bt", name_counts);
+    let result_var = dedup_name(&"opt_result", name_counts);
+
+    w.line(`let {saved} = p.pos;`);
+    w.line(`let mut {result_var}: Option<{type_str}> = null;`);
+    w.begin(`{label}:`);
+
+    if let Group(alts) = *inner {
+        if is_single_alt_group(&alts) {
+            let alt = &alts[0];
+            // Use fresh name counters so element names match field assignments
+            let mut elem_nc: Array<[String, i32]> = [];
+            for let elem of &alt.elements {
+                gen_element_failable_named(w, &elem, ctx, &saved, &label, &mut elem_nc);
+            }
+            // Construct the struct
+            let struct_type_name = single_alt_group_type_name(alt);
+            let struct_field_name = single_alt_group_field_name(alt);
+            w.line(`let {struct_field_name} = {struct_type_name} \{`);
+            w.indent();
+            let mut assign_nc: Array<[String, i32]> = [];
+            for let elem of &alt.elements {
+                gen_field_assignment(w, &elem, &mut assign_nc);
+            }
+            w.dedent();
+            w.line("};");
+            w.line(`{result_var} = Option::<{type_str}>::Some({field_name});`);
+        } else {
+            // For other storable patterns (simple_cst_group, token_only_group),
+            // they should be safe without backtracking. Generate normally.
+            let mut nc: Array<[String, i32]> = [];
+            gen_group_store_any(w, inner, ctx, &mut nc);
+            w.line(`{result_var} = Option::<{type_str}>::Some({field_name});`);
+        }
+    }
+
+    w.end();  // label
+    w.line(result_var);
+    w.else_begin("else");
+    w.line("null");
+    w.end_with(";");
+}
+
+/// Generate a failable element that uses proper variable names for struct
+/// construction, instead of the anonymous `opt_r` variables.
+///
+/// For TokenRef/Literal: generates `let r = p.expect(...); if Err, break; let name = r.unwrap();`
+/// For RuleRef: generates `let r = parse_foo(p); if Err, break; let foo = r.unwrap();`
+fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, saved_var: &String, label: &String, name_counts: &mut Array<[String, i32]>) {
+    if let TokenRef(name) = *elem {
+        let const_name = `TK_{name}`;
+        let field_name = dedup_name(&to_lower(&name), name_counts);
+        let r_var = dedup_name(&"_bt_r", name_counts);
+        w.line(`let {r_var} = p.expect({const_name}, {escape_string(&name)});`);
+        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
+        w.line(`let {field_name} = {r_var}.unwrap();`);
+        return;
+    }
+    if let Literal(text) = *elem {
+        let const_name = literal_const_name(&text);
+        let display = `'{text}'`;
+        let field_name = dedup_name(&literal_field_name(&text), name_counts);
+        let r_var = dedup_name(&"_bt_r", name_counts);
+        w.line(`let {r_var} = p.expect({const_name}, {escape_string(&display)});`);
+        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
+        w.line(`let {field_name} = {r_var}.unwrap();`);
+        return;
+    }
+    if let RuleRef(name) = *elem {
+        let fn_name = `parse_{to_snake_case(&name)}`;
+        let field_name = dedup_name(&to_snake_case(&name), name_counts);
+        let r_var = dedup_name(&"_bt_r", name_counts);
+        w.line(`let {r_var} = {fn_name}(p);`);
+        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
+        w.line(`let {field_name} = {r_var}.unwrap();`);
+        return;
+    }
+    if let Repeat(rep) = *elem {
+        gen_repeat(w, &rep, ctx, name_counts);
+        return;
+    }
+    if let Group(alts) = *elem {
+        if is_simple_cst_group(&alts) {
+            gen_consume_group_store_optional(w, &alts, ctx, name_counts);
+        } else if is_token_only_group(&alts) {
+            gen_consume_token_group(w, &alts, ctx, name_counts);
+        } else if is_single_alt_group(&alts) {
+            gen_consume_single_alt_group(w, &alts[0], ctx, name_counts);
+        } else {
+            gen_consume_group(w, &alts, ctx, name_counts);
+        }
+        return;
+    }
+    if let Label(lab) = *elem {
+        gen_element_failable_named(w, &lab.element, ctx, saved_var, label, name_counts);
         return;
     }
 }

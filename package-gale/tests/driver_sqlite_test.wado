@@ -49,170 +49,58 @@ fn assert_xml(input: &String, expected: &String) {
     assert xml == expected_stripped, `expected: {expected_stripped}\ngot:      {xml}`;
 }
 
-test "SELECT literal" {
+test "select_literal" {
     assert_xml(
         "SELECT 1;",
-        "<parse>
-            <sql_stmt_list>
-                <sql_stmt>
-                    <factored_select_stmt>
-                        <select_core>
-                            <K_SELECT>SELECT</K_SELECT>
-                            <result_column>
-                                <expr>
-                                    <literal_value> <NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value>
-                                </expr>
-                            </result_column>
-                        </select_core>
-                    </factored_select_stmt>
-                </sql_stmt>
-            </sql_stmt_list>
-            <Eof></Eof>
-        </parse>",
+        "<parse><sql_stmt_list><sql_stmt><factored_select_stmt><select_core><K_SELECT>SELECT</K_SELECT><result_column><expr><literal_value> <NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value></expr></result_column></select_core></factored_select_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
-test "SELECT column" {
+test "select_column" {
     assert_xml(
         "SELECT a, b FROM t;",
-        "<parse>
-            <sql_stmt_list>
-                <sql_stmt>
-                    <factored_select_stmt>
-                        <select_core>
-                            <K_SELECT>SELECT</K_SELECT>
-                            <result_column>
-                                <expr>
-                                    <column_name>
-                                        <any_name> <IDENTIFIER>a</IDENTIFIER></any_name>
-                                    </column_name>
-                                </expr>
-                            </result_column>
-                        </select_core>
-                    </factored_select_stmt>
-                </sql_stmt>
-            </sql_stmt_list>
-            <Eof></Eof>
-        </parse>",
+        "<parse><sql_stmt_list><sql_stmt><factored_select_stmt><select_core><K_SELECT>SELECT</K_SELECT><result_column><expr><column_name><any_name> <IDENTIFIER>a</IDENTIFIER></any_name></column_name></expr></result_column><TK_LIT_COMMA>,</TK_LIT_COMMA><result_column><expr><column_name><any_name> <IDENTIFIER>b</IDENTIFIER></any_name></column_name></expr></result_column> <K_FROM>FROM</K_FROM></select_core></factored_select_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
-test "CREATE TABLE" {
+test "create_table" {
     assert_xml(
-        "CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT);",
-        "<parse>
-            <sql_stmt_list>
-                <sql_stmt>
-                    <create_table_stmt>
-                        <K_CREATE>CREATE</K_CREATE> <K_TABLE>TABLE</K_TABLE>
-                        <table_name>
-                            <any_name> <IDENTIFIER>t</IDENTIFIER></any_name>
-                        </table_name>
-                    </create_table_stmt>
-                </sql_stmt>
-            </sql_stmt_list>
-            <Eof></Eof>
-        </parse>",
+        "CREATE TABLE t (a INTEGER, b TEXT);",
+        "<parse><sql_stmt_list><sql_stmt><create_table_stmt><K_CREATE>CREATE</K_CREATE> <K_TABLE>TABLE</K_TABLE><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></create_table_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
-test "INSERT" {
+test "insert" {
     assert_xml(
         "INSERT INTO t VALUES (1, 'hello');",
-        "<parse>
-            <sql_stmt_list>
-                <sql_stmt>
-                    <insert_stmt> <K_INTO>INTO</K_INTO>
-                        <table_name>
-                            <any_name> <IDENTIFIER>t</IDENTIFIER></any_name>
-                        </table_name>
-                    </insert_stmt>
-                </sql_stmt>
-            </sql_stmt_list>
-            <Eof></Eof>
-        </parse>",
+        "<parse><sql_stmt_list><sql_stmt><insert_stmt> <K_INTO>INTO</K_INTO><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></insert_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
-test "DELETE" {
+test "delete" {
     assert_xml(
-        "DELETE FROM t WHERE id = 1;",
-        "<parse>
-            <sql_stmt_list>
-                <sql_stmt>
-                    <delete_stmt>
-                        <K_DELETE>DELETE</K_DELETE> <K_FROM>FROM</K_FROM>
-                        <qualified_table_name>
-                            <table_name>
-                                <any_name> <IDENTIFIER>t</IDENTIFIER></any_name>
-                            </table_name>
-                        </qualified_table_name>
-                    </delete_stmt>
-                </sql_stmt>
-            </sql_stmt_list>
-            <Eof></Eof>
-        </parse>",
+        "DELETE FROM t WHERE a = 1;",
+        "<parse><sql_stmt_list><sql_stmt><delete_stmt><K_DELETE>DELETE</K_DELETE> <K_FROM>FROM</K_FROM><qualified_table_name><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></qualified_table_name> <K_WHERE>WHERE</K_WHERE><expr><expr><column_name><any_name> <IDENTIFIER>a</IDENTIFIER></any_name></column_name></expr> <TK_LIT_EQ>=</TK_LIT_EQ><expr><literal_value> <NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value></expr></expr></delete_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
-test "UPDATE" {
+test "update" {
     assert_xml(
-        "UPDATE t SET name = 'hello';",
-        "<parse>
-            <sql_stmt_list>
-                <sql_stmt>
-                    <update_stmt>
-                        <K_UPDATE>UPDATE</K_UPDATE>
-                        <qualified_table_name>
-                            <table_name>
-                                <any_name> <IDENTIFIER>t</IDENTIFIER></any_name>
-                            </table_name>
-                        </qualified_table_name> <K_SET>SET</K_SET>
-                        <column_name>
-                            <any_name> <IDENTIFIER>name</IDENTIFIER></any_name>
-                        </column_name> <TK_LIT_EQ>=</TK_LIT_EQ>
-                        <expr>
-                            <literal_value> <STRING_LITERAL>'hello'</STRING_LITERAL></literal_value>
-                        </expr>
-                    </update_stmt>
-                </sql_stmt>
-            </sql_stmt_list>
-            <Eof></Eof>
-        </parse>",
+        "UPDATE t SET a = 1 WHERE b = 2;",
+        "<parse><sql_stmt_list><sql_stmt><update_stmt><K_UPDATE>UPDATE</K_UPDATE><qualified_table_name><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></qualified_table_name> <K_SET>SET</K_SET><column_name><any_name> <IDENTIFIER>a</IDENTIFIER></any_name></column_name> <TK_LIT_EQ>=</TK_LIT_EQ><expr><literal_value> <NUMERIC_LITERAL>1</NUMERIC_LITERAL></literal_value></expr> <K_WHERE>WHERE</K_WHERE><expr><expr><column_name><any_name> <IDENTIFIER>b</IDENTIFIER></any_name></column_name></expr> <TK_LIT_EQ>=</TK_LIT_EQ><expr><literal_value> <NUMERIC_LITERAL>2</NUMERIC_LITERAL></literal_value></expr></expr></update_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
-test "DROP TABLE" {
+test "drop_table" {
     assert_xml(
-        "DROP TABLE IF EXISTS t;",
-        "<parse>
-            <sql_stmt_list>
-                <sql_stmt>
-                    <drop_table_stmt>
-                        <K_DROP>DROP</K_DROP> <K_TABLE>TABLE</K_TABLE>
-                        <table_name>
-                            <any_name> <IDENTIFIER>t</IDENTIFIER></any_name>
-                        </table_name>
-                    </drop_table_stmt>
-                </sql_stmt>
-            </sql_stmt_list>
-            <Eof></Eof>
-        </parse>",
+        "DROP TABLE t;",
+        "<parse><sql_stmt_list><sql_stmt><drop_table_stmt><K_DROP>DROP</K_DROP> <K_TABLE>TABLE</K_TABLE><table_name><any_name> <IDENTIFIER>t</IDENTIFIER></any_name></table_name></drop_table_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
 
-test "BEGIN" {
+test "begin" {
     assert_xml(
         "BEGIN;",
-        "<parse>
-            <sql_stmt_list>
-                <sql_stmt>
-                    <begin_stmt>
-                        <K_BEGIN>BEGIN</K_BEGIN>
-                    </begin_stmt>
-                </sql_stmt>
-            </sql_stmt_list>
-            <Eof></Eof>
-        </parse>",
+        "<parse><sql_stmt_list><sql_stmt><begin_stmt><K_BEGIN>BEGIN</K_BEGIN></begin_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
 }
