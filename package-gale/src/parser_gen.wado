@@ -1966,9 +1966,109 @@ fn gen_storable_optional(
         w.else_begin("else");
         w.line("null");
         w.end_with(";");
+    } else if has_nested_optionals(inner) {
+        // Nested optionals: use shape-based lookahead dispatch with struct capture
+        gen_storable_optional_with_lookahead(w, inner, ctx, name_counts, type_str, opt_name, field_name);
     } else {
         // Backtracking: save position and restore on mid-sequence failure
         gen_storable_optional_with_backtrack(w, inner, ctx, first, name_counts, type_str, opt_name, field_name);
+    }
+}
+
+/// Generate a storable optional with shape-based lookahead for groups containing
+/// nested optional sub-groups (e.g. `((database_name '.')? table_name '.')?`).
+///
+/// Enumerates all shapes (combinations of present/absent optional sub-elements),
+/// computes a lookahead signature for each, and generates an if/else-if chain.
+/// Each branch parses the relevant elements and constructs the struct with
+/// null for absent optional fields.
+fn gen_storable_optional_with_lookahead(
+    w: &mut CodeWriter,
+    inner: &Element,
+    ctx: &mut GenContext,
+    name_counts: &mut Array<[String, i32]>,
+    type_str: &String,
+    opt_name: &String,
+    field_name: &String,
+) {
+    if let Group(alts) = *inner {
+        if alts.len() != 1 {
+            return;
+        }
+        let alt = &alts[0];
+        let elements = &alt.elements;
+        let shapes = compute_shapes(elements);
+
+        let struct_type_name = single_alt_group_type_name(alt);
+        let struct_field_name = single_alt_group_field_name(alt);
+
+        let mut is_first = true;
+        for let mut si = 0; si < shapes.len(); si += 1 {
+            let shape = &shapes[si];
+            let sig = shape_lookahead_signature(shape, elements, ctx);
+            if sig.len() == 0 {
+                continue;
+            }
+            let cond = gen_lookahead_condition(&sig);
+
+            if is_first {
+                w.begin(`let {opt_name}: Option<{type_str}> = if {cond}`);
+                is_first = false;
+            } else {
+                w.else_begin(`else if {cond}`);
+            }
+
+            // Parse elements: present ones normally, absent optionals as null
+            let mut nc: Array<[String, i32]> = [];
+            for let mut i = 0; i < elements.len(); i += 1 {
+                let mut in_shape = false;
+                for let mut k = 0; k < shape.len(); k += 1 {
+                    if shape[k] == i {
+                        in_shape = true;
+                    }
+                }
+                if in_shape {
+                    gen_element(w, &elements[i], ctx, &mut nc);
+                } else {
+                    gen_absent_optional_field(w, &elements[i], &mut nc);
+                }
+            }
+
+            // Construct the struct
+            w.line(`let {struct_field_name} = {struct_type_name} \{`);
+            w.indent();
+            let mut assign_nc: Array<[String, i32]> = [];
+            for let elem of elements {
+                gen_field_assignment(w, &elem, &mut assign_nc);
+            }
+            w.dedent();
+            w.line("};");
+            w.line(`Option::<{type_str}>::Some({field_name})`);
+        }
+
+        if !is_first {
+            w.else_begin("else");
+            w.line("null");
+            w.end_with(";");
+        }
+    }
+}
+
+/// Generate a null assignment for an absent optional element's struct field.
+fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>) {
+    if let Repeat(rep) = *elem {
+        if let Optional = rep.kind {
+            if has_field(&rep.element) {
+                let info = element_field_info(&rep.element);
+                let opt_field = dedup_name(&info.0, name_counts);
+                w.line(`let {opt_field}: Option<{info.1}> = null;`);
+            }
+        }
+        return;
+    }
+    if let Label(lab) = *elem {
+        gen_absent_optional_field(w, &lab.element, name_counts);
+        return;
     }
 }
 

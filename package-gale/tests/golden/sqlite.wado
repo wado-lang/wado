@@ -7916,67 +7916,134 @@ fn parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, Pa
     } else {
         null
     };
-    let item_k_limit_expr_item: Option<ItemKLimitExprItemItem> = if p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_LIMIT {
-        let opt_saved = p.pos;
-        let mut opt_result: Option<ItemKLimitExprItemItem> = null;
-        opt_bt: {
-            let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
-                let k_order = p.expect(TK_K_ORDER, "K_ORDER")?;
-                let k_by = p.expect(TK_K_BY, "K_BY")?;
+    let item_k_limit_expr_item: Option<ItemKLimitExprItemItem> = if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && (p.peek_at(2) == TK_NUMERIC_LITERAL || p.peek_at(2) == TK_STRING_LITERAL || p.peek_at(2) == TK_BLOB_LITERAL || p.peek_at(2) == TK_K_NULL || p.peek_at(2) == TK_K_CURRENT_TIME || p.peek_at(2) == TK_K_CURRENT_DATE || p.peek_at(2) == TK_K_CURRENT_TIMESTAMP || p.peek_at(2) == TK_BIND_PARAMETER || p.peek_at(2) == TK_IDENTIFIER || p.peek_at(2) == TK_K_ABORT || p.peek_at(2) == TK_K_ACTION || p.peek_at(2) == TK_K_ADD || p.peek_at(2) == TK_K_AFTER || p.peek_at(2) == TK_K_ALL || p.peek_at(2) == TK_K_ALTER || p.peek_at(2) == TK_K_ANALYZE || p.peek_at(2) == TK_K_AND || p.peek_at(2) == TK_K_AS || p.peek_at(2) == TK_K_ASC || p.peek_at(2) == TK_K_ATTACH || p.peek_at(2) == TK_K_AUTOINCREMENT || p.peek_at(2) == TK_K_BEFORE || p.peek_at(2) == TK_K_BEGIN || p.peek_at(2) == TK_K_BETWEEN || p.peek_at(2) == TK_K_BY || p.peek_at(2) == TK_K_CASCADE || p.peek_at(2) == TK_K_CASE || p.peek_at(2) == TK_K_CAST || p.peek_at(2) == TK_K_CHECK || p.peek_at(2) == TK_K_COLLATE || p.peek_at(2) == TK_K_COLUMN || p.peek_at(2) == TK_K_COMMIT || p.peek_at(2) == TK_K_CONFLICT || p.peek_at(2) == TK_K_CONSTRAINT || p.peek_at(2) == TK_K_CREATE || p.peek_at(2) == TK_K_CROSS || p.peek_at(2) == TK_K_DATABASE || p.peek_at(2) == TK_K_DEFAULT || p.peek_at(2) == TK_K_DEFERRABLE || p.peek_at(2) == TK_K_DEFERRED || p.peek_at(2) == TK_K_DELETE || p.peek_at(2) == TK_K_DESC || p.peek_at(2) == TK_K_DETACH || p.peek_at(2) == TK_K_DISTINCT || p.peek_at(2) == TK_K_DROP || p.peek_at(2) == TK_K_EACH || p.peek_at(2) == TK_K_ELSE || p.peek_at(2) == TK_K_END || p.peek_at(2) == TK_K_ESCAPE || p.peek_at(2) == TK_K_EXCEPT || p.peek_at(2) == TK_K_EXCLUSIVE || p.peek_at(2) == TK_K_EXISTS || p.peek_at(2) == TK_K_EXPLAIN || p.peek_at(2) == TK_K_FAIL || p.peek_at(2) == TK_K_FOR || p.peek_at(2) == TK_K_FOREIGN || p.peek_at(2) == TK_K_FROM || p.peek_at(2) == TK_K_FULL || p.peek_at(2) == TK_K_GLOB || p.peek_at(2) == TK_K_GROUP || p.peek_at(2) == TK_K_HAVING || p.peek_at(2) == TK_K_IF || p.peek_at(2) == TK_K_IGNORE || p.peek_at(2) == TK_K_IMMEDIATE || p.peek_at(2) == TK_K_IN || p.peek_at(2) == TK_K_INDEX || p.peek_at(2) == TK_K_INDEXED || p.peek_at(2) == TK_K_INITIALLY || p.peek_at(2) == TK_K_INNER || p.peek_at(2) == TK_K_INSERT || p.peek_at(2) == TK_K_INSTEAD || p.peek_at(2) == TK_K_INTERSECT || p.peek_at(2) == TK_K_INTO || p.peek_at(2) == TK_K_IS || p.peek_at(2) == TK_K_ISNULL || p.peek_at(2) == TK_K_JOIN || p.peek_at(2) == TK_K_KEY || p.peek_at(2) == TK_K_LEFT || p.peek_at(2) == TK_K_LIKE || p.peek_at(2) == TK_K_LIMIT || p.peek_at(2) == TK_K_MATCH || p.peek_at(2) == TK_K_NATURAL || p.peek_at(2) == TK_K_NO || p.peek_at(2) == TK_K_NOT || p.peek_at(2) == TK_K_NOTNULL || p.peek_at(2) == TK_K_OF || p.peek_at(2) == TK_K_OFFSET || p.peek_at(2) == TK_K_ON || p.peek_at(2) == TK_K_OR || p.peek_at(2) == TK_K_ORDER || p.peek_at(2) == TK_K_OUTER || p.peek_at(2) == TK_K_PLAN || p.peek_at(2) == TK_K_PRAGMA || p.peek_at(2) == TK_K_PRIMARY || p.peek_at(2) == TK_K_QUERY || p.peek_at(2) == TK_K_RAISE || p.peek_at(2) == TK_K_RECURSIVE || p.peek_at(2) == TK_K_REFERENCES || p.peek_at(2) == TK_K_REGEXP || p.peek_at(2) == TK_K_REINDEX || p.peek_at(2) == TK_K_RELEASE || p.peek_at(2) == TK_K_RENAME || p.peek_at(2) == TK_K_REPLACE || p.peek_at(2) == TK_K_RESTRICT || p.peek_at(2) == TK_K_RIGHT || p.peek_at(2) == TK_K_ROLLBACK || p.peek_at(2) == TK_K_ROW || p.peek_at(2) == TK_K_SAVEPOINT || p.peek_at(2) == TK_K_SELECT || p.peek_at(2) == TK_K_SET || p.peek_at(2) == TK_K_TABLE || p.peek_at(2) == TK_K_TEMP || p.peek_at(2) == TK_K_TEMPORARY || p.peek_at(2) == TK_K_THEN || p.peek_at(2) == TK_K_TO || p.peek_at(2) == TK_K_TRANSACTION || p.peek_at(2) == TK_K_TRIGGER || p.peek_at(2) == TK_K_UNION || p.peek_at(2) == TK_K_UNIQUE || p.peek_at(2) == TK_K_UPDATE || p.peek_at(2) == TK_K_USING || p.peek_at(2) == TK_K_VACUUM || p.peek_at(2) == TK_K_VALUES || p.peek_at(2) == TK_K_VIEW || p.peek_at(2) == TK_K_VIRTUAL || p.peek_at(2) == TK_K_WHEN || p.peek_at(2) == TK_K_WHERE || p.peek_at(2) == TK_K_WITH || p.peek_at(2) == TK_K_WITHOUT || p.peek_at(2) == TK_LIT_LPAREN || p.peek_at(2) == TK_LIT_MINUS || p.peek_at(2) == TK_LIT_PLUS || p.peek_at(2) == TK_LIT_TILDE) && p.peek_at(3) == TK_LIT_COMMA && p.peek_at(4) == TK_K_LIMIT && (p.peek_at(5) == TK_NUMERIC_LITERAL || p.peek_at(5) == TK_STRING_LITERAL || p.peek_at(5) == TK_BLOB_LITERAL || p.peek_at(5) == TK_K_NULL || p.peek_at(5) == TK_K_CURRENT_TIME || p.peek_at(5) == TK_K_CURRENT_DATE || p.peek_at(5) == TK_K_CURRENT_TIMESTAMP || p.peek_at(5) == TK_BIND_PARAMETER || p.peek_at(5) == TK_IDENTIFIER || p.peek_at(5) == TK_K_ABORT || p.peek_at(5) == TK_K_ACTION || p.peek_at(5) == TK_K_ADD || p.peek_at(5) == TK_K_AFTER || p.peek_at(5) == TK_K_ALL || p.peek_at(5) == TK_K_ALTER || p.peek_at(5) == TK_K_ANALYZE || p.peek_at(5) == TK_K_AND || p.peek_at(5) == TK_K_AS || p.peek_at(5) == TK_K_ASC || p.peek_at(5) == TK_K_ATTACH || p.peek_at(5) == TK_K_AUTOINCREMENT || p.peek_at(5) == TK_K_BEFORE || p.peek_at(5) == TK_K_BEGIN || p.peek_at(5) == TK_K_BETWEEN || p.peek_at(5) == TK_K_BY || p.peek_at(5) == TK_K_CASCADE || p.peek_at(5) == TK_K_CASE || p.peek_at(5) == TK_K_CAST || p.peek_at(5) == TK_K_CHECK || p.peek_at(5) == TK_K_COLLATE || p.peek_at(5) == TK_K_COLUMN || p.peek_at(5) == TK_K_COMMIT || p.peek_at(5) == TK_K_CONFLICT || p.peek_at(5) == TK_K_CONSTRAINT || p.peek_at(5) == TK_K_CREATE || p.peek_at(5) == TK_K_CROSS || p.peek_at(5) == TK_K_DATABASE || p.peek_at(5) == TK_K_DEFAULT || p.peek_at(5) == TK_K_DEFERRABLE || p.peek_at(5) == TK_K_DEFERRED || p.peek_at(5) == TK_K_DELETE || p.peek_at(5) == TK_K_DESC || p.peek_at(5) == TK_K_DETACH || p.peek_at(5) == TK_K_DISTINCT || p.peek_at(5) == TK_K_DROP || p.peek_at(5) == TK_K_EACH || p.peek_at(5) == TK_K_ELSE || p.peek_at(5) == TK_K_END || p.peek_at(5) == TK_K_ESCAPE || p.peek_at(5) == TK_K_EXCEPT || p.peek_at(5) == TK_K_EXCLUSIVE || p.peek_at(5) == TK_K_EXISTS || p.peek_at(5) == TK_K_EXPLAIN || p.peek_at(5) == TK_K_FAIL || p.peek_at(5) == TK_K_FOR || p.peek_at(5) == TK_K_FOREIGN || p.peek_at(5) == TK_K_FROM || p.peek_at(5) == TK_K_FULL || p.peek_at(5) == TK_K_GLOB || p.peek_at(5) == TK_K_GROUP || p.peek_at(5) == TK_K_HAVING || p.peek_at(5) == TK_K_IF || p.peek_at(5) == TK_K_IGNORE || p.peek_at(5) == TK_K_IMMEDIATE || p.peek_at(5) == TK_K_IN || p.peek_at(5) == TK_K_INDEX || p.peek_at(5) == TK_K_INDEXED || p.peek_at(5) == TK_K_INITIALLY || p.peek_at(5) == TK_K_INNER || p.peek_at(5) == TK_K_INSERT || p.peek_at(5) == TK_K_INSTEAD || p.peek_at(5) == TK_K_INTERSECT || p.peek_at(5) == TK_K_INTO || p.peek_at(5) == TK_K_IS || p.peek_at(5) == TK_K_ISNULL || p.peek_at(5) == TK_K_JOIN || p.peek_at(5) == TK_K_KEY || p.peek_at(5) == TK_K_LEFT || p.peek_at(5) == TK_K_LIKE || p.peek_at(5) == TK_K_LIMIT || p.peek_at(5) == TK_K_MATCH || p.peek_at(5) == TK_K_NATURAL || p.peek_at(5) == TK_K_NO || p.peek_at(5) == TK_K_NOT || p.peek_at(5) == TK_K_NOTNULL || p.peek_at(5) == TK_K_OF || p.peek_at(5) == TK_K_OFFSET || p.peek_at(5) == TK_K_ON || p.peek_at(5) == TK_K_OR || p.peek_at(5) == TK_K_ORDER || p.peek_at(5) == TK_K_OUTER || p.peek_at(5) == TK_K_PLAN || p.peek_at(5) == TK_K_PRAGMA || p.peek_at(5) == TK_K_PRIMARY || p.peek_at(5) == TK_K_QUERY || p.peek_at(5) == TK_K_RAISE || p.peek_at(5) == TK_K_RECURSIVE || p.peek_at(5) == TK_K_REFERENCES || p.peek_at(5) == TK_K_REGEXP || p.peek_at(5) == TK_K_REINDEX || p.peek_at(5) == TK_K_RELEASE || p.peek_at(5) == TK_K_RENAME || p.peek_at(5) == TK_K_REPLACE || p.peek_at(5) == TK_K_RESTRICT || p.peek_at(5) == TK_K_RIGHT || p.peek_at(5) == TK_K_ROLLBACK || p.peek_at(5) == TK_K_ROW || p.peek_at(5) == TK_K_SAVEPOINT || p.peek_at(5) == TK_K_SELECT || p.peek_at(5) == TK_K_SET || p.peek_at(5) == TK_K_TABLE || p.peek_at(5) == TK_K_TEMP || p.peek_at(5) == TK_K_TEMPORARY || p.peek_at(5) == TK_K_THEN || p.peek_at(5) == TK_K_TO || p.peek_at(5) == TK_K_TRANSACTION || p.peek_at(5) == TK_K_TRIGGER || p.peek_at(5) == TK_K_UNION || p.peek_at(5) == TK_K_UNIQUE || p.peek_at(5) == TK_K_UPDATE || p.peek_at(5) == TK_K_USING || p.peek_at(5) == TK_K_VACUUM || p.peek_at(5) == TK_K_VALUES || p.peek_at(5) == TK_K_VIEW || p.peek_at(5) == TK_K_VIRTUAL || p.peek_at(5) == TK_K_WHEN || p.peek_at(5) == TK_K_WHERE || p.peek_at(5) == TK_K_WITH || p.peek_at(5) == TK_K_WITHOUT || p.peek_at(5) == TK_LIT_LPAREN || p.peek_at(5) == TK_LIT_MINUS || p.peek_at(5) == TK_LIT_PLUS || p.peek_at(5) == TK_LIT_TILDE) && (p.peek_at(6) == TK_K_OFFSET || p.peek_at(6) == TK_LIT_COMMA) && (p.peek_at(7) == TK_NUMERIC_LITERAL || p.peek_at(7) == TK_STRING_LITERAL || p.peek_at(7) == TK_BLOB_LITERAL || p.peek_at(7) == TK_K_NULL || p.peek_at(7) == TK_K_CURRENT_TIME || p.peek_at(7) == TK_K_CURRENT_DATE || p.peek_at(7) == TK_K_CURRENT_TIMESTAMP || p.peek_at(7) == TK_BIND_PARAMETER || p.peek_at(7) == TK_IDENTIFIER || p.peek_at(7) == TK_K_ABORT || p.peek_at(7) == TK_K_ACTION || p.peek_at(7) == TK_K_ADD || p.peek_at(7) == TK_K_AFTER || p.peek_at(7) == TK_K_ALL || p.peek_at(7) == TK_K_ALTER || p.peek_at(7) == TK_K_ANALYZE || p.peek_at(7) == TK_K_AND || p.peek_at(7) == TK_K_AS || p.peek_at(7) == TK_K_ASC || p.peek_at(7) == TK_K_ATTACH || p.peek_at(7) == TK_K_AUTOINCREMENT || p.peek_at(7) == TK_K_BEFORE || p.peek_at(7) == TK_K_BEGIN || p.peek_at(7) == TK_K_BETWEEN || p.peek_at(7) == TK_K_BY || p.peek_at(7) == TK_K_CASCADE || p.peek_at(7) == TK_K_CASE || p.peek_at(7) == TK_K_CAST || p.peek_at(7) == TK_K_CHECK || p.peek_at(7) == TK_K_COLLATE || p.peek_at(7) == TK_K_COLUMN || p.peek_at(7) == TK_K_COMMIT || p.peek_at(7) == TK_K_CONFLICT || p.peek_at(7) == TK_K_CONSTRAINT || p.peek_at(7) == TK_K_CREATE || p.peek_at(7) == TK_K_CROSS || p.peek_at(7) == TK_K_DATABASE || p.peek_at(7) == TK_K_DEFAULT || p.peek_at(7) == TK_K_DEFERRABLE || p.peek_at(7) == TK_K_DEFERRED || p.peek_at(7) == TK_K_DELETE || p.peek_at(7) == TK_K_DESC || p.peek_at(7) == TK_K_DETACH || p.peek_at(7) == TK_K_DISTINCT || p.peek_at(7) == TK_K_DROP || p.peek_at(7) == TK_K_EACH || p.peek_at(7) == TK_K_ELSE || p.peek_at(7) == TK_K_END || p.peek_at(7) == TK_K_ESCAPE || p.peek_at(7) == TK_K_EXCEPT || p.peek_at(7) == TK_K_EXCLUSIVE || p.peek_at(7) == TK_K_EXISTS || p.peek_at(7) == TK_K_EXPLAIN || p.peek_at(7) == TK_K_FAIL || p.peek_at(7) == TK_K_FOR || p.peek_at(7) == TK_K_FOREIGN || p.peek_at(7) == TK_K_FROM || p.peek_at(7) == TK_K_FULL || p.peek_at(7) == TK_K_GLOB || p.peek_at(7) == TK_K_GROUP || p.peek_at(7) == TK_K_HAVING || p.peek_at(7) == TK_K_IF || p.peek_at(7) == TK_K_IGNORE || p.peek_at(7) == TK_K_IMMEDIATE || p.peek_at(7) == TK_K_IN || p.peek_at(7) == TK_K_INDEX || p.peek_at(7) == TK_K_INDEXED || p.peek_at(7) == TK_K_INITIALLY || p.peek_at(7) == TK_K_INNER || p.peek_at(7) == TK_K_INSERT || p.peek_at(7) == TK_K_INSTEAD || p.peek_at(7) == TK_K_INTERSECT || p.peek_at(7) == TK_K_INTO || p.peek_at(7) == TK_K_IS || p.peek_at(7) == TK_K_ISNULL || p.peek_at(7) == TK_K_JOIN || p.peek_at(7) == TK_K_KEY || p.peek_at(7) == TK_K_LEFT || p.peek_at(7) == TK_K_LIKE || p.peek_at(7) == TK_K_LIMIT || p.peek_at(7) == TK_K_MATCH || p.peek_at(7) == TK_K_NATURAL || p.peek_at(7) == TK_K_NO || p.peek_at(7) == TK_K_NOT || p.peek_at(7) == TK_K_NOTNULL || p.peek_at(7) == TK_K_OF || p.peek_at(7) == TK_K_OFFSET || p.peek_at(7) == TK_K_ON || p.peek_at(7) == TK_K_OR || p.peek_at(7) == TK_K_ORDER || p.peek_at(7) == TK_K_OUTER || p.peek_at(7) == TK_K_PLAN || p.peek_at(7) == TK_K_PRAGMA || p.peek_at(7) == TK_K_PRIMARY || p.peek_at(7) == TK_K_QUERY || p.peek_at(7) == TK_K_RAISE || p.peek_at(7) == TK_K_RECURSIVE || p.peek_at(7) == TK_K_REFERENCES || p.peek_at(7) == TK_K_REGEXP || p.peek_at(7) == TK_K_REINDEX || p.peek_at(7) == TK_K_RELEASE || p.peek_at(7) == TK_K_RENAME || p.peek_at(7) == TK_K_REPLACE || p.peek_at(7) == TK_K_RESTRICT || p.peek_at(7) == TK_K_RIGHT || p.peek_at(7) == TK_K_ROLLBACK || p.peek_at(7) == TK_K_ROW || p.peek_at(7) == TK_K_SAVEPOINT || p.peek_at(7) == TK_K_SELECT || p.peek_at(7) == TK_K_SET || p.peek_at(7) == TK_K_TABLE || p.peek_at(7) == TK_K_TEMP || p.peek_at(7) == TK_K_TEMPORARY || p.peek_at(7) == TK_K_THEN || p.peek_at(7) == TK_K_TO || p.peek_at(7) == TK_K_TRANSACTION || p.peek_at(7) == TK_K_TRIGGER || p.peek_at(7) == TK_K_UNION || p.peek_at(7) == TK_K_UNIQUE || p.peek_at(7) == TK_K_UPDATE || p.peek_at(7) == TK_K_USING || p.peek_at(7) == TK_K_VACUUM || p.peek_at(7) == TK_K_VALUES || p.peek_at(7) == TK_K_VIEW || p.peek_at(7) == TK_K_VIRTUAL || p.peek_at(7) == TK_K_WHEN || p.peek_at(7) == TK_K_WHERE || p.peek_at(7) == TK_K_WITH || p.peek_at(7) == TK_K_WITHOUT || p.peek_at(7) == TK_LIT_LPAREN || p.peek_at(7) == TK_LIT_MINUS || p.peek_at(7) == TK_LIT_PLUS || p.peek_at(7) == TK_LIT_TILDE) {
+        let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
+            let k_order = p.expect(TK_K_ORDER, "K_ORDER")?;
+            let k_by = p.expect(TK_K_BY, "K_BY")?;
+            let ordering_term = parse_ordering_term(p)?;
+            let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
+            while p.peek_kind() == TK_LIT_COMMA {
+                let comma = p.expect(TK_LIT_COMMA, "','")?;
                 let ordering_term = parse_ordering_term(p)?;
-                let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
-                while p.peek_kind() == TK_LIT_COMMA {
-                    let comma = p.expect(TK_LIT_COMMA, "','")?;
-                    let ordering_term = parse_ordering_term(p)?;
-                    let comma_ordering_term = CommaOrderingTermItem {
-                        comma,
-                        ordering_term,
-                    };
-                    comma_ordering_term_list.append(comma_ordering_term);
-                }
-                let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
-                    k_order,
-                    k_by,
+                let comma_ordering_term = CommaOrderingTermItem {
+                    comma,
                     ordering_term,
-                    comma_ordering_term_list,
                 };
-                Option::<KOrderKByOrderingTermItemItem>::Some(k_order_k_by_ordering_term_item)
-            } else {
-                null
+                comma_ordering_term_list.append(comma_ordering_term);
+            }
+            let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
+                k_order,
+                k_by,
+                ordering_term,
+                comma_ordering_term_list,
             };
-            let _bt_r = p.expect(TK_K_LIMIT, "K_LIMIT");
-            if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
-            let k_limit = _bt_r.unwrap();
-            let _bt_r_2 = parse_expr(p);
-            if let Err(_) = _bt_r_2 { p.pos = opt_saved; break opt_bt; }
-            let expr = _bt_r_2.unwrap();
-            let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
-                let opt_saved = p.pos;
-                let mut opt_result: Option<ItemExprItem> = null;
-                opt_bt: {
-                    let k_offset_or_comma = p.advance();
-                    let _bt_r = parse_expr(p);
-                    if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
-                    let expr = _bt_r.unwrap();
-                    let item_expr = ItemExprItem {
-                        k_offset_or_comma,
-                        expr,
-                    };
-                    opt_result = Option::<ItemExprItem>::Some(item_expr);
-                }
-                opt_result
-            } else {
-                null
+            Option::<KOrderKByOrderingTermItemItem>::Some(k_order_k_by_ordering_term_item)
+        } else {
+            null
+        };
+        let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
+        let expr = parse_expr(p)?;
+        let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
+            let opt_saved = p.pos;
+            let mut opt_result: Option<ItemExprItem> = null;
+            opt_bt: {
+                let k_offset_or_comma = p.advance();
+                let _bt_r = parse_expr(p);
+                if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
+                let expr = _bt_r.unwrap();
+                let item_expr = ItemExprItem {
+                    k_offset_or_comma,
+                    expr,
+                };
+                opt_result = Option::<ItemExprItem>::Some(item_expr);
+            }
+            opt_result
+        } else {
+            null
+        };
+        let item_k_limit_expr_item = ItemKLimitExprItemItem {
+            k_order_k_by_ordering_term_item,
+            k_limit,
+            expr,
+            item_expr,
+        };
+        Option::<ItemKLimitExprItemItem>::Some(item_k_limit_expr_item)
+    } else if p.peek_kind() == TK_K_LIMIT && (p.peek_at(1) == TK_NUMERIC_LITERAL || p.peek_at(1) == TK_STRING_LITERAL || p.peek_at(1) == TK_BLOB_LITERAL || p.peek_at(1) == TK_K_NULL || p.peek_at(1) == TK_K_CURRENT_TIME || p.peek_at(1) == TK_K_CURRENT_DATE || p.peek_at(1) == TK_K_CURRENT_TIMESTAMP || p.peek_at(1) == TK_BIND_PARAMETER || p.peek_at(1) == TK_IDENTIFIER || p.peek_at(1) == TK_K_ABORT || p.peek_at(1) == TK_K_ACTION || p.peek_at(1) == TK_K_ADD || p.peek_at(1) == TK_K_AFTER || p.peek_at(1) == TK_K_ALL || p.peek_at(1) == TK_K_ALTER || p.peek_at(1) == TK_K_ANALYZE || p.peek_at(1) == TK_K_AND || p.peek_at(1) == TK_K_AS || p.peek_at(1) == TK_K_ASC || p.peek_at(1) == TK_K_ATTACH || p.peek_at(1) == TK_K_AUTOINCREMENT || p.peek_at(1) == TK_K_BEFORE || p.peek_at(1) == TK_K_BEGIN || p.peek_at(1) == TK_K_BETWEEN || p.peek_at(1) == TK_K_BY || p.peek_at(1) == TK_K_CASCADE || p.peek_at(1) == TK_K_CASE || p.peek_at(1) == TK_K_CAST || p.peek_at(1) == TK_K_CHECK || p.peek_at(1) == TK_K_COLLATE || p.peek_at(1) == TK_K_COLUMN || p.peek_at(1) == TK_K_COMMIT || p.peek_at(1) == TK_K_CONFLICT || p.peek_at(1) == TK_K_CONSTRAINT || p.peek_at(1) == TK_K_CREATE || p.peek_at(1) == TK_K_CROSS || p.peek_at(1) == TK_K_DATABASE || p.peek_at(1) == TK_K_DEFAULT || p.peek_at(1) == TK_K_DEFERRABLE || p.peek_at(1) == TK_K_DEFERRED || p.peek_at(1) == TK_K_DELETE || p.peek_at(1) == TK_K_DESC || p.peek_at(1) == TK_K_DETACH || p.peek_at(1) == TK_K_DISTINCT || p.peek_at(1) == TK_K_DROP || p.peek_at(1) == TK_K_EACH || p.peek_at(1) == TK_K_ELSE || p.peek_at(1) == TK_K_END || p.peek_at(1) == TK_K_ESCAPE || p.peek_at(1) == TK_K_EXCEPT || p.peek_at(1) == TK_K_EXCLUSIVE || p.peek_at(1) == TK_K_EXISTS || p.peek_at(1) == TK_K_EXPLAIN || p.peek_at(1) == TK_K_FAIL || p.peek_at(1) == TK_K_FOR || p.peek_at(1) == TK_K_FOREIGN || p.peek_at(1) == TK_K_FROM || p.peek_at(1) == TK_K_FULL || p.peek_at(1) == TK_K_GLOB || p.peek_at(1) == TK_K_GROUP || p.peek_at(1) == TK_K_HAVING || p.peek_at(1) == TK_K_IF || p.peek_at(1) == TK_K_IGNORE || p.peek_at(1) == TK_K_IMMEDIATE || p.peek_at(1) == TK_K_IN || p.peek_at(1) == TK_K_INDEX || p.peek_at(1) == TK_K_INDEXED || p.peek_at(1) == TK_K_INITIALLY || p.peek_at(1) == TK_K_INNER || p.peek_at(1) == TK_K_INSERT || p.peek_at(1) == TK_K_INSTEAD || p.peek_at(1) == TK_K_INTERSECT || p.peek_at(1) == TK_K_INTO || p.peek_at(1) == TK_K_IS || p.peek_at(1) == TK_K_ISNULL || p.peek_at(1) == TK_K_JOIN || p.peek_at(1) == TK_K_KEY || p.peek_at(1) == TK_K_LEFT || p.peek_at(1) == TK_K_LIKE || p.peek_at(1) == TK_K_LIMIT || p.peek_at(1) == TK_K_MATCH || p.peek_at(1) == TK_K_NATURAL || p.peek_at(1) == TK_K_NO || p.peek_at(1) == TK_K_NOT || p.peek_at(1) == TK_K_NOTNULL || p.peek_at(1) == TK_K_OF || p.peek_at(1) == TK_K_OFFSET || p.peek_at(1) == TK_K_ON || p.peek_at(1) == TK_K_OR || p.peek_at(1) == TK_K_ORDER || p.peek_at(1) == TK_K_OUTER || p.peek_at(1) == TK_K_PLAN || p.peek_at(1) == TK_K_PRAGMA || p.peek_at(1) == TK_K_PRIMARY || p.peek_at(1) == TK_K_QUERY || p.peek_at(1) == TK_K_RAISE || p.peek_at(1) == TK_K_RECURSIVE || p.peek_at(1) == TK_K_REFERENCES || p.peek_at(1) == TK_K_REGEXP || p.peek_at(1) == TK_K_REINDEX || p.peek_at(1) == TK_K_RELEASE || p.peek_at(1) == TK_K_RENAME || p.peek_at(1) == TK_K_REPLACE || p.peek_at(1) == TK_K_RESTRICT || p.peek_at(1) == TK_K_RIGHT || p.peek_at(1) == TK_K_ROLLBACK || p.peek_at(1) == TK_K_ROW || p.peek_at(1) == TK_K_SAVEPOINT || p.peek_at(1) == TK_K_SELECT || p.peek_at(1) == TK_K_SET || p.peek_at(1) == TK_K_TABLE || p.peek_at(1) == TK_K_TEMP || p.peek_at(1) == TK_K_TEMPORARY || p.peek_at(1) == TK_K_THEN || p.peek_at(1) == TK_K_TO || p.peek_at(1) == TK_K_TRANSACTION || p.peek_at(1) == TK_K_TRIGGER || p.peek_at(1) == TK_K_UNION || p.peek_at(1) == TK_K_UNIQUE || p.peek_at(1) == TK_K_UPDATE || p.peek_at(1) == TK_K_USING || p.peek_at(1) == TK_K_VACUUM || p.peek_at(1) == TK_K_VALUES || p.peek_at(1) == TK_K_VIEW || p.peek_at(1) == TK_K_VIRTUAL || p.peek_at(1) == TK_K_WHEN || p.peek_at(1) == TK_K_WHERE || p.peek_at(1) == TK_K_WITH || p.peek_at(1) == TK_K_WITHOUT || p.peek_at(1) == TK_LIT_LPAREN || p.peek_at(1) == TK_LIT_MINUS || p.peek_at(1) == TK_LIT_PLUS || p.peek_at(1) == TK_LIT_TILDE) && (p.peek_at(2) == TK_K_OFFSET || p.peek_at(2) == TK_LIT_COMMA) && (p.peek_at(3) == TK_NUMERIC_LITERAL || p.peek_at(3) == TK_STRING_LITERAL || p.peek_at(3) == TK_BLOB_LITERAL || p.peek_at(3) == TK_K_NULL || p.peek_at(3) == TK_K_CURRENT_TIME || p.peek_at(3) == TK_K_CURRENT_DATE || p.peek_at(3) == TK_K_CURRENT_TIMESTAMP || p.peek_at(3) == TK_BIND_PARAMETER || p.peek_at(3) == TK_IDENTIFIER || p.peek_at(3) == TK_K_ABORT || p.peek_at(3) == TK_K_ACTION || p.peek_at(3) == TK_K_ADD || p.peek_at(3) == TK_K_AFTER || p.peek_at(3) == TK_K_ALL || p.peek_at(3) == TK_K_ALTER || p.peek_at(3) == TK_K_ANALYZE || p.peek_at(3) == TK_K_AND || p.peek_at(3) == TK_K_AS || p.peek_at(3) == TK_K_ASC || p.peek_at(3) == TK_K_ATTACH || p.peek_at(3) == TK_K_AUTOINCREMENT || p.peek_at(3) == TK_K_BEFORE || p.peek_at(3) == TK_K_BEGIN || p.peek_at(3) == TK_K_BETWEEN || p.peek_at(3) == TK_K_BY || p.peek_at(3) == TK_K_CASCADE || p.peek_at(3) == TK_K_CASE || p.peek_at(3) == TK_K_CAST || p.peek_at(3) == TK_K_CHECK || p.peek_at(3) == TK_K_COLLATE || p.peek_at(3) == TK_K_COLUMN || p.peek_at(3) == TK_K_COMMIT || p.peek_at(3) == TK_K_CONFLICT || p.peek_at(3) == TK_K_CONSTRAINT || p.peek_at(3) == TK_K_CREATE || p.peek_at(3) == TK_K_CROSS || p.peek_at(3) == TK_K_DATABASE || p.peek_at(3) == TK_K_DEFAULT || p.peek_at(3) == TK_K_DEFERRABLE || p.peek_at(3) == TK_K_DEFERRED || p.peek_at(3) == TK_K_DELETE || p.peek_at(3) == TK_K_DESC || p.peek_at(3) == TK_K_DETACH || p.peek_at(3) == TK_K_DISTINCT || p.peek_at(3) == TK_K_DROP || p.peek_at(3) == TK_K_EACH || p.peek_at(3) == TK_K_ELSE || p.peek_at(3) == TK_K_END || p.peek_at(3) == TK_K_ESCAPE || p.peek_at(3) == TK_K_EXCEPT || p.peek_at(3) == TK_K_EXCLUSIVE || p.peek_at(3) == TK_K_EXISTS || p.peek_at(3) == TK_K_EXPLAIN || p.peek_at(3) == TK_K_FAIL || p.peek_at(3) == TK_K_FOR || p.peek_at(3) == TK_K_FOREIGN || p.peek_at(3) == TK_K_FROM || p.peek_at(3) == TK_K_FULL || p.peek_at(3) == TK_K_GLOB || p.peek_at(3) == TK_K_GROUP || p.peek_at(3) == TK_K_HAVING || p.peek_at(3) == TK_K_IF || p.peek_at(3) == TK_K_IGNORE || p.peek_at(3) == TK_K_IMMEDIATE || p.peek_at(3) == TK_K_IN || p.peek_at(3) == TK_K_INDEX || p.peek_at(3) == TK_K_INDEXED || p.peek_at(3) == TK_K_INITIALLY || p.peek_at(3) == TK_K_INNER || p.peek_at(3) == TK_K_INSERT || p.peek_at(3) == TK_K_INSTEAD || p.peek_at(3) == TK_K_INTERSECT || p.peek_at(3) == TK_K_INTO || p.peek_at(3) == TK_K_IS || p.peek_at(3) == TK_K_ISNULL || p.peek_at(3) == TK_K_JOIN || p.peek_at(3) == TK_K_KEY || p.peek_at(3) == TK_K_LEFT || p.peek_at(3) == TK_K_LIKE || p.peek_at(3) == TK_K_LIMIT || p.peek_at(3) == TK_K_MATCH || p.peek_at(3) == TK_K_NATURAL || p.peek_at(3) == TK_K_NO || p.peek_at(3) == TK_K_NOT || p.peek_at(3) == TK_K_NOTNULL || p.peek_at(3) == TK_K_OF || p.peek_at(3) == TK_K_OFFSET || p.peek_at(3) == TK_K_ON || p.peek_at(3) == TK_K_OR || p.peek_at(3) == TK_K_ORDER || p.peek_at(3) == TK_K_OUTER || p.peek_at(3) == TK_K_PLAN || p.peek_at(3) == TK_K_PRAGMA || p.peek_at(3) == TK_K_PRIMARY || p.peek_at(3) == TK_K_QUERY || p.peek_at(3) == TK_K_RAISE || p.peek_at(3) == TK_K_RECURSIVE || p.peek_at(3) == TK_K_REFERENCES || p.peek_at(3) == TK_K_REGEXP || p.peek_at(3) == TK_K_REINDEX || p.peek_at(3) == TK_K_RELEASE || p.peek_at(3) == TK_K_RENAME || p.peek_at(3) == TK_K_REPLACE || p.peek_at(3) == TK_K_RESTRICT || p.peek_at(3) == TK_K_RIGHT || p.peek_at(3) == TK_K_ROLLBACK || p.peek_at(3) == TK_K_ROW || p.peek_at(3) == TK_K_SAVEPOINT || p.peek_at(3) == TK_K_SELECT || p.peek_at(3) == TK_K_SET || p.peek_at(3) == TK_K_TABLE || p.peek_at(3) == TK_K_TEMP || p.peek_at(3) == TK_K_TEMPORARY || p.peek_at(3) == TK_K_THEN || p.peek_at(3) == TK_K_TO || p.peek_at(3) == TK_K_TRANSACTION || p.peek_at(3) == TK_K_TRIGGER || p.peek_at(3) == TK_K_UNION || p.peek_at(3) == TK_K_UNIQUE || p.peek_at(3) == TK_K_UPDATE || p.peek_at(3) == TK_K_USING || p.peek_at(3) == TK_K_VACUUM || p.peek_at(3) == TK_K_VALUES || p.peek_at(3) == TK_K_VIEW || p.peek_at(3) == TK_K_VIRTUAL || p.peek_at(3) == TK_K_WHEN || p.peek_at(3) == TK_K_WHERE || p.peek_at(3) == TK_K_WITH || p.peek_at(3) == TK_K_WITHOUT || p.peek_at(3) == TK_LIT_LPAREN || p.peek_at(3) == TK_LIT_MINUS || p.peek_at(3) == TK_LIT_PLUS || p.peek_at(3) == TK_LIT_TILDE) {
+        let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = null;
+        let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
+        let expr = parse_expr(p)?;
+        let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
+            let opt_saved = p.pos;
+            let mut opt_result: Option<ItemExprItem> = null;
+            opt_bt: {
+                let k_offset_or_comma = p.advance();
+                let _bt_r = parse_expr(p);
+                if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
+                let expr = _bt_r.unwrap();
+                let item_expr = ItemExprItem {
+                    k_offset_or_comma,
+                    expr,
+                };
+                opt_result = Option::<ItemExprItem>::Some(item_expr);
+            }
+            opt_result
+        } else {
+            null
+        };
+        let item_k_limit_expr_item = ItemKLimitExprItemItem {
+            k_order_k_by_ordering_term_item,
+            k_limit,
+            expr,
+            item_expr,
+        };
+        Option::<ItemKLimitExprItemItem>::Some(item_k_limit_expr_item)
+    } else if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && (p.peek_at(2) == TK_NUMERIC_LITERAL || p.peek_at(2) == TK_STRING_LITERAL || p.peek_at(2) == TK_BLOB_LITERAL || p.peek_at(2) == TK_K_NULL || p.peek_at(2) == TK_K_CURRENT_TIME || p.peek_at(2) == TK_K_CURRENT_DATE || p.peek_at(2) == TK_K_CURRENT_TIMESTAMP || p.peek_at(2) == TK_BIND_PARAMETER || p.peek_at(2) == TK_IDENTIFIER || p.peek_at(2) == TK_K_ABORT || p.peek_at(2) == TK_K_ACTION || p.peek_at(2) == TK_K_ADD || p.peek_at(2) == TK_K_AFTER || p.peek_at(2) == TK_K_ALL || p.peek_at(2) == TK_K_ALTER || p.peek_at(2) == TK_K_ANALYZE || p.peek_at(2) == TK_K_AND || p.peek_at(2) == TK_K_AS || p.peek_at(2) == TK_K_ASC || p.peek_at(2) == TK_K_ATTACH || p.peek_at(2) == TK_K_AUTOINCREMENT || p.peek_at(2) == TK_K_BEFORE || p.peek_at(2) == TK_K_BEGIN || p.peek_at(2) == TK_K_BETWEEN || p.peek_at(2) == TK_K_BY || p.peek_at(2) == TK_K_CASCADE || p.peek_at(2) == TK_K_CASE || p.peek_at(2) == TK_K_CAST || p.peek_at(2) == TK_K_CHECK || p.peek_at(2) == TK_K_COLLATE || p.peek_at(2) == TK_K_COLUMN || p.peek_at(2) == TK_K_COMMIT || p.peek_at(2) == TK_K_CONFLICT || p.peek_at(2) == TK_K_CONSTRAINT || p.peek_at(2) == TK_K_CREATE || p.peek_at(2) == TK_K_CROSS || p.peek_at(2) == TK_K_DATABASE || p.peek_at(2) == TK_K_DEFAULT || p.peek_at(2) == TK_K_DEFERRABLE || p.peek_at(2) == TK_K_DEFERRED || p.peek_at(2) == TK_K_DELETE || p.peek_at(2) == TK_K_DESC || p.peek_at(2) == TK_K_DETACH || p.peek_at(2) == TK_K_DISTINCT || p.peek_at(2) == TK_K_DROP || p.peek_at(2) == TK_K_EACH || p.peek_at(2) == TK_K_ELSE || p.peek_at(2) == TK_K_END || p.peek_at(2) == TK_K_ESCAPE || p.peek_at(2) == TK_K_EXCEPT || p.peek_at(2) == TK_K_EXCLUSIVE || p.peek_at(2) == TK_K_EXISTS || p.peek_at(2) == TK_K_EXPLAIN || p.peek_at(2) == TK_K_FAIL || p.peek_at(2) == TK_K_FOR || p.peek_at(2) == TK_K_FOREIGN || p.peek_at(2) == TK_K_FROM || p.peek_at(2) == TK_K_FULL || p.peek_at(2) == TK_K_GLOB || p.peek_at(2) == TK_K_GROUP || p.peek_at(2) == TK_K_HAVING || p.peek_at(2) == TK_K_IF || p.peek_at(2) == TK_K_IGNORE || p.peek_at(2) == TK_K_IMMEDIATE || p.peek_at(2) == TK_K_IN || p.peek_at(2) == TK_K_INDEX || p.peek_at(2) == TK_K_INDEXED || p.peek_at(2) == TK_K_INITIALLY || p.peek_at(2) == TK_K_INNER || p.peek_at(2) == TK_K_INSERT || p.peek_at(2) == TK_K_INSTEAD || p.peek_at(2) == TK_K_INTERSECT || p.peek_at(2) == TK_K_INTO || p.peek_at(2) == TK_K_IS || p.peek_at(2) == TK_K_ISNULL || p.peek_at(2) == TK_K_JOIN || p.peek_at(2) == TK_K_KEY || p.peek_at(2) == TK_K_LEFT || p.peek_at(2) == TK_K_LIKE || p.peek_at(2) == TK_K_LIMIT || p.peek_at(2) == TK_K_MATCH || p.peek_at(2) == TK_K_NATURAL || p.peek_at(2) == TK_K_NO || p.peek_at(2) == TK_K_NOT || p.peek_at(2) == TK_K_NOTNULL || p.peek_at(2) == TK_K_OF || p.peek_at(2) == TK_K_OFFSET || p.peek_at(2) == TK_K_ON || p.peek_at(2) == TK_K_OR || p.peek_at(2) == TK_K_ORDER || p.peek_at(2) == TK_K_OUTER || p.peek_at(2) == TK_K_PLAN || p.peek_at(2) == TK_K_PRAGMA || p.peek_at(2) == TK_K_PRIMARY || p.peek_at(2) == TK_K_QUERY || p.peek_at(2) == TK_K_RAISE || p.peek_at(2) == TK_K_RECURSIVE || p.peek_at(2) == TK_K_REFERENCES || p.peek_at(2) == TK_K_REGEXP || p.peek_at(2) == TK_K_REINDEX || p.peek_at(2) == TK_K_RELEASE || p.peek_at(2) == TK_K_RENAME || p.peek_at(2) == TK_K_REPLACE || p.peek_at(2) == TK_K_RESTRICT || p.peek_at(2) == TK_K_RIGHT || p.peek_at(2) == TK_K_ROLLBACK || p.peek_at(2) == TK_K_ROW || p.peek_at(2) == TK_K_SAVEPOINT || p.peek_at(2) == TK_K_SELECT || p.peek_at(2) == TK_K_SET || p.peek_at(2) == TK_K_TABLE || p.peek_at(2) == TK_K_TEMP || p.peek_at(2) == TK_K_TEMPORARY || p.peek_at(2) == TK_K_THEN || p.peek_at(2) == TK_K_TO || p.peek_at(2) == TK_K_TRANSACTION || p.peek_at(2) == TK_K_TRIGGER || p.peek_at(2) == TK_K_UNION || p.peek_at(2) == TK_K_UNIQUE || p.peek_at(2) == TK_K_UPDATE || p.peek_at(2) == TK_K_USING || p.peek_at(2) == TK_K_VACUUM || p.peek_at(2) == TK_K_VALUES || p.peek_at(2) == TK_K_VIEW || p.peek_at(2) == TK_K_VIRTUAL || p.peek_at(2) == TK_K_WHEN || p.peek_at(2) == TK_K_WHERE || p.peek_at(2) == TK_K_WITH || p.peek_at(2) == TK_K_WITHOUT || p.peek_at(2) == TK_LIT_LPAREN || p.peek_at(2) == TK_LIT_MINUS || p.peek_at(2) == TK_LIT_PLUS || p.peek_at(2) == TK_LIT_TILDE) && p.peek_at(3) == TK_LIT_COMMA && p.peek_at(4) == TK_K_LIMIT && (p.peek_at(5) == TK_NUMERIC_LITERAL || p.peek_at(5) == TK_STRING_LITERAL || p.peek_at(5) == TK_BLOB_LITERAL || p.peek_at(5) == TK_K_NULL || p.peek_at(5) == TK_K_CURRENT_TIME || p.peek_at(5) == TK_K_CURRENT_DATE || p.peek_at(5) == TK_K_CURRENT_TIMESTAMP || p.peek_at(5) == TK_BIND_PARAMETER || p.peek_at(5) == TK_IDENTIFIER || p.peek_at(5) == TK_K_ABORT || p.peek_at(5) == TK_K_ACTION || p.peek_at(5) == TK_K_ADD || p.peek_at(5) == TK_K_AFTER || p.peek_at(5) == TK_K_ALL || p.peek_at(5) == TK_K_ALTER || p.peek_at(5) == TK_K_ANALYZE || p.peek_at(5) == TK_K_AND || p.peek_at(5) == TK_K_AS || p.peek_at(5) == TK_K_ASC || p.peek_at(5) == TK_K_ATTACH || p.peek_at(5) == TK_K_AUTOINCREMENT || p.peek_at(5) == TK_K_BEFORE || p.peek_at(5) == TK_K_BEGIN || p.peek_at(5) == TK_K_BETWEEN || p.peek_at(5) == TK_K_BY || p.peek_at(5) == TK_K_CASCADE || p.peek_at(5) == TK_K_CASE || p.peek_at(5) == TK_K_CAST || p.peek_at(5) == TK_K_CHECK || p.peek_at(5) == TK_K_COLLATE || p.peek_at(5) == TK_K_COLUMN || p.peek_at(5) == TK_K_COMMIT || p.peek_at(5) == TK_K_CONFLICT || p.peek_at(5) == TK_K_CONSTRAINT || p.peek_at(5) == TK_K_CREATE || p.peek_at(5) == TK_K_CROSS || p.peek_at(5) == TK_K_DATABASE || p.peek_at(5) == TK_K_DEFAULT || p.peek_at(5) == TK_K_DEFERRABLE || p.peek_at(5) == TK_K_DEFERRED || p.peek_at(5) == TK_K_DELETE || p.peek_at(5) == TK_K_DESC || p.peek_at(5) == TK_K_DETACH || p.peek_at(5) == TK_K_DISTINCT || p.peek_at(5) == TK_K_DROP || p.peek_at(5) == TK_K_EACH || p.peek_at(5) == TK_K_ELSE || p.peek_at(5) == TK_K_END || p.peek_at(5) == TK_K_ESCAPE || p.peek_at(5) == TK_K_EXCEPT || p.peek_at(5) == TK_K_EXCLUSIVE || p.peek_at(5) == TK_K_EXISTS || p.peek_at(5) == TK_K_EXPLAIN || p.peek_at(5) == TK_K_FAIL || p.peek_at(5) == TK_K_FOR || p.peek_at(5) == TK_K_FOREIGN || p.peek_at(5) == TK_K_FROM || p.peek_at(5) == TK_K_FULL || p.peek_at(5) == TK_K_GLOB || p.peek_at(5) == TK_K_GROUP || p.peek_at(5) == TK_K_HAVING || p.peek_at(5) == TK_K_IF || p.peek_at(5) == TK_K_IGNORE || p.peek_at(5) == TK_K_IMMEDIATE || p.peek_at(5) == TK_K_IN || p.peek_at(5) == TK_K_INDEX || p.peek_at(5) == TK_K_INDEXED || p.peek_at(5) == TK_K_INITIALLY || p.peek_at(5) == TK_K_INNER || p.peek_at(5) == TK_K_INSERT || p.peek_at(5) == TK_K_INSTEAD || p.peek_at(5) == TK_K_INTERSECT || p.peek_at(5) == TK_K_INTO || p.peek_at(5) == TK_K_IS || p.peek_at(5) == TK_K_ISNULL || p.peek_at(5) == TK_K_JOIN || p.peek_at(5) == TK_K_KEY || p.peek_at(5) == TK_K_LEFT || p.peek_at(5) == TK_K_LIKE || p.peek_at(5) == TK_K_LIMIT || p.peek_at(5) == TK_K_MATCH || p.peek_at(5) == TK_K_NATURAL || p.peek_at(5) == TK_K_NO || p.peek_at(5) == TK_K_NOT || p.peek_at(5) == TK_K_NOTNULL || p.peek_at(5) == TK_K_OF || p.peek_at(5) == TK_K_OFFSET || p.peek_at(5) == TK_K_ON || p.peek_at(5) == TK_K_OR || p.peek_at(5) == TK_K_ORDER || p.peek_at(5) == TK_K_OUTER || p.peek_at(5) == TK_K_PLAN || p.peek_at(5) == TK_K_PRAGMA || p.peek_at(5) == TK_K_PRIMARY || p.peek_at(5) == TK_K_QUERY || p.peek_at(5) == TK_K_RAISE || p.peek_at(5) == TK_K_RECURSIVE || p.peek_at(5) == TK_K_REFERENCES || p.peek_at(5) == TK_K_REGEXP || p.peek_at(5) == TK_K_REINDEX || p.peek_at(5) == TK_K_RELEASE || p.peek_at(5) == TK_K_RENAME || p.peek_at(5) == TK_K_REPLACE || p.peek_at(5) == TK_K_RESTRICT || p.peek_at(5) == TK_K_RIGHT || p.peek_at(5) == TK_K_ROLLBACK || p.peek_at(5) == TK_K_ROW || p.peek_at(5) == TK_K_SAVEPOINT || p.peek_at(5) == TK_K_SELECT || p.peek_at(5) == TK_K_SET || p.peek_at(5) == TK_K_TABLE || p.peek_at(5) == TK_K_TEMP || p.peek_at(5) == TK_K_TEMPORARY || p.peek_at(5) == TK_K_THEN || p.peek_at(5) == TK_K_TO || p.peek_at(5) == TK_K_TRANSACTION || p.peek_at(5) == TK_K_TRIGGER || p.peek_at(5) == TK_K_UNION || p.peek_at(5) == TK_K_UNIQUE || p.peek_at(5) == TK_K_UPDATE || p.peek_at(5) == TK_K_USING || p.peek_at(5) == TK_K_VACUUM || p.peek_at(5) == TK_K_VALUES || p.peek_at(5) == TK_K_VIEW || p.peek_at(5) == TK_K_VIRTUAL || p.peek_at(5) == TK_K_WHEN || p.peek_at(5) == TK_K_WHERE || p.peek_at(5) == TK_K_WITH || p.peek_at(5) == TK_K_WITHOUT || p.peek_at(5) == TK_LIT_LPAREN || p.peek_at(5) == TK_LIT_MINUS || p.peek_at(5) == TK_LIT_PLUS || p.peek_at(5) == TK_LIT_TILDE) {
+        let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
+            let k_order = p.expect(TK_K_ORDER, "K_ORDER")?;
+            let k_by = p.expect(TK_K_BY, "K_BY")?;
+            let ordering_term = parse_ordering_term(p)?;
+            let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
+            while p.peek_kind() == TK_LIT_COMMA {
+                let comma = p.expect(TK_LIT_COMMA, "','")?;
+                let ordering_term = parse_ordering_term(p)?;
+                let comma_ordering_term = CommaOrderingTermItem {
+                    comma,
+                    ordering_term,
+                };
+                comma_ordering_term_list.append(comma_ordering_term);
+            }
+            let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
+                k_order,
+                k_by,
+                ordering_term,
+                comma_ordering_term_list,
             };
-            let item_k_limit_expr_item = ItemKLimitExprItemItem {
-                k_order_k_by_ordering_term_item,
-                k_limit,
-                expr,
-                item_expr,
-            };
-            opt_result = Option::<ItemKLimitExprItemItem>::Some(item_k_limit_expr_item);
-        }
-        opt_result
+            Option::<KOrderKByOrderingTermItemItem>::Some(k_order_k_by_ordering_term_item)
+        } else {
+            null
+        };
+        let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
+        let expr = parse_expr(p)?;
+        let item_expr: Option<ItemExprItem> = null;
+        let item_k_limit_expr_item = ItemKLimitExprItemItem {
+            k_order_k_by_ordering_term_item,
+            k_limit,
+            expr,
+            item_expr,
+        };
+        Option::<ItemKLimitExprItemItem>::Some(item_k_limit_expr_item)
+    } else if p.peek_kind() == TK_K_LIMIT && (p.peek_at(1) == TK_NUMERIC_LITERAL || p.peek_at(1) == TK_STRING_LITERAL || p.peek_at(1) == TK_BLOB_LITERAL || p.peek_at(1) == TK_K_NULL || p.peek_at(1) == TK_K_CURRENT_TIME || p.peek_at(1) == TK_K_CURRENT_DATE || p.peek_at(1) == TK_K_CURRENT_TIMESTAMP || p.peek_at(1) == TK_BIND_PARAMETER || p.peek_at(1) == TK_IDENTIFIER || p.peek_at(1) == TK_K_ABORT || p.peek_at(1) == TK_K_ACTION || p.peek_at(1) == TK_K_ADD || p.peek_at(1) == TK_K_AFTER || p.peek_at(1) == TK_K_ALL || p.peek_at(1) == TK_K_ALTER || p.peek_at(1) == TK_K_ANALYZE || p.peek_at(1) == TK_K_AND || p.peek_at(1) == TK_K_AS || p.peek_at(1) == TK_K_ASC || p.peek_at(1) == TK_K_ATTACH || p.peek_at(1) == TK_K_AUTOINCREMENT || p.peek_at(1) == TK_K_BEFORE || p.peek_at(1) == TK_K_BEGIN || p.peek_at(1) == TK_K_BETWEEN || p.peek_at(1) == TK_K_BY || p.peek_at(1) == TK_K_CASCADE || p.peek_at(1) == TK_K_CASE || p.peek_at(1) == TK_K_CAST || p.peek_at(1) == TK_K_CHECK || p.peek_at(1) == TK_K_COLLATE || p.peek_at(1) == TK_K_COLUMN || p.peek_at(1) == TK_K_COMMIT || p.peek_at(1) == TK_K_CONFLICT || p.peek_at(1) == TK_K_CONSTRAINT || p.peek_at(1) == TK_K_CREATE || p.peek_at(1) == TK_K_CROSS || p.peek_at(1) == TK_K_DATABASE || p.peek_at(1) == TK_K_DEFAULT || p.peek_at(1) == TK_K_DEFERRABLE || p.peek_at(1) == TK_K_DEFERRED || p.peek_at(1) == TK_K_DELETE || p.peek_at(1) == TK_K_DESC || p.peek_at(1) == TK_K_DETACH || p.peek_at(1) == TK_K_DISTINCT || p.peek_at(1) == TK_K_DROP || p.peek_at(1) == TK_K_EACH || p.peek_at(1) == TK_K_ELSE || p.peek_at(1) == TK_K_END || p.peek_at(1) == TK_K_ESCAPE || p.peek_at(1) == TK_K_EXCEPT || p.peek_at(1) == TK_K_EXCLUSIVE || p.peek_at(1) == TK_K_EXISTS || p.peek_at(1) == TK_K_EXPLAIN || p.peek_at(1) == TK_K_FAIL || p.peek_at(1) == TK_K_FOR || p.peek_at(1) == TK_K_FOREIGN || p.peek_at(1) == TK_K_FROM || p.peek_at(1) == TK_K_FULL || p.peek_at(1) == TK_K_GLOB || p.peek_at(1) == TK_K_GROUP || p.peek_at(1) == TK_K_HAVING || p.peek_at(1) == TK_K_IF || p.peek_at(1) == TK_K_IGNORE || p.peek_at(1) == TK_K_IMMEDIATE || p.peek_at(1) == TK_K_IN || p.peek_at(1) == TK_K_INDEX || p.peek_at(1) == TK_K_INDEXED || p.peek_at(1) == TK_K_INITIALLY || p.peek_at(1) == TK_K_INNER || p.peek_at(1) == TK_K_INSERT || p.peek_at(1) == TK_K_INSTEAD || p.peek_at(1) == TK_K_INTERSECT || p.peek_at(1) == TK_K_INTO || p.peek_at(1) == TK_K_IS || p.peek_at(1) == TK_K_ISNULL || p.peek_at(1) == TK_K_JOIN || p.peek_at(1) == TK_K_KEY || p.peek_at(1) == TK_K_LEFT || p.peek_at(1) == TK_K_LIKE || p.peek_at(1) == TK_K_LIMIT || p.peek_at(1) == TK_K_MATCH || p.peek_at(1) == TK_K_NATURAL || p.peek_at(1) == TK_K_NO || p.peek_at(1) == TK_K_NOT || p.peek_at(1) == TK_K_NOTNULL || p.peek_at(1) == TK_K_OF || p.peek_at(1) == TK_K_OFFSET || p.peek_at(1) == TK_K_ON || p.peek_at(1) == TK_K_OR || p.peek_at(1) == TK_K_ORDER || p.peek_at(1) == TK_K_OUTER || p.peek_at(1) == TK_K_PLAN || p.peek_at(1) == TK_K_PRAGMA || p.peek_at(1) == TK_K_PRIMARY || p.peek_at(1) == TK_K_QUERY || p.peek_at(1) == TK_K_RAISE || p.peek_at(1) == TK_K_RECURSIVE || p.peek_at(1) == TK_K_REFERENCES || p.peek_at(1) == TK_K_REGEXP || p.peek_at(1) == TK_K_REINDEX || p.peek_at(1) == TK_K_RELEASE || p.peek_at(1) == TK_K_RENAME || p.peek_at(1) == TK_K_REPLACE || p.peek_at(1) == TK_K_RESTRICT || p.peek_at(1) == TK_K_RIGHT || p.peek_at(1) == TK_K_ROLLBACK || p.peek_at(1) == TK_K_ROW || p.peek_at(1) == TK_K_SAVEPOINT || p.peek_at(1) == TK_K_SELECT || p.peek_at(1) == TK_K_SET || p.peek_at(1) == TK_K_TABLE || p.peek_at(1) == TK_K_TEMP || p.peek_at(1) == TK_K_TEMPORARY || p.peek_at(1) == TK_K_THEN || p.peek_at(1) == TK_K_TO || p.peek_at(1) == TK_K_TRANSACTION || p.peek_at(1) == TK_K_TRIGGER || p.peek_at(1) == TK_K_UNION || p.peek_at(1) == TK_K_UNIQUE || p.peek_at(1) == TK_K_UPDATE || p.peek_at(1) == TK_K_USING || p.peek_at(1) == TK_K_VACUUM || p.peek_at(1) == TK_K_VALUES || p.peek_at(1) == TK_K_VIEW || p.peek_at(1) == TK_K_VIRTUAL || p.peek_at(1) == TK_K_WHEN || p.peek_at(1) == TK_K_WHERE || p.peek_at(1) == TK_K_WITH || p.peek_at(1) == TK_K_WITHOUT || p.peek_at(1) == TK_LIT_LPAREN || p.peek_at(1) == TK_LIT_MINUS || p.peek_at(1) == TK_LIT_PLUS || p.peek_at(1) == TK_LIT_TILDE) {
+        let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = null;
+        let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
+        let expr = parse_expr(p)?;
+        let item_expr: Option<ItemExprItem> = null;
+        let item_k_limit_expr_item = ItemKLimitExprItemItem {
+            k_order_k_by_ordering_term_item,
+            k_limit,
+            expr,
+            item_expr,
+        };
+        Option::<ItemKLimitExprItemItem>::Some(item_k_limit_expr_item)
     } else {
         null
     };
@@ -9081,67 +9148,134 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
     } else {
         null
     };
-    let item_k_limit_expr_item: Option<ItemKLimitExprItemItem> = if p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_LIMIT {
-        let opt_saved_2 = p.pos;
-        let mut opt_result: Option<ItemKLimitExprItemItem> = null;
-        opt_bt_2: {
-            let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
-                let k_order = p.expect(TK_K_ORDER, "K_ORDER")?;
-                let k_by = p.expect(TK_K_BY, "K_BY")?;
+    let item_k_limit_expr_item: Option<ItemKLimitExprItemItem> = if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && (p.peek_at(2) == TK_NUMERIC_LITERAL || p.peek_at(2) == TK_STRING_LITERAL || p.peek_at(2) == TK_BLOB_LITERAL || p.peek_at(2) == TK_K_NULL || p.peek_at(2) == TK_K_CURRENT_TIME || p.peek_at(2) == TK_K_CURRENT_DATE || p.peek_at(2) == TK_K_CURRENT_TIMESTAMP || p.peek_at(2) == TK_BIND_PARAMETER || p.peek_at(2) == TK_IDENTIFIER || p.peek_at(2) == TK_K_ABORT || p.peek_at(2) == TK_K_ACTION || p.peek_at(2) == TK_K_ADD || p.peek_at(2) == TK_K_AFTER || p.peek_at(2) == TK_K_ALL || p.peek_at(2) == TK_K_ALTER || p.peek_at(2) == TK_K_ANALYZE || p.peek_at(2) == TK_K_AND || p.peek_at(2) == TK_K_AS || p.peek_at(2) == TK_K_ASC || p.peek_at(2) == TK_K_ATTACH || p.peek_at(2) == TK_K_AUTOINCREMENT || p.peek_at(2) == TK_K_BEFORE || p.peek_at(2) == TK_K_BEGIN || p.peek_at(2) == TK_K_BETWEEN || p.peek_at(2) == TK_K_BY || p.peek_at(2) == TK_K_CASCADE || p.peek_at(2) == TK_K_CASE || p.peek_at(2) == TK_K_CAST || p.peek_at(2) == TK_K_CHECK || p.peek_at(2) == TK_K_COLLATE || p.peek_at(2) == TK_K_COLUMN || p.peek_at(2) == TK_K_COMMIT || p.peek_at(2) == TK_K_CONFLICT || p.peek_at(2) == TK_K_CONSTRAINT || p.peek_at(2) == TK_K_CREATE || p.peek_at(2) == TK_K_CROSS || p.peek_at(2) == TK_K_DATABASE || p.peek_at(2) == TK_K_DEFAULT || p.peek_at(2) == TK_K_DEFERRABLE || p.peek_at(2) == TK_K_DEFERRED || p.peek_at(2) == TK_K_DELETE || p.peek_at(2) == TK_K_DESC || p.peek_at(2) == TK_K_DETACH || p.peek_at(2) == TK_K_DISTINCT || p.peek_at(2) == TK_K_DROP || p.peek_at(2) == TK_K_EACH || p.peek_at(2) == TK_K_ELSE || p.peek_at(2) == TK_K_END || p.peek_at(2) == TK_K_ESCAPE || p.peek_at(2) == TK_K_EXCEPT || p.peek_at(2) == TK_K_EXCLUSIVE || p.peek_at(2) == TK_K_EXISTS || p.peek_at(2) == TK_K_EXPLAIN || p.peek_at(2) == TK_K_FAIL || p.peek_at(2) == TK_K_FOR || p.peek_at(2) == TK_K_FOREIGN || p.peek_at(2) == TK_K_FROM || p.peek_at(2) == TK_K_FULL || p.peek_at(2) == TK_K_GLOB || p.peek_at(2) == TK_K_GROUP || p.peek_at(2) == TK_K_HAVING || p.peek_at(2) == TK_K_IF || p.peek_at(2) == TK_K_IGNORE || p.peek_at(2) == TK_K_IMMEDIATE || p.peek_at(2) == TK_K_IN || p.peek_at(2) == TK_K_INDEX || p.peek_at(2) == TK_K_INDEXED || p.peek_at(2) == TK_K_INITIALLY || p.peek_at(2) == TK_K_INNER || p.peek_at(2) == TK_K_INSERT || p.peek_at(2) == TK_K_INSTEAD || p.peek_at(2) == TK_K_INTERSECT || p.peek_at(2) == TK_K_INTO || p.peek_at(2) == TK_K_IS || p.peek_at(2) == TK_K_ISNULL || p.peek_at(2) == TK_K_JOIN || p.peek_at(2) == TK_K_KEY || p.peek_at(2) == TK_K_LEFT || p.peek_at(2) == TK_K_LIKE || p.peek_at(2) == TK_K_LIMIT || p.peek_at(2) == TK_K_MATCH || p.peek_at(2) == TK_K_NATURAL || p.peek_at(2) == TK_K_NO || p.peek_at(2) == TK_K_NOT || p.peek_at(2) == TK_K_NOTNULL || p.peek_at(2) == TK_K_OF || p.peek_at(2) == TK_K_OFFSET || p.peek_at(2) == TK_K_ON || p.peek_at(2) == TK_K_OR || p.peek_at(2) == TK_K_ORDER || p.peek_at(2) == TK_K_OUTER || p.peek_at(2) == TK_K_PLAN || p.peek_at(2) == TK_K_PRAGMA || p.peek_at(2) == TK_K_PRIMARY || p.peek_at(2) == TK_K_QUERY || p.peek_at(2) == TK_K_RAISE || p.peek_at(2) == TK_K_RECURSIVE || p.peek_at(2) == TK_K_REFERENCES || p.peek_at(2) == TK_K_REGEXP || p.peek_at(2) == TK_K_REINDEX || p.peek_at(2) == TK_K_RELEASE || p.peek_at(2) == TK_K_RENAME || p.peek_at(2) == TK_K_REPLACE || p.peek_at(2) == TK_K_RESTRICT || p.peek_at(2) == TK_K_RIGHT || p.peek_at(2) == TK_K_ROLLBACK || p.peek_at(2) == TK_K_ROW || p.peek_at(2) == TK_K_SAVEPOINT || p.peek_at(2) == TK_K_SELECT || p.peek_at(2) == TK_K_SET || p.peek_at(2) == TK_K_TABLE || p.peek_at(2) == TK_K_TEMP || p.peek_at(2) == TK_K_TEMPORARY || p.peek_at(2) == TK_K_THEN || p.peek_at(2) == TK_K_TO || p.peek_at(2) == TK_K_TRANSACTION || p.peek_at(2) == TK_K_TRIGGER || p.peek_at(2) == TK_K_UNION || p.peek_at(2) == TK_K_UNIQUE || p.peek_at(2) == TK_K_UPDATE || p.peek_at(2) == TK_K_USING || p.peek_at(2) == TK_K_VACUUM || p.peek_at(2) == TK_K_VALUES || p.peek_at(2) == TK_K_VIEW || p.peek_at(2) == TK_K_VIRTUAL || p.peek_at(2) == TK_K_WHEN || p.peek_at(2) == TK_K_WHERE || p.peek_at(2) == TK_K_WITH || p.peek_at(2) == TK_K_WITHOUT || p.peek_at(2) == TK_LIT_LPAREN || p.peek_at(2) == TK_LIT_MINUS || p.peek_at(2) == TK_LIT_PLUS || p.peek_at(2) == TK_LIT_TILDE) && p.peek_at(3) == TK_LIT_COMMA && p.peek_at(4) == TK_K_LIMIT && (p.peek_at(5) == TK_NUMERIC_LITERAL || p.peek_at(5) == TK_STRING_LITERAL || p.peek_at(5) == TK_BLOB_LITERAL || p.peek_at(5) == TK_K_NULL || p.peek_at(5) == TK_K_CURRENT_TIME || p.peek_at(5) == TK_K_CURRENT_DATE || p.peek_at(5) == TK_K_CURRENT_TIMESTAMP || p.peek_at(5) == TK_BIND_PARAMETER || p.peek_at(5) == TK_IDENTIFIER || p.peek_at(5) == TK_K_ABORT || p.peek_at(5) == TK_K_ACTION || p.peek_at(5) == TK_K_ADD || p.peek_at(5) == TK_K_AFTER || p.peek_at(5) == TK_K_ALL || p.peek_at(5) == TK_K_ALTER || p.peek_at(5) == TK_K_ANALYZE || p.peek_at(5) == TK_K_AND || p.peek_at(5) == TK_K_AS || p.peek_at(5) == TK_K_ASC || p.peek_at(5) == TK_K_ATTACH || p.peek_at(5) == TK_K_AUTOINCREMENT || p.peek_at(5) == TK_K_BEFORE || p.peek_at(5) == TK_K_BEGIN || p.peek_at(5) == TK_K_BETWEEN || p.peek_at(5) == TK_K_BY || p.peek_at(5) == TK_K_CASCADE || p.peek_at(5) == TK_K_CASE || p.peek_at(5) == TK_K_CAST || p.peek_at(5) == TK_K_CHECK || p.peek_at(5) == TK_K_COLLATE || p.peek_at(5) == TK_K_COLUMN || p.peek_at(5) == TK_K_COMMIT || p.peek_at(5) == TK_K_CONFLICT || p.peek_at(5) == TK_K_CONSTRAINT || p.peek_at(5) == TK_K_CREATE || p.peek_at(5) == TK_K_CROSS || p.peek_at(5) == TK_K_DATABASE || p.peek_at(5) == TK_K_DEFAULT || p.peek_at(5) == TK_K_DEFERRABLE || p.peek_at(5) == TK_K_DEFERRED || p.peek_at(5) == TK_K_DELETE || p.peek_at(5) == TK_K_DESC || p.peek_at(5) == TK_K_DETACH || p.peek_at(5) == TK_K_DISTINCT || p.peek_at(5) == TK_K_DROP || p.peek_at(5) == TK_K_EACH || p.peek_at(5) == TK_K_ELSE || p.peek_at(5) == TK_K_END || p.peek_at(5) == TK_K_ESCAPE || p.peek_at(5) == TK_K_EXCEPT || p.peek_at(5) == TK_K_EXCLUSIVE || p.peek_at(5) == TK_K_EXISTS || p.peek_at(5) == TK_K_EXPLAIN || p.peek_at(5) == TK_K_FAIL || p.peek_at(5) == TK_K_FOR || p.peek_at(5) == TK_K_FOREIGN || p.peek_at(5) == TK_K_FROM || p.peek_at(5) == TK_K_FULL || p.peek_at(5) == TK_K_GLOB || p.peek_at(5) == TK_K_GROUP || p.peek_at(5) == TK_K_HAVING || p.peek_at(5) == TK_K_IF || p.peek_at(5) == TK_K_IGNORE || p.peek_at(5) == TK_K_IMMEDIATE || p.peek_at(5) == TK_K_IN || p.peek_at(5) == TK_K_INDEX || p.peek_at(5) == TK_K_INDEXED || p.peek_at(5) == TK_K_INITIALLY || p.peek_at(5) == TK_K_INNER || p.peek_at(5) == TK_K_INSERT || p.peek_at(5) == TK_K_INSTEAD || p.peek_at(5) == TK_K_INTERSECT || p.peek_at(5) == TK_K_INTO || p.peek_at(5) == TK_K_IS || p.peek_at(5) == TK_K_ISNULL || p.peek_at(5) == TK_K_JOIN || p.peek_at(5) == TK_K_KEY || p.peek_at(5) == TK_K_LEFT || p.peek_at(5) == TK_K_LIKE || p.peek_at(5) == TK_K_LIMIT || p.peek_at(5) == TK_K_MATCH || p.peek_at(5) == TK_K_NATURAL || p.peek_at(5) == TK_K_NO || p.peek_at(5) == TK_K_NOT || p.peek_at(5) == TK_K_NOTNULL || p.peek_at(5) == TK_K_OF || p.peek_at(5) == TK_K_OFFSET || p.peek_at(5) == TK_K_ON || p.peek_at(5) == TK_K_OR || p.peek_at(5) == TK_K_ORDER || p.peek_at(5) == TK_K_OUTER || p.peek_at(5) == TK_K_PLAN || p.peek_at(5) == TK_K_PRAGMA || p.peek_at(5) == TK_K_PRIMARY || p.peek_at(5) == TK_K_QUERY || p.peek_at(5) == TK_K_RAISE || p.peek_at(5) == TK_K_RECURSIVE || p.peek_at(5) == TK_K_REFERENCES || p.peek_at(5) == TK_K_REGEXP || p.peek_at(5) == TK_K_REINDEX || p.peek_at(5) == TK_K_RELEASE || p.peek_at(5) == TK_K_RENAME || p.peek_at(5) == TK_K_REPLACE || p.peek_at(5) == TK_K_RESTRICT || p.peek_at(5) == TK_K_RIGHT || p.peek_at(5) == TK_K_ROLLBACK || p.peek_at(5) == TK_K_ROW || p.peek_at(5) == TK_K_SAVEPOINT || p.peek_at(5) == TK_K_SELECT || p.peek_at(5) == TK_K_SET || p.peek_at(5) == TK_K_TABLE || p.peek_at(5) == TK_K_TEMP || p.peek_at(5) == TK_K_TEMPORARY || p.peek_at(5) == TK_K_THEN || p.peek_at(5) == TK_K_TO || p.peek_at(5) == TK_K_TRANSACTION || p.peek_at(5) == TK_K_TRIGGER || p.peek_at(5) == TK_K_UNION || p.peek_at(5) == TK_K_UNIQUE || p.peek_at(5) == TK_K_UPDATE || p.peek_at(5) == TK_K_USING || p.peek_at(5) == TK_K_VACUUM || p.peek_at(5) == TK_K_VALUES || p.peek_at(5) == TK_K_VIEW || p.peek_at(5) == TK_K_VIRTUAL || p.peek_at(5) == TK_K_WHEN || p.peek_at(5) == TK_K_WHERE || p.peek_at(5) == TK_K_WITH || p.peek_at(5) == TK_K_WITHOUT || p.peek_at(5) == TK_LIT_LPAREN || p.peek_at(5) == TK_LIT_MINUS || p.peek_at(5) == TK_LIT_PLUS || p.peek_at(5) == TK_LIT_TILDE) && (p.peek_at(6) == TK_K_OFFSET || p.peek_at(6) == TK_LIT_COMMA) && (p.peek_at(7) == TK_NUMERIC_LITERAL || p.peek_at(7) == TK_STRING_LITERAL || p.peek_at(7) == TK_BLOB_LITERAL || p.peek_at(7) == TK_K_NULL || p.peek_at(7) == TK_K_CURRENT_TIME || p.peek_at(7) == TK_K_CURRENT_DATE || p.peek_at(7) == TK_K_CURRENT_TIMESTAMP || p.peek_at(7) == TK_BIND_PARAMETER || p.peek_at(7) == TK_IDENTIFIER || p.peek_at(7) == TK_K_ABORT || p.peek_at(7) == TK_K_ACTION || p.peek_at(7) == TK_K_ADD || p.peek_at(7) == TK_K_AFTER || p.peek_at(7) == TK_K_ALL || p.peek_at(7) == TK_K_ALTER || p.peek_at(7) == TK_K_ANALYZE || p.peek_at(7) == TK_K_AND || p.peek_at(7) == TK_K_AS || p.peek_at(7) == TK_K_ASC || p.peek_at(7) == TK_K_ATTACH || p.peek_at(7) == TK_K_AUTOINCREMENT || p.peek_at(7) == TK_K_BEFORE || p.peek_at(7) == TK_K_BEGIN || p.peek_at(7) == TK_K_BETWEEN || p.peek_at(7) == TK_K_BY || p.peek_at(7) == TK_K_CASCADE || p.peek_at(7) == TK_K_CASE || p.peek_at(7) == TK_K_CAST || p.peek_at(7) == TK_K_CHECK || p.peek_at(7) == TK_K_COLLATE || p.peek_at(7) == TK_K_COLUMN || p.peek_at(7) == TK_K_COMMIT || p.peek_at(7) == TK_K_CONFLICT || p.peek_at(7) == TK_K_CONSTRAINT || p.peek_at(7) == TK_K_CREATE || p.peek_at(7) == TK_K_CROSS || p.peek_at(7) == TK_K_DATABASE || p.peek_at(7) == TK_K_DEFAULT || p.peek_at(7) == TK_K_DEFERRABLE || p.peek_at(7) == TK_K_DEFERRED || p.peek_at(7) == TK_K_DELETE || p.peek_at(7) == TK_K_DESC || p.peek_at(7) == TK_K_DETACH || p.peek_at(7) == TK_K_DISTINCT || p.peek_at(7) == TK_K_DROP || p.peek_at(7) == TK_K_EACH || p.peek_at(7) == TK_K_ELSE || p.peek_at(7) == TK_K_END || p.peek_at(7) == TK_K_ESCAPE || p.peek_at(7) == TK_K_EXCEPT || p.peek_at(7) == TK_K_EXCLUSIVE || p.peek_at(7) == TK_K_EXISTS || p.peek_at(7) == TK_K_EXPLAIN || p.peek_at(7) == TK_K_FAIL || p.peek_at(7) == TK_K_FOR || p.peek_at(7) == TK_K_FOREIGN || p.peek_at(7) == TK_K_FROM || p.peek_at(7) == TK_K_FULL || p.peek_at(7) == TK_K_GLOB || p.peek_at(7) == TK_K_GROUP || p.peek_at(7) == TK_K_HAVING || p.peek_at(7) == TK_K_IF || p.peek_at(7) == TK_K_IGNORE || p.peek_at(7) == TK_K_IMMEDIATE || p.peek_at(7) == TK_K_IN || p.peek_at(7) == TK_K_INDEX || p.peek_at(7) == TK_K_INDEXED || p.peek_at(7) == TK_K_INITIALLY || p.peek_at(7) == TK_K_INNER || p.peek_at(7) == TK_K_INSERT || p.peek_at(7) == TK_K_INSTEAD || p.peek_at(7) == TK_K_INTERSECT || p.peek_at(7) == TK_K_INTO || p.peek_at(7) == TK_K_IS || p.peek_at(7) == TK_K_ISNULL || p.peek_at(7) == TK_K_JOIN || p.peek_at(7) == TK_K_KEY || p.peek_at(7) == TK_K_LEFT || p.peek_at(7) == TK_K_LIKE || p.peek_at(7) == TK_K_LIMIT || p.peek_at(7) == TK_K_MATCH || p.peek_at(7) == TK_K_NATURAL || p.peek_at(7) == TK_K_NO || p.peek_at(7) == TK_K_NOT || p.peek_at(7) == TK_K_NOTNULL || p.peek_at(7) == TK_K_OF || p.peek_at(7) == TK_K_OFFSET || p.peek_at(7) == TK_K_ON || p.peek_at(7) == TK_K_OR || p.peek_at(7) == TK_K_ORDER || p.peek_at(7) == TK_K_OUTER || p.peek_at(7) == TK_K_PLAN || p.peek_at(7) == TK_K_PRAGMA || p.peek_at(7) == TK_K_PRIMARY || p.peek_at(7) == TK_K_QUERY || p.peek_at(7) == TK_K_RAISE || p.peek_at(7) == TK_K_RECURSIVE || p.peek_at(7) == TK_K_REFERENCES || p.peek_at(7) == TK_K_REGEXP || p.peek_at(7) == TK_K_REINDEX || p.peek_at(7) == TK_K_RELEASE || p.peek_at(7) == TK_K_RENAME || p.peek_at(7) == TK_K_REPLACE || p.peek_at(7) == TK_K_RESTRICT || p.peek_at(7) == TK_K_RIGHT || p.peek_at(7) == TK_K_ROLLBACK || p.peek_at(7) == TK_K_ROW || p.peek_at(7) == TK_K_SAVEPOINT || p.peek_at(7) == TK_K_SELECT || p.peek_at(7) == TK_K_SET || p.peek_at(7) == TK_K_TABLE || p.peek_at(7) == TK_K_TEMP || p.peek_at(7) == TK_K_TEMPORARY || p.peek_at(7) == TK_K_THEN || p.peek_at(7) == TK_K_TO || p.peek_at(7) == TK_K_TRANSACTION || p.peek_at(7) == TK_K_TRIGGER || p.peek_at(7) == TK_K_UNION || p.peek_at(7) == TK_K_UNIQUE || p.peek_at(7) == TK_K_UPDATE || p.peek_at(7) == TK_K_USING || p.peek_at(7) == TK_K_VACUUM || p.peek_at(7) == TK_K_VALUES || p.peek_at(7) == TK_K_VIEW || p.peek_at(7) == TK_K_VIRTUAL || p.peek_at(7) == TK_K_WHEN || p.peek_at(7) == TK_K_WHERE || p.peek_at(7) == TK_K_WITH || p.peek_at(7) == TK_K_WITHOUT || p.peek_at(7) == TK_LIT_LPAREN || p.peek_at(7) == TK_LIT_MINUS || p.peek_at(7) == TK_LIT_PLUS || p.peek_at(7) == TK_LIT_TILDE) {
+        let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
+            let k_order = p.expect(TK_K_ORDER, "K_ORDER")?;
+            let k_by = p.expect(TK_K_BY, "K_BY")?;
+            let ordering_term = parse_ordering_term(p)?;
+            let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
+            while p.peek_kind() == TK_LIT_COMMA {
+                let comma = p.expect(TK_LIT_COMMA, "','")?;
                 let ordering_term = parse_ordering_term(p)?;
-                let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
-                while p.peek_kind() == TK_LIT_COMMA {
-                    let comma = p.expect(TK_LIT_COMMA, "','")?;
-                    let ordering_term = parse_ordering_term(p)?;
-                    let comma_ordering_term = CommaOrderingTermItem {
-                        comma,
-                        ordering_term,
-                    };
-                    comma_ordering_term_list.append(comma_ordering_term);
-                }
-                let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
-                    k_order,
-                    k_by,
+                let comma_ordering_term = CommaOrderingTermItem {
+                    comma,
                     ordering_term,
-                    comma_ordering_term_list,
                 };
-                Option::<KOrderKByOrderingTermItemItem>::Some(k_order_k_by_ordering_term_item)
-            } else {
-                null
+                comma_ordering_term_list.append(comma_ordering_term);
+            }
+            let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
+                k_order,
+                k_by,
+                ordering_term,
+                comma_ordering_term_list,
             };
-            let _bt_r = p.expect(TK_K_LIMIT, "K_LIMIT");
-            if let Err(_) = _bt_r { p.pos = opt_saved_2; break opt_bt_2; }
-            let k_limit = _bt_r.unwrap();
-            let _bt_r_2 = parse_expr(p);
-            if let Err(_) = _bt_r_2 { p.pos = opt_saved_2; break opt_bt_2; }
-            let expr = _bt_r_2.unwrap();
-            let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
-                let opt_saved = p.pos;
-                let mut opt_result: Option<ItemExprItem> = null;
-                opt_bt: {
-                    let k_offset_or_comma = p.advance();
-                    let _bt_r = parse_expr(p);
-                    if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
-                    let expr = _bt_r.unwrap();
-                    let item_expr = ItemExprItem {
-                        k_offset_or_comma,
-                        expr,
-                    };
-                    opt_result = Option::<ItemExprItem>::Some(item_expr);
-                }
-                opt_result
-            } else {
-                null
+            Option::<KOrderKByOrderingTermItemItem>::Some(k_order_k_by_ordering_term_item)
+        } else {
+            null
+        };
+        let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
+        let expr = parse_expr(p)?;
+        let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
+            let opt_saved = p.pos;
+            let mut opt_result: Option<ItemExprItem> = null;
+            opt_bt: {
+                let k_offset_or_comma = p.advance();
+                let _bt_r = parse_expr(p);
+                if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
+                let expr = _bt_r.unwrap();
+                let item_expr = ItemExprItem {
+                    k_offset_or_comma,
+                    expr,
+                };
+                opt_result = Option::<ItemExprItem>::Some(item_expr);
+            }
+            opt_result
+        } else {
+            null
+        };
+        let item_k_limit_expr_item = ItemKLimitExprItemItem {
+            k_order_k_by_ordering_term_item,
+            k_limit,
+            expr,
+            item_expr,
+        };
+        Option::<ItemKLimitExprItemItem>::Some(item_k_limit_expr_item)
+    } else if p.peek_kind() == TK_K_LIMIT && (p.peek_at(1) == TK_NUMERIC_LITERAL || p.peek_at(1) == TK_STRING_LITERAL || p.peek_at(1) == TK_BLOB_LITERAL || p.peek_at(1) == TK_K_NULL || p.peek_at(1) == TK_K_CURRENT_TIME || p.peek_at(1) == TK_K_CURRENT_DATE || p.peek_at(1) == TK_K_CURRENT_TIMESTAMP || p.peek_at(1) == TK_BIND_PARAMETER || p.peek_at(1) == TK_IDENTIFIER || p.peek_at(1) == TK_K_ABORT || p.peek_at(1) == TK_K_ACTION || p.peek_at(1) == TK_K_ADD || p.peek_at(1) == TK_K_AFTER || p.peek_at(1) == TK_K_ALL || p.peek_at(1) == TK_K_ALTER || p.peek_at(1) == TK_K_ANALYZE || p.peek_at(1) == TK_K_AND || p.peek_at(1) == TK_K_AS || p.peek_at(1) == TK_K_ASC || p.peek_at(1) == TK_K_ATTACH || p.peek_at(1) == TK_K_AUTOINCREMENT || p.peek_at(1) == TK_K_BEFORE || p.peek_at(1) == TK_K_BEGIN || p.peek_at(1) == TK_K_BETWEEN || p.peek_at(1) == TK_K_BY || p.peek_at(1) == TK_K_CASCADE || p.peek_at(1) == TK_K_CASE || p.peek_at(1) == TK_K_CAST || p.peek_at(1) == TK_K_CHECK || p.peek_at(1) == TK_K_COLLATE || p.peek_at(1) == TK_K_COLUMN || p.peek_at(1) == TK_K_COMMIT || p.peek_at(1) == TK_K_CONFLICT || p.peek_at(1) == TK_K_CONSTRAINT || p.peek_at(1) == TK_K_CREATE || p.peek_at(1) == TK_K_CROSS || p.peek_at(1) == TK_K_DATABASE || p.peek_at(1) == TK_K_DEFAULT || p.peek_at(1) == TK_K_DEFERRABLE || p.peek_at(1) == TK_K_DEFERRED || p.peek_at(1) == TK_K_DELETE || p.peek_at(1) == TK_K_DESC || p.peek_at(1) == TK_K_DETACH || p.peek_at(1) == TK_K_DISTINCT || p.peek_at(1) == TK_K_DROP || p.peek_at(1) == TK_K_EACH || p.peek_at(1) == TK_K_ELSE || p.peek_at(1) == TK_K_END || p.peek_at(1) == TK_K_ESCAPE || p.peek_at(1) == TK_K_EXCEPT || p.peek_at(1) == TK_K_EXCLUSIVE || p.peek_at(1) == TK_K_EXISTS || p.peek_at(1) == TK_K_EXPLAIN || p.peek_at(1) == TK_K_FAIL || p.peek_at(1) == TK_K_FOR || p.peek_at(1) == TK_K_FOREIGN || p.peek_at(1) == TK_K_FROM || p.peek_at(1) == TK_K_FULL || p.peek_at(1) == TK_K_GLOB || p.peek_at(1) == TK_K_GROUP || p.peek_at(1) == TK_K_HAVING || p.peek_at(1) == TK_K_IF || p.peek_at(1) == TK_K_IGNORE || p.peek_at(1) == TK_K_IMMEDIATE || p.peek_at(1) == TK_K_IN || p.peek_at(1) == TK_K_INDEX || p.peek_at(1) == TK_K_INDEXED || p.peek_at(1) == TK_K_INITIALLY || p.peek_at(1) == TK_K_INNER || p.peek_at(1) == TK_K_INSERT || p.peek_at(1) == TK_K_INSTEAD || p.peek_at(1) == TK_K_INTERSECT || p.peek_at(1) == TK_K_INTO || p.peek_at(1) == TK_K_IS || p.peek_at(1) == TK_K_ISNULL || p.peek_at(1) == TK_K_JOIN || p.peek_at(1) == TK_K_KEY || p.peek_at(1) == TK_K_LEFT || p.peek_at(1) == TK_K_LIKE || p.peek_at(1) == TK_K_LIMIT || p.peek_at(1) == TK_K_MATCH || p.peek_at(1) == TK_K_NATURAL || p.peek_at(1) == TK_K_NO || p.peek_at(1) == TK_K_NOT || p.peek_at(1) == TK_K_NOTNULL || p.peek_at(1) == TK_K_OF || p.peek_at(1) == TK_K_OFFSET || p.peek_at(1) == TK_K_ON || p.peek_at(1) == TK_K_OR || p.peek_at(1) == TK_K_ORDER || p.peek_at(1) == TK_K_OUTER || p.peek_at(1) == TK_K_PLAN || p.peek_at(1) == TK_K_PRAGMA || p.peek_at(1) == TK_K_PRIMARY || p.peek_at(1) == TK_K_QUERY || p.peek_at(1) == TK_K_RAISE || p.peek_at(1) == TK_K_RECURSIVE || p.peek_at(1) == TK_K_REFERENCES || p.peek_at(1) == TK_K_REGEXP || p.peek_at(1) == TK_K_REINDEX || p.peek_at(1) == TK_K_RELEASE || p.peek_at(1) == TK_K_RENAME || p.peek_at(1) == TK_K_REPLACE || p.peek_at(1) == TK_K_RESTRICT || p.peek_at(1) == TK_K_RIGHT || p.peek_at(1) == TK_K_ROLLBACK || p.peek_at(1) == TK_K_ROW || p.peek_at(1) == TK_K_SAVEPOINT || p.peek_at(1) == TK_K_SELECT || p.peek_at(1) == TK_K_SET || p.peek_at(1) == TK_K_TABLE || p.peek_at(1) == TK_K_TEMP || p.peek_at(1) == TK_K_TEMPORARY || p.peek_at(1) == TK_K_THEN || p.peek_at(1) == TK_K_TO || p.peek_at(1) == TK_K_TRANSACTION || p.peek_at(1) == TK_K_TRIGGER || p.peek_at(1) == TK_K_UNION || p.peek_at(1) == TK_K_UNIQUE || p.peek_at(1) == TK_K_UPDATE || p.peek_at(1) == TK_K_USING || p.peek_at(1) == TK_K_VACUUM || p.peek_at(1) == TK_K_VALUES || p.peek_at(1) == TK_K_VIEW || p.peek_at(1) == TK_K_VIRTUAL || p.peek_at(1) == TK_K_WHEN || p.peek_at(1) == TK_K_WHERE || p.peek_at(1) == TK_K_WITH || p.peek_at(1) == TK_K_WITHOUT || p.peek_at(1) == TK_LIT_LPAREN || p.peek_at(1) == TK_LIT_MINUS || p.peek_at(1) == TK_LIT_PLUS || p.peek_at(1) == TK_LIT_TILDE) && (p.peek_at(2) == TK_K_OFFSET || p.peek_at(2) == TK_LIT_COMMA) && (p.peek_at(3) == TK_NUMERIC_LITERAL || p.peek_at(3) == TK_STRING_LITERAL || p.peek_at(3) == TK_BLOB_LITERAL || p.peek_at(3) == TK_K_NULL || p.peek_at(3) == TK_K_CURRENT_TIME || p.peek_at(3) == TK_K_CURRENT_DATE || p.peek_at(3) == TK_K_CURRENT_TIMESTAMP || p.peek_at(3) == TK_BIND_PARAMETER || p.peek_at(3) == TK_IDENTIFIER || p.peek_at(3) == TK_K_ABORT || p.peek_at(3) == TK_K_ACTION || p.peek_at(3) == TK_K_ADD || p.peek_at(3) == TK_K_AFTER || p.peek_at(3) == TK_K_ALL || p.peek_at(3) == TK_K_ALTER || p.peek_at(3) == TK_K_ANALYZE || p.peek_at(3) == TK_K_AND || p.peek_at(3) == TK_K_AS || p.peek_at(3) == TK_K_ASC || p.peek_at(3) == TK_K_ATTACH || p.peek_at(3) == TK_K_AUTOINCREMENT || p.peek_at(3) == TK_K_BEFORE || p.peek_at(3) == TK_K_BEGIN || p.peek_at(3) == TK_K_BETWEEN || p.peek_at(3) == TK_K_BY || p.peek_at(3) == TK_K_CASCADE || p.peek_at(3) == TK_K_CASE || p.peek_at(3) == TK_K_CAST || p.peek_at(3) == TK_K_CHECK || p.peek_at(3) == TK_K_COLLATE || p.peek_at(3) == TK_K_COLUMN || p.peek_at(3) == TK_K_COMMIT || p.peek_at(3) == TK_K_CONFLICT || p.peek_at(3) == TK_K_CONSTRAINT || p.peek_at(3) == TK_K_CREATE || p.peek_at(3) == TK_K_CROSS || p.peek_at(3) == TK_K_DATABASE || p.peek_at(3) == TK_K_DEFAULT || p.peek_at(3) == TK_K_DEFERRABLE || p.peek_at(3) == TK_K_DEFERRED || p.peek_at(3) == TK_K_DELETE || p.peek_at(3) == TK_K_DESC || p.peek_at(3) == TK_K_DETACH || p.peek_at(3) == TK_K_DISTINCT || p.peek_at(3) == TK_K_DROP || p.peek_at(3) == TK_K_EACH || p.peek_at(3) == TK_K_ELSE || p.peek_at(3) == TK_K_END || p.peek_at(3) == TK_K_ESCAPE || p.peek_at(3) == TK_K_EXCEPT || p.peek_at(3) == TK_K_EXCLUSIVE || p.peek_at(3) == TK_K_EXISTS || p.peek_at(3) == TK_K_EXPLAIN || p.peek_at(3) == TK_K_FAIL || p.peek_at(3) == TK_K_FOR || p.peek_at(3) == TK_K_FOREIGN || p.peek_at(3) == TK_K_FROM || p.peek_at(3) == TK_K_FULL || p.peek_at(3) == TK_K_GLOB || p.peek_at(3) == TK_K_GROUP || p.peek_at(3) == TK_K_HAVING || p.peek_at(3) == TK_K_IF || p.peek_at(3) == TK_K_IGNORE || p.peek_at(3) == TK_K_IMMEDIATE || p.peek_at(3) == TK_K_IN || p.peek_at(3) == TK_K_INDEX || p.peek_at(3) == TK_K_INDEXED || p.peek_at(3) == TK_K_INITIALLY || p.peek_at(3) == TK_K_INNER || p.peek_at(3) == TK_K_INSERT || p.peek_at(3) == TK_K_INSTEAD || p.peek_at(3) == TK_K_INTERSECT || p.peek_at(3) == TK_K_INTO || p.peek_at(3) == TK_K_IS || p.peek_at(3) == TK_K_ISNULL || p.peek_at(3) == TK_K_JOIN || p.peek_at(3) == TK_K_KEY || p.peek_at(3) == TK_K_LEFT || p.peek_at(3) == TK_K_LIKE || p.peek_at(3) == TK_K_LIMIT || p.peek_at(3) == TK_K_MATCH || p.peek_at(3) == TK_K_NATURAL || p.peek_at(3) == TK_K_NO || p.peek_at(3) == TK_K_NOT || p.peek_at(3) == TK_K_NOTNULL || p.peek_at(3) == TK_K_OF || p.peek_at(3) == TK_K_OFFSET || p.peek_at(3) == TK_K_ON || p.peek_at(3) == TK_K_OR || p.peek_at(3) == TK_K_ORDER || p.peek_at(3) == TK_K_OUTER || p.peek_at(3) == TK_K_PLAN || p.peek_at(3) == TK_K_PRAGMA || p.peek_at(3) == TK_K_PRIMARY || p.peek_at(3) == TK_K_QUERY || p.peek_at(3) == TK_K_RAISE || p.peek_at(3) == TK_K_RECURSIVE || p.peek_at(3) == TK_K_REFERENCES || p.peek_at(3) == TK_K_REGEXP || p.peek_at(3) == TK_K_REINDEX || p.peek_at(3) == TK_K_RELEASE || p.peek_at(3) == TK_K_RENAME || p.peek_at(3) == TK_K_REPLACE || p.peek_at(3) == TK_K_RESTRICT || p.peek_at(3) == TK_K_RIGHT || p.peek_at(3) == TK_K_ROLLBACK || p.peek_at(3) == TK_K_ROW || p.peek_at(3) == TK_K_SAVEPOINT || p.peek_at(3) == TK_K_SELECT || p.peek_at(3) == TK_K_SET || p.peek_at(3) == TK_K_TABLE || p.peek_at(3) == TK_K_TEMP || p.peek_at(3) == TK_K_TEMPORARY || p.peek_at(3) == TK_K_THEN || p.peek_at(3) == TK_K_TO || p.peek_at(3) == TK_K_TRANSACTION || p.peek_at(3) == TK_K_TRIGGER || p.peek_at(3) == TK_K_UNION || p.peek_at(3) == TK_K_UNIQUE || p.peek_at(3) == TK_K_UPDATE || p.peek_at(3) == TK_K_USING || p.peek_at(3) == TK_K_VACUUM || p.peek_at(3) == TK_K_VALUES || p.peek_at(3) == TK_K_VIEW || p.peek_at(3) == TK_K_VIRTUAL || p.peek_at(3) == TK_K_WHEN || p.peek_at(3) == TK_K_WHERE || p.peek_at(3) == TK_K_WITH || p.peek_at(3) == TK_K_WITHOUT || p.peek_at(3) == TK_LIT_LPAREN || p.peek_at(3) == TK_LIT_MINUS || p.peek_at(3) == TK_LIT_PLUS || p.peek_at(3) == TK_LIT_TILDE) {
+        let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = null;
+        let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
+        let expr = parse_expr(p)?;
+        let item_expr: Option<ItemExprItem> = if p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_LIT_COMMA {
+            let opt_saved = p.pos;
+            let mut opt_result: Option<ItemExprItem> = null;
+            opt_bt: {
+                let k_offset_or_comma = p.advance();
+                let _bt_r = parse_expr(p);
+                if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
+                let expr = _bt_r.unwrap();
+                let item_expr = ItemExprItem {
+                    k_offset_or_comma,
+                    expr,
+                };
+                opt_result = Option::<ItemExprItem>::Some(item_expr);
+            }
+            opt_result
+        } else {
+            null
+        };
+        let item_k_limit_expr_item = ItemKLimitExprItemItem {
+            k_order_k_by_ordering_term_item,
+            k_limit,
+            expr,
+            item_expr,
+        };
+        Option::<ItemKLimitExprItemItem>::Some(item_k_limit_expr_item)
+    } else if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && (p.peek_at(2) == TK_NUMERIC_LITERAL || p.peek_at(2) == TK_STRING_LITERAL || p.peek_at(2) == TK_BLOB_LITERAL || p.peek_at(2) == TK_K_NULL || p.peek_at(2) == TK_K_CURRENT_TIME || p.peek_at(2) == TK_K_CURRENT_DATE || p.peek_at(2) == TK_K_CURRENT_TIMESTAMP || p.peek_at(2) == TK_BIND_PARAMETER || p.peek_at(2) == TK_IDENTIFIER || p.peek_at(2) == TK_K_ABORT || p.peek_at(2) == TK_K_ACTION || p.peek_at(2) == TK_K_ADD || p.peek_at(2) == TK_K_AFTER || p.peek_at(2) == TK_K_ALL || p.peek_at(2) == TK_K_ALTER || p.peek_at(2) == TK_K_ANALYZE || p.peek_at(2) == TK_K_AND || p.peek_at(2) == TK_K_AS || p.peek_at(2) == TK_K_ASC || p.peek_at(2) == TK_K_ATTACH || p.peek_at(2) == TK_K_AUTOINCREMENT || p.peek_at(2) == TK_K_BEFORE || p.peek_at(2) == TK_K_BEGIN || p.peek_at(2) == TK_K_BETWEEN || p.peek_at(2) == TK_K_BY || p.peek_at(2) == TK_K_CASCADE || p.peek_at(2) == TK_K_CASE || p.peek_at(2) == TK_K_CAST || p.peek_at(2) == TK_K_CHECK || p.peek_at(2) == TK_K_COLLATE || p.peek_at(2) == TK_K_COLUMN || p.peek_at(2) == TK_K_COMMIT || p.peek_at(2) == TK_K_CONFLICT || p.peek_at(2) == TK_K_CONSTRAINT || p.peek_at(2) == TK_K_CREATE || p.peek_at(2) == TK_K_CROSS || p.peek_at(2) == TK_K_DATABASE || p.peek_at(2) == TK_K_DEFAULT || p.peek_at(2) == TK_K_DEFERRABLE || p.peek_at(2) == TK_K_DEFERRED || p.peek_at(2) == TK_K_DELETE || p.peek_at(2) == TK_K_DESC || p.peek_at(2) == TK_K_DETACH || p.peek_at(2) == TK_K_DISTINCT || p.peek_at(2) == TK_K_DROP || p.peek_at(2) == TK_K_EACH || p.peek_at(2) == TK_K_ELSE || p.peek_at(2) == TK_K_END || p.peek_at(2) == TK_K_ESCAPE || p.peek_at(2) == TK_K_EXCEPT || p.peek_at(2) == TK_K_EXCLUSIVE || p.peek_at(2) == TK_K_EXISTS || p.peek_at(2) == TK_K_EXPLAIN || p.peek_at(2) == TK_K_FAIL || p.peek_at(2) == TK_K_FOR || p.peek_at(2) == TK_K_FOREIGN || p.peek_at(2) == TK_K_FROM || p.peek_at(2) == TK_K_FULL || p.peek_at(2) == TK_K_GLOB || p.peek_at(2) == TK_K_GROUP || p.peek_at(2) == TK_K_HAVING || p.peek_at(2) == TK_K_IF || p.peek_at(2) == TK_K_IGNORE || p.peek_at(2) == TK_K_IMMEDIATE || p.peek_at(2) == TK_K_IN || p.peek_at(2) == TK_K_INDEX || p.peek_at(2) == TK_K_INDEXED || p.peek_at(2) == TK_K_INITIALLY || p.peek_at(2) == TK_K_INNER || p.peek_at(2) == TK_K_INSERT || p.peek_at(2) == TK_K_INSTEAD || p.peek_at(2) == TK_K_INTERSECT || p.peek_at(2) == TK_K_INTO || p.peek_at(2) == TK_K_IS || p.peek_at(2) == TK_K_ISNULL || p.peek_at(2) == TK_K_JOIN || p.peek_at(2) == TK_K_KEY || p.peek_at(2) == TK_K_LEFT || p.peek_at(2) == TK_K_LIKE || p.peek_at(2) == TK_K_LIMIT || p.peek_at(2) == TK_K_MATCH || p.peek_at(2) == TK_K_NATURAL || p.peek_at(2) == TK_K_NO || p.peek_at(2) == TK_K_NOT || p.peek_at(2) == TK_K_NOTNULL || p.peek_at(2) == TK_K_OF || p.peek_at(2) == TK_K_OFFSET || p.peek_at(2) == TK_K_ON || p.peek_at(2) == TK_K_OR || p.peek_at(2) == TK_K_ORDER || p.peek_at(2) == TK_K_OUTER || p.peek_at(2) == TK_K_PLAN || p.peek_at(2) == TK_K_PRAGMA || p.peek_at(2) == TK_K_PRIMARY || p.peek_at(2) == TK_K_QUERY || p.peek_at(2) == TK_K_RAISE || p.peek_at(2) == TK_K_RECURSIVE || p.peek_at(2) == TK_K_REFERENCES || p.peek_at(2) == TK_K_REGEXP || p.peek_at(2) == TK_K_REINDEX || p.peek_at(2) == TK_K_RELEASE || p.peek_at(2) == TK_K_RENAME || p.peek_at(2) == TK_K_REPLACE || p.peek_at(2) == TK_K_RESTRICT || p.peek_at(2) == TK_K_RIGHT || p.peek_at(2) == TK_K_ROLLBACK || p.peek_at(2) == TK_K_ROW || p.peek_at(2) == TK_K_SAVEPOINT || p.peek_at(2) == TK_K_SELECT || p.peek_at(2) == TK_K_SET || p.peek_at(2) == TK_K_TABLE || p.peek_at(2) == TK_K_TEMP || p.peek_at(2) == TK_K_TEMPORARY || p.peek_at(2) == TK_K_THEN || p.peek_at(2) == TK_K_TO || p.peek_at(2) == TK_K_TRANSACTION || p.peek_at(2) == TK_K_TRIGGER || p.peek_at(2) == TK_K_UNION || p.peek_at(2) == TK_K_UNIQUE || p.peek_at(2) == TK_K_UPDATE || p.peek_at(2) == TK_K_USING || p.peek_at(2) == TK_K_VACUUM || p.peek_at(2) == TK_K_VALUES || p.peek_at(2) == TK_K_VIEW || p.peek_at(2) == TK_K_VIRTUAL || p.peek_at(2) == TK_K_WHEN || p.peek_at(2) == TK_K_WHERE || p.peek_at(2) == TK_K_WITH || p.peek_at(2) == TK_K_WITHOUT || p.peek_at(2) == TK_LIT_LPAREN || p.peek_at(2) == TK_LIT_MINUS || p.peek_at(2) == TK_LIT_PLUS || p.peek_at(2) == TK_LIT_TILDE) && p.peek_at(3) == TK_LIT_COMMA && p.peek_at(4) == TK_K_LIMIT && (p.peek_at(5) == TK_NUMERIC_LITERAL || p.peek_at(5) == TK_STRING_LITERAL || p.peek_at(5) == TK_BLOB_LITERAL || p.peek_at(5) == TK_K_NULL || p.peek_at(5) == TK_K_CURRENT_TIME || p.peek_at(5) == TK_K_CURRENT_DATE || p.peek_at(5) == TK_K_CURRENT_TIMESTAMP || p.peek_at(5) == TK_BIND_PARAMETER || p.peek_at(5) == TK_IDENTIFIER || p.peek_at(5) == TK_K_ABORT || p.peek_at(5) == TK_K_ACTION || p.peek_at(5) == TK_K_ADD || p.peek_at(5) == TK_K_AFTER || p.peek_at(5) == TK_K_ALL || p.peek_at(5) == TK_K_ALTER || p.peek_at(5) == TK_K_ANALYZE || p.peek_at(5) == TK_K_AND || p.peek_at(5) == TK_K_AS || p.peek_at(5) == TK_K_ASC || p.peek_at(5) == TK_K_ATTACH || p.peek_at(5) == TK_K_AUTOINCREMENT || p.peek_at(5) == TK_K_BEFORE || p.peek_at(5) == TK_K_BEGIN || p.peek_at(5) == TK_K_BETWEEN || p.peek_at(5) == TK_K_BY || p.peek_at(5) == TK_K_CASCADE || p.peek_at(5) == TK_K_CASE || p.peek_at(5) == TK_K_CAST || p.peek_at(5) == TK_K_CHECK || p.peek_at(5) == TK_K_COLLATE || p.peek_at(5) == TK_K_COLUMN || p.peek_at(5) == TK_K_COMMIT || p.peek_at(5) == TK_K_CONFLICT || p.peek_at(5) == TK_K_CONSTRAINT || p.peek_at(5) == TK_K_CREATE || p.peek_at(5) == TK_K_CROSS || p.peek_at(5) == TK_K_DATABASE || p.peek_at(5) == TK_K_DEFAULT || p.peek_at(5) == TK_K_DEFERRABLE || p.peek_at(5) == TK_K_DEFERRED || p.peek_at(5) == TK_K_DELETE || p.peek_at(5) == TK_K_DESC || p.peek_at(5) == TK_K_DETACH || p.peek_at(5) == TK_K_DISTINCT || p.peek_at(5) == TK_K_DROP || p.peek_at(5) == TK_K_EACH || p.peek_at(5) == TK_K_ELSE || p.peek_at(5) == TK_K_END || p.peek_at(5) == TK_K_ESCAPE || p.peek_at(5) == TK_K_EXCEPT || p.peek_at(5) == TK_K_EXCLUSIVE || p.peek_at(5) == TK_K_EXISTS || p.peek_at(5) == TK_K_EXPLAIN || p.peek_at(5) == TK_K_FAIL || p.peek_at(5) == TK_K_FOR || p.peek_at(5) == TK_K_FOREIGN || p.peek_at(5) == TK_K_FROM || p.peek_at(5) == TK_K_FULL || p.peek_at(5) == TK_K_GLOB || p.peek_at(5) == TK_K_GROUP || p.peek_at(5) == TK_K_HAVING || p.peek_at(5) == TK_K_IF || p.peek_at(5) == TK_K_IGNORE || p.peek_at(5) == TK_K_IMMEDIATE || p.peek_at(5) == TK_K_IN || p.peek_at(5) == TK_K_INDEX || p.peek_at(5) == TK_K_INDEXED || p.peek_at(5) == TK_K_INITIALLY || p.peek_at(5) == TK_K_INNER || p.peek_at(5) == TK_K_INSERT || p.peek_at(5) == TK_K_INSTEAD || p.peek_at(5) == TK_K_INTERSECT || p.peek_at(5) == TK_K_INTO || p.peek_at(5) == TK_K_IS || p.peek_at(5) == TK_K_ISNULL || p.peek_at(5) == TK_K_JOIN || p.peek_at(5) == TK_K_KEY || p.peek_at(5) == TK_K_LEFT || p.peek_at(5) == TK_K_LIKE || p.peek_at(5) == TK_K_LIMIT || p.peek_at(5) == TK_K_MATCH || p.peek_at(5) == TK_K_NATURAL || p.peek_at(5) == TK_K_NO || p.peek_at(5) == TK_K_NOT || p.peek_at(5) == TK_K_NOTNULL || p.peek_at(5) == TK_K_OF || p.peek_at(5) == TK_K_OFFSET || p.peek_at(5) == TK_K_ON || p.peek_at(5) == TK_K_OR || p.peek_at(5) == TK_K_ORDER || p.peek_at(5) == TK_K_OUTER || p.peek_at(5) == TK_K_PLAN || p.peek_at(5) == TK_K_PRAGMA || p.peek_at(5) == TK_K_PRIMARY || p.peek_at(5) == TK_K_QUERY || p.peek_at(5) == TK_K_RAISE || p.peek_at(5) == TK_K_RECURSIVE || p.peek_at(5) == TK_K_REFERENCES || p.peek_at(5) == TK_K_REGEXP || p.peek_at(5) == TK_K_REINDEX || p.peek_at(5) == TK_K_RELEASE || p.peek_at(5) == TK_K_RENAME || p.peek_at(5) == TK_K_REPLACE || p.peek_at(5) == TK_K_RESTRICT || p.peek_at(5) == TK_K_RIGHT || p.peek_at(5) == TK_K_ROLLBACK || p.peek_at(5) == TK_K_ROW || p.peek_at(5) == TK_K_SAVEPOINT || p.peek_at(5) == TK_K_SELECT || p.peek_at(5) == TK_K_SET || p.peek_at(5) == TK_K_TABLE || p.peek_at(5) == TK_K_TEMP || p.peek_at(5) == TK_K_TEMPORARY || p.peek_at(5) == TK_K_THEN || p.peek_at(5) == TK_K_TO || p.peek_at(5) == TK_K_TRANSACTION || p.peek_at(5) == TK_K_TRIGGER || p.peek_at(5) == TK_K_UNION || p.peek_at(5) == TK_K_UNIQUE || p.peek_at(5) == TK_K_UPDATE || p.peek_at(5) == TK_K_USING || p.peek_at(5) == TK_K_VACUUM || p.peek_at(5) == TK_K_VALUES || p.peek_at(5) == TK_K_VIEW || p.peek_at(5) == TK_K_VIRTUAL || p.peek_at(5) == TK_K_WHEN || p.peek_at(5) == TK_K_WHERE || p.peek_at(5) == TK_K_WITH || p.peek_at(5) == TK_K_WITHOUT || p.peek_at(5) == TK_LIT_LPAREN || p.peek_at(5) == TK_LIT_MINUS || p.peek_at(5) == TK_LIT_PLUS || p.peek_at(5) == TK_LIT_TILDE) {
+        let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
+            let k_order = p.expect(TK_K_ORDER, "K_ORDER")?;
+            let k_by = p.expect(TK_K_BY, "K_BY")?;
+            let ordering_term = parse_ordering_term(p)?;
+            let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
+            while p.peek_kind() == TK_LIT_COMMA {
+                let comma = p.expect(TK_LIT_COMMA, "','")?;
+                let ordering_term = parse_ordering_term(p)?;
+                let comma_ordering_term = CommaOrderingTermItem {
+                    comma,
+                    ordering_term,
+                };
+                comma_ordering_term_list.append(comma_ordering_term);
+            }
+            let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
+                k_order,
+                k_by,
+                ordering_term,
+                comma_ordering_term_list,
             };
-            let item_k_limit_expr_item = ItemKLimitExprItemItem {
-                k_order_k_by_ordering_term_item,
-                k_limit,
-                expr,
-                item_expr,
-            };
-            opt_result = Option::<ItemKLimitExprItemItem>::Some(item_k_limit_expr_item);
-        }
-        opt_result
+            Option::<KOrderKByOrderingTermItemItem>::Some(k_order_k_by_ordering_term_item)
+        } else {
+            null
+        };
+        let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
+        let expr = parse_expr(p)?;
+        let item_expr: Option<ItemExprItem> = null;
+        let item_k_limit_expr_item = ItemKLimitExprItemItem {
+            k_order_k_by_ordering_term_item,
+            k_limit,
+            expr,
+            item_expr,
+        };
+        Option::<ItemKLimitExprItemItem>::Some(item_k_limit_expr_item)
+    } else if p.peek_kind() == TK_K_LIMIT && (p.peek_at(1) == TK_NUMERIC_LITERAL || p.peek_at(1) == TK_STRING_LITERAL || p.peek_at(1) == TK_BLOB_LITERAL || p.peek_at(1) == TK_K_NULL || p.peek_at(1) == TK_K_CURRENT_TIME || p.peek_at(1) == TK_K_CURRENT_DATE || p.peek_at(1) == TK_K_CURRENT_TIMESTAMP || p.peek_at(1) == TK_BIND_PARAMETER || p.peek_at(1) == TK_IDENTIFIER || p.peek_at(1) == TK_K_ABORT || p.peek_at(1) == TK_K_ACTION || p.peek_at(1) == TK_K_ADD || p.peek_at(1) == TK_K_AFTER || p.peek_at(1) == TK_K_ALL || p.peek_at(1) == TK_K_ALTER || p.peek_at(1) == TK_K_ANALYZE || p.peek_at(1) == TK_K_AND || p.peek_at(1) == TK_K_AS || p.peek_at(1) == TK_K_ASC || p.peek_at(1) == TK_K_ATTACH || p.peek_at(1) == TK_K_AUTOINCREMENT || p.peek_at(1) == TK_K_BEFORE || p.peek_at(1) == TK_K_BEGIN || p.peek_at(1) == TK_K_BETWEEN || p.peek_at(1) == TK_K_BY || p.peek_at(1) == TK_K_CASCADE || p.peek_at(1) == TK_K_CASE || p.peek_at(1) == TK_K_CAST || p.peek_at(1) == TK_K_CHECK || p.peek_at(1) == TK_K_COLLATE || p.peek_at(1) == TK_K_COLUMN || p.peek_at(1) == TK_K_COMMIT || p.peek_at(1) == TK_K_CONFLICT || p.peek_at(1) == TK_K_CONSTRAINT || p.peek_at(1) == TK_K_CREATE || p.peek_at(1) == TK_K_CROSS || p.peek_at(1) == TK_K_DATABASE || p.peek_at(1) == TK_K_DEFAULT || p.peek_at(1) == TK_K_DEFERRABLE || p.peek_at(1) == TK_K_DEFERRED || p.peek_at(1) == TK_K_DELETE || p.peek_at(1) == TK_K_DESC || p.peek_at(1) == TK_K_DETACH || p.peek_at(1) == TK_K_DISTINCT || p.peek_at(1) == TK_K_DROP || p.peek_at(1) == TK_K_EACH || p.peek_at(1) == TK_K_ELSE || p.peek_at(1) == TK_K_END || p.peek_at(1) == TK_K_ESCAPE || p.peek_at(1) == TK_K_EXCEPT || p.peek_at(1) == TK_K_EXCLUSIVE || p.peek_at(1) == TK_K_EXISTS || p.peek_at(1) == TK_K_EXPLAIN || p.peek_at(1) == TK_K_FAIL || p.peek_at(1) == TK_K_FOR || p.peek_at(1) == TK_K_FOREIGN || p.peek_at(1) == TK_K_FROM || p.peek_at(1) == TK_K_FULL || p.peek_at(1) == TK_K_GLOB || p.peek_at(1) == TK_K_GROUP || p.peek_at(1) == TK_K_HAVING || p.peek_at(1) == TK_K_IF || p.peek_at(1) == TK_K_IGNORE || p.peek_at(1) == TK_K_IMMEDIATE || p.peek_at(1) == TK_K_IN || p.peek_at(1) == TK_K_INDEX || p.peek_at(1) == TK_K_INDEXED || p.peek_at(1) == TK_K_INITIALLY || p.peek_at(1) == TK_K_INNER || p.peek_at(1) == TK_K_INSERT || p.peek_at(1) == TK_K_INSTEAD || p.peek_at(1) == TK_K_INTERSECT || p.peek_at(1) == TK_K_INTO || p.peek_at(1) == TK_K_IS || p.peek_at(1) == TK_K_ISNULL || p.peek_at(1) == TK_K_JOIN || p.peek_at(1) == TK_K_KEY || p.peek_at(1) == TK_K_LEFT || p.peek_at(1) == TK_K_LIKE || p.peek_at(1) == TK_K_LIMIT || p.peek_at(1) == TK_K_MATCH || p.peek_at(1) == TK_K_NATURAL || p.peek_at(1) == TK_K_NO || p.peek_at(1) == TK_K_NOT || p.peek_at(1) == TK_K_NOTNULL || p.peek_at(1) == TK_K_OF || p.peek_at(1) == TK_K_OFFSET || p.peek_at(1) == TK_K_ON || p.peek_at(1) == TK_K_OR || p.peek_at(1) == TK_K_ORDER || p.peek_at(1) == TK_K_OUTER || p.peek_at(1) == TK_K_PLAN || p.peek_at(1) == TK_K_PRAGMA || p.peek_at(1) == TK_K_PRIMARY || p.peek_at(1) == TK_K_QUERY || p.peek_at(1) == TK_K_RAISE || p.peek_at(1) == TK_K_RECURSIVE || p.peek_at(1) == TK_K_REFERENCES || p.peek_at(1) == TK_K_REGEXP || p.peek_at(1) == TK_K_REINDEX || p.peek_at(1) == TK_K_RELEASE || p.peek_at(1) == TK_K_RENAME || p.peek_at(1) == TK_K_REPLACE || p.peek_at(1) == TK_K_RESTRICT || p.peek_at(1) == TK_K_RIGHT || p.peek_at(1) == TK_K_ROLLBACK || p.peek_at(1) == TK_K_ROW || p.peek_at(1) == TK_K_SAVEPOINT || p.peek_at(1) == TK_K_SELECT || p.peek_at(1) == TK_K_SET || p.peek_at(1) == TK_K_TABLE || p.peek_at(1) == TK_K_TEMP || p.peek_at(1) == TK_K_TEMPORARY || p.peek_at(1) == TK_K_THEN || p.peek_at(1) == TK_K_TO || p.peek_at(1) == TK_K_TRANSACTION || p.peek_at(1) == TK_K_TRIGGER || p.peek_at(1) == TK_K_UNION || p.peek_at(1) == TK_K_UNIQUE || p.peek_at(1) == TK_K_UPDATE || p.peek_at(1) == TK_K_USING || p.peek_at(1) == TK_K_VACUUM || p.peek_at(1) == TK_K_VALUES || p.peek_at(1) == TK_K_VIEW || p.peek_at(1) == TK_K_VIRTUAL || p.peek_at(1) == TK_K_WHEN || p.peek_at(1) == TK_K_WHERE || p.peek_at(1) == TK_K_WITH || p.peek_at(1) == TK_K_WITHOUT || p.peek_at(1) == TK_LIT_LPAREN || p.peek_at(1) == TK_LIT_MINUS || p.peek_at(1) == TK_LIT_PLUS || p.peek_at(1) == TK_LIT_TILDE) {
+        let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = null;
+        let k_limit = p.expect(TK_K_LIMIT, "K_LIMIT")?;
+        let expr = parse_expr(p)?;
+        let item_expr: Option<ItemExprItem> = null;
+        let item_k_limit_expr_item = ItemKLimitExprItemItem {
+            k_order_k_by_ordering_term_item,
+            k_limit,
+            expr,
+            item_expr,
+        };
+        Option::<ItemKLimitExprItemItem>::Some(item_k_limit_expr_item)
     } else {
         null
     };
@@ -9434,22 +9568,21 @@ fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
 
 fn parse_expr_bt_21(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
-    let item_k_exists: Option<ItemKExistsItem> = if p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_EXISTS {
-        let opt_saved = p.pos;
-        let mut opt_result: Option<ItemKExistsItem> = null;
-        opt_bt: {
-            if p.peek_kind() == TK_K_NOT {
-                let k_not = p.expect(TK_K_NOT, "K_NOT")?;
-            }
-            let _bt_r = p.expect(TK_K_EXISTS, "K_EXISTS");
-            if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
-            let k_exists = _bt_r.unwrap();
-            let item_k_exists = ItemKExistsItem {
-                k_exists,
-            };
-            opt_result = Option::<ItemKExistsItem>::Some(item_k_exists);
+    let item_k_exists: Option<ItemKExistsItem> = if p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_EXISTS {
+        if p.peek_kind() == TK_K_NOT {
+            let k_not = p.expect(TK_K_NOT, "K_NOT")?;
         }
-        opt_result
+        let k_exists = p.expect(TK_K_EXISTS, "K_EXISTS")?;
+        let item_k_exists = ItemKExistsItem {
+            k_exists,
+        };
+        Option::<ItemKExistsItem>::Some(item_k_exists)
+    } else if p.peek_kind() == TK_K_EXISTS {
+        let k_exists = p.expect(TK_K_EXISTS, "K_EXISTS")?;
+        let item_k_exists = ItemKExistsItem {
+            k_exists,
+        };
+        Option::<ItemKExistsItem>::Some(item_k_exists)
     } else {
         null
     };
@@ -9536,44 +9669,45 @@ fn parse_expr_bt_3(p: &mut Parser) -> Result<ExprNode, ParseError> {
 
 fn parse_expr_bt_2(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
-    let item_table_name_dot: Option<ItemTableNameDotItem> = if p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
-        let opt_saved = p.pos;
-        let mut opt_result: Option<ItemTableNameDotItem> = null;
-        opt_bt: {
-            let database_name_dot: Option<DatabaseNameDotItem> = if p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
-                let opt_saved = p.pos;
-                let mut opt_result: Option<DatabaseNameDotItem> = null;
-                opt_bt: {
-                    let _bt_r = parse_database_name(p);
-                    if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
-                    let database_name = _bt_r.unwrap();
-                    let _bt_r_2 = p.expect(TK_LIT_DOT, "'.'");
-                    if let Err(_) = _bt_r_2 { p.pos = opt_saved; break opt_bt; }
-                    let dot = _bt_r_2.unwrap();
-                    let database_name_dot = DatabaseNameDotItem {
-                        database_name,
-                        dot,
-                    };
-                    opt_result = Option::<DatabaseNameDotItem>::Some(database_name_dot);
-                }
-                opt_result
-            } else {
-                null
-            };
-            let _bt_r = parse_table_name(p);
-            if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
-            let table_name = _bt_r.unwrap();
-            let _bt_r_2 = p.expect(TK_LIT_DOT, "'.'");
-            if let Err(_) = _bt_r_2 { p.pos = opt_saved; break opt_bt; }
-            let dot = _bt_r_2.unwrap();
-            let item_table_name_dot = ItemTableNameDotItem {
-                database_name_dot,
-                table_name,
-                dot,
-            };
-            opt_result = Option::<ItemTableNameDotItem>::Some(item_table_name_dot);
-        }
-        opt_result
+    let item_table_name_dot: Option<ItemTableNameDotItem> = if (p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN) && p.peek_at(1) == TK_LIT_DOT && (p.peek_at(2) == TK_IDENTIFIER || p.peek_at(2) == TK_K_ABORT || p.peek_at(2) == TK_K_ACTION || p.peek_at(2) == TK_K_ADD || p.peek_at(2) == TK_K_AFTER || p.peek_at(2) == TK_K_ALL || p.peek_at(2) == TK_K_ALTER || p.peek_at(2) == TK_K_ANALYZE || p.peek_at(2) == TK_K_AND || p.peek_at(2) == TK_K_AS || p.peek_at(2) == TK_K_ASC || p.peek_at(2) == TK_K_ATTACH || p.peek_at(2) == TK_K_AUTOINCREMENT || p.peek_at(2) == TK_K_BEFORE || p.peek_at(2) == TK_K_BEGIN || p.peek_at(2) == TK_K_BETWEEN || p.peek_at(2) == TK_K_BY || p.peek_at(2) == TK_K_CASCADE || p.peek_at(2) == TK_K_CASE || p.peek_at(2) == TK_K_CAST || p.peek_at(2) == TK_K_CHECK || p.peek_at(2) == TK_K_COLLATE || p.peek_at(2) == TK_K_COLUMN || p.peek_at(2) == TK_K_COMMIT || p.peek_at(2) == TK_K_CONFLICT || p.peek_at(2) == TK_K_CONSTRAINT || p.peek_at(2) == TK_K_CREATE || p.peek_at(2) == TK_K_CROSS || p.peek_at(2) == TK_K_CURRENT_DATE || p.peek_at(2) == TK_K_CURRENT_TIME || p.peek_at(2) == TK_K_CURRENT_TIMESTAMP || p.peek_at(2) == TK_K_DATABASE || p.peek_at(2) == TK_K_DEFAULT || p.peek_at(2) == TK_K_DEFERRABLE || p.peek_at(2) == TK_K_DEFERRED || p.peek_at(2) == TK_K_DELETE || p.peek_at(2) == TK_K_DESC || p.peek_at(2) == TK_K_DETACH || p.peek_at(2) == TK_K_DISTINCT || p.peek_at(2) == TK_K_DROP || p.peek_at(2) == TK_K_EACH || p.peek_at(2) == TK_K_ELSE || p.peek_at(2) == TK_K_END || p.peek_at(2) == TK_K_ESCAPE || p.peek_at(2) == TK_K_EXCEPT || p.peek_at(2) == TK_K_EXCLUSIVE || p.peek_at(2) == TK_K_EXISTS || p.peek_at(2) == TK_K_EXPLAIN || p.peek_at(2) == TK_K_FAIL || p.peek_at(2) == TK_K_FOR || p.peek_at(2) == TK_K_FOREIGN || p.peek_at(2) == TK_K_FROM || p.peek_at(2) == TK_K_FULL || p.peek_at(2) == TK_K_GLOB || p.peek_at(2) == TK_K_GROUP || p.peek_at(2) == TK_K_HAVING || p.peek_at(2) == TK_K_IF || p.peek_at(2) == TK_K_IGNORE || p.peek_at(2) == TK_K_IMMEDIATE || p.peek_at(2) == TK_K_IN || p.peek_at(2) == TK_K_INDEX || p.peek_at(2) == TK_K_INDEXED || p.peek_at(2) == TK_K_INITIALLY || p.peek_at(2) == TK_K_INNER || p.peek_at(2) == TK_K_INSERT || p.peek_at(2) == TK_K_INSTEAD || p.peek_at(2) == TK_K_INTERSECT || p.peek_at(2) == TK_K_INTO || p.peek_at(2) == TK_K_IS || p.peek_at(2) == TK_K_ISNULL || p.peek_at(2) == TK_K_JOIN || p.peek_at(2) == TK_K_KEY || p.peek_at(2) == TK_K_LEFT || p.peek_at(2) == TK_K_LIKE || p.peek_at(2) == TK_K_LIMIT || p.peek_at(2) == TK_K_MATCH || p.peek_at(2) == TK_K_NATURAL || p.peek_at(2) == TK_K_NO || p.peek_at(2) == TK_K_NOT || p.peek_at(2) == TK_K_NOTNULL || p.peek_at(2) == TK_K_NULL || p.peek_at(2) == TK_K_OF || p.peek_at(2) == TK_K_OFFSET || p.peek_at(2) == TK_K_ON || p.peek_at(2) == TK_K_OR || p.peek_at(2) == TK_K_ORDER || p.peek_at(2) == TK_K_OUTER || p.peek_at(2) == TK_K_PLAN || p.peek_at(2) == TK_K_PRAGMA || p.peek_at(2) == TK_K_PRIMARY || p.peek_at(2) == TK_K_QUERY || p.peek_at(2) == TK_K_RAISE || p.peek_at(2) == TK_K_RECURSIVE || p.peek_at(2) == TK_K_REFERENCES || p.peek_at(2) == TK_K_REGEXP || p.peek_at(2) == TK_K_REINDEX || p.peek_at(2) == TK_K_RELEASE || p.peek_at(2) == TK_K_RENAME || p.peek_at(2) == TK_K_REPLACE || p.peek_at(2) == TK_K_RESTRICT || p.peek_at(2) == TK_K_RIGHT || p.peek_at(2) == TK_K_ROLLBACK || p.peek_at(2) == TK_K_ROW || p.peek_at(2) == TK_K_SAVEPOINT || p.peek_at(2) == TK_K_SELECT || p.peek_at(2) == TK_K_SET || p.peek_at(2) == TK_K_TABLE || p.peek_at(2) == TK_K_TEMP || p.peek_at(2) == TK_K_TEMPORARY || p.peek_at(2) == TK_K_THEN || p.peek_at(2) == TK_K_TO || p.peek_at(2) == TK_K_TRANSACTION || p.peek_at(2) == TK_K_TRIGGER || p.peek_at(2) == TK_K_UNION || p.peek_at(2) == TK_K_UNIQUE || p.peek_at(2) == TK_K_UPDATE || p.peek_at(2) == TK_K_USING || p.peek_at(2) == TK_K_VACUUM || p.peek_at(2) == TK_K_VALUES || p.peek_at(2) == TK_K_VIEW || p.peek_at(2) == TK_K_VIRTUAL || p.peek_at(2) == TK_K_WHEN || p.peek_at(2) == TK_K_WHERE || p.peek_at(2) == TK_K_WITH || p.peek_at(2) == TK_K_WITHOUT || p.peek_at(2) == TK_STRING_LITERAL || p.peek_at(2) == TK_LIT_LPAREN) && p.peek_at(3) == TK_LIT_DOT {
+        let database_name_dot: Option<DatabaseNameDotItem> = if p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
+            let opt_saved = p.pos;
+            let mut opt_result: Option<DatabaseNameDotItem> = null;
+            opt_bt: {
+                let _bt_r = parse_database_name(p);
+                if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
+                let database_name = _bt_r.unwrap();
+                let _bt_r_2 = p.expect(TK_LIT_DOT, "'.'");
+                if let Err(_) = _bt_r_2 { p.pos = opt_saved; break opt_bt; }
+                let dot = _bt_r_2.unwrap();
+                let database_name_dot = DatabaseNameDotItem {
+                    database_name,
+                    dot,
+                };
+                opt_result = Option::<DatabaseNameDotItem>::Some(database_name_dot);
+            }
+            opt_result
+        } else {
+            null
+        };
+        let table_name = parse_table_name(p)?;
+        let dot = p.expect(TK_LIT_DOT, "'.'")?;
+        let item_table_name_dot = ItemTableNameDotItem {
+            database_name_dot,
+            table_name,
+            dot,
+        };
+        Option::<ItemTableNameDotItem>::Some(item_table_name_dot)
+    } else if (p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SELECT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VALUES || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITH || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN) && p.peek_at(1) == TK_LIT_DOT {
+        let database_name_dot: Option<DatabaseNameDotItem> = null;
+        let table_name = parse_table_name(p)?;
+        let dot = p.expect(TK_LIT_DOT, "'.'")?;
+        let item_table_name_dot = ItemTableNameDotItem {
+            database_name_dot,
+            table_name,
+            dot,
+        };
+        Option::<ItemTableNameDotItem>::Some(item_table_name_dot)
     } else {
         null
     };
@@ -10247,40 +10381,76 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
             let name = parse_name(p)?;
         }
     }
-    let k_not_k_deferrable_item: Option<KNotKDeferrableItemItem> = if p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_DEFERRABLE {
-        let opt_saved = p.pos;
-        let mut opt_result: Option<KNotKDeferrableItemItem> = null;
-        opt_bt: {
-            let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
-                let k_not = p.expect(TK_K_NOT, "K_NOT")?;
-                Option::<Token>::Some(k_not)
-            } else {
-                null
-            };
-            let _bt_r = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE");
-            if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
-            let k_deferrable = _bt_r.unwrap();
-            if p.peek_kind() == TK_K_INITIALLY {
-                let opt_saved = p.pos;
-                opt_bt: {
-                    let grp_kind = p.peek_kind();
-                    if grp_kind == TK_K_INITIALLY {
-                        let k_initially = p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
-                        if p.peek_kind() == TK_K_DEFERRED {
-                            let k_deferred = p.expect(TK_K_DEFERRED, "K_DEFERRED")?;
-                        } else if p.peek_kind() == TK_K_IMMEDIATE {
-                            let k_immediate = p.expect(TK_K_IMMEDIATE, "K_IMMEDIATE")?;
-                        }
+    let k_not_k_deferrable_item: Option<KNotKDeferrableItemItem> = if p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_DEFERRABLE && p.peek_at(2) == TK_K_INITIALLY {
+        let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
+            let k_not = p.expect(TK_K_NOT, "K_NOT")?;
+            Option::<Token>::Some(k_not)
+        } else {
+            null
+        };
+        let k_deferrable = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE")?;
+        if p.peek_kind() == TK_K_INITIALLY {
+            let opt_saved = p.pos;
+            opt_bt: {
+                let grp_kind = p.peek_kind();
+                if grp_kind == TK_K_INITIALLY {
+                    let k_initially = p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
+                    if p.peek_kind() == TK_K_DEFERRED {
+                        let k_deferred = p.expect(TK_K_DEFERRED, "K_DEFERRED")?;
+                    } else if p.peek_kind() == TK_K_IMMEDIATE {
+                        let k_immediate = p.expect(TK_K_IMMEDIATE, "K_IMMEDIATE")?;
                     }
                 }
             }
-            let k_not_k_deferrable_item = KNotKDeferrableItemItem {
-                k_not,
-                k_deferrable,
-            };
-            opt_result = Option::<KNotKDeferrableItemItem>::Some(k_not_k_deferrable_item);
         }
-        opt_result
+        let k_not_k_deferrable_item = KNotKDeferrableItemItem {
+            k_not,
+            k_deferrable,
+        };
+        Option::<KNotKDeferrableItemItem>::Some(k_not_k_deferrable_item)
+    } else if p.peek_kind() == TK_K_DEFERRABLE && p.peek_at(1) == TK_K_INITIALLY {
+        let k_not: Option<Token> = null;
+        let k_deferrable = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE")?;
+        if p.peek_kind() == TK_K_INITIALLY {
+            let opt_saved = p.pos;
+            opt_bt: {
+                let grp_kind = p.peek_kind();
+                if grp_kind == TK_K_INITIALLY {
+                    let k_initially = p.expect(TK_K_INITIALLY, "K_INITIALLY")?;
+                    if p.peek_kind() == TK_K_DEFERRED {
+                        let k_deferred = p.expect(TK_K_DEFERRED, "K_DEFERRED")?;
+                    } else if p.peek_kind() == TK_K_IMMEDIATE {
+                        let k_immediate = p.expect(TK_K_IMMEDIATE, "K_IMMEDIATE")?;
+                    }
+                }
+            }
+        }
+        let k_not_k_deferrable_item = KNotKDeferrableItemItem {
+            k_not,
+            k_deferrable,
+        };
+        Option::<KNotKDeferrableItemItem>::Some(k_not_k_deferrable_item)
+    } else if p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_DEFERRABLE {
+        let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
+            let k_not = p.expect(TK_K_NOT, "K_NOT")?;
+            Option::<Token>::Some(k_not)
+        } else {
+            null
+        };
+        let k_deferrable = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE")?;
+        let k_not_k_deferrable_item = KNotKDeferrableItemItem {
+            k_not,
+            k_deferrable,
+        };
+        Option::<KNotKDeferrableItemItem>::Some(k_not_k_deferrable_item)
+    } else if p.peek_kind() == TK_K_DEFERRABLE {
+        let k_not: Option<Token> = null;
+        let k_deferrable = p.expect(TK_K_DEFERRABLE, "K_DEFERRABLE")?;
+        let k_not_k_deferrable_item = KNotKDeferrableItemItem {
+            k_not,
+            k_deferrable,
+        };
+        Option::<KNotKDeferrableItemItem>::Some(k_not_k_deferrable_item)
     } else {
         null
     };
@@ -10625,26 +10795,27 @@ fn parse_result_column_bt_1(p: &mut Parser) -> Result<ResultColumnNode, ParseErr
 fn parse_result_column_bt_2(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
     let start = p.peek().span.start;
     let expr = parse_expr(p)?;
-    let k_as_column_alias: Option<KAsColumnAliasItem> = if p.peek_kind() == TK_K_AS || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL {
-        let opt_saved = p.pos;
-        let mut opt_result: Option<KAsColumnAliasItem> = null;
-        opt_bt: {
-            let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
-                let k_as = p.expect(TK_K_AS, "K_AS")?;
-                Option::<Token>::Some(k_as)
-            } else {
-                null
-            };
-            let _bt_r = parse_column_alias(p);
-            if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
-            let column_alias = _bt_r.unwrap();
-            let k_as_column_alias = KAsColumnAliasItem {
-                k_as,
-                column_alias,
-            };
-            opt_result = Option::<KAsColumnAliasItem>::Some(k_as_column_alias);
-        }
-        opt_result
+    let k_as_column_alias: Option<KAsColumnAliasItem> = if p.peek_kind() == TK_K_AS && (p.peek_at(1) == TK_IDENTIFIER || p.peek_at(1) == TK_STRING_LITERAL) {
+        let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
+            let k_as = p.expect(TK_K_AS, "K_AS")?;
+            Option::<Token>::Some(k_as)
+        } else {
+            null
+        };
+        let column_alias = parse_column_alias(p)?;
+        let k_as_column_alias = KAsColumnAliasItem {
+            k_as,
+            column_alias,
+        };
+        Option::<KAsColumnAliasItem>::Some(k_as_column_alias)
+    } else if (p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL) {
+        let k_as: Option<Token> = null;
+        let column_alias = parse_column_alias(p)?;
+        let k_as_column_alias = KAsColumnAliasItem {
+            k_as,
+            column_alias,
+        };
+        Option::<KAsColumnAliasItem>::Some(k_as_column_alias)
     } else {
         null
     };
@@ -10729,26 +10900,27 @@ fn parse_table_or_subquery_bt_3(p: &mut Parser) -> Result<TableOrSubqueryNode, P
     let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
     let select_stmt = parse_select_stmt(p)?;
     let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
-    let k_as_table_alias: Option<KAsTableAliasItem> = if p.peek_kind() == TK_K_AS || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
-        let opt_saved = p.pos;
-        let mut opt_result: Option<KAsTableAliasItem> = null;
-        opt_bt: {
-            let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
-                let k_as = p.expect(TK_K_AS, "K_AS")?;
-                Option::<Token>::Some(k_as)
-            } else {
-                null
-            };
-            let _bt_r = parse_table_alias(p);
-            if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
-            let table_alias = _bt_r.unwrap();
-            let k_as_table_alias = KAsTableAliasItem {
-                k_as,
-                table_alias,
-            };
-            opt_result = Option::<KAsTableAliasItem>::Some(k_as_table_alias);
-        }
-        opt_result
+    let k_as_table_alias: Option<KAsTableAliasItem> = if p.peek_kind() == TK_K_AS && (p.peek_at(1) == TK_IDENTIFIER || p.peek_at(1) == TK_STRING_LITERAL || p.peek_at(1) == TK_LIT_LPAREN) {
+        let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
+            let k_as = p.expect(TK_K_AS, "K_AS")?;
+            Option::<Token>::Some(k_as)
+        } else {
+            null
+        };
+        let table_alias = parse_table_alias(p)?;
+        let k_as_table_alias = KAsTableAliasItem {
+            k_as,
+            table_alias,
+        };
+        Option::<KAsTableAliasItem>::Some(k_as_table_alias)
+    } else if (p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN) {
+        let k_as: Option<Token> = null;
+        let table_alias = parse_table_alias(p)?;
+        let k_as_table_alias = KAsTableAliasItem {
+            k_as,
+            table_alias,
+        };
+        Option::<KAsTableAliasItem>::Some(k_as_table_alias)
     } else {
         null
     };
@@ -10813,26 +10985,27 @@ fn parse_table_or_subquery_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, P
         null
     };
     let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
-    let k_as_table_alias: Option<KAsTableAliasItem> = if p.peek_kind() == TK_K_AS || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
-        let opt_saved_3 = p.pos;
-        let mut opt_result_3: Option<KAsTableAliasItem> = null;
-        opt_bt_3: {
-            let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
-                let k_as = p.expect(TK_K_AS, "K_AS")?;
-                Option::<Token>::Some(k_as)
-            } else {
-                null
-            };
-            let _bt_r = parse_table_alias(p);
-            if let Err(_) = _bt_r { p.pos = opt_saved_3; break opt_bt_3; }
-            let table_alias = _bt_r.unwrap();
-            let k_as_table_alias = KAsTableAliasItem {
-                k_as,
-                table_alias,
-            };
-            opt_result_3 = Option::<KAsTableAliasItem>::Some(k_as_table_alias);
-        }
-        opt_result_3
+    let k_as_table_alias: Option<KAsTableAliasItem> = if p.peek_kind() == TK_K_AS && (p.peek_at(1) == TK_IDENTIFIER || p.peek_at(1) == TK_STRING_LITERAL || p.peek_at(1) == TK_LIT_LPAREN) {
+        let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
+            let k_as = p.expect(TK_K_AS, "K_AS")?;
+            Option::<Token>::Some(k_as)
+        } else {
+            null
+        };
+        let table_alias = parse_table_alias(p)?;
+        let k_as_table_alias = KAsTableAliasItem {
+            k_as,
+            table_alias,
+        };
+        Option::<KAsTableAliasItem>::Some(k_as_table_alias)
+    } else if (p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN) {
+        let k_as: Option<Token> = null;
+        let table_alias = parse_table_alias(p)?;
+        let k_as_table_alias = KAsTableAliasItem {
+            k_as,
+            table_alias,
+        };
+        Option::<KAsTableAliasItem>::Some(k_as_table_alias)
     } else {
         null
     };
@@ -10870,32 +11043,33 @@ fn parse_table_or_subquery_bt_0(p: &mut Parser) -> Result<TableOrSubqueryNode, P
         null
     };
     let table_name = parse_table_name(p)?;
-    let k_as_table_alias: Option<KAsTableAliasItem> = if p.peek_kind() == TK_K_AS || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN {
-        let opt_saved_2 = p.pos;
-        let mut opt_result_2: Option<KAsTableAliasItem> = null;
-        opt_bt_2: {
-            let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
-                let k_as = p.expect(TK_K_AS, "K_AS")?;
-                Option::<Token>::Some(k_as)
-            } else {
-                null
-            };
-            let _bt_r = parse_table_alias(p);
-            if let Err(_) = _bt_r { p.pos = opt_saved_2; break opt_bt_2; }
-            let table_alias = _bt_r.unwrap();
-            let k_as_table_alias = KAsTableAliasItem {
-                k_as,
-                table_alias,
-            };
-            opt_result_2 = Option::<KAsTableAliasItem>::Some(k_as_table_alias);
-        }
-        opt_result_2
+    let k_as_table_alias: Option<KAsTableAliasItem> = if p.peek_kind() == TK_K_AS && (p.peek_at(1) == TK_IDENTIFIER || p.peek_at(1) == TK_STRING_LITERAL || p.peek_at(1) == TK_LIT_LPAREN) {
+        let k_as: Option<Token> = if p.peek_kind() == TK_K_AS {
+            let k_as = p.expect(TK_K_AS, "K_AS")?;
+            Option::<Token>::Some(k_as)
+        } else {
+            null
+        };
+        let table_alias = parse_table_alias(p)?;
+        let k_as_table_alias = KAsTableAliasItem {
+            k_as,
+            table_alias,
+        };
+        Option::<KAsTableAliasItem>::Some(k_as_table_alias)
+    } else if (p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_LIT_LPAREN) {
+        let k_as: Option<Token> = null;
+        let table_alias = parse_table_alias(p)?;
+        let k_as_table_alias = KAsTableAliasItem {
+            k_as,
+            table_alias,
+        };
+        Option::<KAsTableAliasItem>::Some(k_as_table_alias)
     } else {
         null
     };
     if p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_NOT {
-        let opt_saved_3 = p.pos;
-        opt_bt_3: {
+        let opt_saved_2 = p.pos;
+        opt_bt_2: {
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_INDEXED {
                 let k_indexed = p.expect(TK_K_INDEXED, "K_INDEXED")?;
