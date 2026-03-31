@@ -17,6 +17,11 @@ use {
 } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
+use { TreeMap } from "core:collections";
+
+// --- Memoization caches (cleared at gen_parser entry) ---
+global mut first_rule_cache: TreeMap<String, Array<String>> = TreeMap::<String, Array<String>>::new();
+global mut single_token_cache: TreeMap<String, bool> = TreeMap::<String, bool>::new();
 
 // --- Prediction Engine ---
 
@@ -883,17 +888,26 @@ fn compute_deeper_first(elements: &Array<Element>, depth: i32, all_rules: &Array
 /// True when every alternative has exactly one non-nullable element
 /// that is either a terminal (TokenRef/Literal) or a single-token RuleRef.
 fn rule_is_single_token(name: &String, all_rules: &Array<ParserRule>, visiting: &mut Array<String>) -> bool {
+    let cached = single_token_cache.get(*name);
+    if let Some(val) = cached {
+        return val;
+    }
+
     if array_contains_str(visiting, name) {
         return false;
     }
+
+    let is_top_level = visiting.is_empty();
     visiting.append(*name);
 
+    let mut result = false;
     let mut found = false;
     for let rule of all_rules {
         if rule.name != *name {
             continue;
         }
         found = true;
+        let mut all_alts_ok = true;
         for let alt of rule.alternatives {
             let mut non_nullable_count = 0;
             let mut single_ok = false;
@@ -912,15 +926,21 @@ fn rule_is_single_token(name: &String, all_rules: &Array<ParserRule>, visiting: 
                 }
             }
             if non_nullable_count != 1 || !single_ok {
-                remove_from_visiting(visiting, name);
-                return false;
+                all_alts_ok = false;
+                break;
             }
         }
+        result = found && all_alts_ok;
         break;
     }
 
     remove_from_visiting(visiting, name);
-    return found;
+
+    if is_top_level {
+        single_token_cache[*name] = result;
+    }
+
+    return result;
 }
 
 fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
@@ -977,6 +997,8 @@ fn count_leaf_nodes(node: &PredictionNode) -> i32 {
 }
 
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
+    first_rule_cache = TreeMap::<String, Array<String>>::new();
+    single_token_cache = TreeMap::<String, bool>::new();
     gen_parser_struct(w);
     for let rule of grammar.parser_rules {
         gen_parse_fn(w, &rule, &grammar.parser_rules, lit_tokens);
@@ -3132,9 +3154,16 @@ fn first_of_element(elem: &Element, all_rules: &Array<ParserRule>, lit_tokens: &
 }
 
 fn first_of_rule(name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>, visiting: &mut Array<String>) -> Array<String> {
+    let cached = first_rule_cache.get(*name);
+    if let Some(result) = cached {
+        return result;
+    }
+
     if array_contains_str(visiting, name) {
         return [];
     }
+
+    let is_top_level = visiting.is_empty();
     visiting.append(*name);
 
     let mut result: Array<String> = [];
@@ -3159,6 +3188,10 @@ fn first_of_rule(name: &String, all_rules: &Array<ParserRule>, lit_tokens: &Arra
         }
     }
     *visiting = new_visiting;
+
+    if is_top_level {
+        first_rule_cache[*name] = result;
+    }
 
     return result;
 }
