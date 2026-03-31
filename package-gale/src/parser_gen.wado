@@ -8,15 +8,34 @@ use {
     strip_suffix,
     escape_string,
     literal_const_name,
-    array_contains_str,
     is_simple_cst_group,
     group_variant_type_name,
     group_field_base_name,
     group_case_name,
+    str_set_from,
+    str_set_insert_all,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, is_simple_token_group } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
+use { TreeSet } from "core:collections";
+
+fn first_contains(first: &Array<String>, token: &String) -> bool {
+    for let item of first {
+        if *item == *token {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn dedup_append_arr(arr: &mut Array<String>, source: &Array<String>) {
+    for let tk of source {
+        if !first_contains(arr, &tk) {
+            arr.append(tk);
+        }
+    }
+}
 
 // --- Prediction Engine ---
 
@@ -134,17 +153,6 @@ fn sll_closure(configs: &Array<SllConfig>) -> Array<SllConfig> {
     return *configs;
 }
 
-fn _sll_closure_unused(configs: &Array<SllConfig>) -> Array<SllConfig> {
-    let mut result: Array<SllConfig> = [];
-    for let c of configs {
-        let mut cur = sll_config_clone(c);
-        while cur.pos < cur.elements.len() && is_nullable(&cur.elements[cur.pos]) {
-            cur.pos += 1;
-        }
-        result.append(cur);
-    }
-    return result;
-}
 
 /// Compute FIRST set of the current position in a config.
 /// Includes tokens from nullable elements that were skipped by closure.
@@ -191,7 +199,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
     if is_nullable(elem) {
         let mut results: Array<SllConfig> = [];
         let mut visiting: Array<String> = [];
-        if array_contains_str(&ctx.first_of_element(elem, &mut visiting), token) {
+        if first_contains(&ctx.first_of_element(elem, &mut visiting), token) {
             // Check if the inner element is a multi-token RuleRef.
             // If so, enter it via return stack instead of skipping to pos+1.
             let mut entered = false;
@@ -199,23 +207,15 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
                 if let RuleRef(inner_name) = rep.element {
                     let mut stv: Array<String> = [];
                     if !ctx.rule_is_single_token(&inner_name, &mut stv) && c.return_stack.len() < 1 {
-                        let mut inner_alt_count = 0;
-                        for let rule of &ctx.parser_rules {
-                            if rule.name == inner_name {
-                                inner_alt_count = rule.alternatives.len();
-                                break;
-                            }
-                        }
+                        let inner_rule = ctx.find_rule(&inner_name);
+                        let inner_alt_count = if let Some(r) = inner_rule { r.alternatives.len() } else { 0 };
                         if inner_alt_count <= 8 {
                             entered = true;
                             let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-                            for let rule of &ctx.parser_rules {
-                                if rule.name != inner_name {
-                                    continue;
-                                }
-                                for let alt of rule.alternatives {
+                            if let Some(inner_rule) = inner_rule {
+                                for let alt of inner_rule.alternatives {
                                     let mut v2: Array<String> = [];
-                                    if !array_contains_str(&ctx.first_of_alt(&alt, &mut v2), token) {
+                                    if !first_contains(&ctx.first_of_alt(&alt, &mut v2), token) {
                                         continue;
                                     }
                                     let exp = SllConfig {
@@ -229,7 +229,6 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
                                         results.append(a);
                                     }
                                 }
-                                break;
                             }
                         }
                     }
@@ -243,7 +242,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
         let mut skip_pos = c.pos + 1;
         while skip_pos < c.elements.len() && is_nullable(&c.elements[skip_pos]) {
             let mut v: Array<String> = [];
-            if array_contains_str(&ctx.first_of_element(&c.elements[skip_pos], &mut v), token) {
+            if first_contains(&ctx.first_of_element(&c.elements[skip_pos], &mut v), token) {
                 results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
             }
             skip_pos += 1;
@@ -260,7 +259,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
                 }
             } else if let RuleRef(name) = *skipped_elem {
                 let mut v: Array<String> = [];
-                if array_contains_str(&ctx.first_of_rule(&name, &mut v), token) {
+                if first_contains(&ctx.first_of_rule(&name, &mut v), token) {
                     let mut stv: Array<String> = [];
                     if ctx.rule_is_single_token(&name, &mut stv) {
                         results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
@@ -270,7 +269,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
                 }
             } else {
                 let mut v: Array<String> = [];
-                if array_contains_str(&ctx.first_of_element(skipped_elem, &mut v), token) {
+                if first_contains(&ctx.first_of_element(skipped_elem, &mut v), token) {
                     results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                 }
             }
@@ -298,7 +297,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
     if let RuleRef(name) = *elem {
         let mut visiting: Array<String> = [];
         let rule_first = ctx.first_of_rule(&name, &mut visiting);
-        if !array_contains_str(&rule_first, token) {
+        if !first_contains(&rule_first, token) {
             return [];
         }
         let mut st_visiting: Array<String> = [];
@@ -313,17 +312,13 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
 
     // Group: treat as consuming one token if the token is in FIRST(group).
     if let Group(alts) = *elem {
-        let mut group_first: Array<String> = [];
+        let mut group_first = TreeSet::<String>::new();
         for let alt of alts {
             let mut visiting: Array<String> = [];
             let af = ctx.first_of_alt(&alt, &mut visiting);
-            for let tk of af {
-                if !array_contains_str(&group_first, &tk) {
-                    group_first.append(tk);
-                }
-            }
+            str_set_insert_all(&mut group_first, &af);
         }
-        if array_contains_str(&group_first, token) {
+        if group_first.contains(*token) {
             return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
         }
         return [];
@@ -334,7 +329,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
         let mut inner_first: Array<String> = [];
         let mut visiting: Array<String> = [];
         inner_first = ctx.first_of_element(&rep.element, &mut visiting);
-        if array_contains_str(&inner_first, token) {
+        if first_contains(&inner_first, token) {
             // Advance past the repeat element (simplified: treat as consuming 1 token).
             return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
         }
@@ -431,12 +426,16 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
 
     // Compute FIRST set for each config.
     let mut all_tokens: Array<String> = [];
+    let mut all_tokens_seen = TreeSet::<String>::new();
     let mut config_firsts: Array<Array<String>> = [];
+    let mut config_first_sets: Array<TreeSet<String>> = [];
     for let c of closed {
         let first = sll_config_first(&c, ctx);
+        config_first_sets.append(str_set_from(&first));
         config_firsts.append(first);
         for let tk of first {
-            if !array_contains_str(&all_tokens, &tk) {
+            if !all_tokens_seen.contains(tk) {
+                all_tokens_seen.insert(tk);
                 all_tokens.append(tk);
             }
         }
@@ -452,7 +451,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
         let mut next_configs: Array<SllConfig> = [];
         let mut opaque_alts: Array<i32> = [];
         for let mut i = 0; i < closed.len(); i += 1 {
-            if array_contains_str(&config_firsts[i], tk) {
+            if config_first_sets[i].contains(*tk) {
                 let advanced = sll_advance(&closed[i], tk, ctx);
                 for let a of advanced {
                     if a.pos == -1 {
@@ -542,7 +541,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         return null;
     }
     // Rule diversity check: only expand when opaque configs reference different rules.
-    let mut rule_refs: Array<String> = [];
+    let mut rule_refs = TreeSet::<String>::new();
     for let c of original_configs {
         if !array_contains_i32(&opaque_alts, c.alt_index) {
             continue;
@@ -551,9 +550,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
             continue;
         }
         if let RuleRef(name) = c.elements[c.pos] {
-            if !array_contains_str(&rule_refs, &name) {
-                rule_refs.append(name);
-            }
+            rule_refs.insert(name);
         }
     }
     if rule_refs.len() <= 1 {
@@ -569,25 +566,16 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
             continue;
         }
         if let RuleRef(name) = c.elements[c.pos] {
-            let mut alt_count = 0;
-            for let rule of &ctx.parser_rules {
-                if rule.name == name {
-                    alt_count = rule.alternatives.len();
-                    break;
-                }
-            }
-            if alt_count > 8 {
-                continue;
-            }
-            let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-            for let rule of &ctx.parser_rules {
-                if rule.name != name {
+            let found_rule = ctx.find_rule(&name);
+            if let Some(found_rule) = found_rule {
+                if found_rule.alternatives.len() > 8 {
                     continue;
                 }
-                for let alt of rule.alternatives {
+                let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
+                for let alt of found_rule.alternatives {
                     // Pre-filter: skip alternatives whose FIRST doesn't contain the token.
                     let mut v: Array<String> = [];
-                    if !array_contains_str(&ctx.first_of_alt(&alt, &mut v), token) {
+                    if !first_contains(&ctx.first_of_alt(&alt, &mut v), token) {
                         continue;
                     }
                     let exp = SllConfig {
@@ -603,7 +591,6 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
                         }
                     }
                 }
-                break;
             }
         }
     }
@@ -622,12 +609,15 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
     }
     // Compute FIRST for each config at the decision point level.
     let mut all_tokens: Array<String> = [];
-    let mut config_firsts: Array<Array<String>> = [];
+    let mut all_tokens_seen = TreeSet::<String>::new();
+    let mut config_first_sets: Array<TreeSet<String>> = [];
     for let c of all_configs {
         let first = sll_config_first(&c, ctx);
-        config_firsts.append(first);
+        let first_set = str_set_from(&first);
+        config_first_sets.append(first_set);
         for let tk of first {
-            if !array_contains_str(&all_tokens, &tk) {
+            if !all_tokens_seen.contains(tk) {
+                all_tokens_seen.insert(tk);
                 all_tokens.append(tk);
             }
         }
@@ -639,7 +629,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         let tk = &all_tokens[t];
         let mut token_alts: Array<i32> = [];
         for let mut i = 0; i < all_configs.len(); i += 1 {
-            if array_contains_str(&config_firsts[i], tk) {
+            if config_first_sets[i].contains(*tk) {
                 if !array_contains_i32(&token_alts, all_configs[i].alt_index) {
                     token_alts.append(all_configs[i].alt_index);
                 }
@@ -794,10 +784,12 @@ fn elements_suffix(elements: &Array<Element>, start: i32) -> Array<Element> {
 /// Compute first set of a sequence of elements.
 fn first_of_elements(elements: &Array<Element>, ctx: &mut GenContext, visiting: &mut Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
+    let mut seen = TreeSet::<String>::new();
     for let elem of elements {
         let ef = ctx.first_of_element(&elem, visiting);
         for let tk of ef {
-            if !array_contains_str(&result, &tk) {
+            if !seen.contains(tk) {
+                seen.insert(tk);
                 result.append(tk);
             }
         }
@@ -1543,11 +1535,14 @@ fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenC
 
 fn union_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
+    let mut seen = TreeSet::<String>::new();
     for let mut i = 0; i < a.len(); i += 1 {
+        seen.insert(a[i]);
         result.append(a[i]);
     }
     for let mut i = 0; i < b.len(); i += 1 {
-        if !array_contains_str(&result, &b[i]) {
+        if !seen.contains(b[i]) {
+            seen.insert(b[i]);
             result.append(b[i]);
         }
     }
@@ -1555,9 +1550,10 @@ fn union_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
 }
 
 fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
+    let b_set = str_set_from(b);
     let mut result: Array<String> = [];
     for let x of a {
-        if !array_contains_str(b, x) {
+        if !b_set.contains(*x) {
             result.append(x);
         }
     }
@@ -2084,11 +2080,7 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut Ge
 
         let mut union_first: Array<String> = [];
         for let idx of group {
-            for let tk of first_sets[*idx] {
-                if !array_contains_str(&union_first, &tk) {
-                    union_first.append(tk);
-                }
-            }
+            dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
 
         let cond = kind_check_str(&union_first, &grp_var);
@@ -2159,11 +2151,7 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
 
             let mut union_first: Array<String> = [];
             for let idx of group {
-                for let tk of first_sets[*idx] {
-                    if !array_contains_str(&union_first, &tk) {
-                        union_first.append(tk);
-                    }
-                }
+                dedup_append_arr(&mut union_first, &first_sets[*idx]);
             }
 
             let cond = kind_check_str(&union_first, &grp_var);
@@ -2256,11 +2244,7 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
 
         let mut union_first: Array<String> = [];
         for let idx of group {
-            for let tk of first_sets[*idx] {
-                if !array_contains_str(&union_first, &tk) {
-                    union_first.append(tk);
-                }
-            }
+            dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
 
         let cond = kind_check_str(&union_first, &grp_var);
@@ -2444,7 +2428,7 @@ fn compute_lr_conflict_min_prec(alt: &Alternative, own_prec: i32, lr_indices: &A
         let other_prec = total_lr - lr_pos;
         let suffix_first = ctx.first_of_elements_from(&other.elements, 1);
         for let ft of fixed_tokens {
-            if array_contains_str(&suffix_first, &ft) {
+            if first_contains(&suffix_first, &ft) {
                 let candidate = other_prec + 1;
                 if candidate > min_prec {
                     min_prec = candidate;
@@ -2549,7 +2533,7 @@ fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, ctx
         // Check if this element contains the shared token
         let mut visiting: Array<String> = [];
         let elem_first = ctx.first_of_element(elem, &mut visiting);
-        if !array_contains_str(&elem_first, shared_token) {
+        if !first_contains(&elem_first, shared_token) {
             continue;
         }
 
@@ -2573,7 +2557,7 @@ fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, ctx
                 }
                 let mut v2: Array<String> = [];
                 let alt_first = ctx.first_of_element(&alt.elements[0], &mut v2);
-                if array_contains_str(&alt_first, shared_token) && alt.elements.len() >= 2 {
+                if first_contains(&alt_first, shared_token) && alt.elements.len() >= 2 {
                     return ctx.first_of_elements_from(&alt.elements, 1);
                 }
             }
@@ -2600,9 +2584,15 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32, use_
 }
 
 fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext, use_prec: bool) {
+    // Pre-convert suffix_first_sets to TreeSets for efficient lookup.
+    let mut suffix_sets: Array<TreeSet<String>> = [];
+    for let sfs of suffix_first_sets {
+        suffix_sets.append(str_set_from(sfs));
+    }
+
     // For each token in the group, find which alternatives match it.
     // Unique token → dispatch directly. Shared token → sub-dispatch via peek_at(1).
-    let mut emitted: Array<String> = [];
+    let mut emitted = TreeSet::<String>::new();
     let mut first_branch = true;
 
     // First pass: unique-token branches
@@ -2610,7 +2600,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
         let this_first = &suffix_first_sets[group[k]];
         for let mut t = 0; t < this_first.len(); t += 1 {
             let tk = &this_first[t];
-            if array_contains_str(&emitted, tk) {
+            if emitted.contains(*tk) {
                 continue;
             }
             let mut shared = false;
@@ -2618,7 +2608,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
                 if j == k {
                     continue;
                 }
-                if array_contains_str(&suffix_first_sets[group[j]], tk) {
+                if suffix_sets[group[j]].contains(*tk) {
                     shared = true;
                 }
             }
@@ -2633,19 +2623,21 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
                     w.else_begin(`else if suffix_kind == {*tk}`);
                 }
                 gen_lr_call_with_prec(w, &suffix_fn, prec, use_prec);
-                emitted.append(*tk);
+                emitted.insert(*tk);
             }
         }
     }
 
     // Second pass: shared-token branches with peek_at(1) sub-dispatch
     let mut shared_tokens: Array<String> = [];
+    let mut shared_seen = TreeSet::<String>::new();
     for let mut k = 0; k < group.len(); k += 1 {
         for let tk of suffix_first_sets[group[k]] {
-            if array_contains_str(&emitted, &tk) {
+            if emitted.contains(tk) {
                 continue;
             }
-            if !array_contains_str(&shared_tokens, &tk) {
+            if !shared_seen.contains(tk) {
+                shared_seen.insert(tk);
                 shared_tokens.append(tk);
             }
         }
@@ -2661,12 +2653,12 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
         let mut sub_first = true;
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
-            if array_contains_str(&suffix_first_sets[group[k]], shared_tk) {
+            if suffix_sets[group[k]].contains(*shared_tk) {
                 last_k = k;
             }
         }
         for let mut k = 0; k < group.len(); k += 1 {
-            if !array_contains_str(&suffix_first_sets[group[k]], shared_tk) {
+            if !suffix_sets[group[k]].contains(*shared_tk) {
                 continue;
             }
             let lr_idx = valid_lr_indices[group[k]];
@@ -2693,7 +2685,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
                 gen_lr_call_with_prec(w, &suffix_fn, prec, use_prec);
             }
         }
-        emitted.append(*shared_tk);
+        emitted.insert(*shared_tk);
     }
     if !first_branch {
         w.end();
@@ -2738,11 +2730,7 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
 
         let mut union_first: Array<String> = [];
         for let idx of group {
-            for let tk of suffix_first_sets[*idx] {
-                if !array_contains_str(&union_first, &tk) {
-                    union_first.append(tk);
-                }
-            }
+            dedup_append_arr(&mut union_first, &suffix_first_sets[*idx]);
         }
 
         let cond = kind_check_str(&union_first, "suffix_kind");
@@ -2884,11 +2872,7 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         let group = &groups[g];
         let mut union_first: Array<String> = [];
         for let idx of group {
-            for let tk of first_sets[*idx] {
-                if !array_contains_str(&union_first, &tk) {
-                    union_first.append(tk);
-                }
-            }
+            dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
 
         let cond = kind_check_str(&union_first, "kind");
@@ -2999,11 +2983,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
     for let alt of rule.alternatives {
         let mut visiting: Array<String> = [];
         let first = ctx.first_of_alt(&alt, &mut visiting);
-        for let tk of first {
-            if !array_contains_str(&expected, &tk) {
-                expected.append(tk);
-            }
-        }
+        dedup_append_arr(&mut expected, &first);
     }
     let msg = escape_string(&`expected {rule.name}`);
     w.line(`return Result::<{type_name}, ParseError>::Err(ParseError::new(`);

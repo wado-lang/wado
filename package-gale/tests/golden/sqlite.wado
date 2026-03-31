@@ -2184,7 +2184,7 @@ global TK_LIT_EQ: i32 = 164;
 global TK_LIT_PIPEPIPE: i32 = 165;
 global TK_LIT_STAR: i32 = 166;
 global TK_LIT_SLASH: i32 = 167;
-global TK_LIT__: i32 = 168;
+global TK_LIT_PERCENT: i32 = 168;
 global TK_LIT_PLUS: i32 = 169;
 global TK_LIT_MINUS: i32 = 170;
 global TK_LIT_LTLT: i32 = 171;
@@ -5650,7 +5650,7 @@ fn try_lit_slash(chars: &Array<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
-fn try_lit__(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_percent(chars: &Array<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '%' { return -1; }
     return pos + 1;
@@ -5774,8 +5774,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
         if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
         end = try_lit_slash(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
-        end = try_lit__(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT__; }
+        end = try_lit_percent(&lexer.chars, start);
+        if end > best_end { best_end = end; best_kind = TK_LIT_PERCENT; }
         end = try_lit_plus(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
         end = try_lit_minus(&lexer.chars, start);
@@ -6308,7 +6308,7 @@ pub fn token_kind_name(kind: i32) -> String {
     if kind == TK_LIT_PIPEPIPE { return "TK_LIT_PIPEPIPE"; }
     if kind == TK_LIT_STAR { return "TK_LIT_STAR"; }
     if kind == TK_LIT_SLASH { return "TK_LIT_SLASH"; }
-    if kind == TK_LIT__ { return "TK_LIT__"; }
+    if kind == TK_LIT_PERCENT { return "TK_LIT_PERCENT"; }
     if kind == TK_LIT_PLUS { return "TK_LIT_PLUS"; }
     if kind == TK_LIT_MINUS { return "TK_LIT_MINUS"; }
     if kind == TK_LIT_LTLT { return "TK_LIT_LTLT"; }
@@ -8833,7 +8833,7 @@ fn parse_expr_prec(p: &mut Parser, min_prec: i32) -> Result<ExprNode, ParseError
             } else {
                 break;
             }
-        } else if suffix_kind == TK_LIT_STAR || suffix_kind == TK_LIT_SLASH || suffix_kind == TK_LIT__ {
+        } else if suffix_kind == TK_LIT_STAR || suffix_kind == TK_LIT_SLASH || suffix_kind == TK_LIT_PERCENT {
             if 13 >= min_prec {
                 result = parse_expr_lr_5(p, result, start)?;
             } else {

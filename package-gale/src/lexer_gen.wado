@@ -14,12 +14,21 @@ use {
     RepeatElement,
     LabelElement,
 } from "./ir.wado";
-use { to_lower, escape_char, array_contains_str, literal_const_name } from "./gen_util.wado";
+use { to_lower, escape_char, literal_const_name } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec } from "./wadopoet.wado";
 
 pub struct LitToken {
     pub text: String,
     pub const_name: String,
+}
+
+fn seen_contains(seen: &Array<String>, text: &String) -> bool {
+    for let item of seen {
+        if *item == *text {
+            return true;
+        }
+    }
+    return false;
 }
 
 pub fn collect_literal_tokens(parser_rules: &Array<ParserRule>) -> Array<LitToken> {
@@ -41,7 +50,7 @@ fn collect_lits_from_elements(elements: &Array<Element>, seen: &mut Array<String
 
 fn collect_lits_from_element(elem: &Element, seen: &mut Array<String>, result: &mut Array<LitToken>) {
     if let Literal(text) = *elem {
-        if !array_contains_str(seen, &text) {
+        if !seen_contains(seen, &text) {
             seen.append(text);
             result.append(LitToken { text, const_name: literal_const_name(&text) });
         }
