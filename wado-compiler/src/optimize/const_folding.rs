@@ -31,7 +31,7 @@ use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
 };
 
-use super::visitor::{TirVisitor, walk_expr};
+use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 
 enum FoldedExpr {
     Int { value: u64, prim: PrimitiveType },
@@ -74,10 +74,10 @@ struct ConstFoldVisitor<'a> {
     type_table: &'a TypeTable,
 }
 
-impl TirVisitor for ConstFoldVisitor<'_> {
+impl TirOptVisitor for ConstFoldVisitor<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         // Bottom-up: recurse into children first
-        let mut changed = walk_expr(self, expr);
+        let mut changed = opt_walk_expr(self, expr);
         // Then try to fold this expression
         if let Some(folded) = try_fold_expr(expr, self.type_table) {
             expr.kind = folded.into_expr_kind();

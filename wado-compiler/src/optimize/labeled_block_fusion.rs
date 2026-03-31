@@ -38,9 +38,9 @@
 //! This eliminates the GC-allocated `temp: Option<T>` entirely. Subsequent passes
 //! (copy propagation, DCE) clean up the remaining `break '__fused_L;` bookkeeping.
 
-use super::visitor::expr_has_break_to;
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId};
+use crate::tir_visitor::expr_has_break_to;
 
 pub fn fuse_labeled_blocks(project: &mut Project) -> bool {
     let mut changed = false;

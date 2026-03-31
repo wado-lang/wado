@@ -141,9 +141,9 @@ Removes unreachable functions, types, unused string literals, and unused WASI ef
 
 Post-optimization rewrite that converts `if cond { a } else { b }` where both branches are pure into `builtin::select(cond, a, b)`, which emits the Wasm `select` instruction.
 
-### TIR Visitor (`visitor.rs`)
+### TIR Visitor (`tir_visitor.rs`)
 
-Shared visitor infrastructure used by optimization passes to traverse and rewrite TIR trees.
+Shared visitor infrastructure (`TirMutVisitor` / `TirRefVisitor` / `TirOptVisitor`) for traversing and rewriting TIR trees. `TirOptVisitor` provides change-tracking (`-> bool`) used by optimization passes; the `opt_walk_*` free functions implement the default recursive walk. Utility functions like `block_has_break_to` are also provided here.
 
 ### WIR Visitor (`wir_visitor.rs`)
 

@@ -12,7 +12,7 @@ use crate::tir::{
     TypeTable,
 };
 
-use super::visitor::{TirVisitor, walk_expr};
+use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 
 /// Run select lowering on all functions.
 pub fn select_lowering(project: &mut Project) {
@@ -29,7 +29,7 @@ pub fn select_lowering(project: &mut Project) {
 
 struct SelectLoweringVisitor;
 
-impl TirVisitor for SelectLoweringVisitor {
+impl TirOptVisitor for SelectLoweringVisitor {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         let mut changed = false;
         if let TirExprKind::If {
@@ -45,7 +45,7 @@ impl TirVisitor for SelectLoweringVisitor {
             changed |= self.visit_expr(expr);
             return changed;
         }
-        changed |= walk_expr(self, expr);
+        changed |= opt_walk_expr(self, expr);
         changed
     }
 }

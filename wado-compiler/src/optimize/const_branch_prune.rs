@@ -10,9 +10,9 @@
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 
-use super::visitor::{
-    TirVisitor, block_has_break_to, expr_has_break_to, visit_project_functions, walk_block,
-    walk_expr,
+use crate::tir_visitor::{
+    TirOptVisitor, block_has_break_to, expr_has_break_to, opt_walk_block, opt_walk_expr,
+    visit_project_functions,
 };
 
 /// Prune constant branches and simplify trivial blocks in all functions.
@@ -23,10 +23,10 @@ pub fn prune_constant_branches(project: &mut Project) -> bool {
 
 struct BranchPruner;
 
-impl TirVisitor for BranchPruner {
+impl TirOptVisitor for BranchPruner {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         // Bottom-up: walk children first
-        let mut changed = walk_expr(self, expr);
+        let mut changed = opt_walk_expr(self, expr);
         // Then prune this expression
         changed |= prune_expr(expr);
         changed
@@ -34,7 +34,7 @@ impl TirVisitor for BranchPruner {
 
     fn visit_block(&mut self, block: &mut TirBlock) -> bool {
         // Bottom-up: walk stmts first
-        let mut changed = walk_block(self, block);
+        let mut changed = opt_walk_block(self, block);
         // Then eliminate dead stmts
         changed |= eliminate_dead_stmts(block);
         changed
