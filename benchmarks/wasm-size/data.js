@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774915996072,
+  "lastUpdate": 1774918830609,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9032,6 +9032,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/63b19a02d98ea6339f5f03e331327c7bd52ae601"
         },
         "date": 1774915995855,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4498e070ac5cc9c9947f2cf53088820331a4a0b2",
+          "message": "Merge pull request #740 from wado-lang/claude/review-cheatsheet-quality-SyxqH\n\nImprove cheatsheet.md quality: restructure, deduplicate, fix typos",
+          "timestamp": "2026-03-31T09:57:33+09:00",
+          "tree_id": "5555cc35b66ee81da0b8ebc631b65785b3ea8d98",
+          "url": "https://github.com/wado-lang/wado/commit/4498e070ac5cc9c9947f2cf53088820331a4a0b2"
+        },
+        "date": 1774918830374,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
