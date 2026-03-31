@@ -557,15 +557,16 @@ fn uses_of_var_are_reads_only(instr: &WirInstr, var_name: &str) -> bool {
             else_body,
             ..
         } => {
-            // Condition can reference var (e.g., ref.is_null check)
+            // Bodies must always be read-only. Condition is allowed if it's
+            // either a safe use (null/discriminant check) or doesn't mention var.
             then_body
                 .iter()
                 .all(|i| uses_of_var_are_reads_only(i, var_name))
                 && else_body
                     .as_ref()
                     .is_none_or(|eb| eb.iter().all(|i| uses_of_var_are_reads_only(i, var_name)))
-                && !instr_contains_local_get(condition, var_name)
-                || condition_is_safe_use(condition, var_name)
+                && (condition_is_safe_use(condition, var_name)
+                    || !instr_contains_local_get(condition, var_name))
         }
         // LocalGet: reading the variable is always safe.
         WirInstr::LocalGet { name, .. } if name == var_name => true,
