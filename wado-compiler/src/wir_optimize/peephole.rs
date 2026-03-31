@@ -588,17 +588,16 @@ fn uses_of_var_are_reads_only(instr: &WirInstr, var_name: &str) -> bool {
 
 /// Returns `true` if the condition expression passes `var_name` as an
 /// argument to a `Call` or `CallRef`. Condition expressions are inherently
-/// read-only (StructGet, RefTest, RefIsNull, comparisons, etc.) — the only
+/// read-only (`StructGet`, `RefTest`, `RefIsNull`, comparisons, etc.) — the only
 /// risk is when the variable reference is handed to a function that could
 /// mutate the underlying object.
 fn condition_passes_var_to_call(cond: &WirInstr, var_name: &str) -> bool {
-    if let WirInstr::Call { args, .. } | WirInstr::CallRef { args, .. } = cond {
-        if args
+    if let WirInstr::Call { args, .. } | WirInstr::CallRef { args, .. } = cond
+        && args
             .iter()
             .any(|arg| instr_contains_local_get(arg, var_name))
-        {
-            return true;
-        }
+    {
+        return true;
     }
     let mut found = false;
     cond.for_each_child(&mut |child| {
