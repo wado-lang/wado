@@ -145,6 +145,10 @@ Post-optimization rewrite that converts `if cond { a } else { b }` where both br
 
 Shared visitor infrastructure used by optimization passes to traverse and rewrite TIR trees.
 
+### WIR Visitor (`wir_visitor.rs`)
+
+Shared visitor infrastructure (`WirRefVisitor` / `WirMutVisitor`) for traversing and rewriting WIR instruction trees. Centralizes Block/Loop/If/Seq body traversal so individual optimization passes don't duplicate walk logic. Passes that only need body-level traversal (not expression children) override `visit_instr` to skip the `for_each_child` fallback.
+
 ## WIR Optimizations
 
 **Module:** `wir_optimize.rs`

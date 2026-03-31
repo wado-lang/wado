@@ -6,6 +6,7 @@ use crate::wir::{
     COMP_FEATURE_STRING_APPEND, COMP_FEATURE_STRING_APPEND_CHAR, WirData, WirFuncId, WirInstr,
     WirModule,
 };
+use crate::wir_visitor::WirMutVisitor;
 
 /// Rewrite `String::append(buf, "short_constant")` calls into sequences of
 /// `String::append_char(buf, ch)` calls when the constant string is ≤8 bytes.
@@ -49,67 +50,42 @@ pub(super) fn simplify_short_string_appends(module: &mut WirModule) {
     let data = &module.data;
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
-            simplify_short_appends_in_body(body, &append_id, &append_char_id, data);
+            let mut visitor = SimplifyShortAppends {
+                append_id: &append_id,
+                append_char_id: &append_char_id,
+                data,
+            };
+            visitor.visit_body(body);
         }
     }
 }
 
-/// Recursively process instructions, looking for Call patterns to rewrite.
-fn simplify_short_appends_in_instr(
-    instr: &mut WirInstr,
-    append_id: &WirFuncId,
-    append_char_id: &WirFuncId,
-    data: &[WirData],
-) {
-    match instr {
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            simplify_short_appends_in_body(body, append_id, append_char_id, data);
-            return;
-        }
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            simplify_short_appends_in_instr(condition, append_id, append_char_id, data);
-            simplify_short_appends_in_body(then_body, append_id, append_char_id, data);
-            if let Some(eb) = else_body {
-                simplify_short_appends_in_body(eb, append_id, append_char_id, data);
+struct SimplifyShortAppends<'a> {
+    append_id: &'a WirFuncId,
+    append_char_id: &'a WirFuncId,
+    data: &'a [WirData],
+}
+
+impl WirMutVisitor for SimplifyShortAppends<'_> {
+    fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
+        // First recurse into children.
+        self.walk_body(body);
+
+        // Scan for String::append calls with short constant string args.
+        let mut i = 0;
+        while i < body.len() {
+            if let Some(replacements) = try_rewrite_short_string_append(
+                &body[i],
+                self.append_id,
+                self.append_char_id,
+                self.data,
+            ) {
+                let n = replacements.len();
+                body.splice(i..=i, replacements);
+                i += n;
+            } else {
+                i += 1;
             }
-            return;
-        }
-        _ => {}
-    }
-
-    instr.for_each_boxed_child_mut(&mut |child| {
-        simplify_short_appends_in_instr(child, append_id, append_char_id, data);
-    });
-}
-
-/// Process a flat instruction body, replacing short-constant `String::append` calls.
-fn simplify_short_appends_in_body(
-    body: &mut Vec<WirInstr>,
-    append_id: &WirFuncId,
-    append_char_id: &WirFuncId,
-    data: &[WirData],
-) {
-    // First recurse into children.
-    for instr in body.iter_mut() {
-        simplify_short_appends_in_instr(instr, append_id, append_char_id, data);
-    }
-
-    // Scan for String::append calls with short constant string args.
-    let mut i = 0;
-    while i < body.len() {
-        if let Some(replacements) =
-            try_rewrite_short_string_append(&body[i], append_id, append_char_id, data)
-        {
-            let n = replacements.len();
-            body.splice(i..=i, replacements);
-            i += n;
-        } else {
-            i += 1;
         }
     }
 }

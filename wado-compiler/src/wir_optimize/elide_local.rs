@@ -5,6 +5,7 @@
 
 use crate::hashmap::IndexSet;
 use crate::wir::{WirInstr, WirModule};
+use crate::wir_visitor::WirMutVisitor;
 
 use super::util::{collect_local_gets_deep, is_side_effect_free};
 
@@ -26,47 +27,52 @@ fn elide_write_only_locals_in_body(body: &mut [WirInstr]) -> bool {
         collect_local_gets_deep(instr, &mut read_locals);
     }
 
-    let mut changed = false;
+    let mut visitor = ElideWriteOnly {
+        read_locals: &read_locals,
+        changed: false,
+    };
     for instr in body.iter_mut() {
-        elide_write_only_in_instr(instr, &read_locals, &mut changed);
+        visitor.visit_instr(instr);
     }
-    changed
+    visitor.changed
 }
 
-fn elide_write_only_in_instr(
-    instr: &mut WirInstr,
-    read_locals: &IndexSet<String>,
-    changed: &mut bool,
-) {
-    match instr {
-        WirInstr::LocalSet { name, value } if !read_locals.contains(name.as_str()) => {
+struct ElideWriteOnly<'a> {
+    read_locals: &'a IndexSet<String>,
+    changed: bool,
+}
+
+impl WirMutVisitor for ElideWriteOnly<'_> {
+    fn visit_instr(&mut self, instr: &mut WirInstr) {
+        if let WirInstr::LocalSet { name, value } = instr
+            && !self.read_locals.contains(name.as_str())
+        {
             let value_expr = std::mem::replace(value.as_mut(), WirInstr::Nop);
             if is_side_effect_free(&value_expr) {
                 *instr = WirInstr::Nop;
             } else {
                 *instr = WirInstr::Drop(Box::new(value_expr));
             }
-            *changed = true;
+            self.changed = true;
+            return;
         }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            for child in body.iter_mut() {
-                elide_write_only_in_instr(child, read_locals, changed);
+        // Only recurse into bodies (Block/Loop/If/Seq), not expression children.
+        // LocalSet only appears at body level, so expression children are skipped.
+        match instr {
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+                self.visit_body(body);
             }
-        }
-        WirInstr::If {
-            then_body,
-            else_body,
-            ..
-        } => {
-            for child in then_body.iter_mut() {
-                elide_write_only_in_instr(child, read_locals, changed);
-            }
-            if let Some(eb) = else_body {
-                for child in eb.iter_mut() {
-                    elide_write_only_in_instr(child, read_locals, changed);
+            WirInstr::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                self.visit_body(then_body);
+                if let Some(eb) = else_body {
+                    self.visit_body(eb);
                 }
             }
+            _ => {}
         }
-        _ => {}
     }
 }

@@ -8,6 +8,7 @@ use crate::hashmap::IndexSet;
 use crate::wir::{
     COMP_FEATURE_ARRAY_APPEND, WirData, WirInstr, WirModule, WirType, WirTypeDef, WirTypeId,
 };
+use crate::wir_visitor::WirMutVisitor;
 
 /// Minimum element count to trigger `array.new_data` promotion. Arrays with
 /// fewer constant elements keep using `array.new_fixed`.
@@ -34,76 +35,55 @@ pub(super) fn promote_constant_arrays_to_data(module: &mut WirModule) {
         })
         .collect();
 
+    let mut visitor = PromoteConstantArrays {
+        array_elem_types: &array_elem_types,
+        data: &mut module.data,
+    };
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
             for instr in body.iter_mut() {
-                promote_arrays_in_instr(instr, &array_elem_types, &mut module.data);
+                visitor.visit_instr(instr);
             }
         }
     }
 
     // Also check global initializers (e.g., `global ITEMS: Array<i32> = [1,2,3]`).
     for global in &mut module.globals {
-        promote_arrays_in_instr(&mut global.init, &array_elem_types, &mut module.data);
+        visitor.visit_instr(&mut global.init);
     }
 }
 
-/// Recursively walk an instruction tree and promote eligible `ArrayNewFixed` nodes.
-fn promote_arrays_in_instr(
-    instr: &mut WirInstr,
-    array_elem_types: &[Option<WirType>],
-    data: &mut Vec<WirData>,
-) {
-    // Recurse into children first (bottom-up).
-    match instr {
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            for child in body.iter_mut() {
-                promote_arrays_in_instr(child, array_elem_types, data);
-            }
-        }
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            promote_arrays_in_instr(condition, array_elem_types, data);
-            for child in then_body.iter_mut() {
-                promote_arrays_in_instr(child, array_elem_types, data);
-            }
-            if let Some(eb) = else_body {
-                for child in eb.iter_mut() {
-                    promote_arrays_in_instr(child, array_elem_types, data);
-                }
-            }
-        }
-        _ => {
-            instr.for_each_boxed_child_mut(&mut |child| {
-                promote_arrays_in_instr(child, array_elem_types, data);
-            });
-        }
-    }
+struct PromoteConstantArrays<'a> {
+    array_elem_types: &'a [Option<WirType>],
+    data: &'a mut Vec<WirData>,
+}
 
-    // Check if THIS instruction is an eligible ArrayNewFixed.
-    if let WirInstr::ArrayNewFixed { type_id, elements } = instr
-        && elements.len() >= ARRAY_NEW_DATA_THRESHOLD
-    {
-        let arr_type_idx = type_id.index() as usize;
-        if let Some(Some(elem_type)) = array_elem_types.get(arr_type_idx)
-            && let Some(bytes) = try_pack_constant_elements(elem_type, elements)
+impl WirMutVisitor for PromoteConstantArrays<'_> {
+    fn visit_instr(&mut self, instr: &mut WirInstr) {
+        // Recurse into children first (bottom-up).
+        self.walk_instr(instr);
+
+        // Check if THIS instruction is an eligible ArrayNewFixed.
+        if let WirInstr::ArrayNewFixed { type_id, elements } = instr
+            && elements.len() >= ARRAY_NEW_DATA_THRESHOLD
         {
-            let data_index = u32::try_from(data.len()).expect("too many data segments");
-            let len = i32::try_from(elements.len()).unwrap_or(0);
-            data.push(WirData {
-                bytes,
-                offset: None, // passive segment
-            });
-            *instr = WirInstr::ArrayNewData {
-                type_id: type_id.clone(),
-                data_index,
-                offset: Box::new(WirInstr::I32Const(0)),
-                len: Box::new(WirInstr::I32Const(len)),
-            };
+            let arr_type_idx = type_id.index() as usize;
+            if let Some(Some(elem_type)) = self.array_elem_types.get(arr_type_idx)
+                && let Some(bytes) = try_pack_constant_elements(elem_type, elements)
+            {
+                let data_index = u32::try_from(self.data.len()).expect("too many data segments");
+                let len = i32::try_from(elements.len()).unwrap_or(0);
+                self.data.push(WirData {
+                    bytes,
+                    offset: None, // passive segment
+                });
+                *instr = WirInstr::ArrayNewData {
+                    type_id: type_id.clone(),
+                    data_index,
+                    offset: Box::new(WirInstr::I32Const(0)),
+                    len: Box::new(WirInstr::I32Const(len)),
+                };
+            }
         }
     }
 }
@@ -200,53 +180,31 @@ const ARRAY_NEW_FIXED_LIMIT: usize = 256;
 /// Walks all function bodies and rewrites any `ArrayNewFixed` with more than
 /// [`ARRAY_NEW_FIXED_LIMIT`] elements. Uses a module-level counter for unique local names.
 pub(super) fn split_large_array_literals(module: &mut WirModule) {
-    let mut counter: u32 = 0;
+    let mut visitor = SplitLargeArrays { counter: 0 };
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
             for instr in body.iter_mut() {
-                split_large_arrays_in_instr(instr, &mut counter);
+                visitor.visit_instr(instr);
             }
         }
     }
 }
 
-/// Recursively walk an instruction tree and replace large `ArrayNewFixed` nodes.
-fn split_large_arrays_in_instr(instr: &mut WirInstr, counter: &mut u32) {
-    // First, recurse into children so inner ArrayNewFixed nodes are handled first.
-    match instr {
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            for child in body.iter_mut() {
-                split_large_arrays_in_instr(child, counter);
-            }
-        }
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            split_large_arrays_in_instr(condition, counter);
-            for child in then_body.iter_mut() {
-                split_large_arrays_in_instr(child, counter);
-            }
-            if let Some(eb) = else_body {
-                for child in eb.iter_mut() {
-                    split_large_arrays_in_instr(child, counter);
-                }
-            }
-        }
-        _ => {
-            instr.for_each_boxed_child_mut(&mut |child| {
-                split_large_arrays_in_instr(child, counter);
-            });
-        }
-    }
+struct SplitLargeArrays {
+    counter: u32,
+}
 
-    // Now check if THIS instruction is a large ArrayNewFixed that should be split.
-    if let WirInstr::ArrayNewFixed { elements, .. } = instr
-        && elements.len() > ARRAY_NEW_FIXED_LIMIT
-    {
-        rewrite_large_array_new_fixed(instr, counter);
+impl WirMutVisitor for SplitLargeArrays {
+    fn visit_instr(&mut self, instr: &mut WirInstr) {
+        // Recurse into children first (bottom-up).
+        self.walk_instr(instr);
+
+        // Check if THIS instruction is a large ArrayNewFixed that should be split.
+        if let WirInstr::ArrayNewFixed { elements, .. } = instr
+            && elements.len() > ARRAY_NEW_FIXED_LIMIT
+        {
+            rewrite_large_array_new_fixed(instr, &mut self.counter);
+        }
     }
 }
 
@@ -348,7 +306,11 @@ pub(super) fn collapse_array_append_sequences(module: &mut WirModule) {
 
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
-            collapse_appends_in_body(body, &append_func_indices, &array_struct_types);
+            let mut visitor = CollapseAppends {
+                append_func_indices: &append_func_indices,
+                array_struct_types: &array_struct_types,
+            };
+            visitor.visit_body(body);
         }
     }
 }
@@ -377,75 +339,43 @@ struct ArrayInitInfo {
     used_field_index: usize,
 }
 
-/// Scan an instruction tree for init + N×append patterns and collapse them.
-/// Recurses into all instruction bodies (blocks, loops, ifs, and also block bodies
-/// nested inside tree nodes like `ValueCopy { expr: Block { ... } }`).
-fn collapse_appends_in_instr(
-    instr: &mut WirInstr,
-    append_func_indices: &IndexSet<u32>,
-    array_struct_types: &IndexSet<u32>,
-) {
-    // If this instruction contains a Vec<WirInstr> body, process it.
-    match instr {
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            collapse_appends_in_body(body, append_func_indices, array_struct_types);
-            return;
-        }
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            collapse_appends_in_instr(condition, append_func_indices, array_struct_types);
-            collapse_appends_in_body(then_body, append_func_indices, array_struct_types);
-            if let Some(eb) = else_body {
-                collapse_appends_in_body(eb, append_func_indices, array_struct_types);
-            }
-            return;
-        }
-        _ => {}
-    }
-
-    // For non-body instructions, recurse into all Box children.
-    instr.for_each_boxed_child_mut(&mut |child| {
-        collapse_appends_in_instr(child, append_func_indices, array_struct_types);
-    });
+struct CollapseAppends<'a> {
+    append_func_indices: &'a IndexSet<u32>,
+    array_struct_types: &'a IndexSet<u32>,
 }
 
-/// Scan a flat instruction list for init + N×append patterns and collapse them.
-fn collapse_appends_in_body(
-    body: &mut Vec<WirInstr>,
-    append_func_indices: &IndexSet<u32>,
-    array_struct_types: &IndexSet<u32>,
-) {
-    // First recurse into all children.
-    for instr in body.iter_mut() {
-        collapse_appends_in_instr(instr, append_func_indices, array_struct_types);
-    }
+impl WirMutVisitor for CollapseAppends<'_> {
+    fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
+        // First recurse into all children.
+        self.walk_body(body);
 
-    // Now scan the flat body for init + append patterns.
-    let mut i = 0;
-    while i < body.len() {
-        if let Some(init_info) = try_match_array_init(&body[i], array_struct_types) {
-            let n = init_info.capacity;
-            // Check if the next instructions are matching append calls.
-            // Each append may be a single instruction (Block wrapping LocalSet+Call)
-            // or multiple flat instructions (LocalSet* + Call) from block flattening.
-            if n > 0
-                && let Some((values, consumed)) =
-                    try_match_append_sequence(&body[i + 1..], n, &init_info, append_func_indices)
-            {
-                // Rewrite: replace ArrayNewDefault with ArrayNewFixed in the init.
-                rewrite_init_to_fixed(&mut body[i], &init_info, values);
-                // Remove the consumed append instructions.
-                body.drain(i + 1..i + 1 + consumed);
-                // Continue from the next instruction after the rewritten init.
-                i += 1;
-                continue;
+        // Now scan the flat body for init + append patterns.
+        let mut i = 0;
+        while i < body.len() {
+            if let Some(init_info) = try_match_array_init(&body[i], self.array_struct_types) {
+                let n = init_info.capacity;
+                // Check if the next instructions are matching append calls.
+                // Each append may be a single instruction (Block wrapping LocalSet+Call)
+                // or multiple flat instructions (LocalSet* + Call) from block flattening.
+                if n > 0
+                    && let Some((values, consumed)) = try_match_append_sequence(
+                        &body[i + 1..],
+                        n,
+                        &init_info,
+                        self.append_func_indices,
+                    )
+                {
+                    // Rewrite: replace ArrayNewDefault with ArrayNewFixed in the init.
+                    rewrite_init_to_fixed(&mut body[i], &init_info, values);
+                    // Remove the consumed append instructions.
+                    body.drain(i + 1..i + 1 + consumed);
+                    // Continue from the next instruction after the rewritten init.
+                    i += 1;
+                    continue;
+                }
             }
+            i += 1;
         }
-        i += 1;
     }
 }
 

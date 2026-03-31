@@ -34,6 +34,7 @@ pub mod wir;
 pub mod wir_build;
 pub mod wir_optimize;
 pub mod wir_unparse;
+pub mod wir_visitor;
 pub mod world_registry;
 
 pub use analyze::Analyzer;
