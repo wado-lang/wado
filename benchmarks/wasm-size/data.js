@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775050837272,
+  "lastUpdate": 1775086946186,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9422,6 +9422,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b633c5a762ef7157e9408768e086b428c5e3eda4"
         },
         "date": 1775050837048,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0132b7afa1566ed64107386ab9bfb715235a628b",
+          "message": "Merge pull request #750 from wado-lang/claude/rename-append-to-push-KFv9m\n\nRemove deprecated append/append_char from stdlib",
+          "timestamp": "2026-04-02T08:39:28+09:00",
+          "tree_id": "38a117a609a657b46fc6a4b2e65de187123e482d",
+          "url": "https://github.com/wado-lang/wado/commit/0132b7afa1566ed64107386ab9bfb715235a628b"
+        },
+        "date": 1775086945966,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
