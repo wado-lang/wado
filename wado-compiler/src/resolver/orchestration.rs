@@ -1041,9 +1041,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         sorted_indices.iter().map(|&i| sources[i].clone()).collect()
     }
 
-    /// Validate that all named types in struct fields, variant payloads, and newtype
-    /// definitions refer to known types. Runs after the second sub-pass when all type
-    /// names from all modules have been collected.
+    /// Validate that all named types in type definitions and explicit type annotations
+    /// refer to known types. Runs after the second sub-pass when all type names from
+    /// all modules have been collected.
     fn validate_type_definitions(
         modules: &IndexMap<ModuleSource, Module>,
         known_type_names: &IndexSet<String>,
@@ -1052,6 +1052,25 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     ) -> Result<(), Bail> {
         for (module_source, module) in modules {
             logger.set_file(module_source.diagnostic_filename());
+
+            // Build per-module known names: global names + import aliases + trait names
+            let mut module_known_names = known_type_names.clone();
+            for item in &module.items {
+                match item {
+                    Item::Use(use_decl) => {
+                        for use_item in &use_decl.items {
+                            if let ast::UseItem::Simple { name, alias, .. } = use_item {
+                                module_known_names.insert(alias.as_ref().unwrap_or(name).clone());
+                            }
+                        }
+                    }
+                    Item::Trait(trait_decl) => {
+                        module_known_names.insert(trait_decl.name.clone());
+                    }
+                    _ => {}
+                }
+            }
+
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
@@ -1063,7 +1082,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         for field in &struct_decl.fields {
                             Self::validate_ast_type_names(
                                 &field.ty,
-                                known_type_names,
+                                &module_known_names,
                                 resource_type_names,
                                 &type_params,
                                 logger,
@@ -1080,7 +1099,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             if let Some(payload_ty) = &case.payload {
                                 Self::validate_ast_type_names(
                                     payload_ty,
-                                    known_type_names,
+                                    &module_known_names,
                                     resource_type_names,
                                     &type_params,
                                     logger,
@@ -1096,9 +1115,155 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .collect();
                         Self::validate_ast_type_names(
                             &newtype_decl.ty,
-                            known_type_names,
+                            &module_known_names,
                             resource_type_names,
                             &type_params,
+                            logger,
+                        )?;
+                    }
+                    Item::Function(func) => {
+                        let type_params: Vec<&str> =
+                            func.type_params.iter().map(|p| p.name.as_str()).collect();
+                        for param in &func.params {
+                            Self::validate_ast_type_names(
+                                &param.ty,
+                                &module_known_names,
+                                resource_type_names,
+                                &type_params,
+                                logger,
+                            )?;
+                        }
+                        if let Some(return_ty) = &func.return_type {
+                            Self::validate_ast_type_names(
+                                return_ty,
+                                &module_known_names,
+                                resource_type_names,
+                                &type_params,
+                                logger,
+                            )?;
+                        }
+                        if let Some(body) = &func.body {
+                            Self::validate_block_type_names(
+                                body,
+                                &module_known_names,
+                                resource_type_names,
+                                &type_params,
+                                logger,
+                            )?;
+                        }
+                    }
+                    Item::Impl(impl_block) => {
+                        let mut type_params: Vec<&str> = impl_block
+                            .type_params
+                            .iter()
+                            .map(|p| p.name.as_str())
+                            .collect();
+                        // Infer implicit type params from the target type
+                        // (e.g., `impl Option<T>` without `impl<T>`)
+                        if let Type::Generic(g) = &impl_block.ty {
+                            for arg in &g.args {
+                                if let Type::Named(n) = arg
+                                    && !module_known_names.contains(&n.name)
+                                    && !resource_type_names.contains(&n.name)
+                                {
+                                    type_params.push(&n.name);
+                                }
+                            }
+                        }
+                        for method in &impl_block.methods {
+                            let mut method_type_params = type_params.clone();
+                            for p in &method.type_params {
+                                method_type_params.push(p.name.as_str());
+                            }
+                            for param in &method.params {
+                                Self::validate_ast_type_names(
+                                    &param.ty,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+                            if let Some(return_ty) = &method.return_type {
+                                Self::validate_ast_type_names(
+                                    return_ty,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+                            if let Some(body) = &method.body {
+                                Self::validate_block_type_names(
+                                    body,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+                        }
+                    }
+                    Item::Trait(trait_decl) => {
+                        let type_params: Vec<&str> = trait_decl
+                            .type_params
+                            .iter()
+                            .map(|p| p.name.as_str())
+                            .collect();
+                        for method in &trait_decl.methods {
+                            let mut method_type_params = type_params.clone();
+                            method_type_params.push("Self");
+                            for p in &method.type_params {
+                                method_type_params.push(p.name.as_str());
+                            }
+                            // Add associated type names as type params
+                            for assoc in &trait_decl.associated_types {
+                                method_type_params.push(&assoc.name);
+                            }
+                            for param in &method.params {
+                                Self::validate_ast_type_names(
+                                    &param.ty,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+                            if let Some(return_ty) = &method.return_type {
+                                Self::validate_ast_type_names(
+                                    return_ty,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+                            if let Some(body) = &method.body {
+                                Self::validate_block_type_names(
+                                    body,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+                        }
+                    }
+                    Item::Global(global_decl) => {
+                        Self::validate_ast_type_names(
+                            &global_decl.ty,
+                            &module_known_names,
+                            resource_type_names,
+                            &[],
+                            logger,
+                        )?;
+                    }
+                    Item::Test(test_decl) => {
+                        Self::validate_block_type_names(
+                            &test_decl.body,
+                            &module_known_names,
+                            resource_type_names,
+                            &[],
                             logger,
                         )?;
                     }
@@ -1107,6 +1272,636 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
         logger.clear_file();
+        Ok(())
+    }
+
+    /// Validate type names in a block (let-stmt type annotations and cast expressions).
+    fn validate_block_type_names(
+        block: &ast::Block,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &Logger<'_, H>,
+    ) -> Result<(), Bail> {
+        for stmt in &block.stmts {
+            Self::validate_stmt_type_names(
+                stmt,
+                known_type_names,
+                resource_type_names,
+                type_params,
+                logger,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Validate type names in a statement.
+    fn validate_stmt_type_names(
+        stmt: &ast::Stmt,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &Logger<'_, H>,
+    ) -> Result<(), Bail> {
+        match stmt {
+            ast::Stmt::Let(let_stmt) => {
+                if let Some(ty) = &let_stmt.ty {
+                    Self::validate_ast_type_names(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                if let Some(value) = &let_stmt.value {
+                    Self::validate_expr_type_names(
+                        value,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Stmt::Expr(expr_stmt) => {
+                Self::validate_expr_type_names(
+                    &expr_stmt.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Return(ret) => {
+                if let Some(value) = &ret.value {
+                    Self::validate_expr_type_names(
+                        value,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Stmt::TaskReturn(task_ret) => {
+                Self::validate_expr_type_names(
+                    &task_ret.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::If(if_stmt) => {
+                Self::validate_condition_type_names(
+                    &if_stmt.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &if_stmt.then_block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                if let Some(else_block) = &if_stmt.else_block {
+                    Self::validate_block_type_names(
+                        else_block,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Stmt::While(while_stmt) => {
+                Self::validate_condition_type_names(
+                    &while_stmt.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &while_stmt.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::For(for_stmt) => {
+                if let Some(init) = &for_stmt.init {
+                    Self::validate_stmt_type_names(
+                        init,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                if let Some(condition) = &for_stmt.condition {
+                    Self::validate_condition_type_names(
+                        condition,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                if let Some(update) = &for_stmt.update {
+                    Self::validate_expr_type_names(
+                        update,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                Self::validate_block_type_names(
+                    &for_stmt.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::ForOf(for_of) => {
+                Self::validate_expr_type_names(
+                    &for_of.iterable,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &for_of.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Loop(loop_stmt) => {
+                Self::validate_block_type_names(
+                    &loop_stmt.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Match(match_expr) => {
+                Self::validate_expr_type_names(
+                    &ast::Expr::Match(match_expr.clone()),
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Assert(assert_stmt) => {
+                Self::validate_expr_type_names(
+                    &assert_stmt.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::LabeledBlock(lb) => {
+                Self::validate_block_type_names(
+                    &lb.block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Break(_) | ast::Stmt::Continue(_) => {}
+        }
+        Ok(())
+    }
+
+    /// Validate type names in a condition.
+    fn validate_condition_type_names(
+        condition: &ast::Condition,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &Logger<'_, H>,
+    ) -> Result<(), Bail> {
+        match condition {
+            ast::Condition::Expr(expr) => {
+                Self::validate_expr_type_names(
+                    expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Condition::LetChain { elements, .. } => {
+                for elem in elements {
+                    match elem {
+                        ast::ConditionElement::Let { expr, .. } => {
+                            Self::validate_expr_type_names(
+                                expr,
+                                known_type_names,
+                                resource_type_names,
+                                type_params,
+                                logger,
+                            )?;
+                        }
+                        ast::ConditionElement::Expr(expr) => {
+                            Self::validate_expr_type_names(
+                                expr,
+                                known_type_names,
+                                resource_type_names,
+                                type_params,
+                                logger,
+                            )?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate type names in an expression (cast targets, closure params, turbofish, etc.).
+    fn validate_expr_type_names(
+        expr: &ast::Expr,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &Logger<'_, H>,
+    ) -> Result<(), Bail> {
+        match expr {
+            ast::Expr::Cast(cast) => {
+                Self::validate_ast_type_names(
+                    &cast.target_type,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &cast.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Closure(closure) => {
+                for param in &closure.params {
+                    if let Some(ty) = &param.ty {
+                        Self::validate_ast_type_names(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                }
+                Self::validate_expr_type_names(
+                    &closure.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Call(call) => {
+                for ty in &call.type_args {
+                    Self::validate_ast_type_names(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                Self::validate_expr_type_names(
+                    &call.callee,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for arg in &call.args {
+                    Self::validate_expr_type_names(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::MethodCall(mc) => {
+                for ty in &mc.type_args {
+                    Self::validate_ast_type_names(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                Self::validate_expr_type_names(
+                    &mc.receiver,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for arg in &mc.args {
+                    Self::validate_expr_type_names(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::StaticMethodCall(smc) => {
+                Self::validate_ast_type_names(
+                    &smc.target_type,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for ty in &smc.type_args {
+                    Self::validate_ast_type_names(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                for arg in &smc.args {
+                    Self::validate_expr_type_names(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Binary(bin) => {
+                Self::validate_expr_type_names(
+                    &bin.left,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &bin.right,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Unary(un) => {
+                Self::validate_expr_type_names(
+                    &un.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Assign(assign) => {
+                Self::validate_expr_type_names(
+                    &assign.target,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &assign.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::CompoundAssign(ca) => {
+                Self::validate_expr_type_names(
+                    &ca.target,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &ca.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::ComparisonChain(cc) => {
+                Self::validate_expr_type_names(
+                    &cc.first,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for cmp in &cc.comparisons {
+                    Self::validate_expr_type_names(
+                        &cmp.right,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Index(idx) => {
+                Self::validate_expr_type_names(
+                    &idx.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &idx.index,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::FieldAccess(fa) => {
+                Self::validate_expr_type_names(
+                    &fa.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Block(block) => {
+                Self::validate_block_type_names(
+                    block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::If(if_expr) => {
+                Self::validate_condition_type_names(
+                    &if_expr.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &if_expr.then_block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                if let Some(else_block) = &if_expr.else_block {
+                    Self::validate_block_type_names(
+                        else_block,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Match(match_expr) => {
+                Self::validate_expr_type_names(
+                    &match_expr.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for arm in &match_expr.arms {
+                    if let Some(guard) = &arm.guard {
+                        Self::validate_expr_type_names(
+                            guard,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                    Self::validate_expr_type_names(
+                        &arm.body,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Matches(matches_expr) => {
+                Self::validate_expr_type_names(
+                    &matches_expr.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                if let Some(guard) = &matches_expr.guard {
+                    Self::validate_expr_type_names(
+                        guard,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::StructLiteral(sl) => {
+                for field in &sl.fields {
+                    Self::validate_expr_type_names(
+                        &field.value,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::TupleLiteral(tl) => {
+                for elem in &tl.elements {
+                    Self::validate_expr_type_names(
+                        elem,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::TemplateString(ts) => {
+                for part in &ts.parts {
+                    if let ast::TemplatePart::Interpolation { expr, .. } = part {
+                        Self::validate_expr_type_names(
+                            expr,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                }
+            }
+            ast::Expr::LabeledBlock(lb) => {
+                Self::validate_block_type_names(
+                    &lb.block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::TryOp(try_op) => {
+                Self::validate_expr_type_names(
+                    &try_op.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Spread(inner, _) => {
+                Self::validate_expr_type_names(
+                    inner,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Ident(_) | ast::Expr::Literal(_) => {}
+        }
         Ok(())
     }
 
